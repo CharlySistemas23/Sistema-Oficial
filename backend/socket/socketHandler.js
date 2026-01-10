@@ -65,37 +65,49 @@ export const setupSocketIO = (io) => {
       // Obtener todas las sucursales activas y suscribirse a todas
       try {
         const branchesResult = await query(
-          'SELECT id, name, code FROM branches WHERE active = true ORDER BY name'
+          'SELECT id, name, code, active, address, phone, email, created_at FROM branches WHERE active = true ORDER BY name'
         );
         
         const subscribedBranches = [];
-        branchesResult.rows.forEach(branch => {
-          const branchId = branch.id;
-          const roomName = `branch:${branchId}`;
-          const inventoryRoom = `inventory:${branchId}`;
-          const salesRoom = `sales:${branchId}`;
-          
-          // Unirse a todas las salas de esta sucursal
-          socket.join(roomName);
-          socket.join(inventoryRoom);
-          socket.join(salesRoom);
-          
-          subscribedBranches.push({
-            id: branchId,
-            name: branch.name,
-            code: branch.code
+        if (branchesResult && branchesResult.rows && branchesResult.rows.length > 0) {
+          branchesResult.rows.forEach(branch => {
+            const branchId = branch.id;
+            const roomName = `branch:${branchId}`;
+            const inventoryRoom = `inventory:${branchId}`;
+            const salesRoom = `sales:${branchId}`;
+            
+            // Unirse a todas las salas de esta sucursal
+            socket.join(roomName);
+            socket.join(inventoryRoom);
+            socket.join(salesRoom);
+            
+            subscribedBranches.push({
+              id: branchId,
+              name: branch.name,
+              code: branch.code,
+              active: branch.active,
+              address: branch.address,
+              phone: branch.phone,
+              email: branch.email,
+              created_at: branch.created_at
+            });
           });
-        });
+        }
         
-        console.log(`✅ Master admin suscrito a ${subscribedBranches.length} sucursales`);
+        console.log(`✅ Master admin suscrito a ${subscribedBranches.length} sucursales${subscribedBranches.length > 0 ? ': ' + subscribedBranches.map(b => b.name).join(', ') : ' (no hay sucursales activas)'}`);
         socket.emit('joined_room', { 
           room: 'master_admin', 
           allBranches: true,
           branches: subscribedBranches
         });
       } catch (error) {
-        console.error('Error suscribiendo master admin a sucursales:', error);
-        socket.emit('joined_room', { room: 'master_admin', allBranches: false });
+        console.error('❌ Error suscribiendo master admin a sucursales:', error);
+        socket.emit('joined_room', { 
+          room: 'master_admin', 
+          allBranches: false,
+          branches: [],
+          error: error.message
+        });
       }
     } else {
       // Usuarios normales se unen solo a sus sucursales
