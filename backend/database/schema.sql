@@ -540,12 +540,6 @@ CREATE TRIGGER update_agency_arrivals_updated_at BEFORE UPDATE ON agency_arrival
 CREATE TRIGGER update_tourist_reports_updated_at BEFORE UPDATE ON tourist_reports
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_cost_entries_updated_at BEFORE UPDATE ON cost_entries
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_repairs_updated_at BEFORE UPDATE ON repairs
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
 -- ============================================
 -- DATOS INICIALES
 -- ============================================
