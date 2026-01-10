@@ -48,7 +48,7 @@ export const setupSocketIO = (io) => {
     }
   });
 
-  io.on('connection', (socket) => {
+  io.on('connection', async (socket) => {
     console.log(`✅ Cliente conectado: ${socket.userId} (${socket.user.username})`);
 
     // Registrar conexión
@@ -208,4 +208,44 @@ export const emitBranchUpdate = (io, action, branch) => {
       timestamp: new Date().toISOString()
     });
   }
+};
+
+// Función para emitir eventos de reparaciones
+export const emitRepairUpdate = (io, branchId, action, repair) => {
+  emitToBranch(io, branchId, 'repair_updated', {
+    action, // created, updated, completed, cancelled
+    repair,
+    branchId,
+    timestamp: new Date().toISOString()
+  });
+};
+
+// Función para emitir eventos de clientes
+export const emitCustomerUpdate = (io, branchId, action, customer) => {
+  emitToBranch(io, branchId, 'customer_updated', {
+    action, // created, updated, deleted
+    customer,
+    branchId,
+    timestamp: new Date().toISOString()
+  });
+};
+
+// Función para emitir eventos de transferencias
+export const emitTransferUpdate = (io, branchId, action, transfer) => {
+  emitToBranch(io, branchId, 'transfer_updated', {
+    action, // created, sent, received, cancelled
+    transfer,
+    branchId,
+    timestamp: new Date().toISOString()
+  });
+};
+
+// Función para emitir eventos de costos
+export const emitCostUpdate = (io, branchId, action, cost) => {
+  emitToBranch(io, branchId, 'cost_updated', {
+    action, // created, updated, deleted
+    cost,
+    branchId,
+    timestamp: new Date().toISOString()
+  });
 };
