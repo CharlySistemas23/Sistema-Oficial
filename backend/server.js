@@ -117,10 +117,119 @@ app.use((req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
-httpServer.listen(PORT, () => {
-  console.log(`🚀 Servidor iniciado en puerto ${PORT}`);
-  console.log(`📡 Socket.IO habilitado para tiempo real`);
-  console.log(`🌍 Entorno: ${process.env.NODE_ENV || 'development'}`);
-});
+// Función para verificar si la base de datos necesita migración
+async function checkAndMigrate() {
+  if (process.env.SKIP_AUTO_MIGRATE === 'true') {
+    console.log('⏭️  Auto-migración deshabilitada por SKIP_AUTO_MIGRATE');
+    return;
+  }
+
+  try {
+    const { Pool } = await import('pg');
+    const pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    });
+
+    // Verificar si existe la tabla branches (primera tabla que se crea)
+    const result = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'branches'
+      );
+    `);
+
+    if (!result.rows[0].exists) {
+      console.log('🔄 Base de datos vacía, ejecutando migración automática...');
+      
+      // Ejecutar migración manualmente
+      const { readFileSync } = await import('fs');
+      const { join } = await import('path');
+      const schemaPath = join(__dirname, 'database', 'schema.sql');
+      const schemaSQL = readFileSync(schemaPath, 'utf8');
+      await pool.query(schemaSQL);
+      console.log('✅ Migración completada');
+      
+      // Crear usuario admin manualmente
+      console.log('👤 Creando usuario admin maestro...');
+      
+      // Crear sucursal principal
+      await pool.query(`
+        INSERT INTO branches (id, name, code, address, phone, email, active)
+        VALUES (
+          '00000000-0000-0000-0000-000000000001',
+          'Sucursal Principal',
+          'MAIN',
+          'Dirección principal',
+          '1234567890',
+          'admin@opalco.com',
+          true
+        )
+        ON CONFLICT (id) DO NOTHING
+      `);
+      
+      const branchResult = await pool.query(`SELECT id FROM branches WHERE code = 'MAIN' LIMIT 1`);
+      const branchId = branchResult.rows[0].id;
+      
+      // Crear empleado admin
+      await pool.query(`
+        INSERT INTO employees (id, code, name, role, branch_id, active)
+        VALUES (
+          '00000000-0000-0000-0000-000000000002',
+          'ADMIN',
+          'Administrador',
+          'master_admin',
+          $1,
+          true
+        )
+        ON CONFLICT (id) DO NOTHING
+      `, [branchId]);
+      
+      const employeeResult = await pool.query(`SELECT id FROM employees WHERE code = 'ADMIN' LIMIT 1`);
+      const employeeId = employeeResult.rows[0].id;
+      
+      // Crear usuario admin
+      const bcrypt = await import('bcryptjs');
+      const passwordHash = await bcrypt.default.hash('1234', 10);
+      
+      await pool.query(`
+        INSERT INTO users (id, username, password_hash, employee_id, role, active)
+        VALUES (
+          '00000000-0000-0000-0000-000000000001',
+          'admin',
+          $1,
+          $2,
+          'master_admin',
+          true
+        )
+        ON CONFLICT (id) DO NOTHING
+      `, [passwordHash, employeeId]);
+      
+      console.log('✅ Usuario admin creado');
+      console.log('📋 Credenciales: username=admin, PIN=1234');
+    } else {
+      console.log('✅ Base de datos ya migrada');
+    }
+
+    await pool.end();
+  } catch (error) {
+    console.error('⚠️  Error en auto-migración:', error.message);
+    console.log('💡 Puedes ejecutar manualmente: npm run migrate && npm run create-admin');
+  }
+}
+
+// Iniciar servidor después de verificar migración
+async function startServer() {
+  await checkAndMigrate();
+  
+  httpServer.listen(PORT, () => {
+    console.log(`🚀 Servidor iniciado en puerto ${PORT}`);
+    console.log(`📡 Socket.IO habilitado para tiempo real`);
+    console.log(`🌍 Entorno: ${process.env.NODE_ENV || 'development'}`);
+  });
+}
+
+startServer();
 
 export { io };
