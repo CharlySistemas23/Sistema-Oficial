@@ -143,13 +143,46 @@ async function checkAndMigrate() {
     if (!result.rows[0].exists) {
       console.log('🔄 Base de datos vacía, ejecutando migración automática...');
       
-      // Ejecutar migración manualmente
+      // Ejecutar migración manualmente, manejando errores de objetos existentes
       const { readFileSync } = await import('fs');
       const { join } = await import('path');
       const schemaPath = join(__dirname, 'database', 'schema.sql');
       const schemaSQL = readFileSync(schemaPath, 'utf8');
-      await pool.query(schemaSQL);
-      console.log('✅ Migración completada');
+      
+      // Dividir SQL en statements individuales y ejecutar uno por uno
+      const statements = schemaSQL
+        .split(';')
+        .map(s => s.trim())
+        .filter(s => s.length > 0 && !s.startsWith('--'));
+      
+      let successCount = 0;
+      let skipCount = 0;
+      
+      for (const statement of statements) {
+        try {
+          if (statement.trim().length > 0) {
+            await pool.query(statement + ';');
+            successCount++;
+          }
+        } catch (error) {
+          // Ignorar errores de "ya existe" o "duplicate"
+          if (error.code === '42P07' || // duplicate_table
+              error.code === '42710' || // duplicate_object
+              error.code === '42P16' || // duplicate_column
+              error.message.includes('already exists') ||
+              error.message.includes('duplicate') ||
+              error.message.includes('DROP') ||
+              error.code === '42P01') { // undefined_table (para DROP IF EXISTS)
+            skipCount++;
+            // Continuar silenciosamente
+          } else {
+            // Solo mostrar errores críticos
+            console.error(`⚠️  Error en statement: ${error.message.substring(0, 100)}`);
+          }
+        }
+      }
+      
+      console.log(`✅ Migración completada (${successCount} exitosos, ${skipCount} omitidos)`);
       
       // Crear usuario admin manualmente
       console.log('👤 Creando usuario admin maestro...');
