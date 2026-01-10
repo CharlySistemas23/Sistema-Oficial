@@ -1,6 +1,6 @@
 import express from 'express';
 import { query } from '../config/database.js';
-import { requireBranchAccess } from '../middleware/auth.js';
+import { requireBranchAccess, requireMasterAdmin } from '../middleware/auth.js';
 import { body, validationResult } from 'express-validator';
 
 const router = express.Router();
