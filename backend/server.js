@@ -143,46 +143,26 @@ async function checkAndMigrate() {
     if (!result.rows[0].exists) {
       console.log('🔄 Base de datos vacía, ejecutando migración automática...');
       
-      // Ejecutar migración manualmente, manejando errores de objetos existentes
+      // Ejecutar migración: PostgreSQL puede ejecutar múltiples statements en una sola query
       const { readFileSync } = await import('fs');
       const { join } = await import('path');
       const schemaPath = join(__dirname, 'database', 'schema.sql');
       const schemaSQL = readFileSync(schemaPath, 'utf8');
       
-      // Dividir SQL en statements individuales y ejecutar uno por uno
-      const statements = schemaSQL
-        .split(';')
-        .map(s => s.trim())
-        .filter(s => s.length > 0 && !s.startsWith('--'));
-      
-      let successCount = 0;
-      let skipCount = 0;
-      
-      for (const statement of statements) {
-        try {
-          if (statement.trim().length > 0) {
-            await pool.query(statement + ';');
-            successCount++;
-          }
-        } catch (error) {
-          // Ignorar errores de "ya existe" o "duplicate"
-          if (error.code === '42P07' || // duplicate_table
-              error.code === '42710' || // duplicate_object
-              error.code === '42P16' || // duplicate_column
-              error.message.includes('already exists') ||
-              error.message.includes('duplicate') ||
-              error.message.includes('DROP') ||
-              error.code === '42P01') { // undefined_table (para DROP IF EXISTS)
-            skipCount++;
-            // Continuar silenciosamente
-          } else {
-            // Solo mostrar errores críticos
-            console.error(`⚠️  Error en statement: ${error.message.substring(0, 100)}`);
-          }
+      try {
+        // Ejecutar todo el SQL de una vez (PostgreSQL lo maneja correctamente)
+        await pool.query(schemaSQL);
+        console.log('✅ Migración completada');
+      } catch (error) {
+        // Si hay errores de objetos existentes, no es crítico
+        if (error.code === '42P07' || error.code === '42710' || 
+            error.message.includes('already exists')) {
+          console.log('⚠️  Algunos objetos ya existen, continuando...');
+        } else {
+          console.error('❌ Error en migración:', error.message);
+          throw error;
         }
       }
-      
-      console.log(`✅ Migración completada (${successCount} exitosos, ${skipCount} omitidos)`);
       
       // Crear usuario admin manualmente
       console.log('👤 Creando usuario admin maestro...');
