@@ -109,12 +109,6 @@ setInventoryIO(io);
 setSalesIO(io);
 setBranchesIO(io);
 
-// Pasar io a las rutas que lo necesitan
-import { setIO as setInventoryIO } from './routes/inventory.js';
-import { setIO as setSalesIO } from './routes/sales.js';
-setInventoryIO(io);
-setSalesIO(io);
-
 // Manejo de errores
 app.use(errorHandler);
 
