@@ -5,41 +5,6 @@ import { query } from '../config/database.js';
 const activeConnections = new Map(); // userId -> Set of socketIds
 const branchRooms = new Map(); // branchId -> Set of socketIds
 
-// Exportar funciones para emitir eventos
-export const emitInventoryUpdate = (io, branchId, action, item) => {
-  if (!io) return;
-  io.to(`branch:${branchId}`).emit('inventory_updated', {
-    action,
-    item,
-    branchId,
-    timestamp: new Date().toISOString()
-  });
-  // También emitir a admin maestro
-  io.to('master_admin').emit('inventory_updated', {
-    action,
-    item,
-    branchId,
-    timestamp: new Date().toISOString()
-  });
-};
-
-export const emitSaleUpdate = (io, branchId, action, sale) => {
-  if (!io) return;
-  io.to(`branch:${branchId}`).emit('sale_updated', {
-    action,
-    sale,
-    branchId,
-    timestamp: new Date().toISOString()
-  });
-  // También emitir a admin maestro
-  io.to('master_admin').emit('sale_updated', {
-    action,
-    sale,
-    branchId,
-    timestamp: new Date().toISOString()
-  });
-};
-
 export const setupSocketIO = (io) => {
   // Middleware de autenticación para Socket.IO
   io.use(async (socket, next) => {
