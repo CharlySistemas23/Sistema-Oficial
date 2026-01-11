@@ -242,13 +242,13 @@ async function checkAndMigrate() {
     } else {
       console.log('✅ Base de datos ya migrada');
       
-      // Verificar si el usuario admin existe, si no, crearlo
+      // Verificar si el usuario master_admin existe, si no, crearlo
       const adminCheck = await pool.query(`
-        SELECT id FROM users WHERE username = 'admin' LIMIT 1
+        SELECT id FROM users WHERE username = 'master_admin' LIMIT 1
       `);
       
       if (adminCheck.rows.length === 0) {
-        console.log('👤 Usuario admin no encontrado, creando...');
+        console.log('👤 Usuario master_admin no encontrado, creando...');
         
         // Verificar si existe la sucursal MAIN
         let branchResult = await pool.query(`SELECT id FROM branches WHERE code = 'MAIN' LIMIT 1`);
@@ -320,42 +320,43 @@ async function checkAndMigrate() {
             INSERT INTO users (id, username, password_hash, employee_id, role, active)
             VALUES (
               '00000000-0000-0000-0000-000000000001',
-              'admin',
+              'master_admin',
               $1,
               $2,
               'master_admin',
               true
             )
             ON CONFLICT (id) DO UPDATE SET
-              username = EXCLUDED.username,
+              username = 'master_admin',
               password_hash = EXCLUDED.password_hash,
               employee_id = EXCLUDED.employee_id,
-              role = EXCLUDED.role,
+              role = 'master_admin',
               active = EXCLUDED.active
           `, [passwordHash, employeeId]);
           
-          console.log('✅ Usuario admin creado/actualizado');
-          console.log('📋 Credenciales: username=admin, PIN=1234');
+          console.log('✅ Usuario master_admin creado/actualizado');
+          console.log('📋 Credenciales: username=master_admin, PIN=1234');
         } catch (userError) {
           if (userError.code === '23505') {
             // Usuario ya existe (conflicto de username)
-            console.log('⚠️  Usuario admin ya existe con otro ID');
+            console.log('⚠️  Usuario master_admin ya existe con otro ID');
             // Intentar actualizar el existente
             await pool.query(`
               UPDATE users 
               SET password_hash = $1, 
                   employee_id = $2, 
                   role = 'master_admin',
-                  active = true
-              WHERE username = 'admin'
+                  active = true,
+                  username = 'master_admin'
+              WHERE username = 'master_admin' OR id = '00000000-0000-0000-0000-000000000001'
             `, [passwordHash, employeeId]);
-            console.log('✅ Usuario admin actualizado');
+            console.log('✅ Usuario master_admin actualizado');
           } else {
             throw userError;
           }
         }
       } else {
-        console.log('✅ Usuario admin ya existe');
+        console.log('✅ Usuario master_admin ya existe');
       }
       
       // Verificar y agregar branch_id a customers si no existe
