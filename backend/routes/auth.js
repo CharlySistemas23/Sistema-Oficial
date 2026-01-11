@@ -312,61 +312,133 @@ router.post('/ensure-admin', async (req, res) => {
 router.post('/cleanup-users', async (req, res) => {
   try {
     console.log('🧹 Limpiando usuarios (excepto master_admin)...');
+    const { query } = await import('../config/database.js');
+    const bcrypt = await import('bcryptjs');
     
     // Obtener todos los usuarios
     const allUsersResult = await query('SELECT id, username, role FROM users ORDER BY username');
     
+    console.log(`📊 Total de usuarios encontrados: ${allUsersResult.rows.length}`);
+    
     if (allUsersResult.rows.length === 0) {
-      return res.json({ 
-        message: 'No hay usuarios en la base de datos',
-        usersRemaining: 0
-      });
-    }
-    
-    // Identificar usuarios a eliminar (todos excepto master_admin)
-    const usersToDelete = allUsersResult.rows.filter(user => user.role !== 'master_admin');
-    
-    if (usersToDelete.length === 0) {
-      // Buscar usuario master_admin y devolver credenciales
-      const masterAdmin = allUsersResult.rows.find(user => user.role === 'master_admin');
-      return res.json({ 
-        message: 'No hay usuarios para eliminar. Solo existe master_admin.',
-        usersRemaining: 1,
-        credentials: masterAdmin ? {
-          username: masterAdmin.username,
-          pin: '1234'
-        } : null
-      });
-    }
-    
-    // Eliminar usuarios
-    let deletedCount = 0;
-    const deletedUsers = [];
-    
-    for (const user of usersToDelete) {
-      try {
-        await query('DELETE FROM users WHERE id = $1', [user.id]);
-        deletedUsers.push({ username: user.username, role: user.role });
-        deletedCount++;
-      } catch (error) {
-        console.error(`Error eliminando usuario ${user.username}:`, error.message);
+      // Crear usuario master_admin si no existe
+      console.log('🔨 No hay usuarios, creando master_admin...');
+      
+      // Verificar/crear empleado ADMIN
+      let employeeResult = await query(`SELECT id FROM employees WHERE code = 'ADMIN' LIMIT 1`);
+      let employeeId;
+      
+      if (employeeResult.rows.length === 0) {
+        await query(`
+          INSERT INTO employees (id, code, name, role, branch_id, active)
+          VALUES (
+            '00000000-0000-0000-0000-000000000002',
+            'ADMIN',
+            'Administrador Maestro',
+            'master_admin',
+            NULL,
+            true
+          )
+          ON CONFLICT (id) DO UPDATE SET
+            role = 'master_admin',
+            branch_id = NULL
+        `);
+        employeeResult = await query(`SELECT id FROM employees WHERE code = 'ADMIN' LIMIT 1`);
       }
+      
+      employeeId = employeeResult.rows[0]?.id || '00000000-0000-0000-0000-000000000002';
+      
+      // Crear usuario master_admin
+      const passwordHash = await bcrypt.hash('1234', 10);
+      await query(`
+        INSERT INTO users (id, username, password_hash, employee_id, role, active)
+        VALUES (
+          '00000000-0000-0000-0000-000000000001',
+          'master_admin',
+          $1,
+          $2,
+          'master_admin',
+          true
+        )
+      `, [passwordHash, employeeId]);
+      
+      return res.json({ 
+        success: true,
+        message: '✅ Usuario master_admin creado',
+        usersRemaining: 1,
+        credentials: {
+          username: 'master_admin',
+          pin: '1234'
+        }
+      });
     }
     
-    // Buscar usuario master_admin restante
-    const remainingUsersResult = await query('SELECT id, username, role FROM users WHERE role = $1', ['master_admin']);
-    const masterAdmin = remainingUsersResult.rows[0] || null;
+    // Eliminar TODOS los usuarios primero
+    console.log('🗑️ Eliminando todos los usuarios...');
+    const deleteResult = await query('DELETE FROM users RETURNING id, username, role');
+    const deletedCount = deleteResult.rows.length;
+    const deletedUsers = deleteResult.rows;
+    
+    console.log(`✅ ${deletedCount} usuario(s) eliminado(s)`);
+    
+    // Verificar/crear empleado ADMIN
+    let employeeResult = await query(`SELECT id FROM employees WHERE code = 'ADMIN' LIMIT 1`);
+    let employeeId;
+    
+    if (employeeResult.rows.length === 0) {
+      await query(`
+        INSERT INTO employees (id, code, name, role, branch_id, active)
+        VALUES (
+          '00000000-0000-0000-0000-000000000002',
+          'ADMIN',
+          'Administrador Maestro',
+          'master_admin',
+          NULL,
+          true
+        )
+        ON CONFLICT (id) DO UPDATE SET
+          role = 'master_admin',
+          branch_id = NULL
+      `);
+      employeeResult = await query(`SELECT id FROM employees WHERE code = 'ADMIN' LIMIT 1`);
+    }
+    
+    employeeId = employeeResult.rows[0]?.id || '00000000-0000-0000-0000-000000000002';
+    
+    // Crear usuario master_admin con username "master_admin"
+    console.log('🔨 Creando usuario master_admin...');
+    const passwordHash = await bcrypt.hash('1234', 10);
+    await query(`
+      INSERT INTO users (id, username, password_hash, employee_id, role, active)
+      VALUES (
+        '00000000-0000-0000-0000-000000000001',
+        'master_admin',
+        $1,
+        $2,
+        'master_admin',
+        true
+      )
+      ON CONFLICT (id) DO UPDATE SET
+        username = 'master_admin',
+        password_hash = EXCLUDED.password_hash,
+        employee_id = EXCLUDED.employee_id,
+        role = 'master_admin',
+        active = true
+    `, [passwordHash, employeeId]);
+    
+    // Verificar que se creó correctamente
+    const verifyResult = await query('SELECT id, username, role FROM users WHERE role = $1', ['master_admin']);
     
     return res.json({
       success: true,
-      message: `✅ ${deletedCount} usuario(s) eliminado(s) exitosamente`,
+      message: `✅ ${deletedCount} usuario(s) eliminado(s). Usuario master_admin creado/actualizado.`,
       deletedCount,
       deletedUsers,
-      usersRemaining: remainingUsersResult.rows.length,
-      credentials: masterAdmin ? {
-        username: masterAdmin.username,
+      usersRemaining: verifyResult.rows.length,
+      credentials: {
+        username: 'master_admin',
         pin: '1234'
-      } : null
+      }
     });
   } catch (error) {
     console.error('Error limpiando usuarios:', error);
