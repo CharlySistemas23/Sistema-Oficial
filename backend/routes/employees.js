@@ -179,4 +179,45 @@ router.post('/:employeeId/user', requireMasterAdmin, async (req, res) => {
   }
 });
 
+// Eliminar usuario (solo admin maestro)
+router.delete('/user/:userId', requireMasterAdmin, async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    // Verificar que el usuario existe
+    const userResult = await query(
+      'SELECT * FROM users WHERE id = $1',
+      [userId]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    const user = userResult.rows[0];
+
+    // Eliminar el usuario
+    const result = await query(
+      'DELETE FROM users WHERE id = $1 RETURNING *',
+      [userId]
+    );
+
+    // Registrar en audit log
+    try {
+      await query(
+        `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
+         VALUES ($1, 'delete', 'user', $2, $3)`,
+        [req.user.id, userId, JSON.stringify({ username: user.username })]
+      );
+    } catch (auditError) {
+      console.warn('Error registrando en audit_log (no crítico):', auditError.message);
+    }
+
+    res.json({ message: 'Usuario eliminado correctamente' });
+  } catch (error) {
+    console.error('Error eliminando usuario:', error);
+    res.status(500).json({ error: 'Error al eliminar usuario' });
+  }
+});
+
 export default router;
