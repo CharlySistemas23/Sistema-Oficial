@@ -312,8 +312,6 @@ router.post('/ensure-admin', async (req, res) => {
 router.post('/cleanup-users', async (req, res) => {
   try {
     console.log('🧹 Limpiando usuarios (excepto master_admin)...');
-    const { query } = await import('../config/database.js');
-    const bcrypt = await import('bcryptjs');
     
     // Obtener todos los usuarios
     const allUsersResult = await query('SELECT id, username, role FROM users ORDER BY username');
