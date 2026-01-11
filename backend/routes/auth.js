@@ -146,6 +146,8 @@ router.get('/verify', async (req, res) => {
     }
 
     const user = userResult.rows[0];
+    const userRole = user.role || user.employee_role;
+    const isMasterAdmin = userRole === 'master_admin';
 
     res.json({
       valid: true,
@@ -153,10 +155,12 @@ router.get('/verify', async (req, res) => {
         id: user.id,
         username: user.username,
         name: user.employee_name,
-        role: user.role || user.employee_role,
+        role: userRole,
         branchId: user.branch_id,
         branchIds: user.branch_ids || (user.branch_id ? [user.branch_id] : []),
-        isMasterAdmin: user.role === 'master_admin'
+        isMasterAdmin: isMasterAdmin,
+        is_master_admin: isMasterAdmin, // Compatibilidad con frontend
+        employeeId: user.employee_id
       }
     });
   } catch (error) {
