@@ -39,8 +39,9 @@ const __dirname = dirname(__filename);
 const app = express();
 const httpServer = createServer(app);
 
-// Configurar trust proxy para Railway (importante para rate limiting y obtener IP real)
-app.set('trust proxy', true);
+// Configurar trust proxy para Railway (confiar solo en el primer proxy, más seguro)
+// Railway usa un solo proxy, así que 1 es suficiente y más seguro que true
+app.set('trust proxy', 1);
 
 // Configurar Socket.IO
 const io = new Server(httpServer, {
