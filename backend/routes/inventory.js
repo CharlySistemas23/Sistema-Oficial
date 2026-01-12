@@ -15,7 +15,15 @@ const router = express.Router();
 router.get('/', requireBranchAccess, async (req, res) => {
   try {
     const { branch_id, status, search, category, metal, stone_type, min_price, max_price } = req.query;
-    const branchId = branch_id || req.user.branchId;
+    
+    // Manejar branch_id cuando viene como string "null" desde el frontend
+    let branchId = null;
+    if (branch_id && branch_id !== 'null' && branch_id !== 'undefined') {
+      branchId = branch_id;
+    } else if (!req.user.isMasterAdmin) {
+      // Usuarios normales usan su branch_id
+      branchId = req.user.branchId;
+    }
 
     let sql = `
       SELECT * FROM inventory_items
@@ -26,11 +34,13 @@ router.get('/', requireBranchAccess, async (req, res) => {
 
     // Filtro por sucursal
     if (req.user.isMasterAdmin) {
+      // Master admin: si branchId es null, mostrar todos los items
       if (branchId) {
         sql += ` AND (branch_id = $${paramCount} OR branch_id IS NULL)`;
         params.push(branchId);
         paramCount++;
       }
+      // Si branchId es null, no agregar filtro (mostrar todos)
     } else {
       // Usuarios normales solo ven su sucursal
       sql += ` AND (branch_id = $${paramCount} OR branch_id IS NULL)`;
