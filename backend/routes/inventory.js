@@ -1,5 +1,5 @@
 import express from 'express';
-import { query } from '../config/database.js';
+import { query, getClient } from '../config/database.js';
 import { requireBranchAccess } from '../middleware/auth.js';
 import { emitInventoryUpdate } from '../socket/socketHandler.js';
 
@@ -277,16 +277,20 @@ router.put('/:id', requireBranchAccess, async (req, res) => {
 
 // Eliminar item
 router.delete('/:id', requireBranchAccess, async (req, res) => {
+  const client = await getClient();
+  
   try {
+    await client.query('BEGIN');
     const { id } = req.params;
 
     // Verificar que existe y tiene acceso
-    const existingResult = await query(
+    const existingResult = await client.query(
       'SELECT * FROM inventory_items WHERE id = $1',
       [id]
     );
 
     if (existingResult.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Item no encontrado' });
     }
 
@@ -294,17 +298,41 @@ router.delete('/:id', requireBranchAccess, async (req, res) => {
 
     // Verificar acceso
     if (!req.user.isMasterAdmin && item.branch_id && item.branch_id !== req.user.branchId) {
+      await client.query('ROLLBACK');
       return res.status(403).json({ error: 'No tienes acceso a este item' });
     }
 
-    await query('DELETE FROM inventory_items WHERE id = $1', [id]);
+    // Verificar si hay referencias en sale_items
+    const saleItemsCheck = await client.query(
+      'SELECT COUNT(*) as count FROM sale_items WHERE item_id = $1',
+      [id]
+    );
+
+    if (parseInt(saleItemsCheck.rows[0].count) > 0) {
+      // Si tiene ventas asociadas, no eliminar físicamente, solo marcar como eliminado
+      await client.query(
+        `UPDATE inventory_items 
+         SET status = 'eliminado', updated_at = CURRENT_TIMESTAMP 
+         WHERE id = $1`,
+        [id]
+      );
+    } else {
+      // Si no tiene referencias, eliminar físicamente
+      // Primero eliminar logs de inventario relacionados
+      await client.query('DELETE FROM inventory_logs WHERE item_id = $1', [id]);
+      
+      // Luego eliminar el item
+      await client.query('DELETE FROM inventory_items WHERE id = $1', [id]);
+    }
 
     // Registrar en audit log
-    await query(
+    await client.query(
       `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
        VALUES ($1, 'delete', 'inventory_item', $2, $3)`,
       [req.user.id, id, JSON.stringify({ sku: item.sku, name: item.name })]
     );
+
+    await client.query('COMMIT');
 
     // Emitir actualización en tiempo real
     if (io) {
@@ -313,8 +341,20 @@ router.delete('/:id', requireBranchAccess, async (req, res) => {
 
     res.json({ message: 'Item eliminado correctamente' });
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error('Error eliminando item:', error);
-    res.status(500).json({ error: 'Error al eliminar item' });
+    
+    // Mensaje de error más específico
+    let errorMessage = 'Error al eliminar item';
+    if (error.code === '23503') { // Foreign key violation
+      errorMessage = 'No se puede eliminar el item porque tiene ventas asociadas';
+    } else if (error.code === '23505') { // Unique violation
+      errorMessage = 'Error de integridad de datos';
+    }
+    
+    res.status(500).json({ error: errorMessage });
+  } finally {
+    client.release();
   }
 });
 
