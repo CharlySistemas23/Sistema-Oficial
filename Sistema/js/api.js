@@ -880,7 +880,14 @@ const API = {
     },
 
     async createInventoryItem(item) {
-        return await this.post('/api/inventory', item);
+        // Sanitizar: el backend espera UUID en branch_id; y no aceptará ids locales tipo "mke..."
+        const isUUID = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || ''));
+        const payload = { ...(item || {}) };
+        // No mandar id local no-UUID
+        if (payload.id && !isUUID(payload.id)) delete payload.id;
+        // No mandar branch_id si no es UUID
+        if (payload.branch_id && !isUUID(payload.branch_id)) delete payload.branch_id;
+        return await this.post('/api/inventory', payload);
     },
 
     async updateInventoryItem(id, item) {
