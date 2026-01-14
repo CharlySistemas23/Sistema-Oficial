@@ -592,7 +592,17 @@ const SyncManager = {
                                     if (typeof API.createCost !== 'function') {
                                         throw new Error('API.createCost no disponible');
                                     }
-                                    await API.createCost(entityData);
+                                    const created = await API.createCost(entityData);
+                                    // Si el costo local tenía id no-UUID, el servidor generó uno nuevo.
+                                    // Migrar para que no queden “fantasmas” y futuras actualizaciones funcionen.
+                                    try {
+                                        if (created && created.id && created.id !== entityData.id) {
+                                            await DB.put('cost_entries', created);
+                                            await DB.delete('cost_entries', entityData.id);
+                                        }
+                                    } catch (e) {
+                                        console.warn('No se pudo migrar costo local a id del servidor:', e);
+                                    }
                                 }
                                 await DB.delete('sync_queue', item.id);
                                 successCount++;
