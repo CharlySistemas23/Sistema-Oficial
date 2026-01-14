@@ -51,7 +51,8 @@ const io = new Server(httpServer, {
       return envOrigins.length > 0 ? envOrigins : true;
     })(),
     methods: ['GET', 'POST'],
-    credentials: true
+    credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-username', 'x-branch-id']
   },
   transports: ['websocket', 'polling']
 });
@@ -69,8 +70,12 @@ app.use(cors({
     if (!origin) return callback(null, false);
     return callback(null, raw.includes(origin));
   },
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-username', 'x-branch-id']
 }));
+// Responder preflight OPTIONS antes de cualquier middleware de autenticación
+app.options('*', cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
@@ -82,7 +87,11 @@ const limiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false
 });
-app.use('/api/', limiter);
+// No aplicar rate limit a preflight OPTIONS para evitar bloquear CORS
+app.use('/api/', (req, res, next) => {
+  if (req.method === 'OPTIONS') return next();
+  return limiter(req, res, next);
+});
 
 // Health check endpoint
 app.get('/health', (req, res) => {
