@@ -2348,12 +2348,17 @@ const Costs = {
         if (!amount || amount <= 0) return null;
 
         try {
+            const isUUID = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || ''));
+            const currentBranch = (typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null);
+            const finalBranchId = isUUID(branch_id) ? branch_id : (isUUID(currentBranch) ? currentBranch : null);
+
             const cost = {
                 id: Utils.generateId(),
                 type: type,
                 category: category,
                 amount: amount,
-                branch_id: branch_id || (typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null),
+                // IMPORTANTE: en el backend branch_id es UUID. Si no es UUID, dejar null.
+                branch_id: finalBranchId,
                 date: date || Utils.formatDate(new Date(), 'YYYY-MM-DD'),
                 period_type: 'one_time',
                 recurring: false,
