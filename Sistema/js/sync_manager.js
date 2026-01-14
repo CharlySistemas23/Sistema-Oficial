@@ -580,9 +580,33 @@ const SyncManager = {
                             // Manejar creaciones/actualizaciones
                             entityData = await DB.get('cost_entries', item.entity_id);
                             if (entityData) {
+                                // Sanitizar payload: branch_id e id deben ser UUID para Postgres.
+                                const isUUID = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || ''));
+                                // Normalizar entidad local (evita 500 "invalid input syntax for type uuid: branch3")
+                                if (entityData.branch_id && !isUUID(entityData.branch_id)) {
+                                    try {
+                                        entityData.branch_id = null;
+                                        await DB.put('cost_entries', entityData);
+                                    } catch (e) {
+                                        // no bloquear sync si no se puede persistir la normalización
+                                    }
+                                }
+
                                 if (typeof API === 'undefined') {
                                     throw new Error('API no disponible');
                                 }
+
+                                // Si faltan campos requeridos, no tiene sentido reintentar: eliminar de cola
+                                const requiredOk =
+                                    typeof entityData.amount === 'number' && entityData.amount > 0 &&
+                                    (entityData.type === 'fijo' || entityData.type === 'variable') &&
+                                    !!entityData.date;
+                                if (!requiredOk) {
+                                    console.warn(`⚠️ cost_entry inválido (faltan campos). Eliminando de cola: ${item.entity_id}`);
+                                    await DB.delete('sync_queue', item.id);
+                                    break;
+                                }
+
                                 if (entityData.id && await this.entityExists('cost_entries', entityData.id)) {
                                     if (typeof API.updateCost !== 'function') {
                                         throw new Error('API.updateCost no disponible');
