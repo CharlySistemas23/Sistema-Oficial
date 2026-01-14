@@ -6,7 +6,7 @@ import { query } from '../config/database.js';
 export const authenticateOptional = async (req, res, next) => {
   try {
     // Log para debugging (solo para requests que no son OPTIONS)
-    if (req.method !== 'OPTIONS') {
+    if (process.env.DEBUG_AUTH === 'true' && req.method !== 'OPTIONS') {
       console.log(`🔐 Auth request: ${req.method} ${req.path}`);
       console.log(`   Origin: ${req.headers.origin}`);
       console.log(`   Authorization: ${req.headers['authorization'] ? 'Presente' : 'Ausente'}`);
