@@ -587,77 +587,61 @@ const API = {
             });
             
             // Escuchar actualizaciones de sucursales en tiempo real
+            // NOTA: este handler debe ser sintácticamente válido; si falla, rompe todo `api.js`.
             this.socket.on('branch_updated', async (data) => {
-                const { action, branch } = data;
-                console.log(`🔄 Actualización de sucursal recibida: ${action}`, branch);
-                
-                if (action === 'deleted' && branch) {
-                    // Si se eliminó una sucursal, remover de IndexedDB
-                    try {
-                        if (typeof DB !== 'undefined') {
-                            await DB.delete('catalog_branches', branch.id);
-                            console.log(`✅ Sucursal ${branch.name} eliminada de IndexedDB`);
-                        }
-                    } catch (error) {
-                        console.warn('Error eliminando sucursal de IndexedDB:', error);
-                    }
-                } else if (branch) {
-                    // Si se creó o actualizó una sucursal, guardar/actualizar en IndexedDB
-                    try {
-                        if (typeof DB !== 'undefined') {
-                            await DB.put('catalog_branches', branch);
-                            console.log(`✅ Sucursal ${branch.name} ${action === 'created' ? 'agregada' : 'actualizada'} en IndexedDB`);
-                        }
-                    } catch (error) {
-                        console.warn('Error guardando sucursal en IndexedDB:', error);
-                    }
-                }
-                
-                // Recargar módulo de branches si está activo
-                if (typeof Branches !== 'undefined' && Branches.loadBranches && UI.currentModule === 'branches') {
-                    console.log('🔄 Recargando módulo de sucursales...');
-                    setTimeout(() => {
-                        Branches.loadBranches();
-                    }, 100);
-                }
-                
-                // Actualizar selector de sucursales
-                if (typeof BranchManager !== 'undefined' && BranchManager.updateBranchSelector) {
-                    setTimeout(() => {
-                        BranchManager.updateBranchSelector();
-                    }, 100);
-                }
-                    
-                    // Si la sucursal eliminada era la actual, cambiar a la principal
-                    if (typeof BranchManager !== 'undefined') {
-                        const currentBranchId = BranchManager.getCurrentBranchId();
-                        if (currentBranchId === branch.id) {
-                            const mainBranch = await DB.get('catalog_branches', (await DB.getAll('catalog_branches')).find(b => b.code === 'MAIN')?.id) || (await DB.getAll('catalog_branches'))[0];
-                            if (mainBranch) {
-                                BranchManager.setCurrentBranch(mainBranch.id);
+                try {
+                    const { action, branch } = data || {};
+                    console.log(`🔄 Actualización de sucursal recibida: ${action}`, branch);
+
+                    if (!branch || !branch.id) return;
+
+                    // Persistir en IndexedDB
+                    if (typeof DB !== 'undefined') {
+                        if (action === 'deleted') {
+                            try {
+                                await DB.delete('catalog_branches', branch.id);
+                                console.log(`✅ Sucursal ${branch.name || branch.id} eliminada de IndexedDB`);
+                            } catch (error) {
+                                console.warn('Error eliminando sucursal de IndexedDB:', error);
+                            }
+                        } else if (action === 'created' || action === 'updated') {
+                            try {
+                                await DB.put('catalog_branches', branch);
+                                console.log(`✅ Sucursal ${branch.name || branch.id} ${action === 'created' ? 'agregada' : 'actualizada'} en IndexedDB`);
+                            } catch (error) {
+                                console.warn('Error guardando sucursal en IndexedDB:', error);
                             }
                         }
                     }
-                } else if ((action === 'created' || action === 'updated') && branch) {
-                    // Si se creó o actualizó, guardar en IndexedDB
-                    try {
-                        if (typeof DB !== 'undefined') {
-                            await DB.put('catalog_branches', branch);
-                            console.log(`✅ Sucursal ${branch.name} ${action === 'created' ? 'agregada' : 'actualizada'} en IndexedDB`);
+
+                    // Si la sucursal eliminada era la actual, cambiar a la principal
+                    if (action === 'deleted' && typeof BranchManager !== 'undefined' && BranchManager.getCurrentBranchId) {
+                        const currentBranchId = BranchManager.getCurrentBranchId();
+                        if (currentBranchId === branch.id && typeof DB !== 'undefined') {
+                            try {
+                                const all = await DB.getAll('catalog_branches');
+                                const main = all.find(b => b.code === 'MAIN') || all[0];
+                                if (main && BranchManager.setCurrentBranch) {
+                                    BranchManager.setCurrentBranch(main.id);
+                                }
+                            } catch (e) {
+                                console.warn('Error re-seleccionando sucursal tras eliminación:', e);
+                            }
                         }
-                    } catch (error) {
-                        console.warn('Error guardando sucursal en IndexedDB:', error);
                     }
-                }
-                
-                // Recargar lista de sucursales
-                if (typeof Branches !== 'undefined' && Branches.loadBranches) {
-                    Branches.loadBranches();
-                }
-                
-                // Actualizar selector de sucursales
-                if (typeof BranchManager !== 'undefined' && BranchManager.updateBranchSelector) {
-                    BranchManager.updateBranchSelector();
+
+                    // Recargar módulo de branches si está activo
+                    if (typeof Branches !== 'undefined' && Branches.loadBranches && typeof UI !== 'undefined' && UI.currentModule === 'branches') {
+                        console.log('🔄 Recargando módulo de sucursales...');
+                        setTimeout(() => Branches.loadBranches(), 100);
+                    }
+
+                    // Actualizar selector de sucursales (siempre)
+                    if (typeof BranchManager !== 'undefined' && BranchManager.updateBranchSelector) {
+                        setTimeout(() => BranchManager.updateBranchSelector(), 100);
+                    }
+                } catch (e) {
+                    console.error('Error procesando branch_updated:', e);
                 }
             });
 
