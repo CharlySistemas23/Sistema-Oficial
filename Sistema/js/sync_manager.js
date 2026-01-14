@@ -400,7 +400,17 @@ const SyncManager = {
                                     if (typeof API.createInventoryItem !== 'function') {
                                         throw new Error('API.createInventoryItem no disponible');
                                     }
-                                    await API.createInventoryItem(entityData);
+                                    const created = await API.createInventoryItem(entityData);
+                                    // Si el item local tenía id no-UUID, el servidor generó uno nuevo.
+                                    // Para evitar “fantasmas”, migrar a id del servidor.
+                                    try {
+                                        if (created && created.id && created.id !== entityData.id) {
+                                            await DB.put('inventory_items', created);
+                                            await DB.delete('inventory_items', entityData.id);
+                                        }
+                                    } catch (e) {
+                                        console.warn('No se pudo migrar item local a id del servidor:', e);
+                                    }
                                 }
                                 await DB.delete('sync_queue', item.id);
                                 successCount++;
