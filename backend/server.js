@@ -46,7 +46,10 @@ app.set('trust proxy', 1);
 // Configurar Socket.IO
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.SOCKET_IO_CORS_ORIGIN || '*',
+    origin: (() => {
+      const envOrigins = (process.env.ALLOWED_ORIGINS || process.env.SOCKET_IO_CORS_ORIGIN || '').split(',').map(o => o.trim()).filter(Boolean);
+      return envOrigins.length > 0 ? envOrigins : true;
+    })(),
     methods: ['GET', 'POST'],
     credentials: true
   },
@@ -59,7 +62,13 @@ import { setupSocketIO } from './socket/socketHandler.js';
 // Middleware de seguridad
 app.use(helmet());
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || '*',
+  origin: (origin, callback) => {
+    const raw = (process.env.ALLOWED_ORIGINS || process.env.CORS_ORIGIN || '').split(',').map(o => o.trim()).filter(Boolean);
+    const allowAll = raw.length === 0 || raw.includes('*');
+    if (allowAll) return callback(null, true);
+    if (!origin) return callback(null, false);
+    return callback(null, raw.includes(origin));
+  },
   credentials: true
 }));
 app.use(express.json({ limit: '10mb' }));
