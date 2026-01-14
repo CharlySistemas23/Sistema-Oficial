@@ -29,6 +29,7 @@ import uploadRoutes from './routes/upload.js';
 // Importar middleware
 import { authenticateOptional } from './middleware/authOptional.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import { query as dbQuery } from './config/database.js';
 
 // Configurar dotenv
 dotenv.config();
@@ -117,11 +118,45 @@ app.use('/api/', (req, res, next) => {
 
 // Health check endpoint
 app.get('/health', (req, res) => {
+  // No exponer credenciales; solo mostrar host para debugging.
+  let dbHost = null;
+  try {
+    if (process.env.DATABASE_URL) {
+      dbHost = new URL(process.env.DATABASE_URL).host;
+    }
+  } catch (e) {
+    dbHost = 'invalid_database_url';
+  }
   res.json({ 
     status: 'OK', 
     timestamp: new Date().toISOString(),
-    uptime: process.uptime()
+    uptime: process.uptime(),
+    dbConfigured: !!process.env.DATABASE_URL,
+    dbHost
   });
+});
+
+// Health check de BD: valida que Postgres responda (sin exponer datos).
+// Usa 1 intento para responder rápido en diagnósticos.
+app.get('/health/db', async (req, res) => {
+  try {
+    const result = await dbQuery('SELECT 1 as ok', [], 1);
+    res.json({
+      status: 'OK',
+      db: 'OK',
+      result: result?.rows?.[0] || { ok: 1 },
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Health DB falló:', error?.message || error);
+    res.status(503).json({
+      status: 'OK',
+      db: 'ERROR',
+      error: error?.message || 'db_error',
+      code: error?.code,
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
 // Rutas públicas
