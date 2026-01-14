@@ -1876,7 +1876,13 @@ const Inventory = {
             return;
         }
 
-        const branchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : (localStorage.getItem('current_branch_id') || 'default');
+        const rawBranchId = typeof BranchManager !== 'undefined'
+            ? BranchManager.getCurrentBranchId()
+            : (localStorage.getItem('current_branch_id') || null);
+
+        const isUUID = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || ''));
+        // Solo enviar branch_id al servidor si es UUID. Si no, dejarlo null para que el backend lo maneje.
+        const branchId = isUUID(rawBranchId) ? rawBranchId : null;
         
         // #region agent log
         fetch('http://127.0.0.1:7242/ingest/d085ffd8-d37f-46dc-af23-0f9fbbe46595',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'inventory.js:1370',message:'Branch ID determined',data:{branchId:branchId,fromBranchManager:typeof BranchManager!=='undefined',fromLocalStorage:localStorage.getItem('current_branch_id')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
@@ -1945,6 +1951,7 @@ const Inventory = {
             stock_actual: stockActual,
             stock_min: stockMin,
             stock_max: stockMax,
+            // IMPORTANTE: branch_id debe ser UUID para Postgres. Si no lo es, lo dejamos null.
             branch_id: branchId,
             created_at: existingItem?.created_at || new Date().toISOString(),
             updated_at: new Date().toISOString()
@@ -2011,6 +2018,10 @@ const Inventory = {
         // Intentar guardar con API si está disponible
         if (typeof API !== 'undefined' && API.baseURL && API.token) {
             try {
+                // Sanitizar antes de mandar al servidor (evitar branch_id inválido)
+                if (item.branch_id && !isUUID(item.branch_id)) {
+                    delete item.branch_id;
+                }
                 if (itemId) {
                     // Actualizar item existente
                     console.log('Actualizando item con API...');
@@ -2150,7 +2161,8 @@ const Inventory = {
                                 ? `Actualización de costo - ${item.name}` 
                                 : `Adquisición de producto - ${item.name}`,
                             date: new Date().toISOString().split('T')[0],
-                            branch_id: branchId,
+                            // Solo enviar branch_id si es UUID; si no, omitir para evitar error en backend
+                            branch_id: branchId || undefined,
                             notes: `Item: ${item.sku || item.name}, Costo anterior: ${Utils.formatCurrency(oldCost)}, Costo nuevo: ${Utils.formatCurrency(item.cost)}`
                         });
                     } catch (error) {
