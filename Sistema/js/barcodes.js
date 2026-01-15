@@ -78,7 +78,9 @@ const BarcodeManager = {
                 }
                 
                 // Prevenir F5, F12, etc durante escaneo
-                if (e.key.startsWith('F') || e.key === 'F5' || e.key === 'F12') {
+                // e.key puede no ser string en algunos eventos/teclados -> proteger startsWith
+                const key = typeof e.key === 'string' ? e.key : '';
+                if (key.startsWith('F') || key === 'F5' || key === 'F12') {
                     e.preventDefault();
                     e.stopPropagation();
                     return false;
