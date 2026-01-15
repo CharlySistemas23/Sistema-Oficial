@@ -1302,11 +1302,23 @@ Object.assign(POS, {
             const tpvVisa = parseFloat(document.getElementById('payment-tpv-visa')?.value || 0);
             const tpvAmex = parseFloat(document.getElementById('payment-tpv-amex')?.value || 0);
 
-            // Obtener tipos de cambio del día actual
+            // Obtener tipos de cambio del día actual (robusto: ExchangeRates puede no estar cargado)
             const today = Utils.formatDate(new Date(), 'YYYY-MM-DD');
-            const exchangeRates = await ExchangeRates.getExchangeRate(today);
-            const exchangeRate = exchangeRates.usd;
-            const exchangeRateCadValue = exchangeRates.cad;
+            let exchangeRate = 20;
+            let exchangeRateCadValue = 15;
+            try {
+                if (typeof ExchangeRates !== 'undefined' && ExchangeRates.getExchangeRate) {
+                    const exchangeRates = await ExchangeRates.getExchangeRate(today);
+                    exchangeRate = parseFloat(exchangeRates?.usd || 20) || 20;
+                    exchangeRateCadValue = parseFloat(exchangeRates?.cad || 15) || 15;
+                } else if (typeof API !== 'undefined' && API.baseURL && API.token && API.getExchangeRateByDate) {
+                    const rate = await API.getExchangeRateByDate(today);
+                    exchangeRate = parseFloat(rate?.usd_to_mxn || rate?.usd || 20) || 20;
+                    exchangeRateCadValue = parseFloat(rate?.cad_to_mxn || rate?.cad || 15) || 15;
+                }
+            } catch (e) {
+                // No bloquear pagos por tipo de cambio. Usar fallback.
+            }
 
             // Convertir todo a MXN
             let totalPayments = 0;
@@ -1352,8 +1364,18 @@ Object.assign(POS, {
         if (currency === 'USD') {
             // Obtener tipo de cambio del día actual
             const today = Utils.formatDate(new Date(), 'YYYY-MM-DD');
-            const exchangeRates = await ExchangeRates.getExchangeRate(today);
-            const rate = exchangeRates.usd;
+            let rate = 20;
+            try {
+                if (typeof ExchangeRates !== 'undefined' && ExchangeRates.getExchangeRate) {
+                    const exchangeRates = await ExchangeRates.getExchangeRate(today);
+                    rate = parseFloat(exchangeRates?.usd || 20) || 20;
+                } else if (typeof API !== 'undefined' && API.baseURL && API.token && API.getExchangeRateByDate) {
+                    const r = await API.getExchangeRateByDate(today);
+                    rate = parseFloat(r?.usd_to_mxn || r?.usd || 20) || 20;
+                }
+            } catch (e) {
+                // fallback
+            }
             const usdAmount = total / rate;
             document.getElementById('payment-cash-usd').value = usdAmount.toFixed(2);
         } else {
@@ -1455,10 +1477,20 @@ Object.assign(POS, {
         const guideId = isUUID(rawGuideId) ? rawGuideId : null;
         const customerId = isUUID(rawCustomerId) ? rawCustomerId : null;
         const currency = 'MXN';
-        // Obtener tipo de cambio del día actual
+        // Obtener tipo de cambio del día actual (robusto)
         const today = Utils.formatDate(new Date(), 'YYYY-MM-DD');
-        const exchangeRates = await ExchangeRates.getExchangeRate(today);
-        const exchangeRate = exchangeRates.usd;
+        let exchangeRate = 20;
+        try {
+            if (typeof ExchangeRates !== 'undefined' && ExchangeRates.getExchangeRate) {
+                const exchangeRates = await ExchangeRates.getExchangeRate(today);
+                exchangeRate = parseFloat(exchangeRates?.usd || 20) || 20;
+            } else if (typeof API !== 'undefined' && API.baseURL && API.token && API.getExchangeRateByDate) {
+                const r = await API.getExchangeRateByDate(today);
+                exchangeRate = parseFloat(r?.usd_to_mxn || r?.usd || 20) || 20;
+            }
+        } catch (e) {
+            // fallback
+        }
 
         // Generar folio
         // Nota: localmente branchId puede ser "branch1". Para el servidor usamos UUID (branchId) o fallback a req.user.branchId.
