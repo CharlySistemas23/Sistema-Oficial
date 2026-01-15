@@ -1039,6 +1039,12 @@ const Employees = {
                 branchIds = Array.from(branchCheckboxes).map(cb => cb.value);
                 // Si tiene múltiples sucursales, usar la primera como branch_id principal
                 branchId = branchIds.length > 0 ? branchIds[0] : null;
+
+                // Fallback: si el UI no mostró checkboxes (o no hay marcadas), usar el select simple
+                if (branchIds.length === 0 && branchInput?.value) {
+                    branchIds = [branchInput.value];
+                    branchId = branchInput.value;
+                }
                 
                 // Validar que al menos una sucursal esté seleccionada (excepto master_admin)
                 if (role !== 'master_admin' && branchIds.length === 0) {
