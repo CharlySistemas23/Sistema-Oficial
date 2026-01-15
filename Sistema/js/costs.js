@@ -2369,7 +2369,8 @@ const Costs = {
                 ...extraFields
             };
 
-            await DB.put('cost_entries', cost);
+            // Nota: NO auto-inyectar branch_id local (branch1/branch2...) porque el backend espera UUID
+            await DB.put('cost_entries', cost, { autoBranchId: false });
             await SyncManager.addToQueue('cost_entry', cost.id);
             
             // Emitir evento de actualización de costo
