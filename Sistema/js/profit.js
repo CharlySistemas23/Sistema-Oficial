@@ -290,6 +290,9 @@ const ProfitCalculator = {
                 filterByBranch: false, // Caso especial: necesitamos todos los costos para prorrateos
                 branchIdField: 'branch_id' 
             }) || [];
+
+            // Inicializar acumulador (FIX: evitaba ReferenceError: fixedCostsDaily is not defined)
+            let fixedCostsDaily = 0;
             
             // Costos mensuales prorrateados
             const monthlyCosts = allCosts.filter(c => {
