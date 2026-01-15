@@ -1484,6 +1484,7 @@ const Transfers = {
             };
 
             let transfer;
+            let createdViaAPI = false;
             
             // Intentar crear transferencia con API si está disponible
             if (typeof API !== 'undefined' && API.baseURL && API.token && API.createTransfer) {
@@ -1491,9 +1492,10 @@ const Transfers = {
                     console.log('📦 Creando transferencia con API...');
                     transfer = await API.createTransfer(transferData);
                     console.log('✅ Transferencia creada con API:', transfer.folio);
+                    createdViaAPI = true;
                     
                     // Guardar en IndexedDB como caché
-                    await DB.put('inventory_transfers', transfer);
+                    await DB.put('inventory_transfers', transfer, { autoBranchId: false });
                     
                     // Guardar items de transferencia en IndexedDB
                     if (transfer.items && transfer.items.length > 0) {
@@ -1506,7 +1508,7 @@ const Transfers = {
                                 item_name: item.item_name,
                                 quantity: item.quantity,
                                 created_at: item.created_at || new Date().toISOString()
-                            });
+                            }, { autoBranchId: false });
                         }
                     }
                 } catch (apiError) {
@@ -1534,7 +1536,7 @@ const Transfers = {
                     sync_status: 'pending'
                 };
 
-                await DB.add('inventory_transfers', transfer);
+                await DB.add('inventory_transfers', transfer, { autoBranchId: false });
 
                 // Crear items de transferencia localmente
                 const transferItemsCreated = [];
@@ -1551,7 +1553,7 @@ const Transfers = {
                         item_name: item.name,
                         quantity: selectedItem.quantity,
                         created_at: new Date().toISOString()
-                    });
+                    }, { autoBranchId: false });
                     transferItemsCreated.push({ id: transferItemId, item: item, quantity: selectedItem.quantity });
                 }
                 
@@ -1562,16 +1564,14 @@ const Transfers = {
                     return;
                 }
                 
-                // Agregar a cola de sincronización
+                // Agregar a cola de sincronización (solo cuando se creó localmente)
                 if (typeof SyncManager !== 'undefined') {
                     await SyncManager.addToQueue('inventory_transfer', transfer.id);
                 }
             }
 
-            // Agregar a cola de sincronización
-            if (typeof SyncManager !== 'undefined') {
-                await SyncManager.addToQueue('inventory_transfer', transfer.id);
-            }
+            // Si se creó con API, NO encolar (ya existe en servidor).
+            // Si se creó localmente, ya se encoló arriba.
 
             Utils.showNotification(`Transferencia ${folio} creada exitosamente`, 'success');
             UI.closeModal();
