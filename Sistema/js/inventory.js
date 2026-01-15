@@ -329,8 +329,30 @@ const Inventory = {
                     allItemsRaw = await API.getInventoryItems(filters);
                     
                     // Guardar en IndexedDB como caché
+                    // Nota: NO auto-inyectar branch_id local (branch1/branch2...) porque el backend espera UUID
                     for (const item of allItemsRaw) {
-                        await DB.put('inventory_items', item);
+                        try {
+                            await DB.put('inventory_items', item, { autoBranchId: false });
+                        } catch (e) {
+                            // Si hay duplicados por SKU (id local vs id servidor), limpiar y reintentar
+                            if (e && (e.name === 'ConstraintError' || String(e.message).includes('ConstraintError'))) {
+                                try {
+                                    const sku = item?.sku;
+                                    if (sku) {
+                                        const existingBySku = await DB.query('inventory_items', 'sku', sku) || [];
+                                        for (const ex of existingBySku) {
+                                            if (ex && ex.id && ex.id !== item.id) {
+                                                await DB.delete('inventory_items', ex.id);
+                                            }
+                                        }
+                                    }
+                                } catch (cleanupErr) {}
+                                // Reintentar una vez
+                                await DB.put('inventory_items', item, { autoBranchId: false });
+                            } else {
+                                throw e;
+                            }
+                        }
                     }
                     
                     console.log(`✅ ${allItemsRaw.length} items cargados desde API`);
@@ -381,6 +403,8 @@ const Inventory = {
             const verifiedItems = [];
             const ghostItems = [];
             let serverItems = new Set();
+            let serverBySku = new Map();
+            let serverByBarcode = new Map();
             
             // Si hay API disponible, obtener lista de IDs del servidor para comparar
             if (typeof API !== 'undefined' && API.baseURL && API.token && API.getInventoryItems) {
@@ -389,6 +413,8 @@ const Inventory = {
                         branch_id: viewAllBranches ? null : currentBranchId
                     });
                     serverItems = new Set(serverItemsList.map(item => item.id));
+                    serverBySku = new Map(serverItemsList.filter(i => i?.sku).map(i => [String(i.sku), i]));
+                    serverByBarcode = new Map(serverItemsList.filter(i => i?.barcode).map(i => [String(i.barcode), i]));
                     console.log(`✅ ${serverItems.size} items verificados contra servidor`);
                 } catch (apiError) {
                     console.warn('No se pudo verificar items contra servidor, usando verificación local:', apiError);
@@ -412,6 +438,31 @@ const Inventory = {
                     if (isValid) {
                         verifiedItems.push(item);
                     } else {
+                        // Si el ID no coincide pero el SKU/Barcode existe en servidor, NO es fantasma: es mismatch de id.
+                        if (serverItems.size > 0) {
+                            const skuKey = item?.sku ? String(item.sku) : null;
+                            const bcKey = item?.barcode ? String(item.barcode) : null;
+                            const serverMatch = (skuKey && serverBySku.get(skuKey)) || (bcKey && serverByBarcode.get(bcKey));
+                            if (serverMatch && serverMatch.id) {
+                                try {
+                                    await DB.delete('inventory_items', item.id);
+                                    await DB.put('inventory_items', serverMatch, { autoBranchId: false });
+                                    // Limpiar sync_queue del id viejo para no reintentar crear duplicado
+                                    const syncQueue = await DB.getAll('sync_queue') || [];
+                                    for (const queueItem of syncQueue) {
+                                        if (queueItem.type === 'inventory_item' && queueItem.entity_id === item.id) {
+                                            await DB.delete('sync_queue', queueItem.id);
+                                        }
+                                    }
+                                    console.log(`🔁 Item reconciliado por SKU/Barcode: ${item.id} → ${serverMatch.id}`);
+                                    verifiedItems.push(serverMatch);
+                                    continue;
+                                } catch (reconcileErr) {
+                                    console.warn('No se pudo reconciliar item por SKU/Barcode:', reconcileErr);
+                                }
+                            }
+                        }
+
                         ghostItems.push(item.id);
                         console.warn(`⚠️ Item fantasma detectado: ${item.id} (${item.sku || item.name || 'sin nombre'})`);
                     }
@@ -1863,15 +1914,8 @@ const Inventory = {
     },
 
     async saveItem(itemId) {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/d085ffd8-d37f-46dc-af23-0f9fbbe46595',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'inventory.js:1362',message:'saveItem called',data:{itemId:itemId,isEdit:!!itemId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-        // #endregion
-        
         const form = document.getElementById('inventory-form');
         if (!form || !form.checkValidity()) {
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/d085ffd8-d37f-46dc-af23-0f9fbbe46595',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'inventory.js:1366',message:'Form validation failed',data:{formExists:!!form,formValid:form?.checkValidity()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-            // #endregion
             form.reportValidity();
             return;
         }
@@ -1884,10 +1928,6 @@ const Inventory = {
         // Solo enviar branch_id al servidor si es UUID. Si no, dejarlo null para que el backend lo maneje.
         const branchId = isUUID(rawBranchId) ? rawBranchId : null;
         
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/d085ffd8-d37f-46dc-af23-0f9fbbe46595',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'inventory.js:1370',message:'Branch ID determined',data:{branchId:branchId,fromBranchManager:typeof BranchManager!=='undefined',fromLocalStorage:localStorage.getItem('current_branch_id')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-        // #endregion
-
         const formBarcode = document.getElementById('inv-barcode').value.trim();
         const formSku = document.getElementById('inv-sku').value.trim();
         
@@ -1918,8 +1958,13 @@ const Inventory = {
         
         const existingItem = itemId ? await DB.get('inventory_items', itemId) : null;
         
-        const item = {
-            id: itemId || Utils.generateId(),
+        // IMPORTANTE: generar UUID si está disponible para evitar que el servidor genere otro id y se creen “fantasmas”
+        const newId = (!itemId && typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+            ? crypto.randomUUID()
+            : (itemId || Utils.generateId());
+
+        let item = {
+            id: itemId || newId,
             sku: formSku,
             barcode: finalBarcode,
             name: document.getElementById('inv-name').value,
@@ -2015,6 +2060,7 @@ const Inventory = {
             }
         }
 
+        let savedWithAPI = false;
         // Intentar guardar con API si está disponible
         if (typeof API !== 'undefined' && API.baseURL && API.token) {
             try {
@@ -2033,14 +2079,17 @@ const Inventory = {
                     item = await API.createInventoryItem(item);
                     console.log('✅ Item creado con API');
                 }
+
+                savedWithAPI = true;
                 
                 // Guardar en IndexedDB como caché
-                await DB.put('inventory_items', item);
+                // Nota: NO auto-inyectar branch_id local (branch1/branch2...) porque el backend espera UUID
+                await DB.put('inventory_items', item, { autoBranchId: false });
             } catch (apiError) {
                 console.error('Error guardando item con API, usando modo local:', apiError);
                 // Fallback a modo local
                 try {
-                    await DB.put('inventory_items', item);
+                    await DB.put('inventory_items', item, { autoBranchId: false });
                 } catch (error) {
                     throw error;
                 }
@@ -2048,7 +2097,7 @@ const Inventory = {
         } else {
             // Modo offline
             try {
-                await DB.put('inventory_items', item);
+                await DB.put('inventory_items', item, { autoBranchId: false });
             } catch (error) {
                 throw error;
             }
@@ -2173,8 +2222,10 @@ const Inventory = {
             }
         }
 
-        // Add to sync queue
-        await SyncManager.addToQueue('inventory_item', item.id);
+        // Add to sync queue SOLO si NO se guardó con API (si ya se guardó, reintentar crea duplicados por SKU)
+        if (typeof SyncManager !== 'undefined' && !savedWithAPI) {
+            await SyncManager.addToQueue('inventory_item', item.id);
+        }
 
         // Emitir evento de actualización de inventario
         if (typeof Utils !== 'undefined' && Utils.EventBus) {
@@ -2184,19 +2235,12 @@ const Inventory = {
         Utils.showNotification(itemId ? 'Pieza actualizada' : 'Pieza agregada', 'success');
         UI.closeModal();
         
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/d085ffd8-d37f-46dc-af23-0f9fbbe46595',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'inventory.js:1520',message:'About to reload inventory after save',data:{itemId:item.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-        // #endregion
-        
         // Esperar un momento para asegurar que el item se guardó correctamente
         await new Promise(resolve => setTimeout(resolve, 200));
         
         // Forzar recarga completa
         await this.loadInventory();
         
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/d085ffd8-d37f-46dc-af23-0f9fbbe46595',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'inventory.js:1525',message:'Inventory reloaded after save',data:{itemId:item.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-        // #endregion
     },
 
     async editItem(itemId) {
