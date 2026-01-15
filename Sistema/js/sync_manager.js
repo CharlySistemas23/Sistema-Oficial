@@ -387,34 +387,42 @@ const SyncManager = {
                         } else {
                             // Manejar creaciones/actualizaciones
                             entityData = await DB.get('inventory_items', item.entity_id);
-                            if (entityData) {
-                                if (typeof API === 'undefined') {
-                                    throw new Error('API no disponible');
-                                }
-                                if (entityData.id && await this.entityExists('inventory_items', entityData.id)) {
-                                    if (typeof API.updateInventoryItem !== 'function') {
-                                        throw new Error('API.updateInventoryItem no disponible');
-                                    }
-                                    await API.updateInventoryItem(entityData.id, entityData);
-                                } else {
-                                    if (typeof API.createInventoryItem !== 'function') {
-                                        throw new Error('API.createInventoryItem no disponible');
-                                    }
-                                    const created = await API.createInventoryItem(entityData);
-                                    // Si el item local tenía id no-UUID, el servidor generó uno nuevo.
-                                    // Para evitar “fantasmas”, migrar a id del servidor.
-                                    try {
-                                        if (created && created.id && created.id !== entityData.id) {
-                                            await DB.put('inventory_items', created, { autoBranchId: false });
-                                            await DB.delete('inventory_items', entityData.id);
-                                        }
-                                    } catch (e) {
-                                        console.warn('No se pudo migrar item local a id del servidor:', e);
-                                    }
-                                }
+                            if (!entityData) {
+                                // Caso común: el item fue reconciliado/eliminado como “fantasma” en Inventory.loadInventory,
+                                // pero quedó una entrada vieja en sync_queue. No se puede sincronizar: eliminar de la cola.
+                                console.warn(`⚠️ inventory_item ${item.entity_id} no existe localmente. Eliminando de cola: ${item.id}`);
                                 await DB.delete('sync_queue', item.id);
-                                successCount++;
+                                this.syncQueue = this.syncQueue.filter(q => q.id !== item.id);
+                                // No contar como error: es limpieza
+                                continue;
                             }
+
+                            if (typeof API === 'undefined') {
+                                throw new Error('API no disponible');
+                            }
+                            if (entityData.id && await this.entityExists('inventory_items', entityData.id)) {
+                                if (typeof API.updateInventoryItem !== 'function') {
+                                    throw new Error('API.updateInventoryItem no disponible');
+                                }
+                                await API.updateInventoryItem(entityData.id, entityData);
+                            } else {
+                                if (typeof API.createInventoryItem !== 'function') {
+                                    throw new Error('API.createInventoryItem no disponible');
+                                }
+                                const created = await API.createInventoryItem(entityData);
+                                // Si el item local tenía id no-UUID, el servidor generó uno nuevo.
+                                // Para evitar “fantasmas”, migrar a id del servidor.
+                                try {
+                                    if (created && created.id && created.id !== entityData.id) {
+                                        await DB.put('inventory_items', created, { autoBranchId: false });
+                                        await DB.delete('inventory_items', entityData.id);
+                                    }
+                                } catch (e) {
+                                    console.warn('No se pudo migrar item local a id del servidor:', e);
+                                }
+                            }
+                            await DB.delete('sync_queue', item.id);
+                            successCount++;
                         }
                         break;
 
