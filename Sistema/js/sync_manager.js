@@ -931,6 +931,29 @@ const SyncManager = {
                     continue;
                 }
 
+                // Ventas: si ya fue creada en servidor (mismo folio), no reintentar creando.
+                // Esto limpia colas viejas y evita loops de 500 por duplicados.
+                if (item.type === 'sale') {
+                    try {
+                        const localSale = await DB.get('sales', item.entity_id);
+                        const folio = localSale?.folio;
+                        if (folio && typeof API !== 'undefined' && typeof API.getSales === 'function') {
+                            const serverSales = await API.getSales({});
+                            const found = (serverSales || []).find(s => s && s.folio === folio);
+                            if (found && found.id) {
+                                await DB.put('sales', found, { autoBranchId: false });
+                                await DB.delete('sync_queue', item.id);
+                                this.syncQueue = this.syncQueue.filter(q => q.id !== item.id);
+                                console.warn(`✅ Venta ya existía en servidor (folio ${folio}). Eliminada de cola.`);
+                                errorCount = Math.max(0, errorCount - 1);
+                                continue;
+                            }
+                        }
+                    } catch (e) {
+                        // seguir flujo normal de reintentos
+                    }
+                }
+
                 // Si el backend responde 429 (rate limit), pausar sincronización y reintentar después.
                 // IMPORTANTE: no incrementar retry_count ni borrar de cola por esto.
                 if (error && (error.status === 429 || String(error.message).includes('429'))) {
