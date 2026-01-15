@@ -47,7 +47,10 @@ const BranchValidator = {
 
         // Verificar que el empleado tenga acceso a esta sucursal
         if (UserManager.currentEmployee) {
-            return UserManager.currentEmployee.branch_id === branchId;
+            const emp = UserManager.currentEmployee;
+            if (emp.branch_id === branchId) return true;
+            if (Array.isArray(emp.branch_ids) && emp.branch_ids.includes(branchId)) return true;
+            return false;
         }
 
         return false;
@@ -66,10 +69,16 @@ const BranchValidator = {
                 return activeBranch.id;
             }
 
+            // Si hay API configurada, NO crear sucursales legacy automáticamente
+            if (typeof API !== 'undefined' && API.baseURL) {
+                return null;
+            }
+
             // Si no hay sucursales activas, crear una por defecto
             if (branches.length === 0) {
+                const genId = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Utils.generateId();
                 const defaultBranch = {
-                    id: 'branch1',
+                    id: genId(),
                     name: 'Sucursal Principal',
                     address: '',
                     phone: '',
@@ -78,7 +87,7 @@ const BranchValidator = {
                     updated_at: new Date().toISOString()
                 };
 
-                await DB.put('catalog_branches', defaultBranch);
+                await DB.put('catalog_branches', defaultBranch, { autoBranchId: false });
                 console.log('BranchValidator: Sucursal por defecto creada');
                 return defaultBranch.id;
             }
@@ -87,7 +96,7 @@ const BranchValidator = {
             if (branches.length > 0) {
                 branches[0].active = true;
                 branches[0].updated_at = new Date().toISOString();
-                await DB.put('catalog_branches', branches[0]);
+                await DB.put('catalog_branches', branches[0], { autoBranchId: false });
                 console.log('BranchValidator: Primera sucursal activada');
                 return branches[0].id;
             }
@@ -249,19 +258,31 @@ const BranchValidator = {
             config.hasDefaultBranch = !!currentBranchId;
 
             if (!currentBranchId) {
-                const defaultBranchId = await this.getOrCreateDefaultBranch();
-                if (defaultBranchId) {
-                    await BranchManager.setCurrentBranch(defaultBranchId);
+                // Si hay sucursales, usar la primera activa; si no hay, NO inventar en producción.
+                const firstActive = (branches || []).find(b => b.active);
+                if (firstActive) {
+                    await BranchManager.setCurrentBranch(firstActive.id);
                     config.hasDefaultBranch = true;
-                    config.recommendations.push(`Sucursal por defecto establecida: ${defaultBranchId}`);
+                    config.recommendations.push(`Sucursal por defecto establecida: ${firstActive.id}`);
                 } else {
-                    config.issues.push('No se pudo establecer una sucursal por defecto');
+                    const defaultBranchId = await this.getOrCreateDefaultBranch();
+                    if (defaultBranchId) {
+                        await BranchManager.setCurrentBranch(defaultBranchId);
+                        config.hasDefaultBranch = true;
+                        config.recommendations.push(`Sucursal por defecto establecida: ${defaultBranchId}`);
+                    } else {
+                        config.issues.push('No se pudo establecer una sucursal por defecto');
+                    }
                 }
             }
 
             if (UserManager.currentEmployee) {
-                config.currentUserHasBranch = !!UserManager.currentEmployee.branch_id;
-                if (!config.currentUserHasBranch && UserManager.currentUser?.role !== 'admin') {
+                const isMasterAdmin = UserManager.currentUser?.role === 'master_admin' ||
+                                     UserManager.currentUser?.is_master_admin ||
+                                     UserManager.currentUser?.isMasterAdmin;
+                config.currentUserHasBranch = !!UserManager.currentEmployee.branch_id ||
+                                              (Array.isArray(UserManager.currentEmployee.branch_ids) && UserManager.currentEmployee.branch_ids.length > 0);
+                if (!config.currentUserHasBranch && !isMasterAdmin && UserManager.currentUser?.role !== 'admin') {
                     config.issues.push('El empleado actual no tiene sucursal asignada');
                     config.recommendations.push('Asignar una sucursal al empleado en Configuración → Catálogos → Gestionar Sucursales → Asignar Empleados');
                 }
