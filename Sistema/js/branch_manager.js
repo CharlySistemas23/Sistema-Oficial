@@ -1,6 +1,8 @@
 // Branch Manager - Gestión de Sucursales Multisucursal
 
-const BranchManager = {
+// IMPORTANTE: usar `var` + `window` para evitar "Identifier 'BranchManager' has already been declared"
+// si el script se carga dos veces por cache/reintentos del navegador.
+var BranchManager = window.BranchManager || {
     currentBranchId: null,
     currentBranch: null,
     userBranches: [], // Sucursales a las que tiene acceso el usuario
@@ -11,6 +13,78 @@ const BranchManager = {
      */
     async init() {
         try {
+            const isUUID = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || ''));
+
+            // Migración automática: si localStorage tiene branch legacy (branch1/2/3/4) y ya hay API,
+            // mapearlo a UUID real del servidor por nombre/code y migrar datos locales.
+            try {
+                const migratedFlag = await DB.get('settings', 'branch_uuid_migrated');
+                const alreadyMigrated = migratedFlag?.value === 'true';
+                const savedBranchId = localStorage.getItem('current_branch_id');
+
+                if (!alreadyMigrated && savedBranchId && !isUUID(savedBranchId) &&
+                    typeof API !== 'undefined' && API.baseURL && API.token && typeof API.getBranches === 'function') {
+                    const localBranch = await DB.get('catalog_branches', savedBranchId);
+                    const serverBranches = await API.getBranches();
+
+                    const norm = (s) => String(s || '').toLowerCase().replace(/\s+/g, '').trim();
+                    const targetName = norm(localBranch?.name);
+                    const targetCode = norm(localBranch?.code);
+
+                    const match = (serverBranches || []).find(b => {
+                        if (!b) return false;
+                        if (targetCode && norm(b.code) === targetCode) return true;
+                        if (targetName && norm(b.name) === targetName) return true;
+                        return false;
+                    });
+
+                    if (match?.id && isUUID(match.id)) {
+                        // Guardar mapping
+                        await DB.put('settings', { key: 'branch_id_map', value: JSON.stringify({ [savedBranchId]: match.id }), updated_at: new Date().toISOString() });
+
+                        // Migrar datos locales principales
+                        const branchIdMap = { [savedBranchId]: match.id };
+                        const migrateStore = async (storeName, field = 'branch_id') => {
+                            try {
+                                const rows = await DB.getAll(storeName, null, null, { filterByBranch: false }) || [];
+                                for (const r of rows) {
+                                    const old = r?.[field];
+                                    if (old && branchIdMap[old]) {
+                                        await DB.put(storeName, { ...r, [field]: branchIdMap[old] }, { autoBranchId: false });
+                                    }
+                                }
+                            } catch (e) {}
+                        };
+
+                        await migrateStore('inventory_items', 'branch_id');
+                        await migrateStore('cost_entries', 'branch_id');
+                        await migrateStore('customers', 'branch_id');
+                        await migrateStore('sales', 'branch_id');
+                        await migrateStore('repairs', 'branch_id');
+                        // transferencias tienen campos distintos
+                        try {
+                            const transfers = await DB.getAll('inventory_transfers', null, null, { filterByBranch: false }) || [];
+                            for (const t of transfers) {
+                                const fromB = t?.from_branch_id;
+                                const toB = t?.to_branch_id;
+                                const updated = { ...t };
+                                if (fromB && branchIdMap[fromB]) updated.from_branch_id = branchIdMap[fromB];
+                                if (toB && branchIdMap[toB]) updated.to_branch_id = branchIdMap[toB];
+                                if (updated.from_branch_id !== fromB || updated.to_branch_id !== toB) {
+                                    await DB.put('inventory_transfers', updated, { autoBranchId: false });
+                                }
+                            }
+                        } catch (e) {}
+
+                        // Cambiar sucursal actual a UUID real
+                        localStorage.setItem('current_branch_id', match.id);
+                        await DB.put('settings', { key: 'branch_uuid_migrated', value: 'true', updated_at: new Date().toISOString() });
+                    }
+                }
+            } catch (e) {
+                // No bloquear init por migración
+            }
+
             // Verificar si es master_admin
             const isMasterAdmin = UserManager.currentUser?.role === 'master_admin' ||
                                  UserManager.currentUser?.is_master_admin ||
@@ -534,3 +608,5 @@ const BranchManager = {
     }
 };
 
+// Exponer global (y mantener compatibilidad con otros módulos que usan `BranchManager`)
+window.BranchManager = BranchManager;
