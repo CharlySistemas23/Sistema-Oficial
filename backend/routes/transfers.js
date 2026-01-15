@@ -127,6 +127,7 @@ router.get('/:id', requireBranchAccess, async (req, res) => {
 
 // Crear transferencia
 router.post('/', requireBranchAccess, [
+  body('from_branch_id').optional().isUUID().withMessage('from_branch_id debe ser UUID'),
   body('to_branch_id').notEmpty().withMessage('Sucursal destino requerida'),
   body('items').isArray({ min: 1 }).withMessage('Debe incluir al menos un item')
 ], async (req, res) => {
@@ -141,8 +142,16 @@ router.post('/', requireBranchAccess, [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { to_branch_id, items, notes } = req.body;
-    const fromBranchId = req.user.branchId;
+    const { to_branch_id, items, notes, from_branch_id } = req.body;
+    // Por seguridad:
+    // - usuarios normales SIEMPRE transfieren desde su sucursal (req.user.branchId)
+    // - master admin puede especificar from_branch_id en el body
+    const fromBranchId = req.user.isMasterAdmin && from_branch_id ? from_branch_id : req.user.branchId;
+
+    if (!fromBranchId) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Sucursal origen requerida' });
+    }
 
     if (fromBranchId === to_branch_id) {
       await client.query('ROLLBACK');
