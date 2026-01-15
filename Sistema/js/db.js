@@ -389,11 +389,13 @@ const DB = {
                 const cleanData = JSON.parse(JSON.stringify(data));
                 
                 // Agregar branch_id automáticamente si no existe y BranchManager está disponible
+                // IMPORTANTE: solo auto-inyectar si el branch actual es UUID (para no contaminar con ids legacy tipo "branch1")
                 if (options.autoBranchId !== false && typeof BranchManager !== 'undefined') {
                     const branchIdField = options.branchIdField || 'branch_id';
                     if (!cleanData[branchIdField]) {
                         const currentBranchId = BranchManager.getCurrentBranchId();
-                        if (currentBranchId) {
+                        const isUUID = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || ''));
+                        if (currentBranchId && isUUID(currentBranchId)) {
                             cleanData[branchIdField] = currentBranchId;
                         }
                     }
@@ -549,11 +551,13 @@ const DB = {
                 const cleanData = JSON.parse(JSON.stringify(data));
                 
                 // Agregar branch_id automáticamente si no existe y BranchManager está disponible
+                // IMPORTANTE: solo auto-inyectar si el branch actual es UUID (para no contaminar con ids legacy tipo "branch1")
                 if (options.autoBranchId !== false && typeof BranchManager !== 'undefined') {
                     const branchIdField = options.branchIdField || 'branch_id';
                     if (!cleanData[branchIdField]) {
                         const currentBranchId = BranchManager.getCurrentBranchId();
-                        if (currentBranchId) {
+                        const isUUID = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || ''));
+                        if (currentBranchId && isUUID(currentBranchId)) {
                             cleanData[branchIdField] = currentBranchId;
                         }
                     }
