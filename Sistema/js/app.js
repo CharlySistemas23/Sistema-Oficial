@@ -1209,20 +1209,41 @@ const App = {
             }
         }
 
-        // Branches (con nombres correctos)
-        const branches = [
-            { id: 'branch1', name: 'L Vallarta', address: '', active: true },
-            { id: 'branch2', name: 'Malecón', address: '', active: true },
-            { id: 'branch3', name: 'San Sebastián', address: '', active: true },
-            { id: 'branch4', name: 'Sayulita', address: '', active: true }
-        ];
-
-        for (const branch of branches) {
-            try {
-                await DB.put('catalog_branches', branch);
-            } catch (e) {
-                // Already exists
+        // Branches
+        // IMPORTANTE: si hay API, NO sembrar sucursales fake (branch1/2/3/4). El backend usa UUID.
+        try {
+            if (typeof API !== 'undefined' && API.baseURL && API.token && typeof API.getBranches === 'function') {
+                const branchesFromAPI = await API.getBranches();
+                if (Array.isArray(branchesFromAPI) && branchesFromAPI.length > 0) {
+                    for (const b of branchesFromAPI) {
+                        await DB.put('catalog_branches', b, { autoBranchId: false });
+                    }
+                    // Limpiar legacy branches si existen
+                    const legacy = await DB.getAll('catalog_branches') || [];
+                    for (const lb of legacy) {
+                        if (lb?.id && /^branch\d+$/i.test(String(lb.id))) {
+                            try { await DB.delete('catalog_branches', lb.id); } catch (e) {}
+                        }
+                    }
+                }
+            } else {
+                // Fallback offline/demo
+                const branches = [
+                    { id: 'branch1', code: 'LVALLARTA', name: 'L Vallarta', address: '', active: true },
+                    { id: 'branch2', code: 'MALECON', name: 'Malecón', address: '', active: true },
+                    { id: 'branch3', code: 'SANSEBASTIAN', name: 'San Sebastián', address: '', active: true },
+                    { id: 'branch4', code: 'SAYULITA', name: 'Sayulita', address: '', active: true }
+                ];
+                for (const branch of branches) {
+                    try {
+                        await DB.put('catalog_branches', branch, { autoBranchId: false });
+                    } catch (e) {
+                        // Already exists
+                    }
+                }
             }
+        } catch (e) {
+            // No bloquear carga de catálogos si falla branches
         }
 
         // Payment Methods
