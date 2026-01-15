@@ -323,6 +323,19 @@ router.post('/', requireBranchAccess, async (req, res) => {
 
     res.status(201).json(fullSale);
   } catch (error) {
+    // Errores comunes: UUID inválido / not-null / unique
+    if (error && error.code === '22P02') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Datos inválidos (UUID). Verifica sucursal, vendedor/guía/agencia y items.' });
+    }
+    if (error && error.code === '23502') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Faltan campos requeridos para la venta (unit_price/subtotal/items).' });
+    }
+    if (error && error.code === '23505') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'El folio de la venta ya existe' });
+    }
     await client.query('ROLLBACK');
     console.error('Error creando venta:', error);
     res.status(500).json({ error: 'Error al crear venta' });
