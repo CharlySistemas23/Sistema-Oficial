@@ -356,7 +356,114 @@ const SyncManager = {
                                 if (typeof API === 'undefined' || typeof API.createSale !== 'function') {
                                     throw new Error('API.createSale no disponible');
                                 }
-                                await API.createSale(entityData);
+
+                                const isUUID = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || ''));
+
+                                // Construir payload compatible con backend (routes/sales.js)
+                                const payload = { ...entityData };
+                                if (payload.branch_id && !isUUID(payload.branch_id)) delete payload.branch_id;
+                                if (payload.seller_id && !isUUID(payload.seller_id)) payload.seller_id = null;
+                                if (payload.guide_id && !isUUID(payload.guide_id)) payload.guide_id = null;
+                                if (payload.agency_id && !isUUID(payload.agency_id)) payload.agency_id = null;
+                                if (payload.customer_id && !isUUID(payload.customer_id)) payload.customer_id = null;
+
+                                // Items: si vienen en la venta, normalizar; si no, cargar de store sale_items.
+                                let saleItems = Array.isArray(payload.items) ? payload.items : null;
+                                if (!saleItems) {
+                                    try {
+                                        saleItems = await DB.query('sale_items', 'sale_id', payload.id);
+                                    } catch (e) {
+                                        saleItems = [];
+                                    }
+                                }
+                                const normalizedItems = [];
+                                for (const it of (saleItems || [])) {
+                                    const qty = it.quantity || 1;
+                                    const unitPrice = (it.unit_price ?? it.price ?? 0);
+                                    const discountPct = (it.discount_percent ?? it.discount ?? 0);
+                                    const subtotal = (it.subtotal ?? (unitPrice * qty) * (1 - (discountPct / 100)));
+
+                                    // Enlazar item_id si es UUID; si no, intentar resolver por SKU/Barcode; si no, omitir item_id.
+                                    let itemId = it.item_id;
+                                    let sku = it.sku;
+                                    let name = it.name;
+
+                                    if (!sku || !name) {
+                                        try {
+                                            const localInv = it.item_id ? await DB.get('inventory_items', it.item_id) : null;
+                                            sku = sku || localInv?.sku;
+                                            name = name || localInv?.name;
+                                        } catch (e) {}
+                                    }
+
+                                    if (itemId && !isUUID(itemId)) {
+                                        // Resolver por SKU/Barcode si hay API disponible
+                                        try {
+                                            const searchKey = sku || it.barcode || null;
+                                            if (searchKey && typeof API.getInventoryItems === 'function') {
+                                                const candidates = await API.getInventoryItems({ search: String(searchKey) });
+                                                const found = (candidates || []).find(c => c && ((sku && c.sku === sku) || (it.barcode && c.barcode === it.barcode)));
+                                                if (found && found.id) {
+                                                    itemId = found.id;
+                                                } else {
+                                                    itemId = null;
+                                                }
+                                            } else {
+                                                itemId = null;
+                                            }
+                                        } catch (e) {
+                                            itemId = null;
+                                        }
+                                    }
+
+                                    normalizedItems.push({
+                                        item_id: (itemId && isUUID(itemId)) ? itemId : null,
+                                        sku: sku || null,
+                                        name: name || null,
+                                        quantity: qty,
+                                        unit_price: unitPrice,
+                                        discount_percent: discountPct,
+                                        subtotal: subtotal
+                                    });
+                                }
+                                payload.items = normalizedItems;
+
+                                // Payments: si no vienen en payload, cargar store payments
+                                if (!Array.isArray(payload.payments)) {
+                                    try {
+                                        payload.payments = await DB.query('payments', 'sale_id', payload.id);
+                                    } catch (e) {
+                                        payload.payments = [];
+                                    }
+                                }
+
+                                const created = await API.createSale(payload);
+
+                                // Reconciliar IDs: si el servidor generó otro id, migrar sale_id en sale_items/payments
+                                try {
+                                    if (created && created.id && created.id !== entityData.id) {
+                                        const oldSaleId = entityData.id;
+                                        const newSaleId = created.id;
+
+                                        await DB.put('sales', created, { autoBranchId: false });
+                                        await DB.delete('sales', oldSaleId);
+
+                                        const localSaleItems = await DB.query('sale_items', 'sale_id', oldSaleId);
+                                        for (const si of (localSaleItems || [])) {
+                                            await DB.put('sale_items', { ...si, sale_id: newSaleId }, { autoBranchId: false });
+                                            await DB.delete('sale_items', si.id);
+                                        }
+
+                                        const localPays = await DB.query('payments', 'sale_id', oldSaleId);
+                                        for (const p of (localPays || [])) {
+                                            await DB.put('payments', { ...p, sale_id: newSaleId }, { autoBranchId: false });
+                                            await DB.delete('payments', p.id);
+                                        }
+                                    }
+                                } catch (e) {
+                                    console.warn('No se pudo reconciliar sale_id local→servidor:', e);
+                                }
+
                                 await DB.delete('sync_queue', item.id);
                                 successCount++;
                             }
