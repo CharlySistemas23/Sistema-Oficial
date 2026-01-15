@@ -697,6 +697,42 @@ const SyncManager = {
                             // Manejar creaciones/actualizaciones
                             entityData = await DB.get('repairs', item.entity_id);
                             if (entityData) {
+                                const isUUID = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || ''));
+
+                                // Validación mínima (si falta, no tiene sentido reintentar)
+                                if (!entityData.folio || !entityData.description) {
+                                    console.warn(`⚠️ repair inválido (faltan campos). Eliminando de cola: ${item.entity_id}`);
+                                    await DB.delete('sync_queue', item.id);
+                                    break;
+                                }
+
+                                // Normalizar IDs para evitar 500 por UUID inválido
+                                if (entityData.branch_id && !isUUID(entityData.branch_id)) {
+                                    try {
+                                        entityData.branch_id = null;
+                                        await DB.put('repairs', entityData, { autoBranchId: false });
+                                    } catch (e) {}
+                                }
+                                if (entityData.customer_id && !isUUID(entityData.customer_id)) {
+                                    try {
+                                        entityData.customer_id = null;
+                                        await DB.put('repairs', entityData, { autoBranchId: false });
+                                    } catch (e) {}
+                                }
+
+                                // Construir payload “limpio”
+                                const payload = {
+                                    folio: entityData.folio,
+                                    branch_id: (entityData.branch_id && isUUID(entityData.branch_id)) ? entityData.branch_id : undefined,
+                                    customer_id: (entityData.customer_id && isUUID(entityData.customer_id)) ? entityData.customer_id : undefined,
+                                    description: entityData.description,
+                                    estimated_cost: entityData.estimated_cost ?? 0,
+                                    estimated_delivery_date: entityData.estimated_delivery_date || null,
+                                    notes: entityData.notes || '',
+                                    status: entityData.status || 'pending',
+                                    photos: entityData.photos || []
+                                };
+
                                 if (typeof API === 'undefined') {
                                     throw new Error('API no disponible');
                                 }
@@ -704,12 +740,21 @@ const SyncManager = {
                                     if (!API.updateRepair) {
                                         throw new Error('API.updateRepair no disponible');
                                     }
-                                    await API.updateRepair(entityData.id, entityData);
+                                    await API.updateRepair(entityData.id, payload);
                                 } else {
                                     if (!API.createRepair) {
                                         throw new Error('API.createRepair no disponible');
                                     }
-                                    await API.createRepair(entityData);
+                                    const created = await API.createRepair(payload);
+                                    // Migrar id local → id servidor si aplica
+                                    try {
+                                        if (created?.id && created.id !== entityData.id) {
+                                            await DB.put('repairs', { ...entityData, ...created, id: created.id }, { autoBranchId: false });
+                                            await DB.delete('repairs', entityData.id);
+                                        }
+                                    } catch (e) {
+                                        console.warn('No se pudo migrar repair local a id del servidor:', e);
+                                    }
                                 }
                                 await DB.delete('sync_queue', item.id);
                                 successCount++;
