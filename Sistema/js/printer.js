@@ -427,7 +427,8 @@ const Printer = {
             // Obtener nombres de items si no están en los sale_items
             const itemsWithNames = await Promise.all(items.map(async (item) => {
                 if (!item.name) {
-                    const inventoryItem = await DB.get('inventory_items', item.item_id);
+                    // Evitar DataError si item_id es null/undefined
+                    const inventoryItem = item.item_id ? await DB.get('inventory_items', item.item_id) : null;
                     return { ...item, name: inventoryItem?.name || 'Pieza' };
                 }
                 return item;
@@ -667,8 +668,9 @@ const Printer = {
                 return item;
             }));
             
-            const branch = await DB.get('catalog_branches', sale.branch_id);
-            const seller = await DB.get('catalog_sellers', sale.seller_id);
+            // Evitar DataError si ids vienen null/undefined (puede pasar cuando el backend usa req.user.branchId)
+            const branch = sale.branch_id ? await DB.get('catalog_branches', sale.branch_id) : null;
+            const seller = sale.seller_id ? await DB.get('catalog_sellers', sale.seller_id) : null;
             const guide = sale.guide_id ? await DB.get('catalog_guides', sale.guide_id) : null;
             const agency = sale.agency_id ? await DB.get('catalog_agencies', sale.agency_id) : null;
 
