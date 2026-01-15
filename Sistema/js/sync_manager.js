@@ -34,7 +34,8 @@ const SyncManager = {
                     // Verificar validez del token antes de continuar
                     if (hasToken && typeof API.verifyToken === 'function') {
                         const valid = await API.verifyToken();
-                        if (!valid || (valid && valid.valid === false)) {
+                    // valid === null => error transitorio (no borrar token)
+                    if (valid === false || (valid && valid.valid === false)) {
                             console.warn('⚠️ Token inválido o expirado. Limpiando y reintentando login automático...');
                             API.token = null;
                             localStorage.removeItem('api_token');
@@ -136,6 +137,20 @@ const SyncManager = {
 
     async addToQueue(type, entityId, data = null) {
         try {
+            const isUUID = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || ''));
+
+            // Evitar encolar duplicados (mismo tipo + entity_id)
+            if (Array.isArray(this.syncQueue) && this.syncQueue.some(q => q.type === type && q.entity_id === entityId)) {
+                console.warn(`ℹ️ Ya existe en cola: ${type} - ${entityId}`);
+                return;
+            }
+
+            // No encolar transferencias con ID UUID (si ya viene del servidor)
+            if (type === 'inventory_transfer' && isUUID(entityId)) {
+                console.warn(`ℹ️ inventory_transfer con id UUID no se encola (ya existe en servidor): ${entityId}`);
+                return;
+            }
+
             const queueItem = {
                 id: Utils.generateId(),
                 type: type,
@@ -207,7 +222,8 @@ const SyncManager = {
                 // Verificar token y limpiar si es inválido para forzar re-login
                 if (((typeof API !== 'undefined' && API.token) || hasToken) && typeof API.verifyToken === 'function') {
                     const valid = await API.verifyToken();
-                    if (!valid || (valid && valid.valid === false)) {
+                    // valid === null => error transitorio (no borrar token)
+                    if (valid === false || (valid && valid.valid === false)) {
                         console.warn('⚠️ Token inválido/expirado detectado durante sync. Limpiando y reintentando login automático...');
                         API.token = null;
                         localStorage.removeItem('api_token');
@@ -535,24 +551,55 @@ const SyncManager = {
 
                     case 'inventory_transfer':
                         entityData = await DB.get('inventory_transfers', item.entity_id);
-                        if (entityData) {
-                            try {
-                                if (typeof API === 'undefined' || typeof API.createTransfer !== 'function') {
-                                    throw new Error('API.createTransfer no disponible');
-                                }
-                                // Las transferencias siempre se crean (no se actualizan desde el frontend)
-                                await API.createTransfer(entityData);
+                        if (!entityData) {
+                            // Transferencia ya no existe localmente -> limpiar cola
+                            await DB.delete('sync_queue', item.id);
+                            this.syncQueue = this.syncQueue.filter(q => q.id !== item.id);
+                            continue;
+                        }
+
+                        try {
+                            if (typeof API === 'undefined' || typeof API.createTransfer !== 'function') {
+                                throw new Error('API.createTransfer no disponible');
+                            }
+
+                            // Construir payload correcto (el backend requiere items[] y toma from_branch_id del usuario
+                            // o del body si es master admin). No mandar el objeto entero del store.
+                            const transferItems = await DB.query('inventory_transfer_items', 'transfer_id', entityData.id) || [];
+                            const itemsPayload = (transferItems || [])
+                                .filter(ti => ti?.item_id)
+                                .map(ti => ({ item_id: ti.item_id, quantity: ti.quantity || 1 }));
+
+                            if (itemsPayload.length === 0) {
+                                console.warn(`⚠️ inventory_transfer ${entityData.id} sin items. Eliminando de cola.`);
+                                await DB.delete('sync_queue', item.id);
+                                this.syncQueue = this.syncQueue.filter(q => q.id !== item.id);
+                                continue;
+                            }
+
+                            const payload = {
+                                // permitir que el backend use from_branch_id si es master admin (si no, lo ignorará)
+                                from_branch_id: entityData.from_branch_id || null,
+                                to_branch_id: entityData.to_branch_id,
+                                notes: entityData.notes || '',
+                                items: itemsPayload
+                            };
+
+                            await API.createTransfer(payload);
+                            await DB.delete('sync_queue', item.id);
+                            successCount++;
+                        } catch (error) {
+                            // Errores permanentes típicos: item no pertenece a la sucursal origen / stock / etc.
+                            if (error?.message && (error.message.includes('no encontrado en tu sucursal') || error.message.includes('Stock insuficiente'))) {
+                                console.warn(`⚠️ inventory_transfer inválida (permanente). Eliminando de cola: ${entityData.id}`);
                                 await DB.delete('sync_queue', item.id);
                                 successCount++;
-                            } catch (error) {
-                                // Si falla porque ya existe, intentar actualizar
-                                if (error.message && error.message.includes('ya existe')) {
-                                    console.warn(`Transferencia ${item.entity_id} ya existe en servidor, saltando...`);
-                                    await DB.delete('sync_queue', item.id);
-                                    successCount++;
-                                } else {
-                                    throw error;
-                                }
+                            } else if (error?.message && error.message.includes('ya existe')) {
+                                console.warn(`Transferencia ${item.entity_id} ya existe en servidor, saltando...`);
+                                await DB.delete('sync_queue', item.id);
+                                successCount++;
+                            } else {
+                                throw error;
                             }
                         }
                         break;
