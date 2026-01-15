@@ -405,7 +405,7 @@ const SyncManager = {
                                     // Para evitar “fantasmas”, migrar a id del servidor.
                                     try {
                                         if (created && created.id && created.id !== entityData.id) {
-                                            await DB.put('inventory_items', created);
+                                            await DB.put('inventory_items', created, { autoBranchId: false });
                                             await DB.delete('inventory_items', entityData.id);
                                         }
                                     } catch (e) {
@@ -586,7 +586,7 @@ const SyncManager = {
                                 if (entityData.branch_id && !isUUID(entityData.branch_id)) {
                                     try {
                                         entityData.branch_id = null;
-                                        await DB.put('cost_entries', entityData);
+                                        await DB.put('cost_entries', entityData, { autoBranchId: false });
                                     } catch (e) {
                                         // no bloquear sync si no se puede persistir la normalización
                                     }
@@ -801,6 +801,20 @@ const SyncManager = {
             } catch (error) {
                 console.error(`❌ Error sincronizando ${item.type} - ${item.entity_id}:`, error);
                 errorCount++;
+
+                // Si es inventario y el servidor responde 400 por SKU/Barcode duplicado,
+                // normalmente significa que ya fue creado por API anteriormente. No reintentar infinito.
+                if ((item.type === 'inventory_item' || item.type === 'inventory') &&
+                    error?.cause?.status === 400 &&
+                    String(error.message || '').toLowerCase().includes('sku') &&
+                    String(error.message || '').toLowerCase().includes('existe')) {
+                    console.warn(`⚠️ inventory_item duplicado (SKU/Barcode). Eliminando de cola: ${item.entity_id}`);
+                    try { await DB.delete('sync_queue', item.id); } catch (e) {}
+                    this.syncQueue = this.syncQueue.filter(q => q.id !== item.id);
+                    // No contar como error “real” para no spamear al usuario
+                    errorCount = Math.max(0, errorCount - 1);
+                    continue;
+                }
 
                 // Si el backend responde 429 (rate limit), pausar sincronización y reintentar después.
                 // IMPORTANTE: no incrementar retry_count ni borrar de cola por esto.
