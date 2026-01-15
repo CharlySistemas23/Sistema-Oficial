@@ -1652,6 +1652,30 @@ Object.assign(POS, {
                 }
             }
         } else {
+            // Si usamos API, aún así guardar items localmente para impresión/historial offline (sin encolar sync).
+            // Esto evita tickets con "Items: 0" porque en modo API no se crean sale_items locales.
+            try {
+                const existingLocalItems = await DB.query('sale_items', 'sale_id', sale.id) || [];
+                if (existingLocalItems.length === 0) {
+                    for (const item of this.cart) {
+                        await DB.put('sale_items', {
+                            id: Utils.generateId(),
+                            sale_id: sale.id,
+                            item_id: item.id,
+                            sku: item.sku,
+                            name: item.name,
+                            quantity: item.quantity,
+                            unit_price: item.price,
+                            discount_percent: item.discount || 0,
+                            subtotal: item.subtotal,
+                            created_at: new Date().toISOString()
+                        }, { autoBranchId: false });
+                    }
+                }
+            } catch (e) {
+                // No bloquear venta si falla el cache local
+            }
+
             // Si usamos API, calcular comisiones desde los items de la respuesta
             // La API ya actualizó el stock, solo necesitamos calcular comisiones
             if (sale.items) {
