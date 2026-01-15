@@ -243,9 +243,14 @@ const API = {
             });
 
             if (!response.ok) {
-                this.token = null;
-                localStorage.removeItem('api_token');
-                return false;
+                // Solo borrar token si es realmente inválido (401/403).
+                // En 500/timeout/red, mantener token para evitar loops de auto-login.
+                if (response.status === 401 || response.status === 403) {
+                    this.token = null;
+                    localStorage.removeItem('api_token');
+                    return false;
+                }
+                return null; // estado desconocido/transitorio
             }
 
             const data = await response.json();
@@ -256,9 +261,8 @@ const API = {
             return data.valid;
         } catch (error) {
             console.error('Error verificando token:', error);
-            this.token = null;
-            localStorage.removeItem('api_token');
-            return false;
+            // Error de red/transitorio: no borrar token
+            return null;
         }
     },
 
