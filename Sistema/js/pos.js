@@ -1435,15 +1435,25 @@ Object.assign(POS, {
             Utils.showNotification(`Venta ${warnings.join(', ')}`, 'warning');
         }
 
+        const isUUID = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || ''));
+
         // Obtener datos
-        const branchId = typeof BranchManager !== 'undefined' 
-            ? BranchManager.getCurrentBranchId() 
-            : localStorage.getItem('current_branch_id') || 'default';
+        const rawBranchId = typeof BranchManager !== 'undefined'
+            ? BranchManager.getCurrentBranchId()
+            : (localStorage.getItem('current_branch_id') || null);
+        // IMPORTANTE: el backend espera UUID en branch_id. Si no es UUID, omitir y dejar que el backend use req.user.branchId.
+        const branchId = isUUID(rawBranchId) ? rawBranchId : null;
         // Usar vendedor escaneado, o si no hay, el usuario logueado como fallback
-        const sellerId = this.currentSeller?.id || UserManager.currentUser?.employee_id || null;
-        const agencyId = this.currentAgency?.id || null;
-        const guideId = this.currentGuide?.id || null;
-        const customerId = this.currentCustomer?.id || null;
+        const rawSellerId = this.currentSeller?.id || UserManager.currentUser?.employee_id || null;
+        const rawAgencyId = this.currentAgency?.id || null;
+        const rawGuideId = this.currentGuide?.id || null;
+        const rawCustomerId = this.currentCustomer?.id || null;
+
+        // IMPORTANTE: en backend estos ids son UUID. Si no son UUID, omitir (null/undefined).
+        const sellerId = isUUID(rawSellerId) ? rawSellerId : null;
+        const agencyId = isUUID(rawAgencyId) ? rawAgencyId : null;
+        const guideId = isUUID(rawGuideId) ? rawGuideId : null;
+        const customerId = isUUID(rawCustomerId) ? rawCustomerId : null;
         const currency = 'MXN';
         // Obtener tipo de cambio del día actual
         const today = Utils.formatDate(new Date(), 'YYYY-MM-DD');
@@ -1455,10 +1465,10 @@ Object.assign(POS, {
         const branchCode = branch?.name.replace(/\s+/g, '').substring(0, 3).toUpperCase() || 'SUC';
         const folio = Utils.generateFolio(branchCode);
 
-        // Crear venta
+        // Crear venta (shape esperado por backend/routes/sales.js)
         const saleData = {
             folio: folio,
-            branch_id: branchId,
+            branch_id: branchId || undefined,
             seller_id: sellerId,
             agency_id: agencyId,
             guide_id: guideId,
@@ -1469,10 +1479,14 @@ Object.assign(POS, {
             total: total,
             status: 'completed',
             items: this.cart.map(item => ({
-                item_id: item.id,
+                // item_id debe ser UUID para validar stock en servidor; si no lo es, omitir (el servidor guardará sku/name sin link)
+                item_id: isUUID(item.id) ? item.id : undefined,
+                sku: item.sku,
+                name: item.name,
                 quantity: item.quantity,
-                price: item.price,
-                discount: item.discount || 0
+                unit_price: item.price,
+                discount_percent: item.discount || 0,
+                subtotal: (item.price * item.quantity) * (1 - ((item.discount || 0) / 100))
             })),
             payments: [] // Se agregarán después
         };
