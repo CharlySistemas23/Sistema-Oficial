@@ -1461,9 +1461,28 @@ Object.assign(POS, {
         const exchangeRate = exchangeRates.usd;
 
         // Generar folio
-        const branch = await DB.get('catalog_branches', branchId);
+        // Nota: localmente branchId puede ser "branch1". Para el servidor usamos UUID (branchId) o fallback a req.user.branchId.
+        const branch = rawBranchId ? await DB.get('catalog_branches', rawBranchId) : null;
         const branchCode = branch?.name.replace(/\s+/g, '').substring(0, 3).toUpperCase() || 'SUC';
         const folio = Utils.generateFolio(branchCode);
+
+        // Pagos (enviar al backend en el POST inicial para evitar duplicados al re-sync)
+        const cashUsd = parseFloat(document.getElementById('payment-cash-usd')?.value || 0);
+        const cashMxn = parseFloat(document.getElementById('payment-cash-mxn')?.value || 0);
+        const cashCad = parseFloat(document.getElementById('payment-cash-cad')?.value || 0);
+        const tpvVisa = parseFloat(document.getElementById('payment-tpv-visa')?.value || 0);
+        const tpvAmex = parseFloat(document.getElementById('payment-tpv-amex')?.value || 0);
+        const tpvVisaBank = document.getElementById('payment-tpv-visa-bank')?.value || 'banamex';
+        const tpvVisaType = document.getElementById('payment-tpv-visa-type')?.value || 'national';
+        const tpvAmexBank = document.getElementById('payment-tpv-amex-bank')?.value || 'banamex';
+        const tpvAmexType = document.getElementById('payment-tpv-amex-type')?.value || 'national';
+
+        const paymentsForAPI = [];
+        if (cashUsd > 0) paymentsForAPI.push({ method: 'cash_usd', amount: cashUsd, currency: 'USD' });
+        if (cashMxn > 0) paymentsForAPI.push({ method: 'cash_mxn', amount: cashMxn, currency: 'MXN' });
+        if (cashCad > 0) paymentsForAPI.push({ method: 'cash_cad', amount: cashCad, currency: 'CAD' });
+        if (tpvVisa > 0) paymentsForAPI.push({ method: 'tpv_visa', amount: tpvVisa, currency: 'MXN', bank: tpvVisaBank, card_type: tpvVisaType });
+        if (tpvAmex > 0) paymentsForAPI.push({ method: 'tpv_amex', amount: tpvAmex, currency: 'MXN', bank: tpvAmexBank, card_type: tpvAmexType });
 
         // Crear venta (shape esperado por backend/routes/sales.js)
         const saleData = {
@@ -1488,20 +1507,22 @@ Object.assign(POS, {
                 discount_percent: item.discount || 0,
                 subtotal: (item.price * item.quantity) * (1 - ((item.discount || 0) / 100))
             })),
-            payments: [] // Se agregarán después
+            payments: paymentsForAPI
         };
 
         let sale;
         
+        let savedWithAPI = false;
         // Intentar crear venta con API si está disponible
         if (typeof API !== 'undefined' && API.baseURL && API.token && API.createSale) {
             try {
                 console.log('Creando venta con API...');
                 sale = await API.createSale(saleData);
                 console.log('✅ Venta creada con API:', sale.folio);
+                savedWithAPI = true;
                 
                 // Guardar en IndexedDB como caché
-                await DB.put('sales', sale);
+                await DB.put('sales', sale, { autoBranchId: false });
             } catch (apiError) {
                 console.error('Error creando venta con API, usando modo local:', apiError);
                 // Fallback a modo local
@@ -1660,7 +1681,7 @@ Object.assign(POS, {
         // Actualizar venta con comisiones totales
         sale.seller_commission = totalSellerCommission;
         sale.guide_commission = totalGuideCommission;
-        await DB.put('sales', sale);
+        await DB.put('sales', sale, { autoBranchId: false });
 
         // Registrar comisiones automáticamente
         if (typeof Costs !== 'undefined') {
@@ -1705,8 +1726,9 @@ Object.assign(POS, {
             }
         }
 
-        // Agregar a cola de sincronización
-        if (typeof window.SyncManager !== 'undefined') {
+        // Agregar a cola de sincronización SOLO si NO se guardó con API.
+        // Si ya se guardó en servidor, reintentar crea duplicados por folio y puede terminar en error.
+        if (!savedWithAPI && typeof window.SyncManager !== 'undefined') {
             await window.SyncManager.addToQueue('sale', sale.id);
         }
 
