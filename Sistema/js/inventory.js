@@ -201,8 +201,34 @@ const Inventory = {
         const branchFilter = document.getElementById('inventory-branch-filter');
         if (branchFilter) {
             const branches = await DB.getAll('catalog_branches') || [];
-            branchFilter.innerHTML = '<option value="">Todas las sucursales</option>' + 
-                branches.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
+            
+            // Verificar si el usuario es master_admin
+            const isMasterAdmin = typeof UserManager !== 'undefined' && (
+                UserManager.currentUser?.role === 'master_admin' ||
+                UserManager.currentUser?.is_master_admin ||
+                UserManager.currentUser?.isMasterAdmin ||
+                UserManager.currentEmployee?.role === 'master_admin'
+            );
+            
+            // Obtener sucursal actual del usuario
+            const currentBranchId = typeof BranchManager !== 'undefined' 
+                ? BranchManager.getCurrentBranchId() 
+                : localStorage.getItem('current_branch_id');
+            
+            // Si NO es master_admin, ocultar el dropdown y forzar filtro a su sucursal
+            if (!isMasterAdmin) {
+                branchFilter.style.display = 'none';
+                // Forzar el filtro a la sucursal del usuario
+                if (currentBranchId) {
+                    branchFilter.value = currentBranchId;
+                }
+            } else {
+                // Master admin puede ver todas las sucursales
+                branchFilter.style.display = '';
+                branchFilter.innerHTML = '<option value="">Todas las sucursales</option>' + 
+                    branches.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
+            }
+            
             branchFilter.addEventListener('change', () => this.loadInventory());
         }
 
@@ -522,16 +548,17 @@ const Inventory = {
                 const normalizedCurrentBranchId = String(currentBranchId);
                 const beforeBranchFilter = items.length;
                 items = items.filter(item => {
-                    // Incluir items sin branch_id O items que pertenecen a la sucursal actual
+                    // Para usuarios normales (no master_admin), SOLO mostrar items de su sucursal
+                    // NO incluir items sin branch_id (evita mezclar datos)
                     if (!item.branch_id) {
-                        // Items sin branch_id se muestran para todas las sucursales
-                        return true;
+                        return false; // Excluir items sin branch_id para usuarios normales
                     }
                     const itemBranchId = String(item.branch_id);
                     return itemBranchId === normalizedCurrentBranchId;
                 });
                 console.log(`📍 Filtrado por sucursal: ${beforeBranchFilter} → ${items.length} items (sucursal: ${currentBranchId})`);
             } else {
+                // Master admin puede ver todos (incluyendo items sin branch_id)
                 console.log(`📍 Sin filtro de sucursal: ${items.length} items (master_admin o sin sucursal)`);
             }
             
@@ -1927,7 +1954,7 @@ const Inventory = {
         const isUUID = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || ''));
         // Solo enviar branch_id al servidor si es UUID. Si no, dejarlo null para que el backend lo maneje.
         const branchId = isUUID(rawBranchId) ? rawBranchId : null;
-        
+
         const formBarcode = document.getElementById('inv-barcode').value.trim();
         const formSku = document.getElementById('inv-sku').value.trim();
         
@@ -2224,7 +2251,7 @@ const Inventory = {
 
         // Add to sync queue SOLO si NO se guardó con API (si ya se guardó, reintentar crea duplicados por SKU)
         if (typeof SyncManager !== 'undefined' && !savedWithAPI) {
-            await SyncManager.addToQueue('inventory_item', item.id);
+        await SyncManager.addToQueue('inventory_item', item.id);
         }
 
         // Emitir evento de actualización de inventario
