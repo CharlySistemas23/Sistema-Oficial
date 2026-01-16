@@ -672,13 +672,33 @@ const Cash = {
             const userId = await this.getCurrentUserId();
             const userName = await this.getCurrentUserName();
 
+            // Calcular monto inicial total (USD a MXN + MXN + CAD a MXN)
+            // Asumir tipo de cambio por defecto si no está disponible
+            let exchangeRateUSD = 20; // Tipo de cambio por defecto USD
+            let exchangeRateCAD = 15; // Tipo de cambio por defecto CAD
+            try {
+                if (typeof ExchangeRates !== 'undefined' && ExchangeRates.getToday) {
+                    const todayRate = await ExchangeRates.getToday();
+                    if (todayRate) {
+                        exchangeRateUSD = todayRate.usd || 20;
+                        exchangeRateCAD = todayRate.cad || 15;
+                    }
+                }
+            } catch (e) {
+                console.warn('No se pudo obtener tipo de cambio, usando valores por defecto');
+            }
+            const initialAmount = (initialUsd * exchangeRateUSD) + initialMxn + (initialCad * exchangeRateCAD);
+            
+            // Asegurar que initial_amount sea un número válido
+            const finalInitialAmount = isNaN(initialAmount) || initialAmount < 0 ? 0 : Number(initialAmount);
+            
             const sessionData = {
                 branch_id: branchId,
-                initial_usd: initialUsd,
-                initial_mxn: initialMxn,
-                initial_cad: initialCad,
-                notes: notes
+                initial_amount: finalInitialAmount,
+                notes: notes || null
             };
+            
+            console.log('💰 Datos de sesión a enviar:', sessionData);
 
             let session;
             
@@ -687,12 +707,20 @@ const Cash = {
                 try {
                     console.log('💰 Abriendo sesión de caja con API...');
                     session = await API.openCashSession(sessionData);
-                    console.log('✅ Sesión de caja abierta con API');
+                    console.log('✅ Sesión de caja abierta con API:', session);
                     
                     // Guardar en IndexedDB como caché
-                    await DB.put('cash_sessions', session);
+                    if (session && session.id) {
+                        await DB.put('cash_sessions', session);
+                    }
                 } catch (apiError) {
-                    console.warn('Error abriendo sesión con API, usando modo local:', apiError);
+                    console.error('❌ Error abriendo sesión con API:', apiError);
+                    // Mostrar error más detallado al usuario
+                    let errorMsg = apiError.message || 'Error desconocido';
+                    if (apiError.details && apiError.details.errors) {
+                        errorMsg = apiError.details.errors.map(e => e.msg || e.message || JSON.stringify(e)).join(', ');
+                    }
+                    Utils.showNotification(`Error al abrir sesión: ${errorMsg}`, 'error');
                     // Continuar con creación local como fallback
                 }
             }
