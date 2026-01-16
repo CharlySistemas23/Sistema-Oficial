@@ -264,17 +264,24 @@ const Inventory = {
         }
 
             // Escuchar cambios de sucursal para sincronizar el dropdown
-            window.addEventListener('branch-changed', async (e) => {
+            const inventoryBranchChangedListener = async (e) => {
                 if (this.initialized) {
                     const branchFilter = document.getElementById('inventory-branch-filter');
                     if (branchFilter && e.detail && e.detail.branchId) {
-                        // Sincronizar dropdown con la sucursal seleccionada en el header
+                        console.log(`🔄 Inventory: Sincronizando dropdown con sucursal del header: ${e.detail.branchId}`);
+                        // CRÍTICO: Actualizar el dropdown PRIMERO, luego recargar
+                        // Esto asegura que loadInventory() use el valor correcto del dropdown
                         branchFilter.value = e.detail.branchId;
+                        // Pequeño delay para asegurar que el DOM se actualizó
+                        await new Promise(resolve => setTimeout(resolve, 50));
                         // Recargar inventario con el nuevo filtro
                         await this.loadInventory();
                     }
                 }
-            });
+            };
+            // Remover listener anterior si existe para evitar duplicados
+            window.removeEventListener('branch-changed', inventoryBranchChangedListener);
+            window.addEventListener('branch-changed', inventoryBranchChangedListener);
 
             // Escuchar eventos de transferencias y actualizaciones de inventario
             if (typeof Utils !== 'undefined' && Utils.EventBus) {
@@ -393,6 +400,20 @@ const Inventory = {
                     };
                     
                     allItemsRaw = await API.getInventoryItems(filters);
+                    
+                    // CRÍTICO: Aplicar filtro estricto DESPUÉS de recibir de API
+                    // Esto asegura que items sin branch_id se excluyan cuando se filtra por sucursal específica
+                    if (filterBranchId) {
+                        const beforeStrictFilter = allItemsRaw.length;
+                        allItemsRaw = allItemsRaw.filter(item => {
+                            // CRÍTICO: Excluir items sin branch_id cuando se filtra por sucursal específica
+                            if (!item.branch_id) {
+                                return false; // NO mostrar items sin branch_id
+                            }
+                            return String(item.branch_id) === String(filterBranchId);
+                        });
+                        console.log(`📍 Inventory: Filtrado estricto API: ${beforeStrictFilter} → ${allItemsRaw.length} (sucursal: ${filterBranchId})`);
+                    }
                     
                     // Guardar en IndexedDB como caché
                     // Nota: NO auto-inyectar branch_id local (branch1/branch2...) porque el backend espera UUID
