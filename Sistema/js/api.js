@@ -794,21 +794,35 @@ const API = {
                     response.headers.get('Ratelimit-Reset') ||
                     response.headers.get('RateLimit-Reset');
 
-                const errorMsg =
-                    (errorPayload && (errorPayload.error || errorPayload.message)) ||
-                    errorText ||
-                    `Error ${response.status}`;
+                // Formatear mensaje de error más detallado
+                let errorMsg = `Error ${response.status}`;
+                if (errorPayload) {
+                    if (errorPayload.error) {
+                        errorMsg = errorPayload.error;
+                    } else if (errorPayload.message) {
+                        errorMsg = errorPayload.message;
+                    } else if (errorPayload.errors && Array.isArray(errorPayload.errors)) {
+                        // Si viene un array de errores de validación (express-validator)
+                        errorMsg = errorPayload.errors.map(e => e.msg || e.message || JSON.stringify(e)).join(', ');
+                    }
+                } else if (errorText) {
+                    errorMsg = errorText;
+                }
+
+                if (isImportantRequest) {
+                    console.error(`❌ Error en request: ${errorMsg}`);
+                    if (errorPayload && errorPayload.errors) {
+                        console.error('   Detalles de validación:', errorPayload.errors);
+                    }
+                }
 
                 const err = new Error(errorMsg);
                 err.status = response.status;
                 err.retryAfter = retryAfter; // puede venir en segundos (RateLimit-Reset) o texto
                 err.url = url;
                 err.endpoint = endpoint;
+                err.details = errorPayload; // Incluir detalles completos del error
                 throw err;
-
-                if (isImportantRequest) {
-                    console.error(`❌ Error en request: ${errorMsg}`);
-                }
             }
 
             const result = await response.json();
