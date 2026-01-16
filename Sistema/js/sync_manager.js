@@ -786,58 +786,63 @@ const SyncManager = {
                         } else {
                             // Manejar creaciones/actualizaciones
                             entityData = await DB.get('cost_entries', item.entity_id);
-                            if (entityData) {
-                                // Sanitizar payload: branch_id e id deben ser UUID para Postgres.
-                                const isUUID = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || ''));
-                                // Normalizar entidad local (evita 500 "invalid input syntax for type uuid: branch3")
-                                if (entityData.branch_id && !isUUID(entityData.branch_id)) {
-                                    try {
-                                        entityData.branch_id = null;
-                                        await DB.put('cost_entries', entityData, { autoBranchId: false });
-                                    } catch (e) {
-                                        // no bloquear sync si no se puede persistir la normalización
-                                    }
-                                }
-
-                                if (typeof API === 'undefined') {
-                                    throw new Error('API no disponible');
-                                }
-
-                                // Si faltan campos requeridos, no tiene sentido reintentar: eliminar de cola
-                                const requiredOk =
-                                    typeof entityData.amount === 'number' && entityData.amount > 0 &&
-                                    (entityData.type === 'fijo' || entityData.type === 'variable') &&
-                                    !!entityData.date;
-                                if (!requiredOk) {
-                                    console.warn(`⚠️ cost_entry inválido (faltan campos). Eliminando de cola: ${item.entity_id}`);
-                                    await DB.delete('sync_queue', item.id);
-                                    break;
-                                }
-
-                                if (entityData.id && await this.entityExists('cost_entries', entityData.id)) {
-                                    if (typeof API.updateCost !== 'function') {
-                                        throw new Error('API.updateCost no disponible');
-                                    }
-                                    await API.updateCost(entityData.id, entityData);
-                                } else {
-                                    if (typeof API.createCost !== 'function') {
-                                        throw new Error('API.createCost no disponible');
-                                    }
-                                    const created = await API.createCost(entityData);
-                                    // Si el costo local tenía id no-UUID, el servidor generó uno nuevo.
-                                    // Migrar para que no queden “fantasmas” y futuras actualizaciones funcionen.
-                                    try {
-                                        if (created && created.id && created.id !== entityData.id) {
-                                            await DB.put('cost_entries', created);
-                                            await DB.delete('cost_entries', entityData.id);
-                                        }
-                                    } catch (e) {
-                                        console.warn('No se pudo migrar costo local a id del servidor:', e);
-                                    }
-                                }
+                            if (!entityData) {
+                                // Si el cost_entry no existe localmente, eliminar de la cola
+                                console.warn(`⚠️ cost_entry ${item.entity_id} no encontrado localmente, eliminando de cola`);
                                 await DB.delete('sync_queue', item.id);
-                                successCount++;
+                                break;
                             }
+                            
+                            // Sanitizar payload: branch_id e id deben ser UUID para Postgres.
+                            const isUUID = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || ''));
+                            // Normalizar entidad local (evita 500 "invalid input syntax for type uuid: branch3")
+                            if (entityData.branch_id && !isUUID(entityData.branch_id)) {
+                                try {
+                                    entityData.branch_id = null;
+                                    await DB.put('cost_entries', entityData, { autoBranchId: false });
+                                } catch (e) {
+                                    // no bloquear sync si no se puede persistir la normalización
+                                }
+                            }
+
+                            if (typeof API === 'undefined') {
+                                throw new Error('API no disponible');
+                            }
+
+                            // Si faltan campos requeridos, no tiene sentido reintentar: eliminar de cola
+                            const requiredOk =
+                                typeof entityData.amount === 'number' && entityData.amount > 0 &&
+                                (entityData.type === 'fijo' || entityData.type === 'variable') &&
+                                !!entityData.date;
+                            if (!requiredOk) {
+                                console.warn(`⚠️ cost_entry inválido (faltan campos). Eliminando de cola: ${item.entity_id}`, entityData);
+                                await DB.delete('sync_queue', item.id);
+                                break;
+                            }
+
+                            if (entityData.id && await this.entityExists('cost_entries', entityData.id)) {
+                                if (typeof API.updateCost !== 'function') {
+                                    throw new Error('API.updateCost no disponible');
+                                }
+                                await API.updateCost(entityData.id, entityData);
+                            } else {
+                                if (typeof API.createCost !== 'function') {
+                                    throw new Error('API.createCost no disponible');
+                                }
+                                const created = await API.createCost(entityData);
+                                // Si el costo local tenía id no-UUID, el servidor generó uno nuevo.
+                                // Migrar para que no queden "fantasmas" y futuras actualizaciones funcionen.
+                                try {
+                                    if (created && created.id && created.id !== entityData.id) {
+                                        await DB.put('cost_entries', created);
+                                        await DB.delete('cost_entries', entityData.id);
+                                    }
+                                } catch (e) {
+                                    console.warn('No se pudo migrar costo local a id del servidor:', e);
+                                }
+                            }
+                            await DB.delete('sync_queue', item.id);
+                            successCount++;
                         }
                         break;
 
