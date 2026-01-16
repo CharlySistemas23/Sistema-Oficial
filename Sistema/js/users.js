@@ -181,6 +181,15 @@ const UserManager = {
                         await BranchManager.updateBranchSelector();
                     }
                     
+                    // Actualizar nombre del usuario en el header
+                    if (typeof UI !== 'undefined' && UI.updateUserInfo) {
+                        UI.updateUserInfo({
+                            name: this.currentEmployee.name,
+                            username: this.currentUser.username,
+                            role: this.currentUser.role
+                        });
+                    }
+                    
                     // Actualizar estado del topbar después del login
                     if (typeof window.App !== 'undefined' && window.App.updateTopbarStatus) {
                         await window.App.updateTopbarStatus();
