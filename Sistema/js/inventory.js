@@ -2597,24 +2597,26 @@ const Inventory = {
     },
 
     async displayInventoryStats(items) {
-        const allItems = await DB.getAll('inventory_items') || [];
+        // Usar los items filtrados que se pasan como parámetro
+        // (ya están filtrados por sucursal si corresponde)
+        const filteredItems = Array.isArray(items) ? items : [];
         
-        // Estadísticas de stock
+        // Estadísticas de stock basadas en los items filtrados
         const stats = {
-            total: allItems.length,
-            filteredCount: items.length,
-            disponible: allItems.filter(i => i.status === 'disponible').length,
-            vendida: allItems.filter(i => i.status === 'vendida').length,
-            apartada: allItems.filter(i => i.status === 'apartada').length,
-            reparacion: allItems.filter(i => i.status === 'reparacion').length,
-            totalValue: allItems.reduce((sum, i) => sum + ((i.cost || 0) * (i.stock_actual || 1)), 0),
-            totalStock: allItems.reduce((sum, i) => sum + (i.stock_actual || 1), 0),
-            withCertificates: allItems.filter(i => i.certificate_type && i.certificate_number).length,
-            // Alertas de stock
-            stockOut: allItems.filter(i => this.getStockStatus(i) === 'out').length,
-            stockLow: allItems.filter(i => this.getStockStatus(i) === 'low').length,
-            stockOver: allItems.filter(i => this.getStockStatus(i) === 'over').length,
-            stockOk: allItems.filter(i => this.getStockStatus(i) === 'ok').length
+            total: filteredItems.length,
+            filteredCount: filteredItems.length,
+            disponible: filteredItems.filter(i => i.status === 'disponible').length,
+            vendida: filteredItems.filter(i => i.status === 'vendida').length,
+            apartada: filteredItems.filter(i => i.status === 'apartada').length,
+            reparacion: filteredItems.filter(i => i.status === 'reparacion').length,
+            totalValue: filteredItems.reduce((sum, i) => sum + ((i.cost || 0) * (i.stock_actual || 1)), 0),
+            totalStock: filteredItems.reduce((sum, i) => sum + (i.stock_actual || 1), 0),
+            withCertificates: filteredItems.filter(i => i.certificate_type && i.certificate_number).length,
+            // Alertas de stock basadas en items filtrados
+            stockOut: filteredItems.filter(i => this.getStockStatus(i) === 'out').length,
+            stockLow: filteredItems.filter(i => this.getStockStatus(i) === 'low').length,
+            stockOver: filteredItems.filter(i => this.getStockStatus(i) === 'over').length,
+            stockOk: filteredItems.filter(i => this.getStockStatus(i) === 'ok').length
         };
         
         const statsContainer = document.getElementById('inventory-stats');
@@ -2671,13 +2673,6 @@ const Inventory = {
                     </div>
                 </div>
                 
-                ${items.length !== allItems.length ? `
-                <div style="text-align: center; padding: 8px; background: var(--color-bg-tertiary); border-radius: var(--radius-sm); margin-top: 12px;">
-                    <span style="font-size: 12px; color: var(--color-text-secondary);">
-                        Mostrando ${items.length} de ${allItems.length} piezas
-                    </span>
-                </div>
-                ` : ''}
             `;
         }
         
