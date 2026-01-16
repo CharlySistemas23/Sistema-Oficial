@@ -701,9 +701,10 @@ Object.assign(POS, {
                 filterBranchId = isMasterAdmin ? null : null; // Sin sucursal, no mostrar nada
             }
             
-            console.log(`POS: Sucursal actual: ${currentBranchId}`);
+            console.log(`POS: Sucursal actual (header): ${currentBranchId}`);
+            console.log(`POS: Filtro dropdown: ${branchFilterValue || 'no seleccionado'}`);
             console.log(`POS: Master Admin: ${isMasterAdmin}`);
-            console.log(`POS: Filtro de sucursal: ${filterBranchId || 'todas'}`);
+            console.log(`POS: Filtro final aplicado: ${filterBranchId || 'todas las sucursales'}`);
             
             let items = [];
             
@@ -716,12 +717,26 @@ Object.assign(POS, {
                         status: 'disponible'
                     });
                     
+                    // CRÍTICO: Aplicar filtro estricto DESPUÉS de recibir de API
+                    // Esto asegura que items sin branch_id se excluyan cuando se filtra por sucursal específica
+                    if (filterBranchId) {
+                        const beforeStrictFilter = items.length;
+                        items = items.filter(item => {
+                            // CRÍTICO: Excluir items sin branch_id cuando se filtra por sucursal específica
+                            if (!item.branch_id) {
+                                return false; // NO mostrar items sin branch_id
+                            }
+                            return String(item.branch_id) === String(filterBranchId);
+                        });
+                        console.log(`📍 POS: Filtrado estricto API: ${beforeStrictFilter} → ${items.length} (sucursal: ${filterBranchId})`);
+                    }
+                    
                     // Guardar en IndexedDB como caché
                     for (const item of items) {
                         await DB.put('inventory_items', item);
                     }
                     
-                    console.log(`POS: ${items.length} productos cargados desde API`);
+                    console.log(`POS: ${items.length} productos cargados desde API (después de filtro estricto)`);
                 } catch (apiError) {
                     console.warn('Error cargando productos desde API, usando modo local:', apiError);
                     // Fallback a IndexedDB
@@ -3245,9 +3260,12 @@ Object.assign(POS, {
         const syncBranchListener = async (e) => {
             const updatedFilter = document.getElementById('pos-branch-filter');
             if (updatedFilter && e.detail && e.detail.branchId) {
-                // Sincronizar dropdown con la sucursal seleccionada en el header
-                // Esto asegura que el filtro del dropdown coincida con la sucursal seleccionada
+                console.log(`🔄 POS: Sincronizando dropdown con sucursal del header: ${e.detail.branchId}`);
+                // CRÍTICO: Actualizar el dropdown PRIMERO, luego recargar
+                // Esto asegura que loadProducts() use el valor correcto del dropdown
                 updatedFilter.value = e.detail.branchId;
+                // Pequeño delay para asegurar que el DOM se actualizó
+                await new Promise(resolve => setTimeout(resolve, 50));
                 // Recargar productos con el nuevo filtro
                 await this.loadProducts();
             }
