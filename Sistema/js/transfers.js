@@ -279,10 +279,6 @@ const Transfers = {
                             // Mostrar transferencias donde la sucursal filtrada es origen o destino
                             return fromBranch === normalizedBranchId || toBranch === normalizedBranchId;
                         });
-                            // #region agent log
-                            fetch('http://127.0.0.1:7242/ingest/d085ffd8-d37f-46dc-af23-0f9fbbe46595',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'transfers.js:194',message:'After branch filtering',data:{beforeCount:beforeCount,afterCount:allTransfers.length,currentBranchId:currentBranchId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-                            // #endregion
-                        }
                     }
                 } catch (dbError) {
                     console.error('Error obteniendo transferencias de DB:', dbError);
