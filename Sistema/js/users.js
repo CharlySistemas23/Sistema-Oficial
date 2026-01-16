@@ -12,12 +12,22 @@ const UserManager = {
     setupLogin() {
         const barcodeInput = document.getElementById('employee-barcode-input');
         const pinInput = document.getElementById('pin-input');
+        const pinGroup = document.getElementById('pin-group');
         const loginBtn = document.getElementById('login-btn');
         const createDemoBtn = document.getElementById('create-demo-users-btn');
+
+        // Asegurar que el campo PIN siempre esté visible
+        if (pinGroup) {
+            pinGroup.style.display = 'block';
+        }
 
         if (barcodeInput) {
             barcodeInput.addEventListener('input', async (e) => {
                 const barcode = e.target.value.trim();
+                // Asegurar que el campo PIN esté visible cuando el usuario empiece a escribir
+                if (barcode.length > 0 && pinGroup) {
+                    pinGroup.style.display = 'block';
+                }
                 if (barcode.length > 0) {
                     await this.handleBarcodeInput(barcode);
                 }
@@ -1057,8 +1067,14 @@ const UserManager = {
         
         if (barcodeInput) barcodeInput.value = '';
         if (pinInput) pinInput.value = '';
-        if (pinGroup) pinGroup.style.display = 'none';
+        // Mostrar campo PIN siempre (no ocultarlo después de logout)
+        if (pinGroup) pinGroup.style.display = 'block';
         if (loginError) loginError.style.display = 'none';
+        
+        // Enfocar campo de usuario después de limpiar
+        if (barcodeInput) {
+            setTimeout(() => barcodeInput.focus(), 100);
+        }
     },
 
     async logAudit(action, entityType, entityId, details = {}) {
