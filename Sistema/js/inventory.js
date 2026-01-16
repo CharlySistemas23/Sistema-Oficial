@@ -200,7 +200,7 @@ const Inventory = {
 
         const branchFilter = document.getElementById('inventory-branch-filter');
         if (branchFilter) {
-            const branches = await DB.getAll('catalog_branches') || [];
+            let branches = await DB.getAll('catalog_branches') || [];
             
             // Verificar si el usuario es master_admin
             const isMasterAdmin = typeof UserManager !== 'undefined' && (
