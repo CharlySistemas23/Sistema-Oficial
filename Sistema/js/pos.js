@@ -684,13 +684,16 @@ Object.assign(POS, {
             // Determinar qué branch_id usar para el filtro
             let filterBranchId = null;
             if (branchFilterValue && branchFilterValue !== 'all' && branchFilterValue !== '') {
-                // Hay un filtro específico seleccionado
+                // Hay un filtro específico seleccionado en el dropdown
                 filterBranchId = branchFilterValue;
-            } else if (isMasterAdmin && (!branchFilterValue || branchFilterValue === 'all')) {
-                // Master admin sin filtro = mostrar todos
+            } else if (isMasterAdmin && branchFilterValue === 'all') {
+                // Master admin seleccionó explícitamente "Todas" = mostrar todos
                 filterBranchId = null;
+            } else if (isMasterAdmin && (!branchFilterValue || branchFilterValue === '')) {
+                // Master admin sin selección en dropdown = usar sucursal actual del header
+                filterBranchId = currentBranchId;
             } else {
-                // Usuario normal o master_admin con sucursal actual = filtrar por currentBranchId
+                // Usuario normal = filtrar por currentBranchId
                 filterBranchId = currentBranchId;
             }
             
