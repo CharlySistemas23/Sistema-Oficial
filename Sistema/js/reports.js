@@ -118,7 +118,10 @@ const Reports = {
 
     async loadTab(tab) {
         const content = document.getElementById('reports-content');
-        if (!content) return;
+        if (!content) {
+            console.error('Reports: reports-content no encontrado');
+            return;
+        }
 
         this.currentTab = tab;
 
@@ -127,9 +130,24 @@ const Reports = {
 
             switch(tab) {
                 case 'reports':
-                    content.innerHTML = await this.getReportsTab();
-                    this.setupPresetRanges();
-                    await this.loadCatalogs();
+                    try {
+                        const reportsTabHTML = await this.getReportsTab();
+                        content.innerHTML = reportsTabHTML;
+                        this.setupPresetRanges();
+                        await this.loadCatalogs();
+                        // setupBranchFilter ya se llama dentro de loadCatalogs, pero lo llamamos de nuevo para asegurar que esté sincronizado
+                        await this.setupBranchFilter('report-branch');
+                        // Agregar listener para el cambio de sucursal en reportes
+                        const reportBranchFilter = document.getElementById('report-branch');
+                        if (reportBranchFilter) {
+                            reportBranchFilter.addEventListener('change', () => {
+                                // El filtro se aplicará cuando se genere el reporte
+                            });
+                        }
+                    } catch (tabError) {
+                        console.error('Error cargando tab de reports:', tabError);
+                        throw tabError;
+                    }
                     break;
                 case 'commissions':
                     content.innerHTML = await this.getCommissionsTab();
@@ -166,7 +184,18 @@ const Reports = {
     },
 
     async getReportsTab() {
-        return `
+        try {
+            // Calcular fechas por defecto
+            const today = new Date();
+            const thirtyDaysAgo = new Date(Date.now() - 30*24*60*60*1000);
+            const dateFrom = typeof Utils !== 'undefined' && Utils.formatDate 
+                ? Utils.formatDate(thirtyDaysAgo, 'YYYY-MM-DD') 
+                : thirtyDaysAgo.toISOString().split('T')[0];
+            const dateTo = typeof Utils !== 'undefined' && Utils.formatDate 
+                ? Utils.formatDate(today, 'YYYY-MM-DD') 
+                : today.toISOString().split('T')[0];
+            
+            return `
             <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light); margin-bottom: var(--spacing-lg);">
                 <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
                     <i class="fas fa-filter"></i> Filtros Avanzados
@@ -174,11 +203,11 @@ const Reports = {
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--spacing-md); width: 100%; box-sizing: border-box;">
                     <div class="form-group" style="min-width: 0;">
                         <label>Fecha Desde</label>
-                        <input type="date" id="report-date-from" class="form-input" value="${Utils.formatDate(new Date(Date.now() - 30*24*60*60*1000), 'YYYY-MM-DD')}" style="width: 100%;">
+                        <input type="date" id="report-date-from" class="form-input" value="${dateFrom}" style="width: 100%;">
                     </div>
                     <div class="form-group" style="min-width: 0;">
                         <label>Fecha Hasta</label>
-                        <input type="date" id="report-date-to" class="form-input" value="${Utils.formatDate(new Date(), 'YYYY-MM-DD')}" style="width: 100%;">
+                        <input type="date" id="report-date-to" class="form-input" value="${dateTo}" style="width: 100%;">
                     </div>
                     <div class="form-group" style="min-width: 0;">
                         <label>Rango Predefinido</label>
@@ -260,6 +289,14 @@ const Reports = {
             </div>
             <div id="report-results" style="width: 100%; max-width: 100%; box-sizing: border-box;"></div>
         `;
+        } catch (error) {
+            console.error('Error en getReportsTab:', error);
+            return `
+                <div style="padding: var(--spacing-md); background: var(--color-danger); color: white; border-radius: var(--radius-md);">
+                    <strong>Error al cargar formulario de reportes:</strong> ${error.message}
+                </div>
+            `;
+        }
     },
 
     async getOverviewTab() {
@@ -498,23 +535,48 @@ const Reports = {
         // Si hay branchId seleccionado, siempre filtrar por esa sucursal específica
         const viewAllBranches = !branchId && isMasterAdmin;
         
-        console.log(`[Reports] Vista consolidada: ${viewAllBranches} (Admin: ${isAdmin}, BranchId: ${branchId || 'Todas'})`);
+        console.log(`[Reports] Vista consolidada: ${viewAllBranches} (Admin: ${isMasterAdmin}, BranchId: ${branchId || 'Todas'})`);
         
-        // Obtener ventas con filtro de sucursal
-        let sales = await DB.getAll('sales', null, null, { 
-            filterByBranch: !viewAllBranches, 
-            branchIdField: 'branch_id' 
-        }) || [];
-
-        // Normalizar branch_id para comparación flexible
-        const normalizedBranchId = branchId ? String(branchId) : null;
-
-        // Aplicar filtros adicionales
-        if (normalizedBranchId) {
-            sales = sales.filter(s => {
-                const saleBranchId = s.branch_id != null ? String(s.branch_id) : null;
-                return saleBranchId === normalizedBranchId;
-            });
+        // Si hay branchId específico, obtener todas las ventas y filtrar manualmente
+        // Si no hay branchId y es master_admin, obtener todas las ventas sin filtro
+        // Si no hay branchId y no es master_admin, usar el filtro automático de BranchManager
+        let sales;
+        if (branchId || (!branchId && !isMasterAdmin)) {
+            // Si hay branchId específico o no es master_admin, obtener todas y filtrar manualmente
+            sales = await DB.getAll('sales', null, null, { 
+                filterByBranch: false, // Desactivar filtro automático para usar el manual
+                branchIdField: 'branch_id' 
+            }) || [];
+            
+            // Normalizar branch_id para comparación flexible
+            const normalizedBranchId = branchId ? String(branchId) : null;
+            
+            if (normalizedBranchId) {
+                // Filtrar por branch_id específico
+                sales = sales.filter(s => {
+                    const saleBranchId = s.branch_id != null ? String(s.branch_id) : null;
+                    return saleBranchId === normalizedBranchId;
+                });
+            } else if (!isMasterAdmin) {
+                // Si no es master_admin y no hay branchId específico, usar el actual de BranchManager
+                const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
+                if (currentBranchId) {
+                    const normalizedCurrent = String(currentBranchId);
+                    sales = sales.filter(s => {
+                        const saleBranchId = s.branch_id != null ? String(s.branch_id) : null;
+                        return saleBranchId === normalizedCurrent;
+                    });
+                } else {
+                    // Sin branch_id, no mostrar ventas (aislamiento estricto)
+                    sales = [];
+                }
+            }
+        } else {
+            // Master_admin sin branchId específico: obtener todas las ventas
+            sales = await DB.getAll('sales', null, null, { 
+                filterByBranch: false, 
+                branchIdField: 'branch_id' 
+            }) || [];
         }
 
         if (dateFrom) {
@@ -821,12 +883,6 @@ const Reports = {
         const saleItems = await DB.getAll('sale_items') || [];
         
         // Filtrar items por sucursal si es necesario
-        const isMasterAdmin = typeof UserManager !== 'undefined' && (
-            UserManager.currentUser?.role === 'master_admin' ||
-            UserManager.currentUser?.is_master_admin ||
-            UserManager.currentUser?.isMasterAdmin ||
-            UserManager.currentEmployee?.role === 'master_admin'
-        );
         const viewAllBranches = !filterBranchId && isMasterAdmin;
         
         let items = await DB.getAll('inventory_items', null, null, { 
@@ -1214,12 +1270,14 @@ const Reports = {
             // Obtener items relacionados
             const saleItems = await DB.getAll('sale_items') || [];
             
-            // Verificar si es admin para filtrar items
-            const isAdmin = typeof UserManager !== 'undefined' && (
-                UserManager.currentUser?.role === 'admin' || 
-                UserManager.currentUser?.permissions?.includes('all')
+            // Verificar si es master_admin para filtrar items
+            const isMasterAdminItems = typeof UserManager !== 'undefined' && (
+                UserManager.currentUser?.role === 'master_admin' ||
+                UserManager.currentUser?.is_master_admin ||
+                UserManager.currentUser?.isMasterAdmin ||
+                UserManager.currentEmployee?.role === 'master_admin'
             );
-            const viewAllBranches = !branchId && isAdmin;
+            const viewAllBranches = !branchId && isMasterAdminItems;
             
             const items = await DB.getAll('inventory_items', null, null, { 
                 filterByBranch: !viewAllBranches, 
