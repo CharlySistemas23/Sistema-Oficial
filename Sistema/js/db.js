@@ -501,23 +501,23 @@ const DB = {
                                     item[options.branchIdField] === branchId
                                 );
                                 
-                                // Si no hay resultados y includeNull no está explícitamente false, incluir items sin branch_id como fallback
-                                if (filtered.length === 0 && options.includeNull !== false) {
-                                    const itemsWithoutBranch = results.filter(item => !item[options.branchIdField]);
-                                    if (itemsWithoutBranch.length > 0) {
-                                        console.log(`[DB] No hay items para sucursal ${branchId}, mostrando ${itemsWithoutBranch.length} items sin sucursal asignada`);
-                                        filtered = itemsWithoutBranch;
+                                // Si no hay resultados, verificar comportamiento según rol
+                                if (filtered.length === 0) {
+                                    // SOLO master_admin puede ver items sin branch_id como fallback
+                                    if (isAdmin && options.includeNull !== false) {
+                                        const itemsWithoutBranch = results.filter(item => !item[options.branchIdField]);
+                                        if (itemsWithoutBranch.length > 0) {
+                                            console.log(`[DB] No hay items para sucursal ${branchId}, master_admin viendo ${itemsWithoutBranch.length} items sin sucursal asignada`);
+                                            filtered = itemsWithoutBranch;
+                                        } else {
+                                            // Si tampoco hay items sin branch_id, master_admin puede ver todos
+                                            console.log(`[DB] No hay items para sucursal ${branchId} ni sin sucursal, master_admin viendo todos (${results.length} items)`);
+                                            filtered = results;
+                                        }
                                     } else {
-                                // Si tampoco hay items sin branch_id:
-                                // - Admin/master_admin: puede ver todo (modo consolidado)
-                                // - Usuarios normales: NO mostrar todo (evita mezclar sucursales)
-                                if (isAdmin) {
-                                    console.log(`[DB] No hay items para sucursal ${branchId} ni sin sucursal, mostrando todos (${results.length} items) por ser admin`);
-                                    filtered = results;
-                                } else {
-                                    console.log(`[DB] No hay items para sucursal ${branchId}. Mostrando 0 (aislamiento multisucursal)`);
-                                    filtered = [];
-                                }
+                                        // Usuarios normales: NO mostrar items sin branch_id ni todos (aislamiento estricto)
+                                        console.log(`[DB] No hay items para sucursal ${branchId}. Mostrando 0 (aislamiento multisucursal)`);
+                                        filtered = [];
                                     }
                                 }
                                 
