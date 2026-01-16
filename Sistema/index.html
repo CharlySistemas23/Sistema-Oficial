@@ -854,8 +854,9 @@
                 window.fetch = function (input, init) {
                     const url = typeof input === 'string' ? input : (input && input.url) ? input.url : '';
                     if (typeof url === 'string' && url.startsWith('http://127.0.0.1:7242/ingest/')) {
-                        // Silenciar: responder como OK sin red
-                        return Promise.resolve(new Response('', { status: 204 }));
+                        // Silenciar: responder como OK sin red (status 204 no puede tener body)
+                        // Usar status 200 con body vacío o crear Response sin body para 204
+                        return Promise.resolve(new Response(null, { status: 204, statusText: 'No Content' }));
                     }
                     return originalFetch(input, init);
                 };
