@@ -177,6 +177,9 @@ const Customers = {
 
     async loadCustomers() {
         try {
+            // Configurar dropdown de sucursal PRIMERO (antes de leer su valor)
+            await this.setupBranchFilter();
+            
             // Obtener sucursal actual y filtrar datos
             const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
             
@@ -188,7 +191,7 @@ const Customers = {
                 UserManager.currentEmployee?.role === 'master_admin'
             );
             
-            // Obtener filtro de sucursal del dropdown
+            // Obtener filtro de sucursal del dropdown (después de configurarlo)
             const branchFilterEl = document.getElementById('customer-branch-filter');
             const branchFilterValue = branchFilterEl?.value;
             
@@ -208,9 +211,6 @@ const Customers = {
                 filterBranchId = currentBranchId;
                 viewAllBranches = false;
             }
-            
-            // Configurar dropdown de sucursal
-            await this.setupBranchFilter();
             
             // Intentar cargar desde API si está disponible
             let customers = [];
@@ -250,8 +250,7 @@ const Customers = {
                     } else {
                         customers = await DB.getAll('customers', null, null, { 
                             filterByBranch: !viewAllBranches, 
-                            branchIdField: 'branch_id',
-                            includeNull: true
+                            branchIdField: 'branch_id'
                         }) || [];
                     }
                 }
@@ -262,8 +261,7 @@ const Customers = {
                 } else {
                     customers = await DB.getAll('customers', null, null, { 
                         filterByBranch: !viewAllBranches, 
-                        branchIdField: 'branch_id',
-                        includeNull: true
+                        branchIdField: 'branch_id'
                     }) || [];
                 }
             }
@@ -1665,37 +1663,71 @@ const Customers = {
         } else {
             // Master admin puede ver todas las sucursales
             branchFilterContainer.style.display = '';
-            const branches = await DB.getAll('catalog_branches') || [];
+            let branches = await DB.getAll('catalog_branches') || [];
+            
+            // Filtrar duplicados por nombre e ID
+            const seenNames = new Set();
+            const seenIds = new Set();
+            branches = branches.filter(b => {
+                if (!b.id || !b.name) return false;
+                const nameKey = String(b.name).trim().toLowerCase();
+                const idKey = String(b.id);
+                if (seenNames.has(nameKey) || seenIds.has(idKey)) {
+                    return false;
+                }
+                seenNames.add(nameKey);
+                seenIds.add(idKey);
+                return true;
+            });
+            
+            // Guardar el valor actual antes de actualizar el HTML
+            const currentValue = branchFilter.value || (currentBranchId || 'all');
+            
             branchFilter.innerHTML = '<option value="all">Todas las sucursales</option>' + 
                 branches.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
-            // Establecer valor por defecto según sucursal actual
-            if (currentBranchId) {
+            
+            // Establecer valor por defecto
+            if (currentValue && Array.from(branchFilter.options).some(opt => opt.value === currentValue)) {
+                branchFilter.value = currentValue;
+            } else if (currentBranchId && Array.from(branchFilter.options).some(opt => opt.value === currentBranchId)) {
                 branchFilter.value = currentBranchId;
             } else {
                 branchFilter.value = 'all';
             }
-            // Remover listeners previos y agregar uno nuevo
-            const newBranchFilter = branchFilter.cloneNode(true);
-            branchFilter.parentNode.replaceChild(newBranchFilter, branchFilter);
-            newBranchFilter.addEventListener('change', () => this.loadCustomers());
+            
+            // Remover listeners previos y agregar uno nuevo (sin clonar)
+            branchFilter.removeEventListener('change', this._branchFilterChangeHandler);
+            this._branchFilterChangeHandler = () => {
+                console.log('🔄 Customers: Cambio de sucursal desde dropdown:', branchFilter.value);
+                this.loadCustomers();
+            };
+            branchFilter.addEventListener('change', this._branchFilterChangeHandler);
         }
         
         // Escuchar cambios de sucursal desde el header para sincronizar el dropdown
-        const customerBranchChangedListener = async (e) => {
+        // Remover listener anterior si existe
+        if (this._branchChangedListener) {
+            window.removeEventListener('branch-changed', this._branchChangedListener);
+        }
+        
+        this._branchChangedListener = async (e) => {
             const updatedFilter = document.getElementById('customer-branch-filter');
             if (updatedFilter && e.detail && e.detail.branchId) {
                 console.log(`🔄 Customers: Sincronizando dropdown con sucursal del header: ${e.detail.branchId}`);
                 // CRÍTICO: Actualizar el dropdown PRIMERO, luego recargar
-                updatedFilter.value = e.detail.branchId;
+                const branchId = e.detail.branchId;
+                if (branchId && Array.from(updatedFilter.options).some(opt => opt.value === branchId)) {
+                    updatedFilter.value = branchId;
+                } else {
+                    updatedFilter.value = 'all';
+                }
                 // Pequeño delay para asegurar que el DOM se actualizó
                 await new Promise(resolve => setTimeout(resolve, 50));
                 // Recargar clientes con el nuevo filtro
                 await this.loadCustomers();
             }
         };
-        // Remover listener anterior si existe para evitar duplicados
-        window.removeEventListener('branch-changed', customerBranchChangedListener);
-        window.addEventListener('branch-changed', customerBranchChangedListener);
+        window.addEventListener('branch-changed', this._branchChangedListener);
     }
 };
 
