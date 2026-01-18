@@ -3883,6 +3883,115 @@ const Reports = {
         Utils.showNotification('Análisis exportado', 'success');
     },
 
+    async getCommissionsTab() {
+        const today = new Date();
+        const weekStart = new Date(today);
+        weekStart.setDate(weekStart.getDate() - today.getDay());
+        const dateFrom = Utils.formatDate(weekStart, 'YYYY-MM-DD');
+        const dateTo = Utils.formatDate(today, 'YYYY-MM-DD');
+        
+        return `
+            <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light); margin-bottom: var(--spacing-lg);">
+                <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+                    <i class="fas fa-filter"></i> Filtros de Comisiones
+                </h3>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--spacing-md); width: 100%; box-sizing: border-box;">
+                    <div class="form-group" style="min-width: 0;">
+                        <label>Fecha Desde</label>
+                        <input type="date" id="commissions-date-from" class="form-input" value="${dateFrom}" style="width: 100%;">
+                    </div>
+                    <div class="form-group" style="min-width: 0;">
+                        <label>Fecha Hasta</label>
+                        <input type="date" id="commissions-date-to" class="form-input" value="${dateTo}" style="width: 100%;">
+                    </div>
+                    <div class="form-group" style="min-width: 0;">
+                        <label>Rango Predefinido</label>
+                        <select id="commissions-preset-range" class="form-select" style="width: 100%;">
+                            <option value="">Personalizado</option>
+                            <option value="today">Hoy</option>
+                            <option value="yesterday">Ayer</option>
+                            <option value="week" selected>Esta Semana</option>
+                            <option value="lastweek">Semana Pasada</option>
+                            <option value="month">Este Mes</option>
+                            <option value="lastmonth">Mes Pasado</option>
+                            <option value="quarter">Este Trimestre</option>
+                            <option value="year">Este Año</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="min-width: 0;">
+                        <label>Sucursal</label>
+                        <select id="commissions-branch" class="form-select" style="width: 100%;">
+                            <option value="all">Todas las sucursales</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="min-width: 0;">
+                        <label>Vendedor</label>
+                        <select id="commissions-seller" class="form-select" style="width: 100%;">
+                            <option value="">Todos</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="min-width: 0;">
+                        <label>Guía</label>
+                        <select id="commissions-guide" class="form-select" style="width: 100%;">
+                            <option value="">Todos</option>
+                        </select>
+                    </div>
+                </div>
+                <div style="margin-top: var(--spacing-md); display: flex; gap: var(--spacing-sm); flex-wrap: wrap; width: 100%;">
+                    <button class="btn-primary btn-sm" onclick="window.Reports.generateCommissionsReport()">
+                        <i class="fas fa-percent"></i> Generar Reporte de Comisiones
+                    </button>
+                    <button class="btn-secondary btn-sm" onclick="window.Reports.exportCommissionsReport()">
+                        <i class="fas fa-download"></i> Exportar
+                    </button>
+                </div>
+            </div>
+            <div id="commissions-results" style="width: 100%; max-width: 100%; box-sizing: border-box;"></div>
+        `;
+    },
+
+    async getCompareTab() {
+        const today = new Date();
+        const thirtyDaysAgo = new Date(Date.now() - 30*24*60*60*1000);
+        const dateFrom = Utils.formatDate(thirtyDaysAgo, 'YYYY-MM-DD');
+        const dateTo = Utils.formatDate(today, 'YYYY-MM-DD');
+        
+        return `
+            <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light); margin-bottom: var(--spacing-lg);">
+                <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+                    <i class="fas fa-balance-scale"></i> Comparativa de Períodos
+                </h3>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--spacing-md); width: 100%; box-sizing: border-box;">
+                    <div class="form-group" style="min-width: 0;">
+                        <label>Período 1 - Desde</label>
+                        <input type="date" id="compare-period1-from" class="form-input" value="${dateFrom}" style="width: 100%;">
+                    </div>
+                    <div class="form-group" style="min-width: 0;">
+                        <label>Período 1 - Hasta</label>
+                        <input type="date" id="compare-period1-to" class="form-input" value="${dateTo}" style="width: 100%;">
+                    </div>
+                    <div class="form-group" style="min-width: 0;">
+                        <label>Período 2 - Desde (Opcional)</label>
+                        <input type="date" id="compare-period2-from" class="form-input" style="width: 100%;">
+                    </div>
+                    <div class="form-group" style="min-width: 0;">
+                        <label>Período 2 - Hasta (Opcional)</label>
+                        <input type="date" id="compare-period2-to" class="form-input" style="width: 100%;">
+                    </div>
+                </div>
+                <div style="margin-top: var(--spacing-md); display: flex; gap: var(--spacing-sm); flex-wrap: wrap; width: 100%;">
+                    <button class="btn-primary btn-sm" onclick="window.Reports.comparePeriods()">
+                        <i class="fas fa-balance-scale"></i> Comparar Períodos
+                    </button>
+                </div>
+                <div style="margin-top: var(--spacing-md); padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm); font-size: 12px; color: var(--color-text-secondary);">
+                    <i class="fas fa-info-circle"></i> Si no especificas el Período 2, se comparará automáticamente con el período anterior de igual duración.
+                </div>
+            </div>
+            <div id="compare-results" style="width: 100%; max-width: 100%; box-sizing: border-box;"></div>
+        `;
+    },
+
     async loadCommissionsCatalogs() {
         const branches = await DB.getAll('catalog_branches');
         const sellers = await DB.getAll('catalog_sellers');
@@ -3981,15 +4090,23 @@ const Reports = {
             }
 
             // Obtener ventas filtradas
-            const allSales = await this.getFilteredSales({ branchId: branchId || null });
+            const allSales = await this.getFilteredSales({ branchId: branchId === 'all' ? null : (branchId || null) });
             const sales = allSales.filter(sale => {
-                if (sale.status !== 'completada') return false;
+                // Aceptar múltiples formatos de status
+                const status = (sale.status || '').toLowerCase();
+                if (status !== 'completada' && status !== 'completed' && status !== 'completado') return false;
                 const saleDate = sale.created_at?.split('T')[0];
                 if (saleDate < dateFrom || saleDate > dateTo) return false;
                 if (sellerId && sale.seller_id !== sellerId) return false;
                 if (guideId && sale.guide_id !== guideId) return false;
                 return true;
             });
+            
+            // Si no hay ventas, mostrar mensaje y salir
+            if (sales.length === 0) {
+                container.innerHTML = '<div class="empty-state">No hay ventas con comisiones en el período seleccionado</div>';
+                return;
+            }
 
             // Calcular comisiones
             const commissionsBreakdown = {
@@ -4227,10 +4344,6 @@ const Reports = {
                     </div>
                 </div>
             `;
-
-            if (sales.length === 0) {
-                container.innerHTML = '<div class="empty-state">No hay ventas con comisiones en el período seleccionado</div>';
-            }
 
         } catch (e) {
             console.error('Error generando reporte de comisiones:', e);
