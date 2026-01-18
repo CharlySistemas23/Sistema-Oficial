@@ -174,10 +174,6 @@ const Reports = {
                     content.innerHTML = await this.getSavedReportsTab();
                     await this.loadSavedReports();
                     break;
-                case 'saved':
-                    content.innerHTML = await this.getSavedReportsTab();
-                    await this.loadSavedReports();
-                    break;
                 case 'history':
                     content.innerHTML = await this.getHistoryTab();
                     await this.loadHistory();
@@ -568,7 +564,7 @@ const Reports = {
     },
 
     // Helper para generar banner de contexto multisucursal
-    getBranchContextBanner(branchId = null, dateFrom = null, dateTo = null) {
+    async getBranchContextBanner(branchId = null, dateFrom = null, dateTo = null) {
         const isMasterAdmin = typeof UserManager !== 'undefined' && (
             UserManager.currentUser?.role === 'master_admin' ||
             UserManager.currentUser?.is_master_admin ||
@@ -576,10 +572,8 @@ const Reports = {
             UserManager.currentEmployee?.role === 'master_admin'
         );
         
-        // Obtener sucursales y sucursal actual
-        const branches = typeof BranchManager !== 'undefined' 
-            ? BranchManager.getAllBranches() 
-            : [];
+        // Obtener sucursales desde DB
+        const branches = await DB.getAll('catalog_branches') || [];
         const currentBranchId = typeof BranchManager !== 'undefined' 
             ? BranchManager.getCurrentBranchId() 
             : null;
@@ -794,7 +788,7 @@ const Reports = {
             } else {
                 branchIdForBanner = currentBranchId;
             }
-            overviewBanner.innerHTML = this.getBranchContextBanner(branchIdForBanner, dateFrom, dateTo);
+            overviewBanner.innerHTML = await this.getBranchContextBanner(branchIdForBanner, dateFrom, dateTo);
         }
         
         // Actualizar indicador de sucursal en KPI
@@ -1927,7 +1921,7 @@ const Reports = {
         
         const maxDaily = Math.max(...dailyData.map(d => d.total), 1);
 
-        let html = this.getBranchContextBanner(branchIdForBanner, dateFrom, dateTo);
+        let html = await this.getBranchContextBanner(branchIdForBanner, dateFrom, dateTo);
         
         // Comparativa por sucursal (si aplica)
         if (showBranchBreakdown && Object.keys(branchBreakdown).length > 1) {
@@ -2342,7 +2336,7 @@ const Reports = {
         
         const maxTotal = Math.max(...sellerData.map(s => s.total), 1);
         
-        let html = this.getBranchContextBanner(branchIdForBanner, dateFrom, dateTo);
+        let html = await this.getBranchContextBanner(branchIdForBanner, dateFrom, dateTo);
         html += `
             <div class="dashboard-section" style="width: 100%; max-width: 100%; box-sizing: border-box;">
                 <h3 style="font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: var(--spacing-sm);">Análisis por Vendedor</h3>
@@ -2431,7 +2425,7 @@ const Reports = {
             })
             .sort((a, b) => b.total - a.total);
         
-        let html = this.getBranchContextBanner(branchIdForBanner, dateFrom, dateTo);
+        let html = await this.getBranchContextBanner(branchIdForBanner, dateFrom, dateTo);
         html += `
             <div class="dashboard-section" style="width: 100%; max-width: 100%; box-sizing: border-box;">
                 <h3 style="font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: var(--spacing-sm);">Análisis por Agencia</h3>
@@ -2739,7 +2733,7 @@ const Reports = {
         const showBranchBreakdown = isMasterAdmin && branchesInReport.size > 1 && (!branchIdForBanner || branchIdForBanner === 'all');
         
         // Generar HTML
-        let html = this.getBranchContextBanner(branchIdForBanner, dateFrom, dateTo);
+        let html = await this.getBranchContextBanner(branchIdForBanner, dateFrom, dateTo);
         
         // KPIs principales
         html += `
@@ -4371,6 +4365,230 @@ const Reports = {
                 await this.generateReport();
             }
         });
+    },
+    
+    async getSavedReportsTab() {
+        return `
+            <div style="padding: var(--spacing-md);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-md);">
+                    <h2 style="margin: 0;">Reportes Guardados</h2>
+                    <div style="display: flex; gap: var(--spacing-sm);">
+                        <input type="text" id="saved-reports-search" class="form-input" 
+                            placeholder="Buscar por nombre..." 
+                            style="width: 300px;">
+                        <select id="saved-reports-filter" class="form-input" style="width: 200px;">
+                            <option value="">Todos los tipos</option>
+                            <option value="summary">Resumen</option>
+                            <option value="daily">Diario</option>
+                            <option value="product">Productos</option>
+                            <option value="seller">Vendedor</option>
+                            <option value="agency">Agencia</option>
+                            <option value="profit">Utilidad</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="saved-reports-list" style="display: grid; gap: var(--spacing-md);">
+                    <div style="padding: var(--spacing-lg); text-align: center; color: var(--color-text-secondary);">
+                        Cargando reportes guardados...
+                    </div>
+                </div>
+            </div>
+        `;
+    },
+    
+    async loadSavedReports() {
+        const container = document.getElementById('saved-reports-list');
+        if (!container) return;
+        
+        try {
+            const searchInput = document.getElementById('saved-reports-search');
+            const filterSelect = document.getElementById('saved-reports-filter');
+            
+            const filters = {};
+            if (searchInput?.value) filters.search = searchInput.value;
+            if (filterSelect?.value) filters.type = filterSelect.value;
+            
+            const savedReports = await API.getSavedReports(filters) || [];
+            
+            if (savedReports.length === 0) {
+                container.innerHTML = `
+                    <div style="padding: var(--spacing-lg); text-align: center; color: var(--color-text-secondary);">
+                        No hay reportes guardados aún
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = savedReports.map(report => {
+                const summary = report.summary || {};
+                return `
+                    <div style="background: var(--color-bg-card); border: 1px solid var(--color-border-light); 
+                        border-radius: var(--radius-md); padding: var(--spacing-md);">
+                        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: var(--spacing-sm);">
+                            <div>
+                                <h3 style="margin: 0 0 var(--spacing-xs) 0; font-size: 16px;">${report.name || 'Sin nombre'}</h3>
+                                <div style="font-size: 12px; color: var(--color-text-secondary);">
+                                    ${Utils.formatDate(report.created_at, 'DD/MM/YYYY HH:mm')} • ${report.report_type || 'N/A'}
+                                </div>
+                            </div>
+                            <button class="btn-danger btn-sm" onclick="Reports.deleteSavedReport('${report.id}')">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                        ${summary.totalSales ? `
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--spacing-sm); margin-top: var(--spacing-sm);">
+                                ${summary.totalSales !== undefined ? `
+                                    <div style="font-size: 12px;">
+                                        <div style="color: var(--color-text-secondary);">Total Ventas</div>
+                                        <div style="font-weight: 600;">${Utils.formatCurrency(summary.totalSales)}</div>
+                                    </div>
+                                ` : ''}
+                                ${summary.grossProfit !== undefined ? `
+                                    <div style="font-size: 12px;">
+                                        <div style="color: var(--color-text-secondary);">Utilidad Bruta</div>
+                                        <div style="font-weight: 600; color: var(--color-success);">${Utils.formatCurrency(summary.grossProfit)}</div>
+                                    </div>
+                                ` : ''}
+                                ${summary.netProfit !== undefined ? `
+                                    <div style="font-size: 12px;">
+                                        <div style="color: var(--color-text-secondary);">Utilidad Neta</div>
+                                        <div style="font-weight: 600; color: var(--color-success);">${Utils.formatCurrency(summary.netProfit)}</div>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        ` : ''}
+                        <div style="display: flex; gap: var(--spacing-sm); margin-top: var(--spacing-md);">
+                            <button class="btn-primary btn-sm" onclick="Reports.viewSavedReport('${report.id}')">
+                                <i class="fas fa-eye"></i> Ver
+                            </button>
+                            <button class="btn-secondary btn-sm" onclick="Reports.exportSavedReport('${report.id}')">
+                                <i class="fas fa-download"></i> Exportar
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            // Agregar event listeners para búsqueda y filtro
+            if (searchInput) {
+                searchInput.oninput = () => this.loadSavedReports();
+            }
+            if (filterSelect) {
+                filterSelect.onchange = () => this.loadSavedReports();
+            }
+            
+        } catch (error) {
+            console.error('Error cargando reportes guardados:', error);
+            container.innerHTML = `
+                <div style="padding: var(--spacing-md); background: var(--color-danger); color: white; border-radius: var(--radius-md);">
+                    <strong>Error:</strong> ${error.message}
+                </div>
+            `;
+        }
+    },
+    
+    async saveCurrentReport() {
+        if (!window.currentReportData) {
+            Utils.showNotification('No hay reporte para guardar. Genera un reporte primero.', 'warning');
+            return;
+        }
+        
+        const name = await Utils.prompt('Nombre del reporte:', 'Guardar Reporte');
+        if (!name) return;
+        
+        try {
+            const dateFrom = document.getElementById('report-date-from')?.value;
+            const dateTo = document.getElementById('report-date-to')?.value;
+            const branchFilterEl = document.getElementById('report-branch');
+            const branchFilterValue = branchFilterEl?.value || '';
+            
+            const reportData = {
+                name: name,
+                report_type: window.currentReportData.type || 'summary',
+                filters: {
+                    dateFrom,
+                    dateTo,
+                    branchId: branchFilterValue === 'all' ? null : branchFilterValue
+                },
+                data: window.currentReportData,
+                summary: window.currentReportData.summary || {}
+            };
+            
+            await API.saveReport(reportData);
+            Utils.showNotification('Reporte guardado exitosamente', 'success');
+            
+            // Si estamos en la pestaña de guardados, recargar
+            if (this.currentTab === 'saved') {
+                await this.loadSavedReports();
+            }
+        } catch (error) {
+            console.error('Error guardando reporte:', error);
+            Utils.showNotification('Error al guardar el reporte: ' + error.message, 'error');
+        }
+    },
+    
+    async viewSavedReport(reportId) {
+        try {
+            const report = await API.getSavedReport(reportId);
+            if (!report) {
+                Utils.showNotification('Reporte no encontrado', 'error');
+                return;
+            }
+            
+            // Restaurar filtros
+            if (report.filters) {
+                if (report.filters.dateFrom && document.getElementById('report-date-from')) {
+                    document.getElementById('report-date-from').value = report.filters.dateFrom;
+                }
+                if (report.filters.dateTo && document.getElementById('report-date-to')) {
+                    document.getElementById('report-date-to').value = report.filters.dateTo;
+                }
+                if (report.filters.branchId && document.getElementById('report-branch')) {
+                    document.getElementById('report-branch').value = report.filters.branchId || 'all';
+                }
+            }
+            
+            // Cambiar a pestaña de reportes y regenerar
+            this.currentTab = 'reports';
+            await this.loadTab('reports');
+            await this.generateReport();
+            
+            Utils.showNotification('Reporte restaurado', 'success');
+        } catch (error) {
+            console.error('Error cargando reporte guardado:', error);
+            Utils.showNotification('Error al cargar el reporte: ' + error.message, 'error');
+        }
+    },
+    
+    async exportSavedReport(reportId) {
+        try {
+            const report = await API.getSavedReport(reportId);
+            if (!report) {
+                Utils.showNotification('Reporte no encontrado', 'error');
+                return;
+            }
+            
+            // Usar los datos guardados para exportar
+            window.currentReportData = report.data;
+            await this.exportReport();
+        } catch (error) {
+            console.error('Error exportando reporte guardado:', error);
+            Utils.showNotification('Error al exportar el reporte: ' + error.message, 'error');
+        }
+    },
+    
+    async deleteSavedReport(reportId) {
+        const confirm = await Utils.confirm('¿Eliminar este reporte guardado?', 'Eliminar Reporte');
+        if (!confirm) return;
+        
+        try {
+            await API.deleteSavedReport(reportId);
+            Utils.showNotification('Reporte eliminado', 'success');
+            await this.loadSavedReports();
+        } catch (error) {
+            console.error('Error eliminando reporte guardado:', error);
+            Utils.showNotification('Error al eliminar el reporte: ' + error.message, 'error');
+        }
     }
 };
 
