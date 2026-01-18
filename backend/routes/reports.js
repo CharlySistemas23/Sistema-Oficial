@@ -126,6 +126,12 @@ router.post('/save', requireBranchAccess, async (req, res) => {
 router.get('/saved', requireBranchAccess, async (req, res) => {
   try {
     const { branch_id, report_type, limit = 50, offset = 0 } = req.query;
+    
+    // Asegurar que req.user existe
+    if (!req.user) {
+      return res.status(401).json({ error: 'Usuario no autenticado' });
+    }
+    
     const branchId = branch_id || req.user.branchId;
 
     let sql = `
@@ -149,9 +155,11 @@ router.get('/saved', requireBranchAccess, async (req, res) => {
         paramCount++;
       }
     } else {
-      sql += ` AND sr.branch_id = $${paramCount}`;
-      params.push(req.user.branchId);
-      paramCount++;
+      if (req.user.branchId) {
+        sql += ` AND sr.branch_id = $${paramCount}`;
+        params.push(req.user.branchId);
+        paramCount++;
+      }
     }
 
     // Filtro por tipo de reporte
@@ -177,7 +185,8 @@ router.get('/saved', requireBranchAccess, async (req, res) => {
     res.json(reports);
   } catch (error) {
     console.error('Error obteniendo reportes guardados:', error);
-    res.status(500).json({ error: 'Error al obtener reportes guardados' });
+    console.error('Stack trace:', error.stack);
+    res.status(500).json({ error: 'Error al obtener reportes guardados', details: error.message });
   }
 });
 
