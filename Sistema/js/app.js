@@ -1414,6 +1414,7 @@ const App = {
             const veranosAgency = agencies.find(a => a.name.toUpperCase() === 'VERANOS');
             const tbAgency = agencies.find(a => a.name.toUpperCase() === 'TB');
             const ttfAgency = agencies.find(a => a.name.toUpperCase() === 'TTF');
+            const tropicalAgency = agencies.find(a => a.name.toUpperCase() === 'TROPICAL ADVENTURE');
             
             const branch1 = branches.find(b => b.id === 'branch1');
             const branch2 = branches.find(b => b.id === 'branch2');
@@ -1488,6 +1489,14 @@ const App = {
                     { id: Utils.generateId(), agency_id: ttfAgency.id, branch_id: null, min_passengers: 15, max_passengers: 18, unit_type: null, rate_per_passenger: 0, fee_type: 'flat', flat_fee: 800, extra_per_passenger: 0, active_from: today, active_until: null, notes: 'TTF: 15-18 PAX', created_at: new Date().toISOString(), updated_at: new Date().toISOString(), sync_status: 'pending' },
                     { id: Utils.generateId(), agency_id: ttfAgency.id, branch_id: null, min_passengers: 20, max_passengers: 30, unit_type: null, rate_per_passenger: 0, fee_type: 'flat', flat_fee: 1000, extra_per_passenger: 0, active_from: today, active_until: null, notes: 'TTF: 20-30 PAX', created_at: new Date().toISOString(), updated_at: new Date().toISOString(), sync_status: 'pending' },
                     { id: Utils.generateId(), agency_id: ttfAgency.id, branch_id: null, min_passengers: 30, max_passengers: 45, unit_type: null, rate_per_passenger: 0, fee_type: 'flat', flat_fee: 1200, extra_per_passenger: 0, active_from: today, active_until: null, notes: 'TTF: 30-45 PAX', created_at: new Date().toISOString(), updated_at: new Date().toISOString(), sync_status: 'pending' }
+                );
+            }
+
+            // TROPICAL ADVENTURE: Van (1-14 pasajeros) → $500, Camión (15-45 pasajeros) → $1,200 (tarifa fija)
+            if (tropicalAgency) {
+                rules.push(
+                    { id: Utils.generateId(), agency_id: tropicalAgency.id, branch_id: null, min_passengers: 1, max_passengers: 14, unit_type: 'van', rate_per_passenger: 0, fee_type: 'flat', flat_fee: 500, extra_per_passenger: 0, active_from: today, active_until: null, notes: 'TROPICAL ADVENTURE: Van 1-14 PAX', created_at: new Date().toISOString(), updated_at: new Date().toISOString(), sync_status: 'pending' },
+                    { id: Utils.generateId(), agency_id: tropicalAgency.id, branch_id: null, min_passengers: 15, max_passengers: 45, unit_type: 'truck', rate_per_passenger: 0, fee_type: 'flat', flat_fee: 1200, extra_per_passenger: 0, active_from: today, active_until: null, notes: 'TROPICAL ADVENTURE: Camión 15-45 PAX', created_at: new Date().toISOString(), updated_at: new Date().toISOString(), sync_status: 'pending' }
                 );
             }
 
