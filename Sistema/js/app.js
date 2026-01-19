@@ -1152,7 +1152,7 @@ const App = {
             'SEBASTIAN', 'CALI', 'SAULA', 'ANDRES', 'ANGEL', 'SR ANGEL', 'RAMSES', 'ISAURA',
             'CARLOS', 'PACO', 'FRANCISCO', 'OMAR', 'PANDA', 'KARLA', 'JUAN CARLOS', 'NADIA',
             'JASON', 'ROBERTO', 'PEDRO', 'ANA', 'JOVA', 'EDITH', 'VERO', 'POCHIS',
-            'RAMON', 'ALDAIR', 'CLAUDIA', 'SERGIO', 'MANUEL'
+            'RAMON', 'ALDAIR', 'CLAUDIA', 'SERGIO', 'MANUEL', 'CHAYITO'
         ].map((name, idx) => ({
             id: `seller_${idx + 1}`,
             name: name,
