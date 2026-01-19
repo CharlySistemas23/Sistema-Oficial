@@ -1847,19 +1847,42 @@ const Reports = {
             });
         }
 
-        // Calcular comisiones desde las ventas
+        // Calcular COGS desde los items de venta (más preciso que desde cost_entries)
+        let totalCOGS = 0;
+        for (const sale of sales) {
+            const items = saleItems.filter(si => si.sale_id === sale.id);
+            for (const item of items) {
+                const invItem = items.find(i => i.id === item.item_id);
+                if (invItem && invItem.cost) {
+                    totalCOGS += (invItem.cost || 0) * (item.quantity || 1);
+                }
+            }
+        }
+
+        // Calcular comisiones desde sale_items (más preciso)
         const commissionsBreakdown = {
             sellers: 0,
             guides: 0,
             total: 0
         };
-        sales.forEach(sale => {
-            commissionsBreakdown.sellers += sale.seller_commission || 0;
-            commissionsBreakdown.guides += sale.guide_commission || 0;
-        });
-        commissionsBreakdown.total = commissionsBreakdown.sellers + commissionsBreakdown.guides;
+        for (const sale of sales) {
+            const items = saleItems.filter(si => si.sale_id === sale.id);
+            for (const item of items) {
+                if (item.commission_amount) {
+                    commissionsBreakdown.total += item.commission_amount;
+                }
+            }
+        }
+        // Si no hay comisiones en sale_items, usar los valores de las ventas (fallback)
+        if (commissionsBreakdown.total === 0) {
+            sales.forEach(sale => {
+                commissionsBreakdown.sellers += sale.seller_commission || 0;
+                commissionsBreakdown.guides += sale.guide_commission || 0;
+            });
+            commissionsBreakdown.total = commissionsBreakdown.sellers + commissionsBreakdown.guides;
+        }
 
-        // Obtener costos del período del reporte
+        // Obtener costos del período del reporte (llegadas y operativos)
         let totalCosts = 0;
         let costBreakdown = {
             fixed: 0,
@@ -1870,47 +1893,69 @@ const Reports = {
             bankCommissions: 0
         };
         
-        if (typeof Costs !== 'undefined' && sales.length > 0) {
+        if (sales.length > 0) {
             // Obtener fechas del reporte
             const dates = sales.map(s => s.created_at.split('T')[0]).sort();
             const dateFrom = dates[0];
             const dateTo = dates[dates.length - 1];
             
             // Obtener branchId del filtro o de las ventas
-            const branchId = document.getElementById('report-branch')?.value || 
-                           (sales.length > 0 ? sales[0].branch_id : null);
+            const branchId = branchFilterValue && branchFilterValue !== 'all' ? branchFilterValue : 
+                           (branchIdForBanner || (sales.length > 0 ? sales[0].branch_id : null));
             
-            const reportCosts = await Costs.getFilteredCosts({
-                branchId: branchId || null,
-                dateFrom: dateFrom,
-                dateTo: dateTo
+            // Obtener llegadas del período
+            const allArrivals = await DB.getAll('agency_arrivals', null, null, { 
+                filterByBranch: false, 
+                branchIdField: 'branch_id' 
+            }) || [];
+            const periodArrivals = allArrivals.filter(a => {
+                const arrivalDate = a.date || a.created_at?.split('T')[0];
+                return arrivalDate >= dateFrom && arrivalDate <= dateTo &&
+                       (branchId === null || !branchId || a.branch_id === branchId || !a.branch_id) &&
+                       a.passengers > 0 && a.units > 0;
             });
+            costBreakdown.arrivals = periodArrivals.reduce((sum, a) => sum + (a.arrival_fee || a.calculated_fee || 0), 0);
             
-            totalCosts = reportCosts.reduce((sum, c) => sum + (c.amount || 0), 0);
-            
-            // Desglose de costos
-            costBreakdown.fixed = reportCosts
-                .filter(c => c.type === 'fijo')
-                .reduce((sum, c) => sum + (c.amount || 0), 0);
-            costBreakdown.variable = reportCosts
-                .filter(c => c.type === 'variable' && c.category !== 'costo_ventas' && c.category !== 'comisiones' && c.category !== 'comisiones_bancarias' && c.category !== 'pago_llegadas')
-                .reduce((sum, c) => sum + (c.amount || 0), 0);
-            costBreakdown.cogs = reportCosts
-                .filter(c => c.category === 'costo_ventas')
-                .reduce((sum, c) => sum + (c.amount || 0), 0);
-            costBreakdown.commissions = reportCosts
-                .filter(c => c.category === 'comisiones')
-                .reduce((sum, c) => sum + (c.amount || 0), 0);
-            costBreakdown.arrivals = reportCosts
-                .filter(c => c.category === 'pago_llegadas')
-                .reduce((sum, c) => sum + (c.amount || 0), 0);
-            costBreakdown.bankCommissions = reportCosts
-                .filter(c => c.category === 'comisiones_bancarias')
-                .reduce((sum, c) => sum + (c.amount || 0), 0);
+            // Obtener costos operativos del período
+            if (typeof Costs !== 'undefined') {
+                const reportCosts = await Costs.getFilteredCosts({
+                    branchId: branchId || null,
+                    dateFrom: dateFrom,
+                    dateTo: dateTo
+                });
+                
+                // Desglose de costos operativos
+                costBreakdown.fixed = reportCosts
+                    .filter(c => c.type === 'fijo' && c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias')
+                    .reduce((sum, c) => sum + (c.amount || 0), 0);
+                costBreakdown.variable = reportCosts
+                    .filter(c => c.type === 'variable' && c.category !== 'costo_ventas' && c.category !== 'comisiones' && c.category !== 'comisiones_bancarias' && c.category !== 'pago_llegadas')
+                    .reduce((sum, c) => sum + (c.amount || 0), 0);
+                costBreakdown.bankCommissions = reportCosts
+                    .filter(c => c.category === 'comisiones_bancarias')
+                    .reduce((sum, c) => sum + (c.amount || 0), 0);
+            }
         }
         
-        const profit = totalSales - totalCosts;
-        const profitMargin = totalSales > 0 ? (profit / totalSales * 100) : 0;
+        // Usar COGS calculado desde items en lugar de cost_entries
+        costBreakdown.cogs = totalCOGS;
+        costBreakdown.commissions = commissionsBreakdown.total;
+        
+        // Calcular utilidades
+        const grossProfit = totalSales - totalCOGS - commissionsBreakdown.total;
+        const grossMargin = totalSales > 0 ? (grossProfit / totalSales * 100) : 0;
+        
+        // Costos totales = COGS + Comisiones + Llegadas + Operativos + Comisiones Bancarias
+        totalCosts = costBreakdown.cogs + costBreakdown.commissions + costBreakdown.arrivals + 
+                     costBreakdown.fixed + costBreakdown.variable + costBreakdown.bankCommissions;
+        
+        const netProfit = grossProfit - costBreakdown.arrivals - costBreakdown.fixed - 
+                         costBreakdown.variable - costBreakdown.bankCommissions;
+        const netMargin = totalSales > 0 ? (netProfit / totalSales * 100) : 0;
+        
+        // Mantener compatibilidad con el código anterior
+        const profit = netProfit;
+        const profitMargin = netMargin;
         
         // Ventas por día
         const dailyStats = {};
@@ -2029,12 +2074,21 @@ const Reports = {
                     <div class="kpi-value" style="color: var(--color-danger);">${Utils.formatCurrency(totalCosts)}</div>
                 </div>
                 <div class="kpi-card" style="min-width: 0; width: 100%; box-sizing: border-box;">
-                    <div class="kpi-label">Utilidad Neta</div>
-                    <div class="kpi-value" style="color: ${profit >= 0 ? 'var(--color-success)' : 'var(--color-danger)'};">
-                        ${Utils.formatCurrency(profit)}
+                    <div class="kpi-label">Utilidad Bruta</div>
+                    <div class="kpi-value" style="color: var(--color-success);">
+                        ${Utils.formatCurrency(grossProfit)}
                     </div>
                     <div style="font-size: 12px; color: var(--color-text-secondary); margin-top: var(--spacing-xs);">
-                        Margen: ${profitMargin.toFixed(1)}%
+                        Margen Bruto: ${grossMargin.toFixed(1)}%
+                    </div>
+                </div>
+                <div class="kpi-card" style="min-width: 0; width: 100%; box-sizing: border-box;">
+                    <div class="kpi-label">Utilidad Neta</div>
+                    <div class="kpi-value" style="color: ${netProfit >= 0 ? 'var(--color-primary)' : 'var(--color-danger)'}; font-weight: 700;">
+                        ${Utils.formatCurrency(netProfit)}
+                    </div>
+                    <div style="font-size: 12px; color: var(--color-text-secondary); margin-top: var(--spacing-xs);">
+                        Margen Neto: ${netMargin.toFixed(1)}%
                     </div>
                 </div>
             </div>
@@ -2238,35 +2292,241 @@ const Reports = {
             branchIdForBanner = currentBranchId;
         }
         
+        // Obtener datos adicionales para cálculos de utilidad
+        const saleItems = await DB.getAll('sale_items') || [];
+        const inventoryItems = await DB.getAll('inventory_items', null, null, { 
+            filterByBranch: false, 
+            branchIdField: 'branch_id' 
+        }) || [];
+        const allArrivals = await DB.getAll('agency_arrivals', null, null, { 
+            filterByBranch: false, 
+            branchIdField: 'branch_id' 
+        }) || [];
+        const allCosts = await DB.getAll('cost_entries', null, null, { 
+            filterByBranch: false, 
+            branchIdField: 'branch_id' 
+        }) || [];
+        
+        // Determinar qué branch_ids incluir en los cálculos
+        const branchIdsToInclude = [];
+        if (branchIdForBanner === null && isMasterAdmin) {
+            // Todas las sucursales
+            const allBranches = await DB.getAll('catalog_branches') || [];
+            branchIdsToInclude.push(...allBranches.map(b => b.id));
+        } else if (branchIdForBanner) {
+            branchIdsToInclude.push(branchIdForBanner);
+        } else if (currentBranchId) {
+            branchIdsToInclude.push(currentBranchId);
+        }
+        
+        // Función helper para calcular costos del día (similar a ProfitCalculator)
+        const calculateDailyCosts = (dateStr, branchId) => {
+            let fixedCostsDaily = 0;
+            let variableCostsDaily = 0;
+            let arrivalCosts = 0;
+            let bankCommissions = 0;
+            
+            // Filtrar llegadas del día
+            const dayArrivals = allArrivals.filter(a => {
+                const arrivalDate = a.date || a.created_at?.split('T')[0];
+                return arrivalDate === dateStr && 
+                       (branchId === null || a.branch_id === branchId || !a.branch_id) &&
+                       a.passengers > 0 && a.units > 0;
+            });
+            arrivalCosts = dayArrivals.reduce((sum, a) => sum + (a.arrival_fee || a.calculated_fee || 0), 0);
+            
+            // Filtrar costos del día
+            const targetDate = new Date(dateStr);
+            const branchCosts = allCosts.filter(c => 
+                branchId === null || c.branch_id === branchId || !c.branch_id
+            );
+            
+            // Costos mensuales prorrateados
+            const monthlyCosts = branchCosts.filter(c => {
+                const costDate = new Date(c.date || c.created_at);
+                return c.period_type === 'monthly' && 
+                       c.recurring === true &&
+                       costDate.getMonth() === targetDate.getMonth() &&
+                       costDate.getFullYear() === targetDate.getFullYear();
+            });
+            for (const cost of monthlyCosts) {
+                const costDate = new Date(cost.date || cost.created_at);
+                const daysInMonth = new Date(costDate.getFullYear(), costDate.getMonth() + 1, 0).getDate();
+                fixedCostsDaily += (cost.amount || 0) / daysInMonth;
+            }
+            
+            // Costos semanales prorrateados
+            const weeklyCosts = branchCosts.filter(c => {
+                const costDate = new Date(c.date || c.created_at);
+                const targetWeek = this.getWeekNumber(targetDate);
+                const costWeek = this.getWeekNumber(costDate);
+                return c.period_type === 'weekly' && 
+                       c.recurring === true &&
+                       targetWeek === costWeek &&
+                       targetDate.getFullYear() === costDate.getFullYear();
+            });
+            for (const cost of weeklyCosts) {
+                fixedCostsDaily += (cost.amount || 0) / 7;
+            }
+            
+            // Costos anuales prorrateados
+            const annualCosts = branchCosts.filter(c => {
+                const costDate = new Date(c.date || c.created_at);
+                return c.period_type === 'annual' && 
+                       c.recurring === true &&
+                       costDate.getFullYear() === targetDate.getFullYear();
+            });
+            for (const cost of annualCosts) {
+                const daysInYear = ((targetDate.getFullYear() % 4 === 0 && targetDate.getFullYear() % 100 !== 0) || (targetDate.getFullYear() % 400 === 0)) ? 366 : 365;
+                fixedCostsDaily += (cost.amount || 0) / daysInYear;
+            }
+            
+            // Costos variables/diarios del día específico
+            variableCostsDaily = branchCosts
+                .filter(c => {
+                    const costDate = c.date || c.created_at;
+                    const costDateStr = costDate.split('T')[0];
+                    return costDateStr === dateStr &&
+                           (c.period_type === 'one_time' || c.period_type === 'daily' || !c.period_type);
+                })
+                .reduce((sum, c) => {
+                    // Separar comisiones bancarias
+                    if (c.category === 'comisiones_bancarias') {
+                        bankCommissions += (c.amount || 0);
+                    }
+                    return sum + (c.amount || 0);
+                }, 0);
+            
+            return { fixedCostsDaily, variableCostsDaily, arrivalCosts, bankCommissions };
+        };
+        
+        // Calcular estadísticas por día con costos y utilidades
         const dailyStats = {};
-        sales.forEach(sale => {
+        for (const sale of sales) {
             const date = sale.created_at.split('T')[0];
             if (!dailyStats[date]) {
-                dailyStats[date] = { total: 0, count: 0, passengers: 0 };
+                dailyStats[date] = { 
+                    total: 0, 
+                    count: 0, 
+                    passengers: 0,
+                    cogs: 0,
+                    commissions: 0,
+                    arrivalCosts: 0,
+                    operatingCosts: 0,
+                    bankCommissions: 0
+                };
             }
             dailyStats[date].total += sale.total || 0;
             dailyStats[date].count += 1;
             dailyStats[date].passengers += sale.passengers || 1;
-        });
+        }
         
-        const dailyData = Object.entries(dailyStats)
-            .map(([date, stats]) => ({ date, ...stats, avg: stats.passengers > 0 ? stats.total / stats.passengers : 0 }))
-            .sort((a, b) => a.date.localeCompare(b.date));
+        // Calcular COGS y comisiones por día
+        for (const sale of sales) {
+            const date = sale.created_at.split('T')[0];
+            const items = saleItems.filter(si => si.sale_id === sale.id);
+            
+            // COGS
+            for (const item of items) {
+                const invItem = inventoryItems.find(i => i.id === item.item_id);
+                if (invItem && invItem.cost) {
+                    dailyStats[date].cogs += (invItem.cost || 0) * (item.quantity || 1);
+                }
+            }
+            
+            // Comisiones
+            for (const item of items) {
+                if (item.commission_amount) {
+                    dailyStats[date].commissions += item.commission_amount;
+                }
+            }
+        }
         
-        let html = this.getBranchContextBanner(branchIdForBanner, dateFrom, dateTo);
+        // Calcular costos del día (llegadas, operativos, comisiones bancarias)
+        const dailyData = await Promise.all(Object.entries(dailyStats).map(async ([date, stats]) => {
+            // Calcular costos para cada sucursal y sumarlos si es master_admin sin filtro
+            let totalArrivalCosts = 0;
+            let totalOperatingCosts = 0;
+            let totalBankCommissions = 0;
+            
+            if (branchIdsToInclude.length > 0) {
+                for (const branchId of branchIdsToInclude) {
+                    const costs = calculateDailyCosts(date, branchId);
+                    totalArrivalCosts += costs.arrivalCosts;
+                    totalOperatingCosts += costs.fixedCostsDaily + costs.variableCostsDaily;
+                    totalBankCommissions += costs.bankCommissions;
+                }
+            } else {
+                // Si no hay branch_ids, calcular para todas
+                const costs = calculateDailyCosts(date, null);
+                totalArrivalCosts = costs.arrivalCosts;
+                totalOperatingCosts = costs.fixedCostsDaily + costs.variableCostsDaily;
+                totalBankCommissions = costs.bankCommissions;
+            }
+            
+            stats.arrivalCosts = totalArrivalCosts;
+            stats.operatingCosts = totalOperatingCosts;
+            stats.bankCommissions = totalBankCommissions;
+            
+            // Calcular utilidades
+            const grossProfit = stats.total - stats.cogs - stats.commissions;
+            const netProfit = grossProfit - stats.arrivalCosts - stats.operatingCosts - stats.bankCommissions;
+            const grossMargin = stats.total > 0 ? (grossProfit / stats.total * 100) : 0;
+            const netMargin = stats.total > 0 ? (netProfit / stats.total * 100) : 0;
+            
+            return {
+                date,
+                ...stats,
+                avg: stats.passengers > 0 ? stats.total / stats.passengers : 0,
+                grossProfit,
+                netProfit,
+                grossMargin,
+                netMargin
+            };
+        }));
+        
+        dailyData.sort((a, b) => a.date.localeCompare(b.date));
+        
+        // Calcular totales
+        const totals = dailyData.reduce((acc, day) => ({
+            total: acc.total + day.total,
+            count: acc.count + day.count,
+            passengers: acc.passengers + day.passengers,
+            cogs: acc.cogs + day.cogs,
+            commissions: acc.commissions + day.commissions,
+            arrivalCosts: acc.arrivalCosts + day.arrivalCosts,
+            operatingCosts: acc.operatingCosts + day.operatingCosts,
+            bankCommissions: acc.bankCommissions + day.bankCommissions,
+            grossProfit: acc.grossProfit + day.grossProfit,
+            netProfit: acc.netProfit + day.netProfit
+        }), { total: 0, count: 0, passengers: 0, cogs: 0, commissions: 0, arrivalCosts: 0, operatingCosts: 0, bankCommissions: 0, grossProfit: 0, netProfit: 0 });
+        
+        const totalGrossMargin = totals.total > 0 ? (totals.grossProfit / totals.total * 100) : 0;
+        const totalNetMargin = totals.total > 0 ? (totals.netProfit / totals.total * 100) : 0;
+        
+        let html = await this.getBranchContextBanner(branchIdForBanner, dateFrom, dateTo);
         html += `
             <div class="dashboard-section" style="width: 100%; max-width: 100%; box-sizing: border-box;">
-                <h3 style="font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: var(--spacing-sm);">Análisis por Día</h3>
+                <h3 style="font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: var(--spacing-sm);">Análisis por Día con Utilidades</h3>
                 <div style="overflow-x: auto; width: 100%;">
-                    <table class="cart-table" style="width: 100%; max-width: 100%; table-layout: auto; min-width: 800px;">
+                    <table class="cart-table" style="width: 100%; max-width: 100%; table-layout: auto; min-width: 1400px;">
                         <thead>
                             <tr>
                                 <th>Fecha</th>
                                 <th>Ventas</th>
-                                <th>Total</th>
+                                <th>Total Ventas</th>
                                 <th>Pasajeros</th>
-                                <th>Ticket Promedio</th>
+                                <th>Ticket Prom.</th>
                                 <th>% Cierre</th>
+                                <th>Costo Merc.</th>
+                                <th>Comisiones</th>
+                                <th>Costos Llegadas</th>
+                                <th>Costos Operativos</th>
+                                <th>Com. Bancarias</th>
+                                <th style="color: var(--color-success);">Utilidad Bruta</th>
+                                <th style="color: var(--color-success);">Margen Bruto %</th>
+                                <th style="color: var(--color-primary); font-weight: 700;">Utilidad Neta</th>
+                                <th style="color: var(--color-primary); font-weight: 700;">Margen Neto %</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -2278,15 +2538,52 @@ const Reports = {
                                     <td>${day.passengers}</td>
                                     <td>${Utils.formatCurrency(day.avg)}</td>
                                     <td>${day.passengers > 0 ? ((day.count / day.passengers) * 100).toFixed(1) : 0}%</td>
+                                    <td>${Utils.formatCurrency(day.cogs)}</td>
+                                    <td>${Utils.formatCurrency(day.commissions)}</td>
+                                    <td>${Utils.formatCurrency(day.arrivalCosts)}</td>
+                                    <td>${Utils.formatCurrency(day.operatingCosts)}</td>
+                                    <td>${Utils.formatCurrency(day.bankCommissions)}</td>
+                                    <td style="color: var(--color-success); font-weight: 600;">${Utils.formatCurrency(day.grossProfit)}</td>
+                                    <td style="color: var(--color-success);">${day.grossMargin.toFixed(2)}%</td>
+                                    <td style="color: var(--color-primary); font-weight: 700;">${Utils.formatCurrency(day.netProfit)}</td>
+                                    <td style="color: var(--color-primary); font-weight: 700;">${day.netMargin.toFixed(2)}%</td>
                                 </tr>
                             `).join('')}
                         </tbody>
+                        <tfoot style="background: var(--color-bg-secondary); font-weight: 600;">
+                            <tr>
+                                <td><strong>TOTALES</strong></td>
+                                <td><strong>${totals.count}</strong></td>
+                                <td><strong>${Utils.formatCurrency(totals.total)}</strong></td>
+                                <td><strong>${totals.passengers}</strong></td>
+                                <td><strong>${totals.passengers > 0 ? Utils.formatCurrency(totals.total / totals.passengers) : '$0.00'}</strong></td>
+                                <td><strong>${totals.passengers > 0 ? ((totals.count / totals.passengers) * 100).toFixed(1) : 0}%</strong></td>
+                                <td><strong>${Utils.formatCurrency(totals.cogs)}</strong></td>
+                                <td><strong>${Utils.formatCurrency(totals.commissions)}</strong></td>
+                                <td><strong>${Utils.formatCurrency(totals.arrivalCosts)}</strong></td>
+                                <td><strong>${Utils.formatCurrency(totals.operatingCosts)}</strong></td>
+                                <td><strong>${Utils.formatCurrency(totals.bankCommissions)}</strong></td>
+                                <td style="color: var(--color-success);"><strong>${Utils.formatCurrency(totals.grossProfit)}</strong></td>
+                                <td style="color: var(--color-success);"><strong>${totalGrossMargin.toFixed(2)}%</strong></td>
+                                <td style="color: var(--color-primary);"><strong>${Utils.formatCurrency(totals.netProfit)}</strong></td>
+                                <td style="color: var(--color-primary);"><strong>${totalNetMargin.toFixed(2)}%</strong></td>
+                            </tr>
+                        </tfoot>
                     </table>
                 </div>
             </div>
         `;
         
         container.innerHTML = html;
+    },
+    
+    // Helper function para obtener número de semana
+    getWeekNumber(date) {
+        const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+        const dayNum = d.getUTCDay() || 7;
+        d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+        const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+        return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
     },
     
     async displaySellerReport(sales) {
