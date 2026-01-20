@@ -6248,6 +6248,181 @@ const Reports = {
                 }
             }
 
+            // ========== UTILIDADES (MARGEN BRUTO Y NETO) ==========
+            // Obtener tipo de cambio del día
+            const exchangeRates = await DB.query('exchange_rates_daily', 'date', today) || [];
+            const todayRate = exchangeRates[0] || { usd_to_mxn: 20.0, cad_to_mxn: 15.0 };
+            const usdRate = todayRate.usd_to_mxn || 20.0;
+            const cadRate = todayRate.cad_to_mxn || 15.0;
+
+            // Convertir totales a MXN
+            const totalSalesMXN = totals.USD * usdRate + totals.MXN + totals.CAD * cadRate;
+
+            // Calcular comisiones totales (ya están en MXN según el cálculo)
+            const totalCommissions = (sellerEntries.reduce((sum, s) => sum + s.total, 0) || 0) + 
+                                   (guideEntries.reduce((sum, g) => sum + g.total, 0) || 0);
+
+            // COGS: Intentar obtener costos de productos
+            let totalCOGS = 0;
+            try {
+                const inventoryItems = await DB.getAll('inventory_items') || [];
+                for (const capture of captures) {
+                    // Buscar producto por nombre (aproximado)
+                    const item = inventoryItems.find(i => 
+                        i.name && capture.product && 
+                        i.name.toLowerCase().includes(capture.product.toLowerCase())
+                    );
+                    if (item && item.cost) {
+                        totalCOGS += (item.cost || 0) * (capture.quantity || 1);
+                    }
+                }
+            } catch (e) {
+                console.warn('No se pudieron obtener costos de productos:', e);
+            }
+
+            // Costos de llegadas
+            const totalArrivalCosts = todayArrivals
+                .filter(a => a.passengers > 0 && a.units > 0)
+                .reduce((sum, a) => sum + (a.arrival_fee || a.calculated_fee || 0), 0);
+
+            // Costos operativos del día (prorrateados)
+            let totalOperatingCosts = 0;
+            let bankCommissions = 0;
+            try {
+                const allCosts = await DB.getAll('cost_entries') || [];
+                const targetDate = new Date(today);
+                const branchIds = [...new Set(captures.map(c => c.branch_id).filter(Boolean))];
+                
+                for (const branchId of branchIds.length > 0 ? branchIds : [null]) {
+                    const branchCosts = allCosts.filter(c => 
+                        branchId === null || c.branch_id === branchId || !c.branch_id
+                    );
+
+                    // Costos mensuales prorrateados
+                    const monthlyCosts = branchCosts.filter(c => {
+                        const costDate = new Date(c.date || c.created_at);
+                        return c.period_type === 'monthly' && 
+                               c.recurring === true &&
+                               costDate.getMonth() === targetDate.getMonth() &&
+                               costDate.getFullYear() === targetDate.getFullYear();
+                    });
+                    for (const cost of monthlyCosts) {
+                        const costDate = new Date(cost.date || cost.created_at);
+                        const daysInMonth = new Date(costDate.getFullYear(), costDate.getMonth() + 1, 0).getDate();
+                        totalOperatingCosts += (cost.amount || 0) / daysInMonth;
+                    }
+
+                    // Costos semanales prorrateados
+                    const weeklyCosts = branchCosts.filter(c => {
+                        const costDate = new Date(c.date || c.created_at);
+                        const targetWeek = this.getWeekNumber(targetDate);
+                        const costWeek = this.getWeekNumber(costDate);
+                        return c.period_type === 'weekly' && 
+                               c.recurring === true &&
+                               targetWeek === costWeek &&
+                               targetDate.getFullYear() === costDate.getFullYear();
+                    });
+                    for (const cost of weeklyCosts) {
+                        totalOperatingCosts += (cost.amount || 0) / 7;
+                    }
+
+                    // Costos anuales prorrateados
+                    const annualCosts = branchCosts.filter(c => {
+                        const costDate = new Date(c.date || c.created_at);
+                        return c.period_type === 'annual' && 
+                               c.recurring === true &&
+                               costDate.getFullYear() === targetDate.getFullYear();
+                    });
+                    for (const cost of annualCosts) {
+                        const daysInYear = ((targetDate.getFullYear() % 4 === 0 && targetDate.getFullYear() % 100 !== 0) || (targetDate.getFullYear() % 400 === 0)) ? 366 : 365;
+                        totalOperatingCosts += (cost.amount || 0) / daysInYear;
+                    }
+
+                    // Costos variables/diarios del día específico
+                    const variableCosts = branchCosts.filter(c => {
+                        const costDate = c.date || c.created_at;
+                        const costDateStr = costDate.split('T')[0];
+                        return costDateStr === today &&
+                               (c.period_type === 'one_time' || c.period_type === 'daily' || !c.period_type);
+                    });
+                    for (const cost of variableCosts) {
+                        if (cost.category === 'comisiones_bancarias') {
+                            bankCommissions += (cost.amount || 0);
+                        } else {
+                            totalOperatingCosts += (cost.amount || 0);
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn('No se pudieron obtener costos operativos:', e);
+            }
+
+            // Calcular utilidades
+            const grossProfit = totalSalesMXN - totalCOGS - totalCommissions;
+            const netProfit = grossProfit - totalArrivalCosts - totalOperatingCosts - bankCommissions;
+            const grossMargin = totalSalesMXN > 0 ? (grossProfit / totalSalesMXN * 100) : 0;
+            const netMargin = totalSalesMXN > 0 ? (netProfit / totalSalesMXN * 100) : 0;
+
+            // Mostrar sección de utilidades
+            if (y + 40 > pageHeight - 30) {
+                doc.addPage();
+                y = margin;
+            }
+
+            doc.setFontSize(12);
+            doc.setFont('helvetica', 'bold');
+            doc.text('UTILIDADES DEL DÍA', margin, y);
+            y += 10;
+
+            doc.setFillColor(240, 255, 240);
+            doc.rect(margin, y, pageWidth - (margin * 2), 35, 'F');
+            doc.setDrawColor(200, 200, 200);
+            doc.rect(margin, y, pageWidth - (margin * 2), 35);
+
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'bold');
+            doc.text('Ingresos:', margin + 5, y + 7);
+            doc.text(`$${totalSalesMXN.toFixed(2)}`, margin + 50, y + 7);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9);
+            doc.text(`USD: $${totals.USD.toFixed(2)} (x${usdRate.toFixed(2)})`, margin + 100, y + 7);
+            doc.text(`MXN: $${totals.MXN.toFixed(2)}`, margin + 140, y + 7);
+            doc.text(`CAD: $${totals.CAD.toFixed(2)} (x${cadRate.toFixed(2)})`, margin + 170, y + 7);
+
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'normal');
+            doc.text('(-) Costo Mercancía (COGS):', margin + 5, y + 13);
+            doc.text(`$${totalCOGS.toFixed(2)}`, margin + 80, y + 13);
+
+            doc.text('(-) Comisiones:', margin + 5, y + 19);
+            doc.text(`$${totalCommissions.toFixed(2)}`, margin + 50, y + 19);
+
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(0, 128, 0);
+            doc.text('= Utilidad Bruta:', margin + 5, y + 25);
+            doc.text(`$${grossProfit.toFixed(2)}`, margin + 55, y + 25);
+            doc.text(`(${grossMargin.toFixed(2)}%)`, margin + 100, y + 25);
+
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(0, 0, 0);
+            doc.text('(-) Costos Llegadas:', margin + 5, y + 31);
+            doc.text(`$${totalArrivalCosts.toFixed(2)}`, margin + 55, y + 31);
+            doc.text('(-) Costos Operativos:', margin + 100, y + 31);
+            doc.text(`$${totalOperatingCosts.toFixed(2)}`, margin + 155, y + 31);
+            doc.text('(-) Comisiones Bancarias:', margin + 5, y + 37);
+            doc.text(`$${bankCommissions.toFixed(2)}`, margin + 65, y + 37);
+
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(0, 0, 255);
+            doc.text('= Utilidad Neta:', margin + 5, y + 43);
+            doc.text(`$${netProfit.toFixed(2)}`, margin + 50, y + 43);
+            doc.text(`(${netMargin.toFixed(2)}%)`, margin + 95, y + 43);
+
+            doc.setTextColor(0, 0, 0);
+            y += 50;
+
             // ========== FOOTER ==========
             const totalPages = doc.internal.getNumberOfPages();
             for (let i = 1; i <= totalPages; i++) {
