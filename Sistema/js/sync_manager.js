@@ -1024,60 +1024,29 @@ const SyncManager = {
                                     }
 
                                     // Verificar si el usuario ya existe antes de crear
-                                    let existingUser = null;
-                                    let employeeWithUser = null;
+                                    // Primero verificar si el empleado existe y tiene usuario
+                                    let userAlreadyExists = false;
                                     try {
+                                        // Intentar obtener el usuario directamente verificando si existe en el servidor
+                                        // Como no hay endpoint directo para verificar usuarios, intentaremos crear
+                                        // y si falla con "ya existe", lo tratamos como éxito
+                                        
+                                        // Verificar si el empleado existe
                                         const allEmployees = await API.getEmployees();
                                         if (allEmployees && Array.isArray(allEmployees)) {
-                                            // Buscar el empleado asociado
-                                            employeeWithUser = allEmployees.find(e => e.id === entityData.employee_id);
-                                            
-                                            if (employeeWithUser && employeeWithUser.user_id) {
-                                                // El empleado ya tiene un usuario asociado
-                                                existingUser = { id: employeeWithUser.user_id, username: employeeWithUser.username };
-                                            } else if (entityData.username) {
-                                                // Buscar por username en todos los empleados (verificar si algún empleado tiene ese username)
-                                                const employeeWithUsername = allEmployees.find(e => 
-                                                    e.username === entityData.username || 
-                                                    (e.user && e.user.username === entityData.username)
-                                                );
-                                                if (employeeWithUsername) {
-                                                    existingUser = { 
-                                                        id: employeeWithUsername.user_id || employeeWithUsername.id,
-                                                        username: entityData.username
-                                                    };
-                                                }
+                                            const employee = allEmployees.find(e => e.id === entityData.employee_id);
+                                            if (!employee) {
+                                                console.warn(`⚠️ Empleado ${entityData.employee_id} no existe en servidor, eliminando usuario de cola`);
+                                                await DB.delete('sync_queue', item.id);
+                                                break;
                                             }
                                         }
                                     } catch (fetchError) {
-                                        console.warn('⚠️ Error obteniendo lista de empleados/usuarios, intentando crear directamente:', fetchError);
+                                        console.warn('⚠️ Error verificando empleado, intentando crear usuario directamente:', fetchError);
                                     }
 
-                                    // Si el usuario ya existe, intentar actualizar (si hay endpoint PUT para usuarios)
-                                    if (existingUser) {
-                                        console.log(`ℹ️ Usuario ${entityData.username} ya existe (ID: ${existingUser.id}), actualizando...`);
-                                        // Intentar actualizar el usuario existente si hay endpoint PUT
-                                        try {
-                                            if (typeof API.put === 'function') {
-                                                await API.put(`/api/users/${existingUser.id}`, {
-                                                    username: entityData.username,
-                                                    role: entityData.role || employeeWithUser?.role
-                                                });
-                                                await DB.delete('sync_queue', item.id);
-                                                successCount++;
-                                            } else {
-                                                // Si no hay endpoint PUT, considerarlo como éxito (ya existe)
-                                                console.log(`✅ Usuario ya existe en servidor, marcando como sincronizado`);
-                                                await DB.delete('sync_queue', item.id);
-                                                successCount++;
-                                            }
-                                        } catch (updateError) {
-                                            // Si falla la actualización, intentar crear (puede ser que no haya endpoint PUT)
-                                            console.warn('⚠️ Error actualizando usuario, intentando crear:', updateError);
-                                            throw updateError; // Caer al catch general para manejar como creación
-                                        }
-                                    } else {
-                                        // Crear nuevo usuario
+                                    // Intentar crear el usuario (si ya existe, el catch lo manejará)
+                                    try {
                                         await API.post(`/api/employees/${entityData.employee_id}/user`, {
                                             username: entityData.username,
                                             password: '1234', // PIN por defecto, debería cambiarse
@@ -1085,44 +1054,23 @@ const SyncManager = {
                                         });
                                         await DB.delete('sync_queue', item.id);
                                         successCount++;
-                                    }
-                                } catch (error) {
-                                    // Manejo inteligente de errores de duplicados
-                                    const errorMessage = error.message || error.toString() || '';
-                                    const isDuplicateError = errorMessage.includes('nombre de usuario ya existe') || 
-                                                           errorMessage.includes('username already exists') ||
-                                                           errorMessage.includes('ya existe');
-                                    
-                                    if (isDuplicateError) {
-                                        // Intentar recuperar: verificar si el usuario ya existe y considerarlo como éxito
-                                        try {
-                                            console.log(`🔄 Error de usuario duplicado detectado, verificando existencia...`);
-                                            const allEmployees = await API.getEmployees();
-                                            if (allEmployees && Array.isArray(allEmployees)) {
-                                                const employee = allEmployees.find(e => e.id === entityData.employee_id);
-                                                
-                                                if (employee && employee.user_id) {
-                                                    // El usuario ya existe, marcarlo como sincronizado
-                                                    console.log(`✅ Usuario ya existe para empleado ${entityData.employee_id}, marcando como sincronizado`);
-                                                    await DB.delete('sync_queue', item.id);
-                                                    successCount++;
-                                                    continue; // Saltar al siguiente item
-                                                } else if (allEmployees.some(e => 
-                                                    (e.username === entityData.username) || 
-                                                    (e.user && e.user.username === entityData.username)
-                                                )) {
-                                                    // El username ya existe en otro empleado, marcar como sincronizado
-                                                    console.log(`✅ Usuario con username ${entityData.username} ya existe, marcando como sincronizado`);
-                                                    await DB.delete('sync_queue', item.id);
-                                                    successCount++;
-                                                    continue; // Saltar al siguiente item
-                                                }
-                                            }
-                                        } catch (recoveryError) {
-                                            console.error('❌ Error en recuperación de usuario duplicado:', recoveryError);
+                                    } catch (createError) {
+                                        // Si el error es "ya existe", considerarlo como éxito
+                                        const errorMessage = createError.message || createError.toString() || '';
+                                        if (errorMessage.includes('nombre de usuario ya existe') || 
+                                            errorMessage.includes('username already exists') ||
+                                            errorMessage.includes('ya existe')) {
+                                            console.log(`✅ Usuario ${entityData.username} ya existe en servidor, marcando como sincronizado`);
+                                            await DB.delete('sync_queue', item.id);
+                                            successCount++;
+                                        } else {
+                                            // Re-lanzar otros errores
+                                            throw createError;
                                         }
                                     }
-                                    
+                                } catch (error) {
+                                    // El manejo de "ya existe" ya se hace en el try interno
+                                    // Este catch solo maneja errores inesperados
                                     console.error('Error sincronizando usuario:', error);
                                     throw error; // Re-lanzar para que se maneje el error normalmente
                                 }
