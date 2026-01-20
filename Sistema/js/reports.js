@@ -5171,6 +5171,23 @@ const Reports = {
                     </div>
                 </div>
             </div>
+
+            <!-- Sección de Historial de Reportes Archivados -->
+            <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light); margin-top: var(--spacing-lg);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-md);">
+                    <h3 style="margin: 0; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+                        <i class="fas fa-history"></i> Historial de Reportes Archivados
+                    </h3>
+                    <button class="btn-secondary btn-sm" onclick="window.Reports.loadArchivedReports()" title="Actualizar historial">
+                        <i class="fas fa-sync-alt"></i> Actualizar
+                    </button>
+                </div>
+                <div id="archived-reports-list">
+                    <div style="text-align: center; padding: var(--spacing-lg); color: var(--color-text-secondary);">
+                        <i class="fas fa-spinner fa-spin"></i> Cargando historial...
+                    </div>
+                </div>
+            </div>
         `;
     },
 
@@ -5180,6 +5197,9 @@ const Reports = {
         
         // Cargar tipo de cambio en tiempo real
         await this.loadExchangeRates();
+        
+        // Cargar historial de reportes archivados
+        await this.loadArchivedReports();
         
         // Event listener del formulario
         const form = document.getElementById('quick-capture-form');
@@ -7227,6 +7247,568 @@ const Reports = {
         } catch (error) {
             console.error('Error exportando PDF:', error);
             Utils.showNotification('Error al exportar PDF: ' + error.message, 'error');
+        }
+    },
+
+    async archiveQuickCaptureReport() {
+        try {
+            const today = new Date().toISOString().split('T')[0];
+            let captures = await DB.getAll('temp_quick_captures') || [];
+            captures = captures.filter(c => c.date === today);
+
+            if (captures.length === 0) {
+                Utils.showNotification('No hay capturas para archivar', 'warning');
+                return;
+            }
+
+            // Calcular todos los datos del reporte
+            const exchangeRates = await DB.query('exchange_rates_daily', 'date', today) || [];
+            const todayRate = exchangeRates[0] || { usd_to_mxn: 20.0, cad_to_mxn: 15.0 };
+            const usdRate = todayRate.usd_to_mxn || 20.0;
+            const cadRate = todayRate.cad_to_mxn || 15.0;
+
+            const totals = { USD: 0, MXN: 0, CAD: 0 };
+            let totalQuantity = 0;
+            let totalCOGS = 0;
+
+            captures.forEach(c => {
+                totals[c.currency] = (totals[c.currency] || 0) + c.total;
+                totalQuantity += c.quantity || 1;
+                totalCOGS += c.merchandise_cost || 0;
+            });
+
+            const totalSalesMXN = totals.USD * usdRate + totals.MXN + totals.CAD * cadRate;
+
+            // Calcular comisiones
+            const commissionRules = await DB.getAll('commission_rules') || [];
+            let totalCommissions = 0;
+            for (const capture of captures) {
+                if (capture.seller_id && capture.total > 0) {
+                    const sellerRule = commissionRules.find(r => 
+                        r.entity_type === 'seller' && r.entity_id === capture.seller_id
+                    ) || commissionRules.find(r => r.entity_type === 'seller' && r.entity_id === null);
+                    if (sellerRule) {
+                        const discountPct = sellerRule.discount_pct || 0;
+                        const multiplier = sellerRule.multiplier || 1;
+                        const afterDiscount = capture.total * (1 - (discountPct / 100));
+                        totalCommissions += afterDiscount * (multiplier / 100);
+                    }
+                }
+                if (capture.guide_id && capture.total > 0) {
+                    const guideRule = commissionRules.find(r => 
+                        r.entity_type === 'guide' && r.entity_id === capture.guide_id
+                    ) || commissionRules.find(r => r.entity_type === 'guide' && r.entity_id === null);
+                    if (guideRule) {
+                        const discountPct = guideRule.discount_pct || 0;
+                        const multiplier = guideRule.multiplier || 1;
+                        const afterDiscount = capture.total * (1 - (discountPct / 100));
+                        totalCommissions += afterDiscount * (multiplier / 100);
+                    }
+                }
+            }
+
+            // Obtener llegadas y costos (usar misma lógica que loadQuickCaptureProfits)
+            const arrivals = await DB.getAll('agency_arrivals') || [];
+            const todayArrivals = arrivals.filter(a => a.date === today);
+            const captureBranchIds = [...new Set(captures.map(c => c.branch_id).filter(Boolean))];
+            const filteredArrivals = todayArrivals.filter(a => 
+                captureBranchIds.length === 0 || !a.branch_id || captureBranchIds.includes(a.branch_id)
+            );
+            const totalArrivalCosts = filteredArrivals
+                .filter(a => a.passengers > 0 && (a.units > 0 || a.arrival_fee > 0 || a.calculated_fee > 0))
+                .reduce((sum, a) => sum + (a.calculated_fee || a.arrival_fee || 0), 0);
+
+            // Calcular costos operativos
+            let totalOperatingCosts = 0;
+            let bankCommissions = 0;
+            try {
+                const allCosts = await DB.getAll('cost_entries') || [];
+                const targetDate = new Date(today);
+                const branchIdsToProcess = captureBranchIds.length > 0 ? captureBranchIds : [null];
+                
+                for (const branchId of branchIdsToProcess) {
+                    const branchCosts = allCosts.filter(c => 
+                        branchId === null ? (!c.branch_id || captureBranchIds.includes(c.branch_id)) : 
+                        (c.branch_id === branchId || !c.branch_id)
+                    );
+
+                    // Mensuales
+                    const monthlyCosts = branchCosts.filter(c => {
+                        const costDate = new Date(c.date || c.created_at);
+                        return c.period_type === 'monthly' && c.recurring === true &&
+                               costDate.getMonth() === targetDate.getMonth() &&
+                               costDate.getFullYear() === targetDate.getFullYear();
+                    });
+                    for (const cost of monthlyCosts) {
+                        const costDate = new Date(cost.date || cost.created_at);
+                        const daysInMonth = new Date(costDate.getFullYear(), costDate.getMonth() + 1, 0).getDate();
+                        totalOperatingCosts += (cost.amount || 0) / daysInMonth;
+                    }
+
+                    // Semanales
+                    const weeklyCosts = branchCosts.filter(c => {
+                        const costDate = new Date(c.date || c.created_at);
+                        const targetWeek = this.getWeekNumber(targetDate);
+                        const costWeek = this.getWeekNumber(costDate);
+                        return c.period_type === 'weekly' && c.recurring === true &&
+                               targetWeek === costWeek &&
+                               targetDate.getFullYear() === costDate.getFullYear();
+                    });
+                    for (const cost of weeklyCosts) {
+                        totalOperatingCosts += (cost.amount || 0) / 7;
+                    }
+
+                    // Anuales
+                    const annualCosts = branchCosts.filter(c => {
+                        const costDate = new Date(c.date || c.created_at);
+                        return c.period_type === 'annual' && c.recurring === true &&
+                               costDate.getFullYear() === targetDate.getFullYear();
+                    });
+                    for (const cost of annualCosts) {
+                        const daysInYear = ((targetDate.getFullYear() % 4 === 0 && targetDate.getFullYear() % 100 !== 0) || (targetDate.getFullYear() % 400 === 0)) ? 366 : 365;
+                        totalOperatingCosts += (cost.amount || 0) / daysInYear;
+                    }
+
+                    // Variables/diarios
+                    const variableCosts = branchCosts.filter(c => {
+                        const costDate = c.date || c.created_at;
+                        const costDateStr = costDate.split('T')[0];
+                        return costDateStr === today &&
+                               (c.period_type === 'one_time' || c.period_type === 'daily' || !c.period_type);
+                    });
+                    for (const cost of variableCosts) {
+                        if (cost.category === 'comisiones_bancarias') {
+                            bankCommissions += (cost.amount || 0);
+                        } else {
+                            totalOperatingCosts += (cost.amount || 0);
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn('Error calculando costos operativos:', e);
+            }
+
+            const grossProfit = totalSalesMXN - totalCOGS - totalCommissions;
+            const netProfit = grossProfit - totalArrivalCosts - totalOperatingCosts - bankCommissions;
+
+            // Crear objeto de reporte archivado
+            const archivedReport = {
+                id: 'archived_' + today + '_' + Date.now(),
+                date: today,
+                report_type: 'quick_capture',
+                captures: captures,
+                totals: totals,
+                total_quantity: totalQuantity,
+                total_sales_mxn: totalSalesMXN,
+                total_cogs: totalCOGS,
+                total_commissions: totalCommissions,
+                total_arrival_costs: totalArrivalCosts,
+                total_operating_costs: totalOperatingCosts,
+                bank_commissions: bankCommissions,
+                gross_profit: grossProfit,
+                net_profit: netProfit,
+                exchange_rates: { usd: usdRate, cad: cadRate },
+                arrivals: filteredArrivals,
+                archived_at: new Date().toISOString(),
+                archived_by: typeof UserManager !== 'undefined' && UserManager.currentUser ? UserManager.currentUser.id : null
+            };
+
+            // Guardar en IndexedDB (store permanente para historial)
+            await DB.put('archived_quick_captures', archivedReport);
+
+            // Opcional: Intentar guardar en backend si hay API disponible
+            if (typeof API !== 'undefined' && API.saveArchivedReport) {
+                try {
+                    await API.saveArchivedReport(archivedReport);
+                } catch (e) {
+                    console.warn('No se pudo guardar en backend, solo guardado local:', e);
+                }
+            }
+
+            const confirm = await Utils.confirm(
+                `¿Deseas limpiar las capturas temporales del día después de archivar?\n\nSe guardaron ${captures.length} capturas en el historial.`,
+                'Archivar Reporte'
+            );
+
+            if (confirm) {
+                for (const capture of captures) {
+                    await DB.delete('temp_quick_captures', capture.id);
+                }
+                Utils.showNotification(`Reporte archivado correctamente. ${captures.length} capturas eliminadas del día.`, 'success');
+                await this.loadQuickCaptureData();
+            } else {
+                Utils.showNotification('Reporte archivado correctamente. Las capturas temporales se mantienen.', 'success');
+            }
+
+            // Recargar historial
+            await this.loadArchivedReports();
+        } catch (error) {
+            console.error('Error archivando reporte:', error);
+            Utils.showNotification('Error al archivar el reporte: ' + error.message, 'error');
+        }
+    },
+
+    async clearQuickCapture() {
+        const confirm = await Utils.confirm(
+            '¿Eliminar TODAS las capturas del día? Esta acción no se puede deshacer.',
+            'Limpiar Todas las Capturas'
+        );
+        if (!confirm) return;
+
+        try {
+            const today = new Date().toISOString().split('T')[0];
+            let captures = await DB.getAll('temp_quick_captures') || [];
+            captures = captures.filter(c => c.date === today);
+
+            for (const capture of captures) {
+                await DB.delete('temp_quick_captures', capture.id);
+            }
+
+            Utils.showNotification(`${captures.length} capturas eliminadas`, 'success');
+            await this.loadQuickCaptureData();
+        } catch (error) {
+            console.error('Error limpiando capturas:', error);
+            Utils.showNotification('Error al limpiar: ' + error.message, 'error');
+        }
+    },
+
+    async loadArchivedReports() {
+        try {
+            const container = document.getElementById('archived-reports-list');
+            if (!container) return;
+
+            // Obtener todos los reportes archivados
+            const archivedReports = await DB.getAll('archived_quick_captures') || [];
+            
+            // Ordenar por fecha (más recientes primero)
+            archivedReports.sort((a, b) => {
+                const dateA = new Date(a.archived_at || a.date);
+                const dateB = new Date(b.archived_at || b.date);
+                return dateB - dateA;
+            });
+
+            if (archivedReports.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; padding: var(--spacing-lg); color: var(--color-text-secondary);">
+                        <i class="fas fa-inbox" style="font-size: 32px; opacity: 0.3; margin-bottom: var(--spacing-sm);"></i>
+                        <p>No hay reportes archivados</p>
+                        <small style="font-size: 11px; color: var(--color-text-secondary);">
+                            Los reportes archivados aparecerán aquí después de usar el botón "Archivar Reporte"
+                        </small>
+                    </div>
+                `;
+                return;
+            }
+
+            // Renderizar tabla de reportes archivados
+            let html = `
+                <div style="overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                        <thead>
+                            <tr style="background: var(--color-bg-secondary); border-bottom: 2px solid var(--color-border-light);">
+                                <th style="padding: var(--spacing-sm); text-align: left; font-size: 11px; text-transform: uppercase; font-weight: 600;">Fecha</th>
+                                <th style="padding: var(--spacing-sm); text-align: center; font-size: 11px; text-transform: uppercase; font-weight: 600;">Capturas</th>
+                                <th style="padding: var(--spacing-sm); text-align: right; font-size: 11px; text-transform: uppercase; font-weight: 600;">Ventas (MXN)</th>
+                                <th style="padding: var(--spacing-sm); text-align: right; font-size: 11px; text-transform: uppercase; font-weight: 600;">Utilidad Bruta</th>
+                                <th style="padding: var(--spacing-sm); text-align: right; font-size: 11px; text-transform: uppercase; font-weight: 600;">Utilidad Neta</th>
+                                <th style="padding: var(--spacing-sm); text-align: center; font-size: 11px; text-transform: uppercase; font-weight: 600;">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${archivedReports.map(report => {
+                                const date = new Date(report.date);
+                                const dateStr = date.toLocaleDateString('es-MX', { year: 'numeric', month: '2-digit', day: '2-digit' });
+                                const archivedDate = report.archived_at ? new Date(report.archived_at).toLocaleString('es-MX', { 
+                                    year: 'numeric', 
+                                    month: '2-digit', 
+                                    day: '2-digit',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                }) : '';
+                                
+                                const grossProfit = report.gross_profit || 0;
+                                const netProfit = report.net_profit || 0;
+                                const totalSales = report.total_sales_mxn || 0;
+                                const captureCount = report.captures ? report.captures.length : 0;
+                                
+                                const grossMargin = totalSales > 0 ? ((grossProfit / totalSales) * 100).toFixed(2) : '0.00';
+                                const netMargin = totalSales > 0 ? ((netProfit / totalSales) * 100).toFixed(2) : '0.00';
+                                
+                                return `
+                                    <tr style="border-bottom: 1px solid var(--color-border-light);">
+                                        <td style="padding: var(--spacing-sm);">
+                                            <div style="font-weight: 600;">${dateStr}</div>
+                                            ${archivedDate ? `<small style="color: var(--color-text-secondary); font-size: 10px;">Archivado: ${archivedDate}</small>` : ''}
+                                        </td>
+                                        <td style="padding: var(--spacing-sm); text-align: center;">${captureCount}</td>
+                                        <td style="padding: var(--spacing-sm); text-align: right; font-weight: 600;">$${totalSales.toFixed(2)}</td>
+                                        <td style="padding: var(--spacing-sm); text-align: right;">
+                                            <div style="color: var(--color-success); font-weight: 600;">$${grossProfit.toFixed(2)}</div>
+                                            <small style="color: var(--color-text-secondary); font-size: 10px;">${grossMargin}%</small>
+                                        </td>
+                                        <td style="padding: var(--spacing-sm); text-align: right;">
+                                            <div style="color: ${netProfit >= 0 ? 'var(--color-success)' : 'var(--color-danger)'}; font-weight: 600;">$${netProfit.toFixed(2)}</div>
+                                            <small style="color: var(--color-text-secondary); font-size: 10px;">${netMargin}%</small>
+                                        </td>
+                                        <td style="padding: var(--spacing-sm); text-align: center;">
+                                            <div style="display: flex; gap: var(--spacing-xs); justify-content: center;">
+                                                <button class="btn-primary btn-xs" onclick="window.Reports.viewArchivedReport('${report.id}')" title="Ver Detalles">
+                                                    <i class="fas fa-eye"></i>
+                                                </button>
+                                                <button class="btn-secondary btn-xs" onclick="window.Reports.exportArchivedReportPDF('${report.id}')" title="Exportar PDF">
+                                                    <i class="fas fa-file-pdf"></i>
+                                                </button>
+                                                <button class="btn-danger btn-xs" onclick="window.Reports.deleteArchivedReport('${report.id}')" title="Eliminar">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+
+            container.innerHTML = html;
+        } catch (error) {
+            console.error('Error cargando reportes archivados:', error);
+            const container = document.getElementById('archived-reports-list');
+            if (container) {
+                container.innerHTML = `
+                    <div style="padding: var(--spacing-sm); background: var(--color-danger); color: white; border-radius: var(--radius-sm); font-size: 12px;">
+                        Error: ${error.message}
+                    </div>
+                `;
+            }
+        }
+    },
+
+    async viewArchivedReport(reportId) {
+        try {
+            const report = await DB.get('archived_quick_captures', reportId);
+            if (!report) {
+                Utils.showNotification('Reporte no encontrado', 'error');
+                return;
+            }
+
+            // Crear modal para ver detalles del reporte
+            const modal = document.createElement('div');
+            modal.className = 'modal';
+            modal.id = 'view-archived-report-modal';
+            modal.style.display = 'flex';
+
+            const date = new Date(report.date);
+            const dateStr = date.toLocaleDateString('es-MX', { 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric',
+                weekday: 'long'
+            });
+
+            modal.innerHTML = `
+                <div class="modal-content" style="max-width: 900px; width: 90%; max-height: 90vh; overflow-y: auto;">
+                    <div class="modal-header">
+                        <h3>Reporte Archivado - ${dateStr}</h3>
+                        <button class="modal-close" onclick="document.getElementById('view-archived-report-modal').remove()">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <div style="display: grid; gap: var(--spacing-md);">
+                            <!-- Resumen -->
+                            <div style="padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md);">
+                                <h4 style="margin: 0 0 var(--spacing-sm) 0; font-size: 13px; font-weight: 600; text-transform: uppercase;">Resumen</h4>
+                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--spacing-sm); font-size: 12px;">
+                                    <div>
+                                        <div style="color: var(--color-text-secondary); font-size: 10px; text-transform: uppercase;">Total Capturas</div>
+                                        <div style="font-weight: 600; font-size: 16px;">${report.captures ? report.captures.length : 0}</div>
+                                    </div>
+                                    <div>
+                                        <div style="color: var(--color-text-secondary); font-size: 10px; text-transform: uppercase;">Ventas (MXN)</div>
+                                        <div style="font-weight: 600; font-size: 16px;">$${(report.total_sales_mxn || 0).toFixed(2)}</div>
+                                    </div>
+                                    <div>
+                                        <div style="color: var(--color-text-secondary); font-size: 10px; text-transform: uppercase;">Utilidad Bruta</div>
+                                        <div style="font-weight: 600; font-size: 16px; color: var(--color-success);">$${(report.gross_profit || 0).toFixed(2)}</div>
+                                    </div>
+                                    <div>
+                                        <div style="color: var(--color-text-secondary); font-size: 10px; text-transform: uppercase;">Utilidad Neta</div>
+                                        <div style="font-weight: 600; font-size: 16px; color: ${(report.net_profit || 0) >= 0 ? 'var(--color-success)' : 'var(--color-danger)'};">$${(report.net_profit || 0).toFixed(2)}</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Detalles Financieros -->
+                            <div style="padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md);">
+                                <h4 style="margin: 0 0 var(--spacing-sm) 0; font-size: 13px; font-weight: 600; text-transform: uppercase;">Desglose Financiero</h4>
+                                <div style="display: grid; gap: var(--spacing-xs); font-size: 12px;">
+                                    <div style="display: flex; justify-content: space-between;">
+                                        <span style="color: var(--color-text-secondary);">Costo Mercancía (COGS):</span>
+                                        <span style="font-weight: 600;">$${(report.total_cogs || 0).toFixed(2)}</span>
+                                    </div>
+                                    <div style="display: flex; justify-content: space-between;">
+                                        <span style="color: var(--color-text-secondary);">Comisiones:</span>
+                                        <span style="font-weight: 600;">$${(report.total_commissions || 0).toFixed(2)}</span>
+                                    </div>
+                                    <div style="display: flex; justify-content: space-between;">
+                                        <span style="color: var(--color-text-secondary);">Costos de Llegadas:</span>
+                                        <span style="font-weight: 600;">$${(report.total_arrival_costs || 0).toFixed(2)}</span>
+                                    </div>
+                                    <div style="display: flex; justify-content: space-between;">
+                                        <span style="color: var(--color-text-secondary);">Costos Operativos:</span>
+                                        <span style="font-weight: 600;">$${(report.total_operating_costs || 0).toFixed(2)}</span>
+                                    </div>
+                                    <div style="display: flex; justify-content: space-between;">
+                                        <span style="color: var(--color-text-secondary);">Comisiones Bancarias:</span>
+                                        <span style="font-weight: 600;">$${(report.bank_commissions || 0).toFixed(2)}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Capturas -->
+                            ${report.captures && report.captures.length > 0 ? `
+                            <div>
+                                <h4 style="margin: 0 0 var(--spacing-sm) 0; font-size: 13px; font-weight: 600; text-transform: uppercase;">Capturas (${report.captures.length})</h4>
+                                <div style="overflow-x: auto;">
+                                    <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+                                        <thead>
+                                            <tr style="background: var(--color-bg-secondary); border-bottom: 1px solid var(--color-border-light);">
+                                                <th style="padding: var(--spacing-xs); text-align: left;">Hora</th>
+                                                <th style="padding: var(--spacing-xs); text-align: left;">Sucursal</th>
+                                                <th style="padding: var(--spacing-xs); text-align: left;">Vendedor</th>
+                                                <th style="padding: var(--spacing-xs); text-align: left;">Producto</th>
+                                                <th style="padding: var(--spacing-xs); text-align: center;">Cant.</th>
+                                                <th style="padding: var(--spacing-xs); text-align: right;">Total</th>
+                                                <th style="padding: var(--spacing-xs); text-align: right;">Costo</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            ${report.captures.map(c => {
+                                                const time = new Date(c.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+                                                return `
+                                                    <tr style="border-bottom: 1px solid var(--color-border-light);">
+                                                        <td style="padding: var(--spacing-xs);">${time}</td>
+                                                        <td style="padding: var(--spacing-xs);">${c.branch_name || 'N/A'}</td>
+                                                        <td style="padding: var(--spacing-xs);">${c.seller_name || 'N/A'}</td>
+                                                        <td style="padding: var(--spacing-xs);">${c.product || ''}</td>
+                                                        <td style="padding: var(--spacing-xs); text-align: center;">${c.quantity || 1}</td>
+                                                        <td style="padding: var(--spacing-xs); text-align: right; font-weight: 600;">$${(c.total || 0).toFixed(2)} ${c.currency || ''}</td>
+                                                        <td style="padding: var(--spacing-xs); text-align: right; color: var(--color-text-secondary);">$${(c.merchandise_cost || 0).toFixed(2)}</td>
+                                                    </tr>
+                                                `;
+                                            }).join('')}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                    <div class="modal-footer" style="display: flex; gap: var(--spacing-sm); justify-content: flex-end; padding: var(--spacing-md); border-top: 1px solid var(--color-border-light);">
+                        <button class="btn-secondary" onclick="window.Reports.exportArchivedReportPDF('${report.id}')">
+                            <i class="fas fa-file-pdf"></i> Exportar PDF
+                        </button>
+                        <button class="btn-primary" onclick="document.getElementById('view-archived-report-modal').remove()">
+                            Cerrar
+                        </button>
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(modal);
+        } catch (error) {
+            console.error('Error viendo reporte archivado:', error);
+            Utils.showNotification('Error al ver el reporte: ' + error.message, 'error');
+        }
+    },
+
+    async exportArchivedReportPDF(reportId) {
+        try {
+            const report = await DB.get('archived_quick_captures', reportId);
+            if (!report) {
+                Utils.showNotification('Reporte no encontrado', 'error');
+                return;
+            }
+
+            // Reutilizar la función de exportación PDF pero con datos del reporte archivado
+            const jspdfLib = Utils.checkJsPDF();
+            if (!jspdfLib) {
+                Utils.showNotification('jsPDF no está disponible', 'error');
+                return;
+            }
+
+            const { jsPDF } = jspdfLib;
+            const doc = new jsPDF('p', 'mm', 'a4');
+            const pageWidth = doc.internal.pageSize.getWidth();
+            const pageHeight = doc.internal.pageSize.getHeight();
+            const margin = 15;
+            let y = margin;
+
+            // Header
+            doc.setFillColor(52, 73, 94);
+            doc.rect(0, 0, pageWidth, 35, 'F');
+            doc.setTextColor(255, 255, 255);
+            doc.setFontSize(20);
+            doc.setFont('helvetica', 'bold');
+            doc.text('OPAL & CO', margin, 15);
+            doc.setFontSize(14);
+            doc.setFont('helvetica', 'normal');
+            doc.text('Reporte Archivado', margin, 22);
+            doc.setFontSize(10);
+            doc.setTextColor(220, 220, 220);
+            const date = new Date(report.date);
+            doc.text(`Fecha: ${date.toLocaleDateString('es-MX')}`, pageWidth - margin, 15, { align: 'right' });
+            doc.text(`Archivado: ${new Date(report.archived_at).toLocaleString('es-MX')}`, pageWidth - margin, 22, { align: 'right' });
+
+            y = 45;
+
+            // Resumen
+            doc.setFillColor(240, 248, 255);
+            doc.rect(margin, y, pageWidth - (margin * 2), 30, 'F');
+            doc.setDrawColor(200, 200, 200);
+            doc.rect(margin, y, pageWidth - (margin * 2), 30);
+
+            doc.setTextColor(0, 0, 0);
+            doc.setFontSize(12);
+            doc.setFont('helvetica', 'bold');
+            doc.text('RESUMEN', margin + 5, y + 8);
+
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'normal');
+            doc.text(`Total Capturas: ${report.captures ? report.captures.length : 0}`, margin + 5, y + 15);
+            doc.text(`Ventas (MXN): $${(report.total_sales_mxn || 0).toFixed(2)}`, margin + 60, y + 15);
+            doc.text(`Utilidad Bruta: $${(report.gross_profit || 0).toFixed(2)}`, margin + 5, y + 22);
+            doc.text(`Utilidad Neta: $${(report.net_profit || 0).toFixed(2)}`, margin + 60, y + 22);
+
+            y += 40;
+
+            // Guardar PDF
+            const filename = `Reporte_Archivado_${report.date}_${Date.now()}.pdf`;
+            doc.save(filename);
+
+            Utils.showNotification('PDF exportado correctamente', 'success');
+        } catch (error) {
+            console.error('Error exportando PDF del reporte archivado:', error);
+            Utils.showNotification('Error al exportar PDF: ' + error.message, 'error');
+        }
+    },
+
+    async deleteArchivedReport(reportId) {
+        const confirm = await Utils.confirm(
+            '¿Eliminar este reporte archivado? Esta acción no se puede deshacer.',
+            'Eliminar Reporte Archivado'
+        );
+        if (!confirm) return;
+
+        try {
+            await DB.delete('archived_quick_captures', reportId);
+            Utils.showNotification('Reporte archivado eliminado', 'success');
+            await this.loadArchivedReports();
+        } catch (error) {
+            console.error('Error eliminando reporte archivado:', error);
+            Utils.showNotification('Error al eliminar: ' + error.message, 'error');
         }
     }
 };
