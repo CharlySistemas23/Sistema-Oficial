@@ -235,35 +235,69 @@ const API = {
             return false;
         }
 
-        try {
-            const response = await fetch(`${this.baseURL}/api/auth/verify`, {
-                headers: {
-                    'Authorization': `Bearer ${this.token}`
-                }
-            });
-
-            if (!response.ok) {
-                // Solo borrar token si es realmente inválido (401/403).
-                // En 500/timeout/red, mantener token para evitar loops de auto-login.
-                if (response.status === 401 || response.status === 403) {
-                    this.token = null;
-                    localStorage.removeItem('api_token');
-                    return false;
-                }
-                return null; // estado desconocido/transitorio
+        // Caché de verificación para evitar múltiples llamadas simultáneas
+        const now = Date.now();
+        const CACHE_DURATION = 30000; // 30 segundos
+        const cacheKey = `verify_token_${this.token}`;
+        
+        if (this._verifyTokenCache && this._verifyTokenCache.cacheKey === cacheKey) {
+            if (now - this._verifyTokenCache.timestamp < CACHE_DURATION) {
+                return this._verifyTokenCache.result;
             }
-
-            const data = await response.json();
-            // Devolver el objeto completo si tiene user, sino solo valid
-            if (data.valid && data.user) {
-                return data;
-            }
-            return data.valid;
-        } catch (error) {
-            console.error('Error verificando token:', error);
-            // Error de red/transitorio: no borrar token
-            return null;
         }
+
+        // Si hay una verificación en progreso, esperarla
+        if (this._verifyTokenPromise) {
+            return await this._verifyTokenPromise;
+        }
+
+        // Crear nueva promesa de verificación
+        this._verifyTokenPromise = (async () => {
+            try {
+                const response = await fetch(`${this.baseURL}/api/auth/verify`, {
+                    headers: {
+                        'Authorization': `Bearer ${this.token}`
+                    }
+                });
+
+                if (!response.ok) {
+                    // Si es 429, esperar un poco y retornar null (no borrar token)
+                    if (response.status === 429) {
+                        console.warn('⚠️ Rate limit alcanzado en verifyToken, omitiendo verificación');
+                        return null;
+                    }
+                    // Solo borrar token si es realmente inválido (401/403).
+                    // En 500/timeout/red, mantener token para evitar loops de auto-login.
+                    if (response.status === 401 || response.status === 403) {
+                        this.token = null;
+                        localStorage.removeItem('api_token');
+                        return false;
+                    }
+                    return null; // estado desconocido/transitorio
+                }
+
+                const data = await response.json();
+                // Devolver el objeto completo si tiene user, sino solo valid
+                const result = (data.valid && data.user) ? data : data.valid;
+                
+                // Guardar en caché
+                this._verifyTokenCache = {
+                    cacheKey,
+                    timestamp: now,
+                    result
+                };
+                
+                return result;
+            } catch (error) {
+                console.error('Error verificando token:', error);
+                // Error de red/transitorio: no borrar token
+                return null;
+            } finally {
+                this._verifyTokenPromise = null;
+            }
+        })();
+
+        return await this._verifyTokenPromise;
     },
 
     // Inicializar Socket.IO
@@ -766,6 +800,19 @@ const API = {
             }
 
             if (!response.ok) {
+                // Manejar 429 (Rate Limit) de forma especial - no lanzar error, retornar null
+                if (response.status === 429) {
+                    const retryAfter = response.headers.get('Retry-After') || response.headers.get('Ratelimit-Reset') || response.headers.get('RateLimit-Reset');
+                    if (isImportantRequest) {
+                        console.warn(`⚠️ Rate limit alcanzado (429). Reintentar después de ${retryAfter || '60'} segundos`);
+                    }
+                    const err = new Error('Demasiadas solicitudes desde esta IP, intenta de nuevo más tarde.');
+                    err.status = 429;
+                    err.retryAfter = retryAfter;
+                    err.isRateLimit = true;
+                    throw err;
+                }
+                
                 if (response.status === 401) {
                     // Token expirado, pero no cerrar sesión si estamos usando fallback
                     if (this.token) {
@@ -799,6 +846,14 @@ const API = {
                 if (errorPayload) {
                     if (errorPayload.error) {
                         errorMsg = errorPayload.error;
+                        // Si hay un hint (para errores de migración), agregarlo
+                        if (errorPayload.hint) {
+                            errorMsg += `\n💡 ${errorPayload.hint}`;
+                        }
+                        // Si hay detalles, agregarlos
+                        if (errorPayload.details) {
+                            errorMsg += `\n📋 ${errorPayload.details}`;
+                        }
                     } else if (errorPayload.message) {
                         errorMsg = errorPayload.message;
                     } else if (errorPayload.errors && Array.isArray(errorPayload.errors)) {
@@ -813,6 +868,10 @@ const API = {
                     console.error(`❌ Error en request: ${errorMsg}`);
                     if (errorPayload && errorPayload.errors) {
                         console.error('   Detalles de validación:', errorPayload.errors);
+                    }
+                    // Mostrar hint si está disponible (especialmente para errores de migración)
+                    if (errorPayload && errorPayload.hint) {
+                        console.error(`   💡 ${errorPayload.hint}`);
                     }
                 }
 
