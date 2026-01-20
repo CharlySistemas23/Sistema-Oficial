@@ -193,6 +193,17 @@ const App = {
                     await BranchManager.updateBranchSelector();
                 }
 
+                // Después de cargar sucursales del servidor, sincronizar las locales que no existen
+                if (typeof window.SyncManager !== 'undefined' && window.SyncManager.syncLocalDataToServer) {
+                    setTimeout(async () => {
+                        try {
+                            await window.SyncManager.syncLocalDataToServer();
+                        } catch (error) {
+                            console.warn('Error sincronizando datos locales:', error);
+                        }
+                    }, 3000); // Esperar 3 segundos para que termine la carga inicial
+                }
+
                 // Validate system configuration for multi-branch
                 if (typeof BranchValidator !== 'undefined') {
                     const config = await BranchValidator.validateSystemConfig();
@@ -1249,18 +1260,18 @@ const App = {
                 }
             } else {
                 // Fallback offline/demo
-                const branches = [
+        const branches = [
                     { id: 'branch1', code: 'LVALLARTA', name: 'L Vallarta', address: '', active: true },
                     { id: 'branch2', code: 'MALECON', name: 'Malecón', address: '', active: true },
                     { id: 'branch3', code: 'SANSEBASTIAN', name: 'San Sebastián', address: '', active: true },
                     { id: 'branch4', code: 'SAYULITA', name: 'Sayulita', address: '', active: true }
-                ];
-                for (const branch of branches) {
-                    try {
+        ];
+        for (const branch of branches) {
+            try {
                         await DB.put('catalog_branches', branch, { autoBranchId: false });
-                    } catch (e) {
-                        // Already exists
-                    }
+            } catch (e) {
+                // Already exists
+            }
                 }
             }
         } catch (e) {
