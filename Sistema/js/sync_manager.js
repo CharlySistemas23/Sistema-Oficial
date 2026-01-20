@@ -72,6 +72,8 @@ const SyncManager = {
                     
                     // Intentar sincronizar si hay URL (con o sin token, el syncPending intentará login automático)
                     if (API.baseURL) {
+                        // Detectar y sincronizar datos locales que no están en el servidor
+                        await this.syncLocalDataToServer();
                         await this.syncPending();
                     }
                 }
@@ -1404,6 +1406,119 @@ const SyncManager = {
             console.log('🗑️  Cola de sincronización limpiada');
         } catch (error) {
             console.error('Error limpiando cola:', error);
+        }
+    },
+
+    // Función para sincronizar datos locales (sucursales, empleados, usuarios) que no están en el servidor
+    async syncLocalDataToServer() {
+        try {
+            // Verificar que API esté disponible y con token
+            if (typeof API === 'undefined' || !API.baseURL || !API.token) {
+                return; // No hacer nada si no hay conexión
+            }
+
+            // Verificar token
+            const tokenValid = await API.verifyToken();
+            if (!tokenValid) {
+                return; // No hacer nada si el token no es válido
+            }
+
+            console.log('🔄 Verificando datos locales para sincronizar...');
+
+            // 1. Sincronizar sucursales locales
+            try {
+                const localBranches = await DB.getAll('catalog_branches') || [];
+                const serverBranches = await API.getBranches() || [];
+                const serverBranchIds = new Set(serverBranches.map(b => b.id));
+
+                for (const branch of localBranches) {
+                    if (!branch || !branch.id) continue;
+                    
+                    // Ignorar IDs locales no-UUID (branch1, branch2, etc.)
+                    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(branch.id));
+                    if (!isUUID) continue;
+
+                    // Si la sucursal no existe en el servidor, agregarla a la cola
+                    if (!serverBranchIds.has(branch.id)) {
+                        // Verificar si ya está en la cola
+                        const existingInQueue = await DB.query('sync_queue', 'entity_id', branch.id) || [];
+                        const alreadyQueued = existingInQueue.some(q => 
+                            (q.type === 'branch' || q.type === 'catalog_branch') && q.entity_id === branch.id
+                        );
+
+                        if (!alreadyQueued) {
+                            await this.addToQueue('branch', branch.id, branch);
+                            console.log(`📤 Sucursal agregada a cola de sincronización: ${branch.name || branch.id}`);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.warn('⚠️ Error verificando sucursales locales:', error.message);
+            }
+
+            // 2. Sincronizar empleados locales
+            try {
+                const localEmployees = await DB.getAll('employees') || [];
+                const serverEmployees = await API.getEmployees() || [];
+                const serverEmployeeIds = new Set(serverEmployees.map(e => e.id));
+
+                for (const employee of localEmployees) {
+                    if (!employee || !employee.id) continue;
+                    
+                    // Ignorar IDs locales no-UUID
+                    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(employee.id));
+                    if (!isUUID) continue;
+
+                    // Si el empleado no existe en el servidor, agregarlo a la cola
+                    if (!serverEmployeeIds.has(employee.id)) {
+                        // Verificar si ya está en la cola
+                        const existingInQueue = await DB.query('sync_queue', 'entity_id', employee.id) || [];
+                        const alreadyQueued = existingInQueue.some(q => q.type === 'employee' && q.entity_id === employee.id);
+
+                        if (!alreadyQueued) {
+                            await this.addToQueue('employee', employee.id, employee);
+                            console.log(`📤 Empleado agregado a cola de sincronización: ${employee.name || employee.id}`);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.warn('⚠️ Error verificando empleados locales:', error.message);
+            }
+
+            // 3. Sincronizar usuarios locales (solo si tienen empleado asociado)
+            try {
+                const localUsers = await DB.getAll('users') || [];
+                const serverEmployees = await API.getEmployees() || [];
+                const serverEmployeeIds = new Set(serverEmployees.map(e => e.id));
+
+                for (const user of localUsers) {
+                    if (!user || !user.id || !user.employee_id) continue;
+                    
+                    // Ignorar IDs locales no-UUID
+                    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(user.id));
+                    if (!isUUID) continue;
+
+                    // Solo sincronizar si el empleado asociado existe en el servidor
+                    // Los usuarios se crean a través de los empleados
+                    if (serverEmployeeIds.has(user.employee_id)) {
+                        // Verificar si ya está en la cola
+                        const existingInQueue = await DB.query('sync_queue', 'entity_id', user.id) || [];
+                        const alreadyQueued = existingInQueue.some(q => q.type === 'user' && q.entity_id === user.id);
+
+                        if (!alreadyQueued) {
+                            // Los usuarios se sincronizan solo si tienen empleado asociado
+                            await this.addToQueue('user', user.id, user);
+                            console.log(`📤 Usuario agregado a cola de sincronización: ${user.username || user.id}`);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.warn('⚠️ Error verificando usuarios locales:', error.message);
+            }
+
+            console.log('✅ Verificación de datos locales completada');
+        } catch (error) {
+            console.warn('⚠️ Error en syncLocalDataToServer:', error.message);
         }
     }
 };
