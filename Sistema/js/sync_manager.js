@@ -1026,11 +1026,81 @@ const SyncManager = {
                                         throw new Error('API no disponible');
                                     }
                                     
+                                    // Mapear IDs locales a UUIDs del backend
+                                    const isUUID = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || ''));
+                                    
+                                    let finalAgencyId = entityData.agency_id;
+                                    let finalBranchId = entityData.branch_id || null;
+                                    
+                                    // Si agency_id no es UUID, buscar la agencia en el backend por nombre
+                                    if (entityData.agency_id && !isUUID(entityData.agency_id)) {
+                                        try {
+                                            // Obtener el nombre de la agencia desde IndexedDB
+                                            const localAgency = await DB.get('catalog_agencies', entityData.agency_id);
+                                            if (localAgency && localAgency.name) {
+                                                // Buscar la agencia en el backend por nombre
+                                                if (typeof API !== 'undefined' && API.getAgencies) {
+                                                    const backendAgencies = await API.getAgencies();
+                                                    const matchedAgency = backendAgencies.find(a => 
+                                                        a.name && a.name.toUpperCase() === localAgency.name.toUpperCase()
+                                                    );
+                                                    if (matchedAgency && matchedAgency.id) {
+                                                        finalAgencyId = matchedAgency.id;
+                                                        console.log(`✅ Mapeado agency_id: "${entityData.agency_id}" (${localAgency.name}) → ${finalAgencyId}`);
+                                                    } else {
+                                                        console.warn(`⚠️ Agencia "${localAgency.name}" (${entityData.agency_id}) no encontrada en backend, omitiendo agency_id`);
+                                                        finalAgencyId = null;
+                                                    }
+                                                } else {
+                                                    console.warn(`⚠️ API.getAgencies no disponible, omitiendo agency_id no-UUID: ${entityData.agency_id}`);
+                                                    finalAgencyId = null;
+                                                }
+                                            } else {
+                                                console.warn(`⚠️ No se pudo obtener nombre de agencia local para ID: ${entityData.agency_id}`);
+                                                finalAgencyId = null;
+                                            }
+                                        } catch (e) {
+                                            console.error(`❌ Error mapeando agency_id ${entityData.agency_id}:`, e);
+                                            finalAgencyId = null;
+                                        }
+                                    }
+                                    
+                                    // Si branch_id no es UUID, omitirlo o buscar el UUID
+                                    if (finalBranchId && !isUUID(finalBranchId)) {
+                                        try {
+                                            if (typeof API !== 'undefined' && API.getBranches) {
+                                                const backendBranches = await API.getBranches();
+                                                const matchedBranch = backendBranches.find(b => b.id === finalBranchId);
+                                                if (!matchedBranch) {
+                                                    // Si no se encuentra por ID, buscar por nombre (branch1, branch2, etc.)
+                                                    const localBranch = await DB.get('catalog_branches', finalBranchId);
+                                                    if (localBranch && localBranch.name) {
+                                                        const matchedByName = backendBranches.find(b => 
+                                                            b.name && b.name.toUpperCase() === localBranch.name.toUpperCase()
+                                                        );
+                                                        if (matchedByName) {
+                                                            finalBranchId = matchedByName.id;
+                                                        } else {
+                                                            finalBranchId = null;
+                                                        }
+                                                    } else {
+                                                        finalBranchId = null;
+                                                    }
+                                                }
+                                            } else {
+                                                finalBranchId = null;
+                                            }
+                                        } catch (e) {
+                                            console.warn(`⚠️ Error mapeando branch_id ${finalBranchId}:`, e);
+                                            finalBranchId = null;
+                                        }
+                                    }
+                                    
                                     // Construir payload limpio
                                     const payload = {
                                         id: entityData.id,
-                                        agency_id: entityData.agency_id,
-                                        branch_id: entityData.branch_id || null,
+                                        agency_id: finalAgencyId,
+                                        branch_id: finalBranchId,
                                         unit_type: entityData.unit_type || null,
                                         fee_type: entityData.fee_type || 'flat',
                                         flat_fee: entityData.flat_fee || 0,
@@ -1042,6 +1112,13 @@ const SyncManager = {
                                         active_until: entityData.active_until || null,
                                         notes: entityData.notes || ''
                                     };
+                                    
+                                    // Si no hay agency_id válido, no podemos sincronizar
+                                    if (!payload.agency_id) {
+                                        console.warn(`⚠️ Regla de llegada ${entityData.id} sin agency_id válido, eliminando de cola`);
+                                        await DB.delete('sync_queue', item.id);
+                                        break;
+                                    }
                                     
                                     // Verificar si la regla existe en el servidor
                                     const exists = await this.entityExists('arrival_rate_rules', entityData.id);
