@@ -1135,24 +1135,87 @@ const SyncManager = {
                                     if (typeof API === 'undefined') {
                                         throw new Error('API no disponible');
                                     }
+                                    
                                     // Verificar si la sucursal existe en el servidor
                                     const exists = await this.entityExists('branches', entityData.id);
+                                    
+                                    // Asegurar que la sucursal tenga código antes de sincronizar
+                                    if (!entityData.code && entityData.name) {
+                                        // Generar código basado en el nombre si no existe
+                                        entityData.code = entityData.name
+                                            .toUpperCase()
+                                            .replace(/[^A-Z0-9]/g, '')
+                                            .substring(0, 10) || `BRANCH-${entityData.id.substring(0, 8).toUpperCase()}`;
+                                        // Actualizar en local
+                                        await DB.put('catalog_branches', entityData);
+                                    }
+                                    
                                     if (exists) {
                                         if (typeof API.updateBranch !== 'function') {
                                             throw new Error('API.updateBranch no disponible');
                                         }
                                         await API.updateBranch(entityData.id, entityData);
                                     } else {
-                                        if (typeof API.createBranch !== 'function') {
-                                            throw new Error('API.createBranch no disponible');
+                                        // Verificar si existe por nombre antes de crear
+                                        try {
+                                            const allBranches = await API.getBranches();
+                                            const existingByName = allBranches.find(b => 
+                                                b.name === entityData.name || 
+                                                (entityData.code && b.code === entityData.code)
+                                            );
+                                            
+                                            if (existingByName) {
+                                                // La sucursal ya existe en el servidor, actualizar local con el ID del servidor
+                                                console.log(`✅ Sucursal "${entityData.name}" ya existe en servidor, actualizando local...`);
+                                                entityData.id = existingByName.id;
+                                                await DB.put('catalog_branches', entityData);
+                                                await API.updateBranch(existingByName.id, entityData);
+                                            } else {
+                                                // Crear nueva sucursal
+                                                if (typeof API.createBranch !== 'function') {
+                                                    throw new Error('API.createBranch no disponible');
+                                                }
+                                                
+                                                // Asegurar que tenga código antes de crear
+                                                if (!entityData.code) {
+                                                    throw new Error('La sucursal debe tener un código para sincronizarse');
+                                                }
+                                                
+                                                await API.createBranch(entityData);
+                                            }
+                                        } catch (createError) {
+                                            // Si el error es "Código requerido" o similar, intentar generar código y reintentar
+                                            if (createError.message && (
+                                                createError.message.includes('Código requerido') ||
+                                                createError.message.includes('code') ||
+                                                createError.message.includes('required')
+                                            )) {
+                                                if (!entityData.code && entityData.name) {
+                                                    entityData.code = entityData.name
+                                                        .toUpperCase()
+                                                        .replace(/[^A-Z0-9]/g, '')
+                                                        .substring(0, 10) || `BRANCH-${Date.now().toString(36).toUpperCase()}`;
+                                                    await DB.put('catalog_branches', entityData);
+                                                    await API.createBranch(entityData);
+                                                } else {
+                                                    throw createError;
+                                                }
+                                            } else {
+                                                throw createError;
+                                            }
                                         }
-                                        await API.createBranch(entityData);
                                     }
                                     await DB.delete('sync_queue', item.id);
                                     successCount++;
                                 } catch (error) {
                                     console.error('Error sincronizando sucursal:', error);
-                                    throw error;
+                                    // Si el error es "Código requerido", marcar como error pero no reintentar infinitamente
+                                    if (error.message && error.message.includes('Código requerido')) {
+                                        console.warn(`⚠️  Sucursal ${entityData.name || item.entity_id} sin código, eliminando de cola de sincronización`);
+                                        await DB.delete('sync_queue', item.id);
+                                    } else {
+                                        throw error;
+                                    }
                                 }
                             } else {
                                 // Si la sucursal no existe localmente y no es eliminación, eliminar de la cola
