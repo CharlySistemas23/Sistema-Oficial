@@ -5383,8 +5383,20 @@ const Reports = {
                     sellers.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
             }
 
-            // Cargar agencias
-            const agencies = await DB.getAll('catalog_agencies') || [];
+            // Cargar agencias (filtrar duplicados por nombre)
+            const allAgencies = await DB.getAll('catalog_agencies') || [];
+            // Filtrar duplicados: mantener solo la primera agencia con cada nombre
+            const seenAgencyNames = new Set();
+            const agencies = allAgencies.filter(a => {
+                if (!a || !a.name) return false;
+                const normalizedName = a.name.trim().toUpperCase();
+                if (seenAgencyNames.has(normalizedName)) {
+                    console.warn(`⚠️ Agencia duplicada ignorada: ${a.name} (ID: ${a.id})`);
+                    return false;
+                }
+                seenAgencyNames.add(normalizedName);
+                return true;
+            });
             const agencySelect = document.getElementById('qc-agency');
             if (agencySelect) {
                 agencySelect.innerHTML = '<option value="">Ninguna</option>' +
