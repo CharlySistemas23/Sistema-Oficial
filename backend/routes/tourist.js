@@ -138,7 +138,34 @@ router.post('/rules', requireBranchAccess, [
     }
   } catch (error) {
     console.error('Error guardando regla de llegada:', error);
-    res.status(500).json({ error: 'Error al guardar regla de llegada' });
+    console.error('Detalles del error:', {
+      message: error.message,
+      stack: error.stack,
+      agency_id,
+      branch_id: finalBranchId,
+      ruleId
+    });
+    
+    // Si es un error de foreign key (agencia no existe), dar mensaje más específico
+    if (error.message && error.message.includes('foreign key')) {
+      return res.status(400).json({ 
+        error: 'La agencia especificada no existe en el sistema',
+        details: `agency_id: ${agency_id} no es válido o no existe`
+      });
+    }
+    
+    // Si es un error de formato UUID
+    if (error.message && (error.message.includes('invalid input syntax') || error.message.includes('UUID'))) {
+      return res.status(400).json({ 
+        error: 'El ID de agencia o sucursal no tiene el formato correcto (debe ser UUID)',
+        details: `agency_id: ${agency_id}, branch_id: ${finalBranchId}`
+      });
+    }
+    
+    res.status(500).json({ 
+      error: 'Error al guardar regla de llegada',
+      details: error.message 
+    });
   }
 });
 
