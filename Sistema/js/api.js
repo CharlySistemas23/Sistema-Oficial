@@ -1353,6 +1353,15 @@ const API = {
         return await this.post('/api/exchange-rates', data);
     },
 
+    // Catálogos
+    async getAgencies(filters = {}) {
+        return await this.get('/api/catalogs/agencies', filters);
+    },
+
+    async getBranches(filters = {}) {
+        return await this.get('/api/branches', filters);
+    },
+
     // Dashboard
     async getDashboardMetrics(filters = {}) {
         return await this.get('/api/dashboard/metrics', filters);
