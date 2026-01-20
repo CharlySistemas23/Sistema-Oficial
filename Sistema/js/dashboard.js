@@ -276,22 +276,37 @@ const Dashboard = {
             } else {
                 branchFilter.value = 'all';
             }
-            // Remover listeners previos y agregar uno nuevo
-            const newBranchFilter = branchFilter.cloneNode(true);
-            branchFilter.parentNode.replaceChild(newBranchFilter, branchFilter);
-            newBranchFilter.addEventListener('change', () => this.loadDashboard());
+            // Remover listeners previos y agregar uno nuevo (evitar duplicados)
+            if (this._branchFilterChangeHandler) {
+                branchFilter.removeEventListener('change', this._branchFilterChangeHandler);
+            }
+            this._branchFilterChangeHandler = async () => {
+                console.log('🔄 Dashboard: Cambio de sucursal desde dropdown:', branchFilter.value);
+                // Recargar dashboard con el nuevo filtro
+                await this.loadDashboard();
+            };
+            branchFilter.addEventListener('change', this._branchFilterChangeHandler);
         }
         
         // Escuchar cambios de sucursal desde el header para sincronizar el dropdown
-        window.addEventListener('branch-changed', async (e) => {
+        // Remover listener anterior si existe para evitar duplicados
+        if (this._branchChangedListener) {
+            window.removeEventListener('branch-changed', this._branchChangedListener);
+        }
+        
+        this._branchChangedListener = async (e) => {
             const updatedFilter = document.getElementById('dashboard-branch-filter');
             if (updatedFilter && e.detail && e.detail.branchId) {
-                // Sincronizar dropdown con la sucursal seleccionada en el header
+                console.log(`🔄 Dashboard: Sincronizando dropdown con sucursal del header: ${e.detail.branchId}`);
+                // CRÍTICO: Actualizar el dropdown PRIMERO, luego recargar
                 updatedFilter.value = e.detail.branchId;
+                // Pequeño delay para asegurar que el DOM se actualizó
+                await new Promise(resolve => setTimeout(resolve, 50));
                 // Recargar dashboard con el nuevo filtro
                 await this.loadDashboard();
             }
-        });
+        };
+        window.addEventListener('branch-changed', this._branchChangedListener);
     },
     
     async loadDashboard(showAllBranches = false) {
@@ -312,6 +327,11 @@ const Dashboard = {
             const currentBranchId = typeof BranchManager !== 'undefined' 
                 ? BranchManager.getCurrentBranchId() 
                 : localStorage.getItem('current_branch_id') || null;
+            
+            // Configurar el filtro de sucursal primero si es master_admin (para asegurar que el dropdown esté disponible)
+            if (isMasterAdmin) {
+                await this.setupBranchFilter();
+            }
             
             // Obtener filtro de sucursal del dropdown
             const branchFilterEl = document.getElementById('dashboard-branch-filter');
@@ -932,9 +952,6 @@ const Dashboard = {
                 </div>
             </div>
         ` : '';
-        
-        // Configurar dropdown de sucursal antes de renderizar
-        await this.setupBranchFilter();
         
         container.innerHTML = `
             ${viewAllInfo}
