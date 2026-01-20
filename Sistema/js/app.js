@@ -1571,19 +1571,19 @@ const App = {
                 });
             }
 
-            // Tienda 2 (Malecón): ANDREA $2,000, ITZEL $2,000, GUILLE $2,500 → total $6,500 semanal
+            // Tienda 2 (Malecón): ITZEL $2,000, GUILLE $2,500 → total $4,500 semanal
             if (branch2) {
                 payrollCosts.push({
                     id: Utils.generateId(),
                     type: 'fijo',
                     category: 'nomina',
-                    amount: 6500,
+                    amount: 4500,
                     branch_id: branch2.id,
                     date: today,
                     period_type: 'weekly',
                     recurring: true,
                     auto_generate: true,
-                    notes: 'Nómina semanal: ANDREA $2,000, ITZEL $2,000, GUILLE $2,500',
+                    notes: 'Nómina semanal: ITZEL $2,000, GUILLE $2,500',
                     created_at: new Date().toISOString(),
                     sync_status: 'pending'
                 });
@@ -1607,19 +1607,19 @@ const App = {
                 });
             }
 
-            // Tienda 4 (Sayulita): OMAR $2,000, JUAN CARLOS $2,000, FANY $1,500, COVARRUBIAS $1,000 → total $6,500 semanal
+            // Tienda 4 (Sayulita): OMAR $2,000, JUAN CARLOS $2,000, MIRNA $1,800 → total $5,800 semanal
             if (branch4) {
                 payrollCosts.push({
                     id: Utils.generateId(),
                     type: 'fijo',
                     category: 'nomina',
-                    amount: 6500,
+                    amount: 5800,
                     branch_id: branch4.id,
                     date: today,
                     period_type: 'weekly',
                     recurring: true,
                     auto_generate: true,
-                    notes: 'Nómina semanal: OMAR $2,000, JUAN CARLOS $2,000, FANY $1,500, COVARRUBIAS $1,000',
+                    notes: 'Nómina semanal: OMAR $2,000, JUAN CARLOS $2,000, MIRNA $1,800',
                     created_at: new Date().toISOString(),
                     sync_status: 'pending'
                 });
