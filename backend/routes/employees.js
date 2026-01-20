@@ -11,11 +11,12 @@ router.get('/', async (req, res) => {
     let result;
 
     if (req.user.isMasterAdmin) {
-      // Admin maestro ve todos los empleados
+      // Admin maestro ve todos los empleados con información de usuarios asociados
       result = await query(
-        `SELECT e.*, b.name as branch_name
+        `SELECT e.*, b.name as branch_name, u.id as user_id, u.username
          FROM employees e
          LEFT JOIN branches b ON e.branch_id = b.id
+         LEFT JOIN users u ON u.employee_id = e.id
          ORDER BY e.name`
       );
     } else {
@@ -25,9 +26,10 @@ router.get('/', async (req, res) => {
         return res.json([]);
       }
       result = await query(
-        `SELECT e.*, b.name as branch_name
+        `SELECT e.*, b.name as branch_name, u.id as user_id, u.username
          FROM employees e
          LEFT JOIN branches b ON e.branch_id = b.id
+         LEFT JOIN users u ON u.employee_id = e.id
          WHERE e.branch_id = ANY($1) OR e.branch_id IS NULL
          ORDER BY e.name`,
         [branchIds]
