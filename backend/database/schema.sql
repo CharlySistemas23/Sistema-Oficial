@@ -426,6 +426,99 @@ CREATE INDEX idx_arrival_rate_rules_branch_id ON arrival_rate_rules(branch_id);
 CREATE INDEX idx_arrival_rate_rules_active_from ON arrival_rate_rules(active_from);
 CREATE INDEX idx_arrival_rate_rules_active_until ON arrival_rate_rules(active_until);
 
+-- Agregar columnas faltantes a arrival_rate_rules si la tabla ya existe con estructura antigua
+DO $$ 
+BEGIN
+    -- Agregar fee_type si no existe
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'arrival_rate_rules' AND column_name = 'fee_type'
+    ) THEN
+        ALTER TABLE arrival_rate_rules ADD COLUMN fee_type VARCHAR(20) NOT NULL DEFAULT 'flat';
+    END IF;
+
+    -- Agregar flat_fee si no existe
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'arrival_rate_rules' AND column_name = 'flat_fee'
+    ) THEN
+        ALTER TABLE arrival_rate_rules ADD COLUMN flat_fee DECIMAL(12, 2) DEFAULT 0;
+    END IF;
+
+    -- Agregar rate_per_passenger si no existe
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'arrival_rate_rules' AND column_name = 'rate_per_passenger'
+    ) THEN
+        ALTER TABLE arrival_rate_rules ADD COLUMN rate_per_passenger DECIMAL(12, 2) DEFAULT 0;
+    END IF;
+
+    -- Agregar extra_per_passenger si no existe
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'arrival_rate_rules' AND column_name = 'extra_per_passenger'
+    ) THEN
+        ALTER TABLE arrival_rate_rules ADD COLUMN extra_per_passenger DECIMAL(12, 2) DEFAULT 0;
+    END IF;
+
+    -- Agregar min_passengers si no existe
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'arrival_rate_rules' AND column_name = 'min_passengers'
+    ) THEN
+        ALTER TABLE arrival_rate_rules ADD COLUMN min_passengers INTEGER DEFAULT 1;
+    END IF;
+
+    -- Agregar max_passengers si no existe
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'arrival_rate_rules' AND column_name = 'max_passengers'
+    ) THEN
+        ALTER TABLE arrival_rate_rules ADD COLUMN max_passengers INTEGER;
+    END IF;
+
+    -- Agregar active_from si no existe
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'arrival_rate_rules' AND column_name = 'active_from'
+    ) THEN
+        ALTER TABLE arrival_rate_rules ADD COLUMN active_from DATE NOT NULL DEFAULT CURRENT_DATE;
+    END IF;
+
+    -- Renombrar active_to a active_until si existe, o agregar active_until si no existe
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'arrival_rate_rules' AND column_name = 'active_to'
+    ) THEN
+        ALTER TABLE arrival_rate_rules RENAME COLUMN active_to TO active_until;
+    ELSIF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'arrival_rate_rules' AND column_name = 'active_until'
+    ) THEN
+        ALTER TABLE arrival_rate_rules ADD COLUMN active_until DATE;
+    END IF;
+
+    -- Agregar notes si no existe
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'arrival_rate_rules' AND column_name = 'notes'
+    ) THEN
+        ALTER TABLE arrival_rate_rules ADD COLUMN notes TEXT;
+    END IF;
+
+    -- Agregar unit_type si no existe
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'arrival_rate_rules' AND column_name = 'unit_type'
+    ) THEN
+        ALTER TABLE arrival_rate_rules ADD COLUMN unit_type VARCHAR(50);
+    END IF;
+
+    -- Actualizar registros existentes que tengan fee_type NULL
+    UPDATE arrival_rate_rules SET fee_type = 'flat' WHERE fee_type IS NULL;
+
+END $$;
+
 -- Agency Arrivals (Captura diaria oficial de llegadas)
 CREATE TABLE IF NOT EXISTS agency_arrivals (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
