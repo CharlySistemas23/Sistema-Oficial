@@ -137,8 +137,8 @@ const Reports = {
                     try {
                         const reportsTabHTML = await this.getReportsTab();
                         content.innerHTML = reportsTabHTML;
-                        this.setupPresetRanges();
-                        await this.loadCatalogs();
+                    this.setupPresetRanges();
+                    await this.loadCatalogs();
                         // setupBranchFilter ya se llama dentro de loadCatalogs, pero lo llamamos de nuevo para asegurar que esté sincronizado
                         await this.setupBranchFilter('report-branch');
                         // Agregar listener para el cambio de sucursal en reportes
@@ -211,7 +211,7 @@ const Reports = {
                 ? Utils.formatDate(today, 'YYYY-MM-DD') 
                 : today.toISOString().split('T')[0];
             
-            return `
+        return `
             <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light); margin-bottom: var(--spacing-lg);">
                 <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
                     <i class="fas fa-filter"></i> Filtros Avanzados
@@ -664,23 +664,23 @@ const Reports = {
             // Si hay branchId específico o no es master_admin, obtener todas y filtrar manualmente
             sales = await DB.getAll('sales', null, null, { 
                 filterByBranch: false, // Desactivar filtro automático para usar el manual
-                branchIdField: 'branch_id' 
-            }) || [];
-            
-            // Normalizar branch_id para comparación flexible
-            const normalizedBranchId = branchId ? String(branchId) : null;
-            
-            if (normalizedBranchId) {
+            branchIdField: 'branch_id' 
+        }) || [];
+
+        // Normalizar branch_id para comparación flexible
+        const normalizedBranchId = branchId ? String(branchId) : null;
+
+        if (normalizedBranchId) {
                 // Filtrar por branch_id específico - ESTRICTO
                 const beforeFilter = sales.length;
-                sales = sales.filter(s => {
+            sales = sales.filter(s => {
                     // CRÍTICO: Excluir ventas sin branch_id cuando se filtra por sucursal específica
                     if (!s.branch_id) {
                         return false; // NO mostrar ventas sin branch_id
                     }
                     const saleBranchId = String(s.branch_id);
-                    return saleBranchId === normalizedBranchId;
-                });
+                return saleBranchId === normalizedBranchId;
+            });
                 console.log(`📍 [Reports] Filtrado de ventas por sucursal: ${beforeFilter} → ${sales.length} (sucursal: ${normalizedBranchId})`);
             } else if (!isMasterAdmin) {
                 // Si no es master_admin y no hay branchId específico, usar el actual de BranchManager
@@ -833,7 +833,7 @@ const Reports = {
             });
             window._overviewBranchBreakdown = branchBreakdown;
         }
-        
+
         document.getElementById('overview-total-sales').textContent = Utils.formatCurrency(totalSales);
         document.getElementById('overview-sales-count').textContent = completedSales.length;
         document.getElementById('overview-avg-ticket').textContent = Utils.formatCurrency(avgTicket);
@@ -1105,22 +1105,22 @@ const Reports = {
                         `;
                     } else {
                         // Gráfico simple (una sola línea)
-                        const value = dailyTotals[date];
+                    const value = dailyTotals[date];
                         const height = maxValue > 0 ? (value / maxValue) * 100 : 0;
-                        return `
-                            <div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; flex-shrink: 0;">
-                                <div style="flex: 1; display: flex; align-items: flex-end; width: 100%; min-width: 0;">
-                                    <div style="width: 100%; background: var(--gradient-accent); 
-                                        border-radius: var(--radius-xs) var(--radius-xs) 0 0; 
-                                        height: ${height}%; 
-                                        min-height: ${value > 0 ? '3px' : '0'};"></div>
-                                </div>
-                                <div style="font-size: 9px; color: var(--color-text-secondary); text-align: center; white-space: nowrap;">
-                                    <div>${Utils.formatDate(date, 'DD/MM')}</div>
-                                    <div style="font-weight: 600; color: var(--color-text); margin-top: 2px; font-size: 10px;">${Utils.formatCurrency(value)}</div>
-                                </div>
+                    return `
+                        <div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; flex-shrink: 0;">
+                            <div style="flex: 1; display: flex; align-items: flex-end; width: 100%; min-width: 0;">
+                                <div style="width: 100%; background: var(--gradient-accent); 
+                                    border-radius: var(--radius-xs) var(--radius-xs) 0 0; 
+                                    height: ${height}%; 
+                                    min-height: ${value > 0 ? '3px' : '0'};"></div>
                             </div>
-                        `;
+                            <div style="font-size: 9px; color: var(--color-text-secondary); text-align: center; white-space: nowrap;">
+                                <div>${Utils.formatDate(date, 'DD/MM')}</div>
+                                <div style="font-weight: 600; color: var(--color-text); margin-top: 2px; font-size: 10px;">${Utils.formatCurrency(value)}</div>
+                            </div>
+                        </div>
+                    `;
                     }
                 }).join('')}
             </div>
@@ -1825,7 +1825,7 @@ const Reports = {
         const totalPassengers = sales.reduce((sum, s) => sum + (s.passengers || 1), 0);
         const avgTicket = totalPassengers > 0 ? totalSales / totalPassengers : 0;
         const closeRate = totalPassengers > 0 ? (sales.length / totalPassengers) * 100 : 0;
-        
+
         // Agrupar por sucursal si es master_admin y hay múltiples sucursales
         const branchesInReport = new Set(sales.map(s => s.branch_id).filter(Boolean));
         const showBranchBreakdown = isMasterAdmin && branchesInReport.size > 1 && (!branchIdForBanner || branchIdForBanner === 'all');
@@ -1875,11 +1875,11 @@ const Reports = {
         }
         // Si no hay comisiones en sale_items, usar los valores de las ventas (fallback)
         if (commissionsBreakdown.total === 0) {
-            sales.forEach(sale => {
-                commissionsBreakdown.sellers += sale.seller_commission || 0;
-                commissionsBreakdown.guides += sale.guide_commission || 0;
-            });
-            commissionsBreakdown.total = commissionsBreakdown.sellers + commissionsBreakdown.guides;
+        sales.forEach(sale => {
+            commissionsBreakdown.sellers += sale.seller_commission || 0;
+            commissionsBreakdown.guides += sale.guide_commission || 0;
+        });
+        commissionsBreakdown.total = commissionsBreakdown.sellers + commissionsBreakdown.guides;
         }
 
         // Obtener costos del período del reporte (llegadas y operativos)
@@ -1918,22 +1918,22 @@ const Reports = {
             
             // Obtener costos operativos del período
             if (typeof Costs !== 'undefined') {
-                const reportCosts = await Costs.getFilteredCosts({
-                    branchId: branchId || null,
-                    dateFrom: dateFrom,
-                    dateTo: dateTo
-                });
-                
+            const reportCosts = await Costs.getFilteredCosts({
+                branchId: branchId || null,
+                dateFrom: dateFrom,
+                dateTo: dateTo
+            });
+            
                 // Desglose de costos operativos
-                costBreakdown.fixed = reportCosts
+            costBreakdown.fixed = reportCosts
                     .filter(c => c.type === 'fijo' && c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias')
-                    .reduce((sum, c) => sum + (c.amount || 0), 0);
-                costBreakdown.variable = reportCosts
-                    .filter(c => c.type === 'variable' && c.category !== 'costo_ventas' && c.category !== 'comisiones' && c.category !== 'comisiones_bancarias' && c.category !== 'pago_llegadas')
-                    .reduce((sum, c) => sum + (c.amount || 0), 0);
-                costBreakdown.bankCommissions = reportCosts
-                    .filter(c => c.category === 'comisiones_bancarias')
-                    .reduce((sum, c) => sum + (c.amount || 0), 0);
+                .reduce((sum, c) => sum + (c.amount || 0), 0);
+            costBreakdown.variable = reportCosts
+                .filter(c => c.type === 'variable' && c.category !== 'costo_ventas' && c.category !== 'comisiones' && c.category !== 'comisiones_bancarias' && c.category !== 'pago_llegadas')
+                .reduce((sum, c) => sum + (c.amount || 0), 0);
+            costBreakdown.bankCommissions = reportCosts
+                .filter(c => c.category === 'comisiones_bancarias')
+                .reduce((sum, c) => sum + (c.amount || 0), 0);
             }
         }
         
@@ -3063,13 +3063,13 @@ const Reports = {
                 const netProfit = revenue - cost - totalCommissions;
                 
                 // Estadísticas por producto (agregado de todas las sucursales)
-                if (!productStats[item.id]) {
-                    productStats[item.id] = {
-                        name: item.name || item.sku,
+                    if (!productStats[item.id]) {
+                        productStats[item.id] = {
+                            name: item.name || item.sku,
                         sku: item.sku,
-                        qty: 0,
+                            qty: 0,
                         weight: 0,
-                        revenue: 0,
+                            revenue: 0,
                         cost: 0,
                         commissions: 0,
                         grossProfit: 0,
@@ -3238,10 +3238,10 @@ const Reports = {
                         text-transform: uppercase; letter-spacing: 0.5px;">
                         <i class="fas fa-balance-scale"></i> Comparativa por Sucursal
                     </h3>
-                    <div style="overflow-x: auto; width: 100%;">
+                <div style="overflow-x: auto; width: 100%;">
                         <table class="cart-table" style="width: 100%; max-width: 100%; table-layout: auto; min-width: 1000px;">
-                            <thead>
-                                <tr>
+                        <thead>
+                            <tr>
                                     <th>Sucursal</th>
                                     <th style="text-align: right;">Piezas</th>
                                     <th style="text-align: right;">Peso (g)</th>
@@ -3596,7 +3596,7 @@ const Reports = {
             UserManager.currentUser?.isMasterAdmin ||
             UserManager.currentEmployee?.role === 'master_admin'
         );
-        
+
         const branches = await DB.getAll('catalog_branches');
         const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
         
@@ -5822,13 +5822,16 @@ const Reports = {
                 return;
             }
 
-            const today = new Date().toISOString().split('T')[0];
+            // Usar la fecha de las capturas (todas deberían tener la misma fecha)
+            const captureDate = captures[0]?.date || new Date().toISOString().split('T')[0];
             
-            // 1. Obtener tipo de cambio del día
-            const exchangeRates = await DB.query('exchange_rates_daily', 'date', today) || [];
+            // 1. Obtener tipo de cambio del día (usar la fecha de las capturas)
+            const exchangeRates = await DB.query('exchange_rates_daily', 'date', captureDate) || [];
             const todayRate = exchangeRates[0] || { usd_to_mxn: 20.0, cad_to_mxn: 15.0 };
             const usdRate = todayRate.usd_to_mxn || 20.0;
             const cadRate = todayRate.cad_to_mxn || 15.0;
+
+            console.log(`💱 Tipo de cambio usado para ${captureDate}: USD=${usdRate}, CAD=${cadRate}`);
 
             // 2. Calcular totales de ventas por moneda
             const totals = { USD: 0, MXN: 0, CAD: 0 };
@@ -5840,10 +5843,19 @@ const Reports = {
             const totalSalesMXN = totals.USD * usdRate + totals.MXN + totals.CAD * cadRate;
 
             // 4. Calcular comisiones totales (vendedores + guías)
+            // IMPORTANTE: Las comisiones deben calcularse sobre el monto en MXN
             const commissionRules = await DB.getAll('commission_rules') || [];
             let totalCommissions = 0;
             for (const capture of captures) {
-                if (capture.seller_id && capture.total > 0) {
+                // Convertir el total de la captura a MXN antes de calcular comisiones
+                let captureTotalMXN = capture.total;
+                if (capture.currency === 'USD') {
+                    captureTotalMXN = capture.total * usdRate;
+                } else if (capture.currency === 'CAD') {
+                    captureTotalMXN = capture.total * cadRate;
+                }
+                
+                if (capture.seller_id && captureTotalMXN > 0) {
                     const sellerRule = commissionRules.find(r => 
                         r.entity_type === 'seller' && r.entity_id === capture.seller_id
                     ) || commissionRules.find(r => 
@@ -5852,12 +5864,12 @@ const Reports = {
                     if (sellerRule) {
                         const discountPct = sellerRule.discount_pct || 0;
                         const multiplier = sellerRule.multiplier || 1;
-                        const afterDiscount = capture.total * (1 - (discountPct / 100));
+                        const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
                         const commission = afterDiscount * (multiplier / 100);
                         totalCommissions += commission;
                     }
                 }
-                if (capture.guide_id && capture.total > 0) {
+                if (capture.guide_id && captureTotalMXN > 0) {
                     const guideRule = commissionRules.find(r => 
                         r.entity_type === 'guide' && r.entity_id === capture.guide_id
                     ) || commissionRules.find(r => 
@@ -5866,7 +5878,7 @@ const Reports = {
                     if (guideRule) {
                         const discountPct = guideRule.discount_pct || 0;
                         const multiplier = guideRule.multiplier || 1;
-                        const afterDiscount = capture.total * (1 - (discountPct / 100));
+                        const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
                         const commission = afterDiscount * (multiplier / 100);
                         totalCommissions += commission;
                     }
@@ -5897,17 +5909,21 @@ const Reports = {
             }
 
             // 6. Costos de llegadas del día - Leer desde cost_entries (fuente autorizada)
+            // IMPORTANTE: Usar la fecha de las capturas, no la fecha actual
             const captureBranchIds = [...new Set(captures.map(c => c.branch_id).filter(Boolean))];
             const branchIdForArrivals = captureBranchIds.length === 1 ? captureBranchIds[0] : null;
-            const totalArrivalCosts = await this.calculateArrivalCosts(today, branchIdForArrivals, captureBranchIds);
+            const totalArrivalCosts = await this.calculateArrivalCosts(captureDate, branchIdForArrivals, captureBranchIds);
+            console.log(`✈️ Costos de llegadas para ${captureDate}: $${totalArrivalCosts.toFixed(2)} (sucursales: ${captureBranchIds.join(', ')})`);
 
             // 7. Costos operativos del día (prorrateados) - Por todas las sucursales involucradas
+            // IMPORTANTE: Usar la fecha de las capturas, no la fecha actual
             let totalOperatingCosts = 0;
             let bankCommissions = 0;
             try {
                 const allCosts = await DB.getAll('cost_entries') || [];
-                const targetDate = new Date(today);
+                const targetDate = new Date(captureDate);
                 const captureBranchIds = [...new Set(captures.map(c => c.branch_id).filter(Boolean))];
+                console.log(`💰 Calculando costos operativos para ${captureDate}, sucursales: ${captureBranchIds.join(', ') || 'todas'}`);
                 
                 // Si no hay branchIds específicos, considerar costos globales (branch_id = null)
                 const branchIdsToProcess = captureBranchIds.length > 0 ? captureBranchIds : [null];
@@ -5972,7 +5988,7 @@ const Reports = {
                     const variableCosts = branchCosts.filter(c => {
                         const costDate = c.date || c.created_at;
                         const costDateStr = costDate.split('T')[0];
-                        return costDateStr === today &&
+                        return costDateStr === captureDate &&
                                c.category !== 'pago_llegadas' && // Excluir llegadas
                                c.category !== 'comisiones_bancarias' && // Excluir comisiones bancarias
                                (c.period_type === 'one_time' || c.period_type === 'daily' || !c.period_type);
@@ -6782,11 +6798,12 @@ const Reports = {
             }
 
             const { jsPDF } = jspdfLib;
-            const today = new Date().toISOString().split('T')[0];
             
             // Obtener datos
             let captures = await DB.getAll('temp_quick_captures') || [];
-            captures = captures.filter(c => c.date === today);
+            // Usar la fecha de las capturas (todas deberían tener la misma fecha)
+            const captureDate = captures.length > 0 ? captures[0].date : new Date().toISOString().split('T')[0];
+            captures = captures.filter(c => c.date === captureDate);
             
             if (captures.length === 0) {
                 Utils.showNotification('No hay capturas para exportar', 'warning');
@@ -6830,7 +6847,7 @@ const Reports = {
                 ? Utils.formatDate(new Date(), 'DD/MM/YYYY HH:mm')
                 : new Date().toLocaleString('es-MX');
             doc.text(dateStr, pageWidth - margin, 15, { align: 'right' });
-            doc.text(`Fecha: ${today}`, pageWidth - margin, 22, { align: 'right' });
+            doc.text(`Fecha: ${captureDate}`, pageWidth - margin, 22, { align: 'right' });
 
             y = 45;
 
@@ -6993,7 +7010,8 @@ const Reports = {
 
             // ========== COMISIONES ==========
             // Obtener tipo de cambio del día PRIMERO (para convertir comisiones a MXN)
-            const exchangeRates = await DB.query('exchange_rates_daily', 'date', today) || [];
+            // IMPORTANTE: Usar la fecha de las capturas, no la fecha actual
+            const exchangeRates = await DB.query('exchange_rates_daily', 'date', captureDate) || [];
             const todayRate = exchangeRates[0] || { usd_to_mxn: 20.0, cad_to_mxn: 15.0 };
             const usdRate = todayRate.usd_to_mxn || 20.0;
             const cadRate = todayRate.cad_to_mxn || 15.0;
@@ -7239,16 +7257,18 @@ const Reports = {
             }
 
             // Costos de llegadas - Leer desde cost_entries (fuente autorizada)
+            // IMPORTANTE: Usar la fecha de las capturas, no la fecha actual
             const captureBranchIds = [...new Set(captures.map(c => c.branch_id).filter(Boolean))];
             const branchIdForArrivals = captureBranchIds.length === 1 ? captureBranchIds[0] : null;
-            const totalArrivalCosts = await this.calculateArrivalCosts(today, branchIdForArrivals, captureBranchIds);
+            const totalArrivalCosts = await this.calculateArrivalCosts(captureDate, branchIdForArrivals, captureBranchIds);
 
             // Costos operativos del día (prorrateados)
+            // IMPORTANTE: Usar la fecha de las capturas, no la fecha actual
             let totalOperatingCosts = 0;
             let bankCommissions = 0;
             try {
                 const allCosts = await DB.getAll('cost_entries') || [];
-                const targetDate = new Date(today);
+                const targetDate = new Date(captureDate);
                 const captureBranchIds = [...new Set(captures.map(c => c.branch_id).filter(Boolean))];
                 
                 // Si no hay branchIds específicos, considerar costos globales
@@ -7301,10 +7321,13 @@ const Reports = {
                     }
 
                     // Costos variables/diarios del día específico
+                    // IMPORTANTE: Usar la fecha de las capturas, no la fecha actual
                     const variableCosts = branchCosts.filter(c => {
                         const costDate = c.date || c.created_at;
                         const costDateStr = costDate.split('T')[0];
-                        return costDateStr === today &&
+                        return costDateStr === captureDate &&
+                               c.category !== 'pago_llegadas' && // Excluir llegadas
+                               c.category !== 'comisiones_bancarias' && // Excluir comisiones bancarias
                                (c.period_type === 'one_time' || c.period_type === 'daily' || !c.period_type);
                     });
                     for (const cost of variableCosts) {
