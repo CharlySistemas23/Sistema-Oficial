@@ -2007,8 +2007,22 @@ const TouristReport = {
      * Genera el HTML de la tabla de llegadas por agencia
      */
     async getArrivalsTableHTML(branchId, date) {
-        const agencies = await DB.getAll('catalog_agencies') || [];
+        const allAgencies = await DB.getAll('catalog_agencies') || [];
         const targetAgencies = ['TRAVELEX', 'VERANOS', 'TANITOURS', 'DISCOVERY', 'TB', 'TTF', 'TROPICAL ADVENTURE'];
+        
+        // Filtrar duplicados: mantener solo la primera agencia con cada nombre
+        const seenAgencyNames = new Set();
+        const agencies = allAgencies.filter(a => {
+            if (!a || !a.name) return false;
+            const normalizedName = a.name.trim().toUpperCase();
+            if (seenAgencyNames.has(normalizedName)) {
+                console.warn(`⚠️ Agencia duplicada ignorada en llegadas: ${a.name} (ID: ${a.id})`);
+                return false;
+            }
+            seenAgencyNames.add(normalizedName);
+            return true;
+        });
+        
         const filteredAgencies = agencies.filter(a => targetAgencies.includes(a.name.toUpperCase()));
         
         // Limpiar llegadas inválidas antes de cargar
