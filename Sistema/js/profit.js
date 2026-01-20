@@ -281,6 +281,15 @@ const ProfitCalculator = {
                 a.units > 0
             );
             
+            // 5. COSTOS OPERATIVOS: Costos del día (filtrados por sucursal)
+            // NOTA: Usamos filterByBranch: false porque necesitamos todos los costos para calcular prorrateos
+            // y luego aplicar el filtro de branch_id manualmente
+            // IMPORTANTE: Declarar allCosts ANTES de usarlo en el cálculo de llegadas
+            const allCosts = await DB.getAll('cost_entries', null, null, { 
+                filterByBranch: false, // Caso especial: necesitamos todos los costos para prorrateos
+                branchIdField: 'branch_id' 
+            }) || [];
+
             // Calcular costos de llegadas desde cost_entries (fuente autorizada)
             // Si no hay costos registrados, calcular desde agency_arrivals como fallback
             let arrivalsTotal = 0;
@@ -331,14 +340,6 @@ const ProfitCalculator = {
             }
             
             const passengersTotal = branchArrivals.reduce((sum, a) => sum + (a.passengers || 0), 0);
-
-            // 5. COSTOS OPERATIVOS: Costos del día (filtrados por sucursal)
-            // NOTA: Usamos filterByBranch: false porque necesitamos todos los costos para calcular prorrateos
-            // y luego aplicar el filtro de branch_id manualmente
-            const allCosts = await DB.getAll('cost_entries', null, null, { 
-                filterByBranch: false, // Caso especial: necesitamos todos los costos para prorrateos
-                branchIdField: 'branch_id' 
-            }) || [];
 
             // Inicializar acumulador (FIX: evitaba ReferenceError: fixedCostsDaily is not defined)
             let fixedCostsDaily = 0;
