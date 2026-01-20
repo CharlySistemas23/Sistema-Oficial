@@ -61,9 +61,11 @@ const ArrivalRules = {
             );
             const viewAllBranches = isMasterAdmin;
             
-            // Obtener reglas activas para esta agencia (filtrado automático)
+            // Obtener reglas activas para esta agencia
+            // IMPORTANTE: No filtrar por branch_id aquí, porque necesitamos incluir reglas globales (branch_id: null)
+            // El filtro manual abajo manejará correctamente reglas específicas vs globales
             const allRules = await DB.getAll('arrival_rate_rules', null, null, { 
-                filterByBranch: !viewAllBranches, 
+                filterByBranch: false, 
                 branchIdField: 'branch_id' 
             }) || [];
             // #region agent log
