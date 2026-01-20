@@ -6350,7 +6350,19 @@ const Reports = {
             
             const sellers = await DB.getAll('catalog_sellers') || [];
             const guides = await DB.getAll('catalog_guides') || [];
-            const agencies = await DB.getAll('catalog_agencies') || [];
+            const allAgencies = await DB.getAll('catalog_agencies') || [];
+            // Filtrar duplicados: mantener solo la primera agencia con cada nombre
+            const seenAgencyNames = new Set();
+            const agencies = allAgencies.filter(a => {
+                if (!a || !a.name) return false;
+                const normalizedName = a.name.trim().toUpperCase();
+                if (seenAgencyNames.has(normalizedName)) {
+                    console.warn(`⚠️ Agencia duplicada ignorada en edición: ${a.name} (ID: ${a.id})`);
+                    return false;
+                }
+                seenAgencyNames.add(normalizedName);
+                return true;
+            });
             const branches = await DB.getAll('catalog_branches') || [];
 
             modal.innerHTML = `
@@ -6438,6 +6450,7 @@ const Reports = {
 
             // Event listener del formulario
             const form = document.getElementById('edit-quick-capture-form');
+            const self = this; // Guardar referencia al objeto Reports
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 
@@ -6494,7 +6507,7 @@ const Reports = {
 
                     modal.remove();
                     Utils.showNotification('Captura actualizada correctamente', 'success');
-                    await this.loadQuickCaptureData();
+                    await self.loadQuickCaptureData();
                 } catch (error) {
                     console.error('Error actualizando captura:', error);
                     Utils.showNotification('Error al actualizar la captura: ' + error.message, 'error');
