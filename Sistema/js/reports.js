@@ -5258,11 +5258,64 @@ const Reports = {
                 </div>
             </div>
 
-            <!-- Sección de Llegadas del Día -->
+            <!-- Sección de Llegadas del Día (Desplegable) -->
             <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light); margin-top: var(--spacing-lg);">
-                <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
-                    <i class="fas fa-plane-arrival"></i> Llegadas del Día
-                </h3>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-md); cursor: pointer;" onclick="window.Reports.toggleArrivalsForm()">
+                    <h3 style="margin: 0; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+                        <i class="fas fa-plane-arrival"></i> Llegadas del Día
+                    </h3>
+                    <i id="arrivals-form-toggle-icon" class="fas fa-chevron-down" style="transition: transform 0.3s;"></i>
+                </div>
+                <div id="quick-capture-arrivals-form-container" style="display: none; margin-bottom: var(--spacing-md); padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-sm);">
+                    <form id="quick-arrivals-form" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--spacing-md);">
+                        ${isMasterAdmin ? `
+                        <div class="form-group">
+                            <label>Sucursal <span style="color: var(--color-danger);">*</span></label>
+                            <select id="qc-arrival-branch" class="form-select" required>
+                                <option value="">Seleccionar...</option>
+                            </select>
+                        </div>
+                        ` : ''}
+                        <div class="form-group">
+                            <label>Agencia <span style="color: var(--color-danger);">*</span></label>
+                            <select id="qc-arrival-agency" class="form-select" required>
+                                <option value="">Seleccionar...</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Pasajeros (PAX) <span style="color: var(--color-danger);">*</span></label>
+                            <input type="number" id="qc-arrival-pax" class="form-input" min="1" step="1" placeholder="0" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Unidades <span style="color: var(--color-danger);">*</span></label>
+                            <input type="number" id="qc-arrival-units" class="form-input" min="1" step="1" placeholder="0" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Tipo Unidad</label>
+                            <select id="qc-arrival-unit-type" class="form-select">
+                                <option value="">Cualquiera</option>
+                                <option value="city_tour">City Tour</option>
+                                <option value="sprinter">Sprinter</option>
+                                <option value="van">Van</option>
+                                <option value="truck">Camiones</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Costo de Llegada (MXN)</label>
+                            <input type="number" id="qc-arrival-cost" class="form-input" min="0" step="0.01" placeholder="0.00" readonly style="background: var(--color-bg-secondary);">
+                            <small style="color: var(--color-text-secondary); font-size: 9px;">Se calcula automáticamente</small>
+                        </div>
+                        <div class="form-group" style="grid-column: 1 / -1;">
+                            <label>Notas</label>
+                            <input type="text" id="qc-arrival-notes" class="form-input" placeholder="Notas opcionales...">
+                        </div>
+                        <div class="form-group" style="grid-column: 1 / -1;">
+                            <button type="submit" class="btn-primary" style="width: 100%;">
+                                <i class="fas fa-save"></i> Guardar Llegada
+                            </button>
+                        </div>
+                    </form>
+                </div>
                 <div id="quick-capture-arrivals">
                     <div style="text-align: center; padding: var(--spacing-lg); color: var(--color-text-secondary);">
                         <i class="fas fa-spinner fa-spin"></i> Cargando llegadas...
@@ -5317,19 +5370,78 @@ const Reports = {
         // Cargar catálogos
         await this.loadQuickCaptureCatalogs();
         
+        // Cargar catálogos para formulario de llegadas
+        await this.loadQuickArrivalsCatalogs();
+        
         // Cargar tipo de cambio en tiempo real
         await this.loadExchangeRates();
         
         // Cargar historial de reportes archivados
         await this.loadArchivedReports();
         
-        // Event listener del formulario
+        // Event listener del formulario de capturas
         const form = document.getElementById('quick-capture-form');
         if (form) {
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 await this.saveQuickCaptureSale();
             });
+        }
+
+        // Event listener del formulario de llegadas
+        const arrivalsForm = document.getElementById('quick-arrivals-form');
+        if (arrivalsForm) {
+            arrivalsForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                await this.saveQuickArrival();
+            });
+            
+            // Calcular costo cuando cambian los campos
+            const paxInput = document.getElementById('qc-arrival-pax');
+            const unitsInput = document.getElementById('qc-arrival-units');
+            const agencySelect = document.getElementById('qc-arrival-agency');
+            const unitTypeSelect = document.getElementById('qc-arrival-unit-type');
+            const branchSelect = document.getElementById('qc-arrival-branch');
+            
+            const calculateArrivalCost = async () => {
+                const pax = parseInt(paxInput?.value || 0);
+                const units = parseInt(unitsInput?.value || 0);
+                const agencyId = agencySelect?.value;
+                const unitType = unitTypeSelect?.value || null;
+                
+                if (pax > 0 && units > 0 && agencyId) {
+                    const isMasterAdmin = typeof UserManager !== 'undefined' && (
+                        UserManager.currentUser?.role === 'master_admin' ||
+                        UserManager.currentUser?.is_master_admin ||
+                        UserManager.currentUser?.isMasterAdmin
+                    );
+                    const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
+                    const branchId = isMasterAdmin && branchSelect?.value 
+                        ? branchSelect.value 
+                        : currentBranchId;
+                    
+                    if (branchId) {
+                        const today = new Date().toISOString().split('T')[0];
+                        if (typeof ArrivalRules !== 'undefined' && ArrivalRules.calculateArrivalFee) {
+                            const calculation = await ArrivalRules.calculateArrivalFee(agencyId, branchId, pax, unitType, today);
+                            const costInput = document.getElementById('qc-arrival-cost');
+                            if (costInput) {
+                                if (calculation.overrideRequired && !calculation.calculatedFee) {
+                                    costInput.value = 'Requiere Override';
+                                } else {
+                                    costInput.value = (calculation.calculatedFee || 0).toFixed(2);
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+            
+            if (paxInput) paxInput.addEventListener('input', calculateArrivalCost);
+            if (unitsInput) unitsInput.addEventListener('input', calculateArrivalCost);
+            if (agencySelect) agencySelect.addEventListener('change', calculateArrivalCost);
+            if (unitTypeSelect) unitTypeSelect.addEventListener('change', calculateArrivalCost);
+            if (branchSelect) branchSelect.addEventListener('change', calculateArrivalCost);
         }
 
         // Cuando cambia la agencia, actualizar guías
@@ -5804,6 +5916,168 @@ const Reports = {
                     </div>
                 `;
             }
+        }
+    },
+
+    toggleArrivalsForm() {
+        const container = document.getElementById('quick-capture-arrivals-form-container');
+        const icon = document.getElementById('arrivals-form-toggle-icon');
+        if (container && icon) {
+            const isHidden = container.style.display === 'none';
+            container.style.display = isHidden ? 'block' : 'none';
+            icon.style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
+        }
+    },
+
+    async loadQuickArrivalsCatalogs() {
+        try {
+            const isMasterAdmin = typeof UserManager !== 'undefined' && (
+                UserManager.currentUser?.role === 'master_admin' ||
+                UserManager.currentUser?.is_master_admin ||
+                UserManager.currentUser?.isMasterAdmin
+            );
+            
+            // Cargar sucursales para formulario de llegadas (si es master admin)
+            if (isMasterAdmin) {
+                const branches = await DB.getAll('catalog_branches') || [];
+                const branchSelect = document.getElementById('qc-arrival-branch');
+                if (branchSelect) {
+                    branchSelect.innerHTML = '<option value="">Seleccionar...</option>' +
+                        branches.filter(b => b.active !== false).map(b => 
+                            `<option value="${b.id}">${b.name}</option>`
+                        ).join('');
+                }
+            }
+
+            // Cargar agencias para formulario de llegadas (filtrar duplicados)
+            const allAgencies = await DB.getAll('catalog_agencies') || [];
+            const seenAgencyNames = new Set();
+            const agencies = allAgencies.filter(a => {
+                if (!a || !a.name) return false;
+                const normalizedName = a.name.trim().toUpperCase();
+                if (seenAgencyNames.has(normalizedName)) {
+                    return false;
+                }
+                seenAgencyNames.add(normalizedName);
+                return true;
+            });
+            const agencySelect = document.getElementById('qc-arrival-agency');
+            if (agencySelect) {
+                agencySelect.innerHTML = '<option value="">Seleccionar...</option>' +
+                    agencies.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+            }
+        } catch (error) {
+            console.error('Error cargando catálogos de llegadas:', error);
+        }
+    },
+
+    async saveQuickArrival() {
+        try {
+            const isMasterAdmin = typeof UserManager !== 'undefined' && (
+                UserManager.currentUser?.role === 'master_admin' ||
+                UserManager.currentUser?.is_master_admin ||
+                UserManager.currentUser?.isMasterAdmin
+            );
+            const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
+
+            const branchId = isMasterAdmin 
+                ? document.getElementById('qc-arrival-branch')?.value || currentBranchId
+                : currentBranchId;
+            const agencyId = document.getElementById('qc-arrival-agency')?.value;
+            const passengers = parseInt(document.getElementById('qc-arrival-pax')?.value || 0);
+            const units = parseInt(document.getElementById('qc-arrival-units')?.value || 0);
+            const unitType = document.getElementById('qc-arrival-unit-type')?.value || null;
+            const notes = document.getElementById('qc-arrival-notes')?.value?.trim() || null;
+
+            // Validar campos requeridos
+            if (!branchId || !agencyId || !passengers || passengers <= 0 || !units || units <= 0) {
+                Utils.showNotification('Por favor completa todos los campos requeridos', 'error');
+                return;
+            }
+
+            // Obtener nombres para mostrar
+            const agencies = await DB.getAll('catalog_agencies') || [];
+            const agency = agencies.find(a => a.id === agencyId);
+            const agencyName = agency ? agency.name : 'Desconocida';
+
+            const branches = await DB.getAll('catalog_branches') || [];
+            const branch = branches.find(b => b.id === branchId);
+            const branchName = branch ? branch.name : 'Desconocida';
+
+            // Calcular costo de llegada
+            const today = new Date().toISOString().split('T')[0];
+            let arrivalFee = 0;
+            if (typeof ArrivalRules !== 'undefined' && ArrivalRules.calculateArrivalFee) {
+                const calculation = await ArrivalRules.calculateArrivalFee(agencyId, branchId, passengers, unitType, today);
+                if (calculation.overrideRequired && !calculation.calculatedFee) {
+                    Utils.showNotification('Esta llegada requiere override manual. Por favor usa el módulo de llegadas para configurarla.', 'warning');
+                    return;
+                }
+                arrivalFee = calculation.calculatedFee || 0;
+            }
+
+            // Guardar llegada usando ArrivalRules.saveArrival
+            if (typeof ArrivalRules !== 'undefined' && ArrivalRules.saveArrival) {
+                await ArrivalRules.saveArrival({
+                    agency_id: agencyId,
+                    agency_name: agencyName,
+                    branch_id: branchId,
+                    branch_name: branchName,
+                    passengers: passengers,
+                    units: units,
+                    unit_type: unitType,
+                    arrival_fee: arrivalFee,
+                    date: today,
+                    notes: notes,
+                    created_by: typeof UserManager !== 'undefined' && UserManager.currentUser ? UserManager.currentUser.id : null
+                });
+            } else {
+                // Fallback: guardar directamente en IndexedDB
+                const arrival = {
+                    id: 'arrival_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+                    agency_id: agencyId,
+                    agency_name: agencyName,
+                    branch_id: branchId,
+                    branch_name: branchName,
+                    passengers: passengers,
+                    units: units,
+                    unit_type: unitType,
+                    arrival_fee: arrivalFee,
+                    calculated_fee: arrivalFee,
+                    date: today,
+                    notes: notes,
+                    created_at: new Date().toISOString(),
+                    created_by: typeof UserManager !== 'undefined' && UserManager.currentUser ? UserManager.currentUser.id : null,
+                    sync_status: 'pending'
+                };
+                await DB.put('agency_arrivals', arrival);
+
+                // Registrar costo de llegada
+                if (typeof Costs !== 'undefined' && Costs.registerArrivalPayment && arrivalFee > 0) {
+                    await Costs.registerArrivalPayment(
+                        arrival.id,
+                        arrivalFee,
+                        branchId,
+                        agencyId,
+                        passengers,
+                        today
+                    );
+                }
+            }
+
+            // Limpiar formulario
+            document.getElementById('quick-arrivals-form')?.reset();
+            const costInput = document.getElementById('qc-arrival-cost');
+            if (costInput) costInput.value = '';
+
+            // Recargar llegadas
+            await this.loadQuickCaptureArrivals();
+            await this.loadQuickCaptureData(); // Recargar datos para actualizar utilidades
+
+            Utils.showNotification('Llegada guardada correctamente', 'success');
+        } catch (error) {
+            console.error('Error guardando llegada rápida:', error);
+            Utils.showNotification('Error al guardar la llegada: ' + error.message, 'error');
         }
     },
 
