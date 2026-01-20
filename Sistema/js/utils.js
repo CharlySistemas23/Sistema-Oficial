@@ -834,7 +834,7 @@ const Utils = {
             }
             
             // Acumular caracteres si es un carácter imprimible
-            if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+            if (event.key && event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
                 // Si el tiempo entre teclas es muy corto, probablemente es escaneo
                 if (timeSinceLastKey < minSpeed && buffer.length > 0) {
                     // Prevenir comportamiento por defecto durante escaneo rápido
