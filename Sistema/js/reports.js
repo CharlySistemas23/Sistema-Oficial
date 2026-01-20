@@ -6811,8 +6811,9 @@ const Reports = {
             }
 
             // Obtener llegadas
+            // IMPORTANTE: Usar la fecha de las capturas, no la fecha actual
             const arrivals = await DB.getAll('agency_arrivals') || [];
-            const todayArrivals = arrivals.filter(a => a.date === today);
+            const todayArrivals = arrivals.filter(a => a.date === captureDate);
             
             // Calcular comisiones
             const commissionRules = await DB.getAll('commission_rules') || [];
