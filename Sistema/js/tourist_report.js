@@ -2541,7 +2541,24 @@ const TouristReport = {
             // Master admin puede ver todas las sucursales
             branchFilterContainer.style.display = '';
             branchDisplayContainer.style.display = 'none';
-            const branches = await DB.getAll('catalog_branches') || [];
+            const allBranches = await DB.getAll('catalog_branches') || [];
+            // Filtrar solo sucursales activas y eliminar duplicados
+            const seenNames = new Set();
+            const seenIds = new Set();
+            const branches = allBranches.filter(b => {
+                if (!b || !b.id || !b.name) return false;
+                // Solo mostrar sucursales activas
+                if (b.active === false) return false;
+                // Eliminar duplicados por nombre
+                if (b.name === 'Sucursal Principal' && seenNames.has('Sucursal Principal')) {
+                    return false;
+                }
+                // Eliminar duplicados por ID
+                if (seenIds.has(b.id)) return false;
+                seenNames.add(b.name);
+                seenIds.add(b.id);
+                return true;
+            });
             branchFilter.innerHTML = '<option value="all">Todas las sucursales</option>' + 
                 branches.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
             branchFilter.value = currentBranchId || 'all';
