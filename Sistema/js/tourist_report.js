@@ -2008,7 +2008,7 @@ const TouristReport = {
      */
     async getArrivalsTableHTML(branchId, date) {
         const agencies = await DB.getAll('catalog_agencies') || [];
-        const targetAgencies = ['TRAVELEX', 'VERANOS', 'TANITOURS', 'DISCOVERY', 'TB', 'TTF'];
+        const targetAgencies = ['TRAVELEX', 'VERANOS', 'TANITOURS', 'DISCOVERY', 'TB', 'TTF', 'TROPICAL ADVENTURE'];
         const filteredAgencies = agencies.filter(a => targetAgencies.includes(a.name.toUpperCase()));
         
         // Limpiar llegadas inválidas antes de cargar
