@@ -251,7 +251,7 @@ const Dashboard = {
         } else {
             // Master admin puede ver todas las sucursales
             branchFilterContainer.style.display = 'block';
-            const branches = await DB.getAll('catalog_branches') || [];
+            let branches = await DB.getAll('catalog_branches') || [];
             // Eliminar duplicados: si hay múltiples sucursales con el mismo nombre "Sucursal Principal", 
             // mantener solo la primera y eliminar las demás
             const seenNames = new Set();
