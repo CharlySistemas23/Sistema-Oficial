@@ -158,6 +158,16 @@ router.post('/rules', requireBranchAccess, [
       }
     }
     
+    // Detectar error de columna faltante (migración no ejecutada)
+    if (error.code === '42703' || (error.message && error.message.includes('does not exist'))) {
+      return res.status(500).json({ 
+        error: 'Error de base de datos: La tabla arrival_rate_rules necesita ser migrada. Ejecuta el script de migración.',
+        code: error.code,
+        message: error.message,
+        hint: 'Ejecuta backend/scripts/migrate-arrival-rate-rules.sql en Railway'
+      });
+    }
+    
     // Si es un error de foreign key (agencia no existe), dar mensaje más específico
     if (error.message && error.message.includes('foreign key')) {
       return res.status(400).json({ 
