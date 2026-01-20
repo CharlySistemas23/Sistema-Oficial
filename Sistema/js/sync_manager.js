@@ -220,15 +220,19 @@ const SyncManager = {
                 }
                 
                 // Verificar token y limpiar si es inválido para forzar re-login
-                if (((typeof API !== 'undefined' && API.token) || hasToken) && typeof API.verifyToken === 'function') {
-                    const valid = await API.verifyToken();
-                    // valid === null => error transitorio (no borrar token)
-                    if (valid === false || (valid && valid.valid === false)) {
-                        console.warn('⚠️ Token inválido/expirado detectado durante sync. Limpiando y reintentando login automático...');
-                        API.token = null;
-                        localStorage.removeItem('api_token');
-                        hasToken = false;
-                        this._autoLoginAttempted = false;
+                // Solo verificar una vez por sincronización para evitar rate limits
+                if (!this._lastTokenCheck || (Date.now() - this._lastTokenCheck) > 60000) { // 1 minuto
+                    if (((typeof API !== 'undefined' && API.token) || hasToken) && typeof API.verifyToken === 'function') {
+                        const valid = await API.verifyToken();
+                        this._lastTokenCheck = Date.now();
+                        // valid === null => error transitorio (no borrar token, incluye 429)
+                        if (valid === false || (valid && valid.valid === false)) {
+                            console.warn('⚠️ Token inválido/expirado detectado durante sync. Limpiando y reintentando login automático...');
+                            API.token = null;
+                            localStorage.removeItem('api_token');
+                            hasToken = false;
+                            this._autoLoginAttempted = false;
+                        }
                     }
                 }
             }
