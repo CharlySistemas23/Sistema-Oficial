@@ -3,7 +3,7 @@
 const DB = {
     db: null,
     dbName: 'opal_pos_db',
-    version: 9, // Incrementado para agregar store temp_quick_captures
+    version: 10, // Incrementado para agregar stores temp_quick_captures y archived_quick_captures
 
     async init() {
         return new Promise((resolve, reject) => {
@@ -373,6 +373,26 @@ const DB = {
             qaFixesStore.createIndex('fix_type', 'fix_type', { unique: false });
             qaFixesStore.createIndex('entity_type', 'entity_type', { unique: false });
             qaFixesStore.createIndex('timestamp', 'timestamp', { unique: false });
+        }
+
+        // Temporary Quick Captures (Capturas rápidas temporales del día)
+        if (!db.objectStoreNames.contains('temp_quick_captures')) {
+            const qcStore = db.createObjectStore('temp_quick_captures', { keyPath: 'id' });
+            qcStore.createIndex('date', 'date', { unique: false });
+            qcStore.createIndex('branch_id', 'branch_id', { unique: false });
+            qcStore.createIndex('seller_id', 'seller_id', { unique: false });
+            qcStore.createIndex('guide_id', 'guide_id', { unique: false });
+            qcStore.createIndex('agency_id', 'agency_id', { unique: false });
+            qcStore.createIndex('created_at', 'created_at', { unique: false });
+        }
+
+        // Archived Quick Captures (Reportes periódicos archivados)
+        if (!db.objectStoreNames.contains('archived_quick_captures')) {
+            const archStore = db.createObjectStore('archived_quick_captures', { keyPath: 'id' });
+            archStore.createIndex('date', 'date', { unique: false });
+            archStore.createIndex('report_type', 'report_type', { unique: false });
+            archStore.createIndex('archived_at', 'archived_at', { unique: false });
+            archStore.createIndex('archived_by', 'archived_by', { unique: false });
         }
     },
 
