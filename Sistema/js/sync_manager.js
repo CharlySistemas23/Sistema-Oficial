@@ -329,6 +329,14 @@ const SyncManager = {
         let successCount = 0;
         let errorCount = 0;
 
+        // Verificar si el usuario actual es master_admin
+        const isMasterAdmin = typeof UserManager !== 'undefined' && (
+            UserManager.currentUser?.role === 'master_admin' ||
+            UserManager.currentUser?.is_master_admin ||
+            UserManager.currentUser?.isMasterAdmin ||
+            UserManager.currentEmployee?.role === 'master_admin'
+        );
+
         for (const item of toSync) {
             try {
                 // Verificar que API esté disponible antes de procesar cada item (token opcional)
@@ -337,6 +345,14 @@ const SyncManager = {
                     console.error(`   API definido: ${typeof API !== 'undefined'}`);
                     console.error(`   API.baseURL: ${typeof API !== 'undefined' ? API.baseURL : 'undefined'}`);
                     break; // Salir del loop si API no está disponible
+                }
+                
+                // Verificar permisos para entidades que requieren master_admin
+                if ((item.type === 'branch' || item.type === 'catalog_branch' || item.type === 'employee') && !isMasterAdmin) {
+                    console.warn(`⚠️  Omitiendo sincronización de ${item.type} - Se requiere rol de administrador maestro`);
+                    console.warn(`   Usuario actual no es master_admin, eliminando de cola: ${item.entity_id}`);
+                    await DB.delete('sync_queue', item.id);
+                    continue; // Omitir este item y continuar con el siguiente
                 }
                 
                 // Log detallado para debugging
@@ -984,7 +1000,17 @@ const SyncManager = {
                                     }
                                     
                                     console.error('Error sincronizando empleado:', error);
-                                    throw error; // Re-lanzar para que se maneje el error normalmente
+                                    // Si el error es de permisos (403), eliminar de la cola
+                                    if (error.message && (
+                                        error.message.includes('Acceso denegado') ||
+                                        error.message.includes('se requiere rol de administrador maestro') ||
+                                        error.message.includes('403')
+                                    )) {
+                                        console.warn(`⚠️  Empleado ${entityData.name || item.entity_id} no se puede sincronizar: Se requiere rol de administrador maestro`);
+                                        await DB.delete('sync_queue', item.id);
+                                    } else {
+                                        throw error; // Re-lanzar para que se maneje el error normalmente
+                                    }
                                 }
                             } else {
                                 // Si el empleado no existe localmente y no es eliminación, eliminar de la cola
@@ -1212,6 +1238,14 @@ const SyncManager = {
                                     // Si el error es "Código requerido", marcar como error pero no reintentar infinitamente
                                     if (error.message && error.message.includes('Código requerido')) {
                                         console.warn(`⚠️  Sucursal ${entityData.name || item.entity_id} sin código, eliminando de cola de sincronización`);
+                                        await DB.delete('sync_queue', item.id);
+                                    } else if (error.message && (
+                                        error.message.includes('Acceso denegado') ||
+                                        error.message.includes('se requiere rol de administrador maestro') ||
+                                        error.message.includes('403')
+                                    )) {
+                                        // Si el error es de permisos, eliminar de la cola (no es master_admin)
+                                        console.warn(`⚠️  Sucursal ${entityData.name || item.entity_id} no se puede sincronizar: Se requiere rol de administrador maestro`);
                                         await DB.delete('sync_queue', item.id);
                                     } else {
                                         throw error;
