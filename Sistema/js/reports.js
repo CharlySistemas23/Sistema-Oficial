@@ -5140,6 +5140,18 @@ const Reports = {
                     </div>
                 </div>
             </div>
+
+            <!-- Sección de Utilidades del Día -->
+            <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light); margin-top: var(--spacing-lg);">
+                <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+                    <i class="fas fa-chart-line"></i> Utilidades del Día
+                </h3>
+                <div id="quick-capture-profits">
+                    <div style="text-align: center; padding: var(--spacing-lg); color: var(--color-text-secondary);">
+                        <i class="fas fa-spinner fa-spin"></i> Calculando utilidades...
+                    </div>
+                </div>
+            </div>
         `;
     },
 
@@ -5459,9 +5471,10 @@ const Reports = {
 
             listContainer.innerHTML = html;
             
-            // Cargar llegadas y comisiones
+            // Cargar llegadas, comisiones y utilidades
             await this.loadQuickCaptureArrivals();
             await this.loadQuickCaptureCommissions(captures);
+            await this.loadQuickCaptureProfits(captures);
         } catch (error) {
             console.error('Error cargando capturas rápidas:', error);
             const listContainer = document.getElementById('quick-capture-list');
@@ -5541,6 +5554,285 @@ const Reports = {
         } catch (error) {
             console.error('Error cargando llegadas:', error);
             const container = document.getElementById('quick-capture-arrivals');
+            if (container) {
+                container.innerHTML = `
+                    <div style="padding: var(--spacing-sm); background: var(--color-danger); color: white; border-radius: var(--radius-sm); font-size: 12px;">
+                        Error: ${error.message}
+                    </div>
+                `;
+            }
+        }
+    },
+
+    async loadQuickCaptureProfits(captures) {
+        try {
+            const container = document.getElementById('quick-capture-profits');
+            if (!container) return;
+
+            if (!captures || captures.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; padding: var(--spacing-md); color: var(--color-text-secondary);">
+                        <i class="fas fa-inbox" style="font-size: 32px; opacity: 0.3; margin-bottom: var(--spacing-sm);"></i>
+                        <p>No hay capturas para calcular utilidades</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const today = new Date().toISOString().split('T')[0];
+            
+            // 1. Obtener tipo de cambio del día
+            const exchangeRates = await DB.query('exchange_rates_daily', 'date', today) || [];
+            const todayRate = exchangeRates[0] || { usd_to_mxn: 20.0, cad_to_mxn: 15.0 };
+            const usdRate = todayRate.usd_to_mxn || 20.0;
+            const cadRate = todayRate.cad_to_mxn || 15.0;
+
+            // 2. Calcular totales de ventas por moneda
+            const totals = { USD: 0, MXN: 0, CAD: 0 };
+            captures.forEach(c => {
+                totals[c.currency] = (totals[c.currency] || 0) + c.total;
+            });
+
+            // 3. Convertir totales a MXN
+            const totalSalesMXN = totals.USD * usdRate + totals.MXN + totals.CAD * cadRate;
+
+            // 4. Calcular comisiones totales (vendedores + guías)
+            const commissionRules = await DB.getAll('commission_rules') || [];
+            let totalCommissions = 0;
+            for (const capture of captures) {
+                if (capture.seller_id && capture.total > 0) {
+                    const sellerRule = commissionRules.find(r => 
+                        r.entity_type === 'seller' && r.entity_id === capture.seller_id
+                    ) || commissionRules.find(r => 
+                        r.entity_type === 'seller' && r.entity_id === null
+                    );
+                    if (sellerRule) {
+                        const discountPct = sellerRule.discount_pct || 0;
+                        const multiplier = sellerRule.multiplier || 1;
+                        const afterDiscount = capture.total * (1 - (discountPct / 100));
+                        const commission = afterDiscount * (multiplier / 100);
+                        totalCommissions += commission;
+                    }
+                }
+                if (capture.guide_id && capture.total > 0) {
+                    const guideRule = commissionRules.find(r => 
+                        r.entity_type === 'guide' && r.entity_id === capture.guide_id
+                    ) || commissionRules.find(r => 
+                        r.entity_type === 'guide' && r.entity_id === null
+                    );
+                    if (guideRule) {
+                        const discountPct = guideRule.discount_pct || 0;
+                        const multiplier = guideRule.multiplier || 1;
+                        const afterDiscount = capture.total * (1 - (discountPct / 100));
+                        const commission = afterDiscount * (multiplier / 100);
+                        totalCommissions += commission;
+                    }
+                }
+            }
+
+            // 5. COGS: Intentar obtener costos de productos
+            let totalCOGS = 0;
+            try {
+                const inventoryItems = await DB.getAll('inventory_items') || [];
+                for (const capture of captures) {
+                    const item = inventoryItems.find(i => 
+                        i.name && capture.product && 
+                        i.name.toLowerCase().includes(capture.product.toLowerCase())
+                    );
+                    if (item && item.cost) {
+                        totalCOGS += (item.cost || 0) * (capture.quantity || 1);
+                    }
+                }
+            } catch (e) {
+                console.warn('No se pudieron obtener costos de productos:', e);
+            }
+
+            // 6. Costos de llegadas del día
+            const arrivals = await DB.getAll('agency_arrivals') || [];
+            const todayArrivals = arrivals.filter(a => a.date === today);
+            const totalArrivalCosts = todayArrivals
+                .filter(a => a.passengers > 0 && a.units > 0)
+                .reduce((sum, a) => sum + (a.arrival_fee || a.calculated_fee || 0), 0);
+
+            // 7. Costos operativos del día (prorrateados)
+            let totalOperatingCosts = 0;
+            let bankCommissions = 0;
+            try {
+                const allCosts = await DB.getAll('cost_entries') || [];
+                const targetDate = new Date(today);
+                const branchIds = [...new Set(captures.map(c => c.branch_id).filter(Boolean))];
+                
+                for (const branchId of branchIds.length > 0 ? branchIds : [null]) {
+                    const branchCosts = allCosts.filter(c => 
+                        branchId === null || c.branch_id === branchId || !c.branch_id
+                    );
+
+                    // Costos mensuales prorrateados
+                    const monthlyCosts = branchCosts.filter(c => {
+                        const costDate = new Date(c.date || c.created_at);
+                        return c.period_type === 'monthly' && 
+                               c.recurring === true &&
+                               costDate.getMonth() === targetDate.getMonth() &&
+                               costDate.getFullYear() === targetDate.getFullYear();
+                    });
+                    for (const cost of monthlyCosts) {
+                        const costDate = new Date(cost.date || cost.created_at);
+                        const daysInMonth = new Date(costDate.getFullYear(), costDate.getMonth() + 1, 0).getDate();
+                        totalOperatingCosts += (cost.amount || 0) / daysInMonth;
+                    }
+
+                    // Costos semanales prorrateados
+                    const weeklyCosts = branchCosts.filter(c => {
+                        const costDate = new Date(c.date || c.created_at);
+                        const targetWeek = this.getWeekNumber(targetDate);
+                        const costWeek = this.getWeekNumber(costDate);
+                        return c.period_type === 'weekly' && 
+                               c.recurring === true &&
+                               targetWeek === costWeek &&
+                               targetDate.getFullYear() === costDate.getFullYear();
+                    });
+                    for (const cost of weeklyCosts) {
+                        totalOperatingCosts += (cost.amount || 0) / 7;
+                    }
+
+                    // Costos anuales prorrateados
+                    const annualCosts = branchCosts.filter(c => {
+                        const costDate = new Date(c.date || c.created_at);
+                        return c.period_type === 'annual' && 
+                               c.recurring === true &&
+                               costDate.getFullYear() === targetDate.getFullYear();
+                    });
+                    for (const cost of annualCosts) {
+                        const daysInYear = ((targetDate.getFullYear() % 4 === 0 && targetDate.getFullYear() % 100 !== 0) || (targetDate.getFullYear() % 400 === 0)) ? 366 : 365;
+                        totalOperatingCosts += (cost.amount || 0) / daysInYear;
+                    }
+
+                    // Costos variables/diarios del día específico
+                    const variableCosts = branchCosts.filter(c => {
+                        const costDate = c.date || c.created_at;
+                        const costDateStr = costDate.split('T')[0];
+                        return costDateStr === today &&
+                               (c.period_type === 'one_time' || c.period_type === 'daily' || !c.period_type);
+                    });
+                    for (const cost of variableCosts) {
+                        if (cost.category === 'comisiones_bancarias') {
+                            bankCommissions += (cost.amount || 0);
+                        } else {
+                            totalOperatingCosts += (cost.amount || 0);
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn('No se pudieron obtener costos operativos:', e);
+            }
+
+            // 8. Calcular utilidades
+            const grossProfit = totalSalesMXN - totalCOGS - totalCommissions;
+            const netProfit = grossProfit - totalArrivalCosts - totalOperatingCosts - bankCommissions;
+            const grossMargin = totalSalesMXN > 0 ? (grossProfit / totalSalesMXN * 100) : 0;
+            const netMargin = totalSalesMXN > 0 ? (netProfit / totalSalesMXN * 100) : 0;
+
+            // 9. Renderizar HTML
+            const profitColor = netProfit >= 0 ? 'var(--color-success)' : 'var(--color-danger)';
+            const marginColor = netMargin >= 0 ? 'var(--color-success)' : 'var(--color-danger)';
+
+            let html = `
+                <div style="display: grid; gap: var(--spacing-md);">
+                    <!-- Resumen de Ingresos -->
+                    <div style="padding: var(--spacing-md); background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: var(--radius-md); color: white;">
+                        <h4 style="margin: 0 0 var(--spacing-sm) 0; font-size: 12px; text-transform: uppercase; opacity: 0.9;">Ingresos del Día</h4>
+                        <div style="font-size: 28px; font-weight: 700; margin-bottom: var(--spacing-xs);">$${totalSalesMXN.toFixed(2)} MXN</div>
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--spacing-sm); font-size: 11px; opacity: 0.9; margin-top: var(--spacing-sm);">
+                            <div>USD: $${totals.USD.toFixed(2)} (x${usdRate.toFixed(2)})</div>
+                            <div>MXN: $${totals.MXN.toFixed(2)}</div>
+                            <div>CAD: $${totals.CAD.toFixed(2)} (x${cadRate.toFixed(2)})</div>
+                        </div>
+                    </div>
+
+                    <!-- Gastos Brutos -->
+                    <div style="padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md); border-left: 4px solid var(--color-warning);">
+                        <h4 style="margin: 0 0 var(--spacing-sm) 0; font-size: 12px; font-weight: 600; text-transform: uppercase; color: var(--color-text-primary);">
+                            <i class="fas fa-minus-circle"></i> Gastos Brutos
+                        </h4>
+                        <div style="display: grid; gap: var(--spacing-xs); font-size: 12px;">
+                            <div style="display: flex; justify-content: space-between;">
+                                <span style="color: var(--color-text-secondary);">Costo Mercancía (COGS):</span>
+                                <span style="font-weight: 600;">$${totalCOGS.toFixed(2)}</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between;">
+                                <span style="color: var(--color-text-secondary);">Comisiones (Vendedores + Guías):</span>
+                                <span style="font-weight: 600;">$${totalCommissions.toFixed(2)}</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; margin-top: var(--spacing-xs); padding-top: var(--spacing-xs); border-top: 1px solid var(--color-border-light);">
+                                <span style="font-weight: 600;">Total Gastos Brutos:</span>
+                                <span style="font-weight: 700; font-size: 14px;">$${(totalCOGS + totalCommissions).toFixed(2)}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Utilidad Bruta -->
+                    <div style="padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md); border-left: 4px solid var(--color-success);">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <h4 style="margin: 0 0 var(--spacing-xs) 0; font-size: 12px; font-weight: 600; text-transform: uppercase; color: var(--color-text-primary);">
+                                    <i class="fas fa-chart-line"></i> Utilidad Bruta
+                                </h4>
+                                <div style="font-size: 11px; color: var(--color-text-secondary);">Ventas - Gastos Brutos</div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="font-size: 24px; font-weight: 700; color: var(--color-success);">$${grossProfit.toFixed(2)}</div>
+                                <div style="font-size: 12px; color: var(--color-text-secondary);">${grossMargin.toFixed(2)}%</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Gastos Operativos -->
+                    <div style="padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md); border-left: 4px solid var(--color-info);">
+                        <h4 style="margin: 0 0 var(--spacing-sm) 0; font-size: 12px; font-weight: 600; text-transform: uppercase; color: var(--color-text-primary);">
+                            <i class="fas fa-minus-circle"></i> Gastos Operativos del Día
+                        </h4>
+                        <div style="display: grid; gap: var(--spacing-xs); font-size: 12px;">
+                            <div style="display: flex; justify-content: space-between;">
+                                <span style="color: var(--color-text-secondary);">Costos de Llegadas:</span>
+                                <span style="font-weight: 600;">$${totalArrivalCosts.toFixed(2)}</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between;">
+                                <span style="color: var(--color-text-secondary);">Costos Operativos (Prorrateados):</span>
+                                <span style="font-weight: 600;">$${totalOperatingCosts.toFixed(2)}</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between;">
+                                <span style="color: var(--color-text-secondary);">Comisiones Bancarias:</span>
+                                <span style="font-weight: 600;">$${bankCommissions.toFixed(2)}</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; margin-top: var(--spacing-xs); padding-top: var(--spacing-xs); border-top: 1px solid var(--color-border-light);">
+                                <span style="font-weight: 600;">Total Gastos Operativos:</span>
+                                <span style="font-weight: 700; font-size: 14px;">$${(totalArrivalCosts + totalOperatingCosts + bankCommissions).toFixed(2)}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Utilidad Neta (GANANCIA O PÉRDIDA DEL DÍA) -->
+                    <div style="padding: var(--spacing-md); background: linear-gradient(135deg, ${netProfit >= 0 ? '#11998e 0%, #38ef7d 100%' : '#ee0979 0%, #ff6a00 100%'}); border-radius: var(--radius-md); color: white;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <h4 style="margin: 0 0 var(--spacing-xs) 0; font-size: 12px; text-transform: uppercase; opacity: 0.9;">
+                                    <i class="fas fa-${netProfit >= 0 ? 'arrow-up' : 'arrow-down'}"></i> ${netProfit >= 0 ? 'GANANCIA' : 'PÉRDIDA'} DEL DÍA
+                                </h4>
+                                <div style="font-size: 11px; opacity: 0.8;">Utilidad Bruta - Gastos Operativos</div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="font-size: 32px; font-weight: 700;">$${Math.abs(netProfit).toFixed(2)}</div>
+                                <div style="font-size: 14px; opacity: 0.9;">Margen: ${netMargin.toFixed(2)}%</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            container.innerHTML = html;
+        } catch (error) {
+            console.error('Error calculando utilidades:', error);
+            const container = document.getElementById('quick-capture-profits');
             if (container) {
                 container.innerHTML = `
                     <div style="padding: var(--spacing-sm); background: var(--color-danger); color: white; border-radius: var(--radius-sm); font-size: 12px;">
