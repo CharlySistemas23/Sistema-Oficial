@@ -6955,12 +6955,28 @@ const Reports = {
             y += 5;
 
             // ========== COMISIONES ==========
-            // Calcular comisiones
+            // Obtener tipo de cambio del día PRIMERO (para convertir comisiones a MXN)
+            const exchangeRates = await DB.query('exchange_rates_daily', 'date', today) || [];
+            const todayRate = exchangeRates[0] || { usd_to_mxn: 20.0, cad_to_mxn: 15.0 };
+            const usdRate = todayRate.usd_to_mxn || 20.0;
+            const cadRate = todayRate.cad_to_mxn || 15.0;
+
+            // Calcular comisiones (convertir cada captura a MXN antes de calcular comisiones)
             const sellerCommissions = {};
             const guideCommissions = {};
 
             for (const capture of captures) {
-                if (capture.seller_id && capture.total > 0) {
+                // Convertir total de captura a MXN
+                let captureTotalMXN = 0;
+                if (capture.currency === 'USD') {
+                    captureTotalMXN = capture.total * usdRate;
+                } else if (capture.currency === 'CAD') {
+                    captureTotalMXN = capture.total * cadRate;
+                } else {
+                    captureTotalMXN = capture.total; // Ya está en MXN
+                }
+
+                if (capture.seller_id && captureTotalMXN > 0) {
                     if (!sellerCommissions[capture.seller_id]) {
                         sellerCommissions[capture.seller_id] = {
                             seller: sellers.find(s => s.id === capture.seller_id),
@@ -6976,17 +6992,26 @@ const Reports = {
                     if (sellerRule) {
                         const discountPct = sellerRule.discount_pct || 0;
                         const multiplier = sellerRule.multiplier || 1;
-                        const afterDiscount = capture.total * (1 - (discountPct / 100));
+                        // Calcular comisión sobre el total convertido a MXN
+                        const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
                         const commission = afterDiscount * (multiplier / 100);
                         sellerCommissions[capture.seller_id].total += commission;
+                        // Mantener comisión en moneda original también para mostrar en PDF
                         if (!sellerCommissions[capture.seller_id].commissions[capture.currency]) {
                             sellerCommissions[capture.seller_id].commissions[capture.currency] = 0;
                         }
-                        sellerCommissions[capture.seller_id].commissions[capture.currency] += commission;
+                        // Convertir comisión a moneda original para mostrar
+                        if (capture.currency === 'USD') {
+                            sellerCommissions[capture.seller_id].commissions[capture.currency] += commission / usdRate;
+                        } else if (capture.currency === 'CAD') {
+                            sellerCommissions[capture.seller_id].commissions[capture.currency] += commission / cadRate;
+                        } else {
+                            sellerCommissions[capture.seller_id].commissions[capture.currency] += commission;
+                        }
                     }
                 }
 
-                if (capture.guide_id && capture.total > 0) {
+                if (capture.guide_id && captureTotalMXN > 0) {
                     if (!guideCommissions[capture.guide_id]) {
                         guideCommissions[capture.guide_id] = {
                             guide: guides.find(g => g.id === capture.guide_id),
@@ -7002,13 +7027,22 @@ const Reports = {
                     if (guideRule) {
                         const discountPct = guideRule.discount_pct || 0;
                         const multiplier = guideRule.multiplier || 1;
-                        const afterDiscount = capture.total * (1 - (discountPct / 100));
+                        // Calcular comisión sobre el total convertido a MXN
+                        const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
                         const commission = afterDiscount * (multiplier / 100);
                         guideCommissions[capture.guide_id].total += commission;
+                        // Mantener comisión en moneda original también para mostrar en PDF
                         if (!guideCommissions[capture.guide_id].commissions[capture.currency]) {
                             guideCommissions[capture.guide_id].commissions[capture.currency] = 0;
                         }
-                        guideCommissions[capture.guide_id].commissions[capture.currency] += commission;
+                        // Convertir comisión a moneda original para mostrar
+                        if (capture.currency === 'USD') {
+                            guideCommissions[capture.guide_id].commissions[capture.currency] += commission / usdRate;
+                        } else if (capture.currency === 'CAD') {
+                            guideCommissions[capture.guide_id].commissions[capture.currency] += commission / cadRate;
+                        } else {
+                            guideCommissions[capture.guide_id].commissions[capture.currency] += commission;
+                        }
                     }
                 }
             }
@@ -7136,16 +7170,11 @@ const Reports = {
             }
 
             // ========== UTILIDADES (MARGEN BRUTO Y NETO) ==========
-            // Obtener tipo de cambio del día
-            const exchangeRates = await DB.query('exchange_rates_daily', 'date', today) || [];
-            const todayRate = exchangeRates[0] || { usd_to_mxn: 20.0, cad_to_mxn: 15.0 };
-            const usdRate = todayRate.usd_to_mxn || 20.0;
-            const cadRate = todayRate.cad_to_mxn || 15.0;
-
+            // El tipo de cambio ya se obtuvo arriba, reutilizarlo
             // Convertir totales a MXN
             const totalSalesMXN = totals.USD * usdRate + totals.MXN + totals.CAD * cadRate;
 
-            // Calcular comisiones totales (ya están en MXN según el cálculo)
+            // Calcular comisiones totales (ya están en MXN según el cálculo anterior)
             const totalCommissions = (sellerEntries.reduce((sum, s) => sum + s.total, 0) || 0) + 
                                    (guideEntries.reduce((sum, g) => sum + g.total, 0) || 0);
 
@@ -7249,18 +7278,47 @@ const Reports = {
                         }
                     }
                 }
+                
+                // Calcular comisiones bancarias de las ventas capturadas si aplica
+                // Buscar configuración de comisiones bancarias por método de pago
+                for (const capture of captures) {
+                    // Si la captura tiene método de pago que genera comisión (tarjeta), calcular comisión bancaria
+                    // Por ahora, asumimos que todas las ventas con tarjeta generan comisión bancaria
+                    // Necesitaríamos agregar un campo de método de pago en las capturas rápidas
+                    // Por ahora, verificar en settings si hay una comisión bancaria configurada por defecto
+                    if (capture.payment_method && capture.payment_method !== 'cash') {
+                        // Calcular comisión bancaria sobre el total convertido a MXN
+                        let captureTotalMXN = 0;
+                        if (capture.currency === 'USD') {
+                            captureTotalMXN = capture.total * usdRate;
+                        } else if (capture.currency === 'CAD') {
+                            captureTotalMXN = capture.total * cadRate;
+                        } else {
+                            captureTotalMXN = capture.total;
+                        }
+                        
+                        // Buscar configuración de comisión bancaria
+                        const bankCommissionSetting = await DB.get('settings', 'bank_commission_default_rate');
+                        const bankCommissionRate = bankCommissionSetting?.value ? parseFloat(bankCommissionSetting.value) : 0;
+                        if (bankCommissionRate > 0) {
+                            bankCommissions += (captureTotalMXN * bankCommissionRate) / 100;
+                        }
+                    }
+                }
             } catch (e) {
                 console.warn('No se pudieron obtener costos operativos:', e);
             }
 
             // Calcular utilidades
-            const grossProfit = totalSalesMXN - totalCOGS - totalCommissions;
-            const netProfit = grossProfit - totalArrivalCosts - totalOperatingCosts - bankCommissions;
+            // Utilidad Bruta = Ingresos - COGS - Comisiones - Costos de Llegadas
+            const grossProfit = totalSalesMXN - totalCOGS - totalCommissions - totalArrivalCosts;
+            // Utilidad Neta = Utilidad Bruta - Costos Operativos - Comisiones Bancarias
+            const netProfit = grossProfit - totalOperatingCosts - bankCommissions;
             const grossMargin = totalSalesMXN > 0 ? (grossProfit / totalSalesMXN * 100) : 0;
             const netMargin = totalSalesMXN > 0 ? (netProfit / totalSalesMXN * 100) : 0;
 
             // Mostrar sección de utilidades
-            if (y + 40 > pageHeight - 30) {
+            if (y + 50 > pageHeight - 30) {
                 doc.addPage();
                 y = margin;
             }
@@ -7271,9 +7329,9 @@ const Reports = {
             y += 10;
 
             doc.setFillColor(240, 255, 240);
-            doc.rect(margin, y, pageWidth - (margin * 2), 35, 'F');
+            doc.rect(margin, y, pageWidth - (margin * 2), 50, 'F');
             doc.setDrawColor(200, 200, 200);
-            doc.rect(margin, y, pageWidth - (margin * 2), 35);
+            doc.rect(margin, y, pageWidth - (margin * 2), 50);
 
             doc.setFontSize(10);
             doc.setFont('helvetica', 'bold');
@@ -7288,33 +7346,34 @@ const Reports = {
             doc.setFontSize(10);
             doc.setFont('helvetica', 'normal');
             doc.text('(-) Costo Mercancía (COGS):', margin + 5, y + 13);
-            doc.text(`$${totalCOGS.toFixed(2)}`, margin + 80, y + 13);
+            doc.text(`$${totalCOGS.toFixed(2)}`, margin + 75, y + 13);
 
-            doc.text('(-) Comisiones:', margin + 5, y + 19);
-            doc.text(`$${totalCommissions.toFixed(2)}`, margin + 50, y + 19);
+            doc.text('(-) Comisiones (Vendedores + Guías):', margin + 5, y + 19);
+            doc.text(`$${totalCommissions.toFixed(2)}`, margin + 85, y + 19);
+
+            doc.text('(-) Costos Llegadas:', margin + 5, y + 25);
+            doc.text(`$${totalArrivalCosts.toFixed(2)}`, margin + 60, y + 25);
 
             doc.setFont('helvetica', 'bold');
             doc.setTextColor(0, 128, 0);
-            doc.text('= Utilidad Bruta:', margin + 5, y + 25);
-            doc.text(`$${grossProfit.toFixed(2)}`, margin + 55, y + 25);
-            doc.text(`(${grossMargin.toFixed(2)}%)`, margin + 100, y + 25);
+            doc.text('= Utilidad Bruta:', margin + 5, y + 31);
+            doc.text(`$${grossProfit.toFixed(2)}`, margin + 55, y + 31);
+            doc.text(`(${grossMargin.toFixed(2)}%)`, margin + 105, y + 31);
 
             doc.setFontSize(9);
             doc.setFont('helvetica', 'normal');
             doc.setTextColor(0, 0, 0);
-            doc.text('(-) Costos Llegadas:', margin + 5, y + 31);
-            doc.text(`$${totalArrivalCosts.toFixed(2)}`, margin + 55, y + 31);
-            doc.text('(-) Costos Operativos:', margin + 100, y + 31);
-            doc.text(`$${totalOperatingCosts.toFixed(2)}`, margin + 155, y + 31);
-            doc.text('(-) Comisiones Bancarias:', margin + 5, y + 37);
-            doc.text(`$${bankCommissions.toFixed(2)}`, margin + 65, y + 37);
+            doc.text('(-) Costos Operativos:', margin + 5, y + 37);
+            doc.text(`$${totalOperatingCosts.toFixed(2)}`, margin + 65, y + 37);
+            doc.text('(-) Comisiones Bancarias:', margin + 125, y + 37);
+            doc.text(`$${bankCommissions.toFixed(2)}`, margin + 190, y + 37);
 
             doc.setFontSize(10);
             doc.setFont('helvetica', 'bold');
             doc.setTextColor(0, 0, 255);
             doc.text('= Utilidad Neta:', margin + 5, y + 43);
-            doc.text(`$${netProfit.toFixed(2)}`, margin + 50, y + 43);
-            doc.text(`(${netMargin.toFixed(2)}%)`, margin + 95, y + 43);
+            doc.text(`$${netProfit.toFixed(2)}`, margin + 60, y + 43);
+            doc.text(`(${netMargin.toFixed(2)}%)`, margin + 110, y + 43);
 
             doc.setTextColor(0, 0, 0);
             y += 50;
