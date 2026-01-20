@@ -2621,10 +2621,13 @@ const Reports = {
             // Calcular total desde cost_entries
             const totalFromCosts = arrivalCostEntries.reduce((sum, c) => sum + (c.amount || 0), 0);
             
-            // Si hay costos registrados, retornar ese valor (fuente autorizada)
-            if (totalFromCosts > 0 || arrivalCostEntries.length > 0) {
+            // Si hay costos registrados (incluso si el total es 0 pero hay registros), retornar ese valor (fuente autorizada)
+            if (arrivalCostEntries.length > 0) {
+                console.log(`✅ Costos de llegadas encontrados en cost_entries: ${arrivalCostEntries.length} registros, total: $${totalFromCosts.toFixed(2)}`);
                 return totalFromCosts;
             }
+            
+            console.warn(`⚠️ No se encontraron costos de llegadas en cost_entries para ${dateStr}, branchId: ${branchId || 'null'}, branchIds: [${branchIds.join(', ')}]`);
             
             // 2. FALLBACK: Si no hay costos registrados, calcular desde agency_arrivals
             // (Por si acaso no se registraron automáticamente)
@@ -2657,6 +2660,7 @@ const Reports = {
             
             // Si encontramos llegadas sin costo registrado, registrar automáticamente
             if (totalFromArrivals > 0 && totalFromCosts === 0 && typeof Costs !== 'undefined') {
+                console.log(`📝 Registrando automáticamente ${dayArrivals.length} costos de llegadas desde agency_arrivals...`);
                 for (const arrival of dayArrivals) {
                     if (arrival.arrival_fee > 0 || arrival.calculated_fee > 0) {
                         const fee = arrival.calculated_fee || arrival.arrival_fee || 0;
@@ -2670,14 +2674,33 @@ const Reports = {
                                     arrival.passengers,
                                     arrival.date // Pasar la fecha de la llegada
                                 );
+                                console.log(`✅ Costo de llegada registrado: $${fee.toFixed(2)} para llegada ${arrival.id}`);
                             } catch (e) {
                                 console.warn('Error registrando costo de llegada automáticamente:', e);
                             }
                         }
                     }
                 }
+                // Después de registrar, recalcular desde cost_entries
+                const updatedCosts = await DB.getAll('cost_entries') || [];
+                const updatedArrivalCosts = updatedCosts.filter(c => {
+                    const costDate = c.date || c.created_at;
+                    const costDateStr = typeof costDate === 'string' ? costDate.split('T')[0] : new Date(costDate).toISOString().split('T')[0];
+                    if (c.category !== 'pago_llegadas' || costDateStr !== dateStr) return false;
+                    if (branchId !== null) {
+                        return c.branch_id === branchId || !c.branch_id;
+                    } else if (branchIds.length > 0) {
+                        return !c.branch_id || branchIds.includes(c.branch_id);
+                    } else {
+                        return true;
+                    }
+                });
+                const updatedTotal = updatedArrivalCosts.reduce((sum, c) => sum + (c.amount || 0), 0);
+                console.log(`✅ Total de costos de llegadas después de registro automático: $${updatedTotal.toFixed(2)}`);
+                return updatedTotal;
             }
             
+            console.log(`📊 Total de costos de llegadas desde agency_arrivals: $${totalFromArrivals.toFixed(2)}`);
             return totalFromArrivals;
         } catch (error) {
             console.error('Error calculando costos de llegadas:', error);
@@ -5896,10 +5919,13 @@ const Reports = {
                     );
 
                     // Costos mensuales prorrateados
+                    // EXCLUIR: pago_llegadas y comisiones_bancarias (ya se calculan por separado)
                     const monthlyCosts = branchCosts.filter(c => {
                         const costDate = new Date(c.date || c.created_at);
                         return c.period_type === 'monthly' && 
                                c.recurring === true &&
+                               c.category !== 'pago_llegadas' && // Excluir llegadas
+                               c.category !== 'comisiones_bancarias' && // Excluir comisiones bancarias
                                costDate.getMonth() === targetDate.getMonth() &&
                                costDate.getFullYear() === targetDate.getFullYear();
                     });
@@ -5910,12 +5936,15 @@ const Reports = {
                     }
 
                     // Costos semanales prorrateados
+                    // EXCLUIR: pago_llegadas y comisiones_bancarias (ya se calculan por separado)
                     const weeklyCosts = branchCosts.filter(c => {
                         const costDate = new Date(c.date || c.created_at);
                         const targetWeek = this.getWeekNumber(targetDate);
                         const costWeek = this.getWeekNumber(costDate);
                         return c.period_type === 'weekly' && 
                                c.recurring === true &&
+                               c.category !== 'pago_llegadas' && // Excluir llegadas
+                               c.category !== 'comisiones_bancarias' && // Excluir comisiones bancarias
                                targetWeek === costWeek &&
                                targetDate.getFullYear() === costDate.getFullYear();
                     });
@@ -5924,10 +5953,13 @@ const Reports = {
                     }
 
                     // Costos anuales prorrateados
+                    // EXCLUIR: pago_llegadas y comisiones_bancarias (ya se calculan por separado)
                     const annualCosts = branchCosts.filter(c => {
                         const costDate = new Date(c.date || c.created_at);
                         return c.period_type === 'annual' && 
                                c.recurring === true &&
+                               c.category !== 'pago_llegadas' && // Excluir llegadas
+                               c.category !== 'comisiones_bancarias' && // Excluir comisiones bancarias
                                costDate.getFullYear() === targetDate.getFullYear();
                     });
                     for (const cost of annualCosts) {
@@ -5936,13 +5968,17 @@ const Reports = {
                     }
 
                     // Costos variables/diarios del día específico
+                    // EXCLUIR: pago_llegadas y comisiones_bancarias (ya se calculan por separado)
                     const variableCosts = branchCosts.filter(c => {
                         const costDate = c.date || c.created_at;
                         const costDateStr = costDate.split('T')[0];
                         return costDateStr === today &&
+                               c.category !== 'pago_llegadas' && // Excluir llegadas
+                               c.category !== 'comisiones_bancarias' && // Excluir comisiones bancarias
                                (c.period_type === 'one_time' || c.period_type === 'daily' || !c.period_type);
                     });
                     for (const cost of variableCosts) {
+                        // Las comisiones bancarias ya están excluidas en el filtro, pero por seguridad:
                         if (cost.category === 'comisiones_bancarias') {
                             bankCommissions += (cost.amount || 0);
                         } else {
