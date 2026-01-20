@@ -7572,13 +7572,15 @@ const Reports = {
                         (c.branch_id === branchId || !c.branch_id) // Incluir costos globales también
                     );
 
-                    // Costos mensuales prorrateados
+                    // Costos mensuales prorrateados (excluir pago_llegadas y comisiones_bancarias)
                     const monthlyCosts = branchCosts.filter(c => {
                         const costDate = new Date(c.date || c.created_at);
                         return c.period_type === 'monthly' && 
                                c.recurring === true &&
                                costDate.getMonth() === targetDate.getMonth() &&
-                               costDate.getFullYear() === targetDate.getFullYear();
+                               costDate.getFullYear() === targetDate.getFullYear() &&
+                               c.category !== 'pago_llegadas' && // Excluir llegadas
+                               c.category !== 'comisiones_bancarias'; // Excluir comisiones bancarias
                     });
                     for (const cost of monthlyCosts) {
                         const costDate = new Date(cost.date || cost.created_at);
@@ -7586,7 +7588,7 @@ const Reports = {
                         totalOperatingCosts += (cost.amount || 0) / daysInMonth;
                     }
 
-                    // Costos semanales prorrateados
+                    // Costos semanales prorrateados (excluir pago_llegadas y comisiones_bancarias)
                     const weeklyCosts = branchCosts.filter(c => {
                         const costDate = new Date(c.date || c.created_at);
                         const targetWeek = this.getWeekNumber(targetDate);
@@ -7594,40 +7596,55 @@ const Reports = {
                         return c.period_type === 'weekly' && 
                                c.recurring === true &&
                                targetWeek === costWeek &&
-                               targetDate.getFullYear() === costDate.getFullYear();
+                               targetDate.getFullYear() === costDate.getFullYear() &&
+                               c.category !== 'pago_llegadas' && // Excluir llegadas
+                               c.category !== 'comisiones_bancarias'; // Excluir comisiones bancarias
                     });
                     for (const cost of weeklyCosts) {
                         totalOperatingCosts += (cost.amount || 0) / 7;
                     }
 
-                    // Costos anuales prorrateados
+                    // Costos anuales prorrateados (excluir pago_llegadas y comisiones_bancarias)
                     const annualCosts = branchCosts.filter(c => {
                         const costDate = new Date(c.date || c.created_at);
                         return c.period_type === 'annual' && 
                                c.recurring === true &&
-                               costDate.getFullYear() === targetDate.getFullYear();
+                               costDate.getFullYear() === targetDate.getFullYear() &&
+                               c.category !== 'pago_llegadas' && // Excluir llegadas
+                               c.category !== 'comisiones_bancarias'; // Excluir comisiones bancarias
                     });
                     for (const cost of annualCosts) {
                         const daysInYear = ((targetDate.getFullYear() % 4 === 0 && targetDate.getFullYear() % 100 !== 0) || (targetDate.getFullYear() % 400 === 0)) ? 366 : 365;
                         totalOperatingCosts += (cost.amount || 0) / daysInYear;
                     }
 
-                    // Costos variables/diarios del día específico
+                    // Costos variables/diarios del día específico (incluir comisiones_bancarias para procesarlas por separado)
                     // IMPORTANTE: Usar la fecha de las capturas, no la fecha actual
                     const variableCosts = branchCosts.filter(c => {
                         const costDate = c.date || c.created_at;
                         const costDateStr = costDate.split('T')[0];
                         return costDateStr === captureDate &&
-                               c.category !== 'pago_llegadas' && // Excluir llegadas
-                               c.category !== 'comisiones_bancarias' && // Excluir comisiones bancarias
+                               c.category !== 'pago_llegadas' && // Excluir llegadas (se calculan por separado)
                                (c.period_type === 'one_time' || c.period_type === 'daily' || !c.period_type);
                     });
                     for (const cost of variableCosts) {
                         if (cost.category === 'comisiones_bancarias') {
+                            // Las comisiones bancarias se suman por separado, no son costos operativos
                             bankCommissions += (cost.amount || 0);
                         } else {
                             totalOperatingCosts += (cost.amount || 0);
                         }
+                    }
+                    
+                    // También buscar comisiones bancarias en cost_entries para el día
+                    const bankCommissionCosts = branchCosts.filter(c => {
+                        const costDate = c.date || c.created_at;
+                        const costDateStr = costDate.split('T')[0];
+                        return costDateStr === captureDate &&
+                               c.category === 'comisiones_bancarias';
+                    });
+                    for (const cost of bankCommissionCosts) {
+                        bankCommissions += (cost.amount || 0);
                     }
                 }
                 
