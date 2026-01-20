@@ -1,4 +1,5 @@
 import express from 'express';
+import { randomUUID } from 'crypto';
 import { query, getClient } from '../config/database.js';
 import { requireBranchAccess } from '../middleware/authOptional.js';
 import { body, validationResult } from 'express-validator';
@@ -68,7 +69,7 @@ router.post('/rules', requireBranchAccess, [
     } = req.body;
 
     const finalBranchId = branch_id || (req.user.isMasterAdmin ? null : req.user.branchId);
-    const ruleId = id || require('crypto').randomUUID();
+    const ruleId = id || randomUUID();
 
     // Verificar si ya existe
     const existing = await query('SELECT id FROM arrival_rate_rules WHERE id = $1', [ruleId]);
@@ -138,19 +139,24 @@ router.post('/rules', requireBranchAccess, [
     }
   } catch (error) {
     console.error('Error guardando regla de llegada:', error);
+    // Obtener valores de forma segura en caso de error
+    const safeAgencyId = req.body?.agency_id || 'no definido';
+    const safeBranchId = req.body?.branch_id || (req.user?.isMasterAdmin ? null : req.user?.branchId);
+    const safeRuleId = req.body?.id || 'no definido';
+    
     console.error('Detalles del error:', {
       message: error.message,
       stack: error.stack,
-      agency_id,
-      branch_id: finalBranchId,
-      ruleId
+      agency_id: safeAgencyId,
+      branch_id: safeBranchId,
+      ruleId: safeRuleId
     });
     
     // Si es un error de foreign key (agencia no existe), dar mensaje más específico
     if (error.message && error.message.includes('foreign key')) {
       return res.status(400).json({ 
         error: 'La agencia especificada no existe en el sistema',
-        details: `agency_id: ${agency_id} no es válido o no existe`
+        details: `agency_id: ${safeAgencyId} no es válido o no existe`
       });
     }
     
@@ -158,7 +164,7 @@ router.post('/rules', requireBranchAccess, [
     if (error.message && (error.message.includes('invalid input syntax') || error.message.includes('UUID'))) {
       return res.status(400).json({ 
         error: 'El ID de agencia o sucursal no tiene el formato correcto (debe ser UUID)',
-        details: `agency_id: ${agency_id}, branch_id: ${finalBranchId}`
+        details: `agency_id: ${safeAgencyId}, branch_id: ${safeBranchId}`
       });
     }
     
