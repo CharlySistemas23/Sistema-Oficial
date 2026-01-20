@@ -880,24 +880,111 @@ const SyncManager = {
                                     if (typeof API === 'undefined') {
                                         throw new Error('API no disponible');
                                     }
-                                    // Verificar si el empleado existe en el servidor
-                                    const exists = await this.entityExists('employees', entityData.id);
-                                    if (exists) {
+
+                                    // 1. Validar branch_id antes de sincronizar
+                                    if (entityData.branch_id) {
+                                        try {
+                                            const branches = await API.getBranches();
+                                            const branchExists = branches && branches.some(b => b.id === entityData.branch_id);
+                                            if (!branchExists) {
+                                                console.warn(`⚠️ branch_id ${entityData.branch_id} no existe en servidor, estableciendo a null`);
+                                                entityData.branch_id = null;
+                                                // Actualizar en local también
+                                                await DB.put('employees', entityData);
+                                            }
+                                        } catch (branchError) {
+                                            console.warn('⚠️ Error verificando branches, continuando sin validación:', branchError);
+                                        }
+                                    }
+
+                                    // 2. Verificar si el empleado existe (por ID o por código/barcode)
+                                    let existingEmployee = null;
+                                    try {
+                                        const allEmployees = await API.getEmployees();
+                                        if (allEmployees && Array.isArray(allEmployees)) {
+                                            // Primero verificar por ID
+                                            existingEmployee = allEmployees.find(e => e.id === entityData.id);
+                                            
+                                            // Si no existe por ID, verificar por código/barcode
+                                            if (!existingEmployee && (entityData.code || entityData.barcode)) {
+                                                existingEmployee = allEmployees.find(e => 
+                                                    (entityData.code && e.code === entityData.code) || 
+                                                    (entityData.barcode && e.barcode === entityData.barcode)
+                                                );
+                                                
+                                                if (existingEmployee) {
+                                                    console.log(`ℹ️ Empleado encontrado por código/barcode (ID diferente). Actualizando existente: ${existingEmployee.id}`);
+                                                }
+                                            }
+                                        }
+                                    } catch (fetchError) {
+                                        console.warn('⚠️ Error obteniendo lista de empleados, intentando crear/actualizar directamente:', fetchError);
+                                    }
+
+                                    // 3. Crear o actualizar según corresponda
+                                    if (existingEmployee) {
+                                        // Actualizar el empleado existente
                                         if (typeof API.updateEmployee !== 'function') {
                                             throw new Error('API.updateEmployee no disponible');
                                         }
-                                        await API.updateEmployee(entityData.id, entityData);
+                                        await API.updateEmployee(existingEmployee.id, entityData);
+                                        
+                                        // Si el ID es diferente, actualizar el ID local
+                                        if (existingEmployee.id !== entityData.id) {
+                                            console.log(`🔄 Actualizando ID local de empleado: ${entityData.id} -> ${existingEmployee.id}`);
+                                            await DB.put('employees', { ...entityData, id: existingEmployee.id });
+                                            await DB.delete('employees', entityData.id);
+                                        }
                                     } else {
+                                        // Crear nuevo empleado
                                         if (typeof API.createEmployee !== 'function') {
                                             throw new Error('API.createEmployee no disponible');
                                         }
                                         await API.createEmployee(entityData);
                                     }
+                                    
                                     await DB.delete('sync_queue', item.id);
                                     successCount++;
                                 } catch (error) {
+                                    // Manejo inteligente de errores de duplicados
+                                    const errorMessage = error.message || error.toString() || '';
+                                    const isDuplicateError = errorMessage.includes('ya existe') || 
+                                                           errorMessage.includes('duplicate') ||
+                                                           (error.status === 400 && errorMessage.toLowerCase().includes('código'));
+                                    
+                                    if (isDuplicateError) {
+                                        // Intentar recuperar: buscar el empleado existente y actualizarlo
+                                        try {
+                                            console.log(`🔄 Error de duplicado detectado, intentando recuperación...`);
+                                            const allEmployees = await API.getEmployees();
+                                            if (allEmployees && Array.isArray(allEmployees)) {
+                                                const existing = allEmployees.find(e => 
+                                                    (entityData.code && e.code === entityData.code) || 
+                                                    (entityData.barcode && e.barcode === entityData.barcode)
+                                                );
+                                                
+                                                if (existing) {
+                                                    console.log(`✅ Empleado duplicado encontrado, actualizando: ${existing.id}`);
+                                                    await API.updateEmployee(existing.id, entityData);
+                                                    
+                                                    // Actualizar ID local si es diferente
+                                                    if (existing.id !== entityData.id) {
+                                                        await DB.put('employees', { ...entityData, id: existing.id });
+                                                        await DB.delete('employees', entityData.id);
+                                                    }
+                                                    
+                                                    await DB.delete('sync_queue', item.id);
+                                                    successCount++;
+                                                    continue; // Saltar al siguiente item
+                                                }
+                                            }
+                                        } catch (recoveryError) {
+                                            console.error('❌ Error en recuperación de duplicado:', recoveryError);
+                                        }
+                                    }
+                                    
                                     console.error('Error sincronizando empleado:', error);
-                                    throw error; // Re-lanzar para que se maneje el error
+                                    throw error; // Re-lanzar para que se maneje el error normalmente
                                 }
                             } else {
                                 // Si el empleado no existe localmente y no es eliminación, eliminar de la cola
@@ -929,21 +1016,115 @@ const SyncManager = {
                                     if (typeof API === 'undefined' || typeof API.post !== 'function') {
                                         throw new Error('API.post no disponible');
                                     }
-                                    // Los usuarios se crean a través del endpoint de empleados
-                                    // O se pueden crear directamente si existe el endpoint
-                                    if (entityData.employee_id) {
-                                        // Crear usuario para empleado
+                                    
+                                    if (!entityData.employee_id) {
+                                        console.warn(`⚠️ Usuario ${item.entity_id} no tiene employee_id, eliminando de cola`);
+                                        await DB.delete('sync_queue', item.id);
+                                        break;
+                                    }
+
+                                    // Verificar si el usuario ya existe antes de crear
+                                    let existingUser = null;
+                                    let employeeWithUser = null;
+                                    try {
+                                        const allEmployees = await API.getEmployees();
+                                        if (allEmployees && Array.isArray(allEmployees)) {
+                                            // Buscar el empleado asociado
+                                            employeeWithUser = allEmployees.find(e => e.id === entityData.employee_id);
+                                            
+                                            if (employeeWithUser && employeeWithUser.user_id) {
+                                                // El empleado ya tiene un usuario asociado
+                                                existingUser = { id: employeeWithUser.user_id, username: employeeWithUser.username };
+                                            } else if (entityData.username) {
+                                                // Buscar por username en todos los empleados (verificar si algún empleado tiene ese username)
+                                                const employeeWithUsername = allEmployees.find(e => 
+                                                    e.username === entityData.username || 
+                                                    (e.user && e.user.username === entityData.username)
+                                                );
+                                                if (employeeWithUsername) {
+                                                    existingUser = { 
+                                                        id: employeeWithUsername.user_id || employeeWithUsername.id,
+                                                        username: entityData.username
+                                                    };
+                                                }
+                                            }
+                                        }
+                                    } catch (fetchError) {
+                                        console.warn('⚠️ Error obteniendo lista de empleados/usuarios, intentando crear directamente:', fetchError);
+                                    }
+
+                                    // Si el usuario ya existe, intentar actualizar (si hay endpoint PUT para usuarios)
+                                    if (existingUser) {
+                                        console.log(`ℹ️ Usuario ${entityData.username} ya existe (ID: ${existingUser.id}), actualizando...`);
+                                        // Intentar actualizar el usuario existente si hay endpoint PUT
+                                        try {
+                                            if (typeof API.put === 'function') {
+                                                await API.put(`/api/users/${existingUser.id}`, {
+                                                    username: entityData.username,
+                                                    role: entityData.role || employeeWithUser?.role
+                                                });
+                                                await DB.delete('sync_queue', item.id);
+                                                successCount++;
+                                            } else {
+                                                // Si no hay endpoint PUT, considerarlo como éxito (ya existe)
+                                                console.log(`✅ Usuario ya existe en servidor, marcando como sincronizado`);
+                                                await DB.delete('sync_queue', item.id);
+                                                successCount++;
+                                            }
+                                        } catch (updateError) {
+                                            // Si falla la actualización, intentar crear (puede ser que no haya endpoint PUT)
+                                            console.warn('⚠️ Error actualizando usuario, intentando crear:', updateError);
+                                            throw updateError; // Caer al catch general para manejar como creación
+                                        }
+                                    } else {
+                                        // Crear nuevo usuario
                                         await API.post(`/api/employees/${entityData.employee_id}/user`, {
                                             username: entityData.username,
                                             password: '1234', // PIN por defecto, debería cambiarse
-                                            role: entityData.role
+                                            role: entityData.role || 'employee'
                                         });
+                                        await DB.delete('sync_queue', item.id);
+                                        successCount++;
                                     }
-                                    await DB.delete('sync_queue', item.id);
-                                    successCount++;
                                 } catch (error) {
+                                    // Manejo inteligente de errores de duplicados
+                                    const errorMessage = error.message || error.toString() || '';
+                                    const isDuplicateError = errorMessage.includes('nombre de usuario ya existe') || 
+                                                           errorMessage.includes('username already exists') ||
+                                                           errorMessage.includes('ya existe');
+                                    
+                                    if (isDuplicateError) {
+                                        // Intentar recuperar: verificar si el usuario ya existe y considerarlo como éxito
+                                        try {
+                                            console.log(`🔄 Error de usuario duplicado detectado, verificando existencia...`);
+                                            const allEmployees = await API.getEmployees();
+                                            if (allEmployees && Array.isArray(allEmployees)) {
+                                                const employee = allEmployees.find(e => e.id === entityData.employee_id);
+                                                
+                                                if (employee && employee.user_id) {
+                                                    // El usuario ya existe, marcarlo como sincronizado
+                                                    console.log(`✅ Usuario ya existe para empleado ${entityData.employee_id}, marcando como sincronizado`);
+                                                    await DB.delete('sync_queue', item.id);
+                                                    successCount++;
+                                                    continue; // Saltar al siguiente item
+                                                } else if (allEmployees.some(e => 
+                                                    (e.username === entityData.username) || 
+                                                    (e.user && e.user.username === entityData.username)
+                                                )) {
+                                                    // El username ya existe en otro empleado, marcar como sincronizado
+                                                    console.log(`✅ Usuario con username ${entityData.username} ya existe, marcando como sincronizado`);
+                                                    await DB.delete('sync_queue', item.id);
+                                                    successCount++;
+                                                    continue; // Saltar al siguiente item
+                                                }
+                                            }
+                                        } catch (recoveryError) {
+                                            console.error('❌ Error en recuperación de usuario duplicado:', recoveryError);
+                                        }
+                                    }
+                                    
                                     console.error('Error sincronizando usuario:', error);
-                                    throw error;
+                                    throw error; // Re-lanzar para que se maneje el error normalmente
                                 }
                             } else {
                                 // Si el usuario no existe localmente y no es eliminación, eliminar de la cola
@@ -1208,9 +1389,80 @@ const SyncManager = {
                     console.warn(`⚠️ inventory_item duplicado (SKU/Barcode). Eliminando de cola: ${item.entity_id}`);
                     try { await DB.delete('sync_queue', item.id); } catch (e) {}
                     this.syncQueue = this.syncQueue.filter(q => q.id !== item.id);
-                    // No contar como error “real” para no spamear al usuario
+                    // No contar como error "real" para no spamear al usuario
                     errorCount = Math.max(0, errorCount - 1);
                     continue;
+                }
+
+                // Si es empleado y hay error de foreign key constraint (branch_id inválido)
+                if (item.type === 'employee' &&
+                    (error?.code === '23503' || 
+                     String(error.message || '').toLowerCase().includes('foreign key constraint') ||
+                     String(error.message || '').toLowerCase().includes('violates foreign key') ||
+                     String(error.message || '').includes('employees_branch_id_fkey'))) {
+                    console.warn(`⚠️ Empleado con branch_id inválido detectado. Intentando corregir...`);
+                    try {
+                        const employeeData = await DB.get('employees', item.entity_id);
+                        if (employeeData && employeeData.branch_id) {
+                            // Obtener branches válidas y establecer a null o a una válida
+                            const branches = await API.getBranches();
+                            const isValidBranch = branches && branches.some(b => b.id === employeeData.branch_id);
+                            
+                            if (!isValidBranch) {
+                                console.log(`🔄 Estableciendo branch_id a null para empleado ${item.entity_id}`);
+                                employeeData.branch_id = null;
+                                await DB.put('employees', employeeData);
+                                // Reintentar sincronización (no contar como error todavía)
+                                errorCount = Math.max(0, errorCount - 1);
+                                continue; // Volver a intentar este item
+                            }
+                        }
+                    } catch (fixError) {
+                        console.error('❌ Error intentando corregir branch_id:', fixError);
+                    }
+                }
+
+                // Si es empleado/usuario y hay error de duplicado, ya fue manejado en el caso específico
+                // pero si llegamos aquí significa que la recuperación falló, considerar eliminarlo
+                if ((item.type === 'employee' || item.type === 'user') &&
+                    error?.cause?.status === 400 &&
+                    (String(error.message || '').toLowerCase().includes('ya existe') ||
+                     String(error.message || '').toLowerCase().includes('already exists'))) {
+                    // Si ya intentamos recuperar y falló, verificar una vez más y eliminar si realmente existe
+                    try {
+                        if (item.type === 'employee') {
+                            const allEmployees = await API.getEmployees();
+                            const entityData = await DB.get('employees', item.entity_id);
+                            if (entityData && allEmployees) {
+                                const exists = allEmployees.find(e => 
+                                    (entityData.code && e.code === entityData.code) || 
+                                    (entityData.barcode && e.barcode === entityData.barcode)
+                                );
+                                if (exists) {
+                                    console.log(`✅ Empleado duplicado ya existe en servidor. Eliminando de cola: ${item.entity_id}`);
+                                    await DB.delete('sync_queue', item.id);
+                                    this.syncQueue = this.syncQueue.filter(q => q.id !== item.id);
+                                    errorCount = Math.max(0, errorCount - 1);
+                                    continue;
+                                }
+                            }
+                        } else if (item.type === 'user') {
+                            const allEmployees = await API.getEmployees();
+                            const entityData = await DB.get('users', item.entity_id);
+                            if (entityData && entityData.employee_id && allEmployees) {
+                                const employee = allEmployees.find(e => e.id === entityData.employee_id);
+                                if (employee && employee.user_id) {
+                                    console.log(`✅ Usuario duplicado ya existe en servidor. Eliminando de cola: ${item.entity_id}`);
+                                    await DB.delete('sync_queue', item.id);
+                                    this.syncQueue = this.syncQueue.filter(q => q.id !== item.id);
+                                    errorCount = Math.max(0, errorCount - 1);
+                                    continue;
+                                }
+                            }
+                        }
+                    } catch (verifyError) {
+                        console.warn('⚠️ Error verificando duplicado:', verifyError);
+                    }
                 }
 
                 // Ventas: si ya fue creada en servidor (mismo folio), no reintentar creando.
