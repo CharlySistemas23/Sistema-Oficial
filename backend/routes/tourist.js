@@ -138,19 +138,25 @@ router.post('/rules', requireBranchAccess, [
       res.status(201).json(result.rows[0]);
     }
   } catch (error) {
-    console.error('Error guardando regla de llegada:', error);
     // Obtener valores de forma segura en caso de error
     const safeAgencyId = req.body?.agency_id || 'no definido';
     const safeBranchId = req.body?.branch_id || (req.user?.isMasterAdmin ? null : req.user?.branchId);
     const safeRuleId = req.body?.id || 'no definido';
     
-    console.error('Detalles del error:', {
-      message: error.message,
-      stack: error.stack,
-      agency_id: safeAgencyId,
-      branch_id: safeBranchId,
-      ruleId: safeRuleId
-    });
+    // Reducir logs para evitar rate limiting de Railway
+    // Solo loggear el mensaje, no todo el stack trace
+    const isProduction = process.env.NODE_ENV === 'production';
+    if (!isProduction || error.code !== '42703') { // No loggear errores de columnas faltantes repetidamente en producción
+      console.error('Error guardando regla de llegada:', error.message);
+      if (!isProduction) {
+        console.error('Detalles:', {
+          agency_id: safeAgencyId,
+          branch_id: safeBranchId,
+          ruleId: safeRuleId,
+          code: error.code
+        });
+      }
+    }
     
     // Si es un error de foreign key (agencia no existe), dar mensaje más específico
     if (error.message && error.message.includes('foreign key')) {
