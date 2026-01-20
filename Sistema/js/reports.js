@@ -6342,11 +6342,14 @@ const Reports = {
                 return;
             }
 
-            // Crear modal de edición
+            // Crear modal de edición con overlay para centrarlo correctamente
+            const modalOverlay = document.createElement('div');
+            modalOverlay.className = 'modal-overlay';
+            modalOverlay.id = 'edit-quick-capture-overlay';
+            
             const modal = document.createElement('div');
-            modal.className = 'modal';
+            modal.className = 'modal modal-medium';
             modal.id = 'edit-quick-capture-modal';
-            modal.style.display = 'flex';
             
             const sellers = await DB.getAll('catalog_sellers') || [];
             const guides = await DB.getAll('catalog_guides') || [];
@@ -6369,7 +6372,7 @@ const Reports = {
                 <div class="modal-content" style="max-width: 600px; width: 90%;">
                     <div class="modal-header">
                         <h3>Editar Captura Rápida</h3>
-                        <button class="modal-close" onclick="document.getElementById('edit-quick-capture-modal').remove()">
+                        <button class="modal-close" onclick="document.getElementById('edit-quick-capture-overlay').remove()">
                             <i class="fas fa-times"></i>
                         </button>
                     </div>
@@ -6437,7 +6440,7 @@ const Reports = {
                                 <button type="submit" class="btn-primary" style="flex: 1;">
                                     <i class="fas fa-save"></i> Guardar Cambios
                                 </button>
-                                <button type="button" class="btn-secondary" onclick="document.getElementById('edit-quick-capture-modal').remove()" style="flex: 1;">
+                                <button type="button" class="btn-secondary" onclick="document.getElementById('edit-quick-capture-overlay').remove()" style="flex: 1;">
                                     Cancelar
                                 </button>
                             </div>
@@ -6446,7 +6449,8 @@ const Reports = {
                 </div>
             `;
 
-            document.body.appendChild(modal);
+            modalOverlay.appendChild(modal);
+            document.body.appendChild(modalOverlay);
 
             // Event listener del formulario
             const form = document.getElementById('edit-quick-capture-form');
@@ -6505,7 +6509,7 @@ const Reports = {
 
                     await DB.put('temp_quick_captures', capture);
 
-                    modal.remove();
+                    modalOverlay.remove();
                     Utils.showNotification('Captura actualizada correctamente', 'success');
                     await self.loadQuickCaptureData();
                 } catch (error) {
