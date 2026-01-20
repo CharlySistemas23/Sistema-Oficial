@@ -1024,21 +1024,45 @@ const SyncManager = {
                                     }
 
                                     // Verificar si el usuario ya existe antes de crear
-                                    // Primero verificar si el empleado existe y tiene usuario
                                     let userAlreadyExists = false;
                                     try {
-                                        // Intentar obtener el usuario directamente verificando si existe en el servidor
-                                        // Como no hay endpoint directo para verificar usuarios, intentaremos crear
-                                        // y si falla con "ya existe", lo tratamos como éxito
-                                        
-                                        // Verificar si el empleado existe
+                                        // Verificar si el empleado existe y si ya tiene usuario asociado
                                         const allEmployees = await API.getEmployees();
                                         if (allEmployees && Array.isArray(allEmployees)) {
                                             const employee = allEmployees.find(e => e.id === entityData.employee_id);
+                                            
                                             if (!employee) {
                                                 console.warn(`⚠️ Empleado ${entityData.employee_id} no existe en servidor, eliminando usuario de cola`);
                                                 await DB.delete('sync_queue', item.id);
                                                 break;
+                                            }
+                                            
+                                            // Verificar si el empleado ya tiene un usuario asociado
+                                            if (employee.user_id) {
+                                                // El empleado ya tiene un usuario, verificar si es el mismo username
+                                                if (employee.username === entityData.username) {
+                                                    console.log(`✅ Usuario ${entityData.username} ya existe en servidor para este empleado, marcando como sincronizado`);
+                                                    await DB.delete('sync_queue', item.id);
+                                                    successCount++;
+                                                    continue; // Saltar al siguiente item
+                                                } else {
+                                                    console.warn(`⚠️ Empleado ya tiene usuario diferente (${employee.username} vs ${entityData.username}), eliminando de cola`);
+                                                    await DB.delete('sync_queue', item.id);
+                                                    break;
+                                                }
+                                            }
+                                            
+                                            // Verificar si el username ya existe en otro empleado
+                                            const existingUser = allEmployees.find(e => 
+                                                e.username === entityData.username && 
+                                                e.id !== entityData.employee_id
+                                            );
+                                            
+                                            if (existingUser) {
+                                                console.log(`✅ Usuario ${entityData.username} ya existe en servidor para otro empleado, marcando como sincronizado`);
+                                                await DB.delete('sync_queue', item.id);
+                                                successCount++;
+                                                continue; // Saltar al siguiente item
                                             }
                                         }
                                     } catch (fetchError) {
