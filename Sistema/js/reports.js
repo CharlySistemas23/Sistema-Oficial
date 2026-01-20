@@ -5084,7 +5084,23 @@ const Reports = {
                         <label>Total <span style="color: var(--color-danger);">*</span></label>
                         <input type="number" id="qc-total" class="form-input" min="0" step="0.01" placeholder="0.00" required>
                     </div>
+                    <div class="form-group">
+                        <label>Costo de Mercancía (MXN)</label>
+                        <input type="number" id="qc-cost" class="form-input" min="0" step="0.01" placeholder="0.00">
+                        <small style="color: var(--color-text-secondary); font-size: 9px;">Opcional: Si no se ingresa, se buscará en inventario</small>
+                    </div>
                     <div class="form-group" style="grid-column: 1 / -1;">
+                        <div style="display: flex; gap: var(--spacing-sm); align-items: center; margin-bottom: var(--spacing-sm); padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm);">
+                            <div style="flex: 1;">
+                                <div style="font-size: 10px; color: var(--color-text-secondary); margin-bottom: var(--spacing-xs);">Tipo de Cambio Actual</div>
+                                <div id="qc-exchange-rates-display" style="font-size: 11px;">
+                                    <i class="fas fa-spinner fa-spin"></i> Obteniendo...
+                                </div>
+                            </div>
+                            <button type="button" class="btn-secondary btn-xs" onclick="window.Reports.refreshExchangeRates()" title="Actualizar Tipo de Cambio">
+                                <i class="fas fa-sync-alt"></i> Actualizar
+                            </button>
+                        </div>
                         <button type="submit" class="btn-primary" style="width: 100%; padding: var(--spacing-sm);">
                             <i class="fas fa-save"></i> Guardar Captura
                         </button>
@@ -5099,6 +5115,9 @@ const Reports = {
                         <i class="fas fa-list"></i> Capturas del Día (${today})
                     </h3>
                     <div style="display: flex; gap: var(--spacing-sm);">
+                        <button class="btn-success btn-sm" onclick="window.Reports.archiveQuickCaptureReport()" title="Guardar reporte permanentemente en historial">
+                            <i class="fas fa-archive"></i> Archivar Reporte
+                        </button>
                         <button class="btn-primary btn-sm" onclick="window.Reports.exportQuickCapturePDF()">
                             <i class="fas fa-file-pdf"></i> Exportar PDF
                         </button>
@@ -5159,6 +5178,9 @@ const Reports = {
         // Cargar catálogos
         await this.loadQuickCaptureCatalogs();
         
+        // Cargar tipo de cambio en tiempo real
+        await this.loadExchangeRates();
+        
         // Event listener del formulario
         const form = document.getElementById('quick-capture-form');
         if (form) {
@@ -5175,6 +5197,46 @@ const Reports = {
                 await this.loadGuidesForAgency(agencySelect.value);
             });
         }
+    },
+
+    async loadExchangeRates() {
+        try {
+            // Obtener tipo de cambio en tiempo real
+            if (typeof ExchangeRates !== 'undefined') {
+                const rates = await ExchangeRates.updateTodayExchangeRate(true); // Forzar actualización
+                const display = document.getElementById('qc-exchange-rates-display');
+                if (display) {
+                    display.innerHTML = `
+                        <div><strong>USD:</strong> $${rates.usd.toFixed(2)} MXN</div>
+                        <div><strong>CAD:</strong> $${rates.cad.toFixed(2)} MXN</div>
+                    `;
+                }
+            } else {
+                // Fallback: obtener desde configuración
+                const today = new Date().toISOString().split('T')[0];
+                const exchangeRates = await DB.query('exchange_rates_daily', 'date', today) || [];
+                const todayRate = exchangeRates[0] || { usd_to_mxn: 20.0, cad_to_mxn: 15.0 };
+                const display = document.getElementById('qc-exchange-rates-display');
+                if (display) {
+                    display.innerHTML = `
+                        <div><strong>USD:</strong> $${(todayRate.usd_to_mxn || 20.0).toFixed(2)} MXN</div>
+                        <div><strong>CAD:</strong> $${(todayRate.cad_to_mxn || 15.0).toFixed(2)} MXN</div>
+                    `;
+                }
+            }
+        } catch (error) {
+            console.error('Error cargando tipo de cambio:', error);
+            const display = document.getElementById('qc-exchange-rates-display');
+            if (display) {
+                display.innerHTML = '<span style="color: var(--color-danger);">Error al cargar</span>';
+            }
+        }
+    },
+
+    async refreshExchangeRates() {
+        Utils.showNotification('Actualizando tipo de cambio...', 'info');
+        await this.loadExchangeRates();
+        Utils.showNotification('Tipo de cambio actualizado', 'success');
     },
 
     async loadQuickCaptureCatalogs() {
@@ -5323,6 +5385,25 @@ const Reports = {
             const branch = branches.find(b => b.id === branchId);
             const branchName = branch ? branch.name : 'Desconocida';
 
+            // Obtener costo de mercancía (manual o del inventario)
+            let merchandiseCost = parseFloat(document.getElementById('qc-cost')?.value || 0);
+            
+            // Si no se ingresó costo manual, intentar obtener del inventario
+            if (!merchandiseCost || merchandiseCost === 0) {
+                try {
+                    const inventoryItems = await DB.getAll('inventory_items') || [];
+                    const matchingItem = inventoryItems.find(i => 
+                        i.name && product && 
+                        i.name.toLowerCase().includes(product.toLowerCase())
+                    );
+                    if (matchingItem && matchingItem.cost) {
+                        merchandiseCost = (matchingItem.cost || 0) * quantity;
+                    }
+                } catch (e) {
+                    console.warn('No se pudo obtener costo del inventario:', e);
+                }
+            }
+
             // Crear objeto de captura
             const capture = {
                 id: 'qc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
@@ -5338,6 +5419,7 @@ const Reports = {
                 quantity: quantity,
                 currency: currency,
                 total: total,
+                merchandise_cost: merchandiseCost, // Costo de mercancía manual o del inventario
                 date: new Date().toISOString().split('T')[0],
                 created_at: new Date().toISOString(),
                 created_by: typeof UserManager !== 'undefined' && UserManager.currentUser ? UserManager.currentUser.id : null
@@ -5439,6 +5521,7 @@ const Reports = {
                                 <th style="padding: var(--spacing-sm); text-align: center; font-size: 11px; text-transform: uppercase; font-weight: 600;">Cantidad</th>
                                 <th style="padding: var(--spacing-sm); text-align: right; font-size: 11px; text-transform: uppercase; font-weight: 600;">Moneda</th>
                                 <th style="padding: var(--spacing-sm); text-align: right; font-size: 11px; text-transform: uppercase; font-weight: 600;">Total</th>
+                                <th style="padding: var(--spacing-sm); text-align: right; font-size: 11px; text-transform: uppercase; font-weight: 600;">Costo</th>
                                 <th style="padding: var(--spacing-sm); text-align: center; font-size: 11px; text-transform: uppercase; font-weight: 600;">Acciones</th>
                             </tr>
                         </thead>
@@ -5456,10 +5539,16 @@ const Reports = {
                                         <td style="padding: var(--spacing-sm); font-size: 12px; text-align: center;">${c.quantity}</td>
                                         <td style="padding: var(--spacing-sm); font-size: 12px; text-align: right;">${c.currency}</td>
                                         <td style="padding: var(--spacing-sm); font-size: 12px; text-align: right; font-weight: 600;">$${c.total.toFixed(2)}</td>
+                                        <td style="padding: var(--spacing-sm); font-size: 12px; text-align: right; color: var(--color-text-secondary);">$${(c.merchandise_cost || 0).toFixed(2)}</td>
                                         <td style="padding: var(--spacing-sm); text-align: center;">
-                                            <button class="btn-danger btn-xs" onclick="window.Reports.deleteQuickCaptureSale('${c.id}')" title="Eliminar">
-                                                <i class="fas fa-trash"></i>
-                                            </button>
+                                            <div style="display: flex; gap: var(--spacing-xs); justify-content: center;">
+                                                <button class="btn-primary btn-xs" onclick="window.Reports.editQuickCaptureSale('${c.id}')" title="Editar">
+                                                    <i class="fas fa-edit"></i>
+                                                </button>
+                                                <button class="btn-danger btn-xs" onclick="window.Reports.deleteQuickCaptureSale('${c.id}')" title="Eliminar">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 `;
@@ -5630,41 +5719,62 @@ const Reports = {
                 }
             }
 
-            // 5. COGS: Intentar obtener costos de productos
+            // 5. COGS: Usar costo de mercancía almacenado en capturas o buscar en inventario
             let totalCOGS = 0;
-            try {
-                const inventoryItems = await DB.getAll('inventory_items') || [];
-                for (const capture of captures) {
-                    const item = inventoryItems.find(i => 
-                        i.name && capture.product && 
-                        i.name.toLowerCase().includes(capture.product.toLowerCase())
-                    );
-                    if (item && item.cost) {
-                        totalCOGS += (item.cost || 0) * (capture.quantity || 1);
+            for (const capture of captures) {
+                // Priorizar costo almacenado manualmente
+                if (capture.merchandise_cost && capture.merchandise_cost > 0) {
+                    totalCOGS += capture.merchandise_cost;
+                } else {
+                    // Si no hay costo almacenado, intentar obtener del inventario
+                    try {
+                        const inventoryItems = await DB.getAll('inventory_items') || [];
+                        const item = inventoryItems.find(i => 
+                            i.name && capture.product && 
+                            i.name.toLowerCase().includes(capture.product.toLowerCase())
+                        );
+                        if (item && item.cost) {
+                            totalCOGS += (item.cost || 0) * (capture.quantity || 1);
+                        }
+                    } catch (e) {
+                        console.warn('No se pudo obtener costo del inventario:', e);
                     }
                 }
-            } catch (e) {
-                console.warn('No se pudieron obtener costos de productos:', e);
             }
 
-            // 6. Costos de llegadas del día
+            // 6. Costos de llegadas del día (filtrar por sucursales de las capturas)
             const arrivals = await DB.getAll('agency_arrivals') || [];
-            const todayArrivals = arrivals.filter(a => a.date === today);
-            const totalArrivalCosts = todayArrivals
-                .filter(a => a.passengers > 0 && a.units > 0)
-                .reduce((sum, a) => sum + (a.arrival_fee || a.calculated_fee || 0), 0);
+            const branchIds = [...new Set(captures.map(c => c.branch_id).filter(Boolean))];
+            const todayArrivals = arrivals.filter(a => {
+                const arrivalDate = a.date || (a.created_at ? a.created_at.split('T')[0] : null);
+                return arrivalDate === today && 
+                       (branchIds.length === 0 || !a.branch_id || branchIds.includes(a.branch_id)) &&
+                       a.passengers > 0 && 
+                       (a.units > 0 || a.arrival_fee > 0 || a.calculated_fee > 0);
+            });
+            
+            // Calcular costo total de llegadas (usar arrival_fee o calculated_fee)
+            const totalArrivalCosts = todayArrivals.reduce((sum, a) => {
+                // Priorizar calculated_fee, luego arrival_fee
+                const fee = a.calculated_fee || a.arrival_fee || 0;
+                return sum + fee;
+            }, 0);
 
-            // 7. Costos operativos del día (prorrateados)
+            // 7. Costos operativos del día (prorrateados) - Por todas las sucursales involucradas
             let totalOperatingCosts = 0;
             let bankCommissions = 0;
             try {
                 const allCosts = await DB.getAll('cost_entries') || [];
                 const targetDate = new Date(today);
-                const branchIds = [...new Set(captures.map(c => c.branch_id).filter(Boolean))];
+                const captureBranchIds = [...new Set(captures.map(c => c.branch_id).filter(Boolean))];
                 
-                for (const branchId of branchIds.length > 0 ? branchIds : [null]) {
+                // Si no hay branchIds específicos, considerar costos globales (branch_id = null)
+                const branchIdsToProcess = captureBranchIds.length > 0 ? captureBranchIds : [null];
+                
+                for (const branchId of branchIdsToProcess) {
                     const branchCosts = allCosts.filter(c => 
-                        branchId === null || c.branch_id === branchId || !c.branch_id
+                        branchId === null ? (!c.branch_id || captureBranchIds.includes(c.branch_id)) : 
+                        (c.branch_id === branchId || !c.branch_id) // Incluir costos globales también
                     );
 
                     // Costos mensuales prorrateados
@@ -6054,6 +6164,178 @@ const Reports = {
         }
     },
 
+    async editQuickCaptureSale(captureId) {
+        try {
+            const capture = await DB.get('temp_quick_captures', captureId);
+            if (!capture) {
+                Utils.showNotification('Captura no encontrada', 'error');
+                return;
+            }
+
+            // Crear modal de edición
+            const modal = document.createElement('div');
+            modal.className = 'modal';
+            modal.id = 'edit-quick-capture-modal';
+            modal.style.display = 'flex';
+            
+            const sellers = await DB.getAll('catalog_sellers') || [];
+            const guides = await DB.getAll('catalog_guides') || [];
+            const agencies = await DB.getAll('catalog_agencies') || [];
+            const branches = await DB.getAll('catalog_branches') || [];
+
+            modal.innerHTML = `
+                <div class="modal-content" style="max-width: 600px; width: 90%;">
+                    <div class="modal-header">
+                        <h3>Editar Captura Rápida</h3>
+                        <button class="modal-close" onclick="document.getElementById('edit-quick-capture-modal').remove()">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="edit-quick-capture-form" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--spacing-md);">
+                            <div class="form-group" style="grid-column: 1 / -1;">
+                                <label>Sucursal <span style="color: var(--color-danger);">*</span></label>
+                                <select id="edit-qc-branch" class="form-select" required>
+                                    ${branches.filter(b => b.active).map(b => 
+                                        `<option value="${b.id}" ${b.id === capture.branch_id ? 'selected' : ''}>${b.name}</option>`
+                                    ).join('')}
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Vendedor <span style="color: var(--color-danger);">*</span></label>
+                                <select id="edit-qc-seller" class="form-select" required>
+                                    ${sellers.map(s => 
+                                        `<option value="${s.id}" ${s.id === capture.seller_id ? 'selected' : ''}>${s.name}</option>`
+                                    ).join('')}
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Guía</label>
+                                <select id="edit-qc-guide" class="form-select">
+                                    <option value="">Ninguno</option>
+                                    ${guides.map(g => 
+                                        `<option value="${g.id}" ${g.id === capture.guide_id ? 'selected' : ''}>${g.name}</option>`
+                                    ).join('')}
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Agencia</label>
+                                <select id="edit-qc-agency" class="form-select">
+                                    <option value="">Ninguna</option>
+                                    ${agencies.map(a => 
+                                        `<option value="${a.id}" ${a.id === capture.agency_id ? 'selected' : ''}>${a.name}</option>`
+                                    ).join('')}
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Producto <span style="color: var(--color-danger);">*</span></label>
+                                <input type="text" id="edit-qc-product" class="form-input" value="${capture.product || ''}" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Cantidad <span style="color: var(--color-danger);">*</span></label>
+                                <input type="number" id="edit-qc-quantity" class="form-input" min="1" step="1" value="${capture.quantity || 1}" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Tipo de Moneda <span style="color: var(--color-danger);">*</span></label>
+                                <select id="edit-qc-currency" class="form-select" required>
+                                    <option value="USD" ${capture.currency === 'USD' ? 'selected' : ''}>USD</option>
+                                    <option value="MXN" ${capture.currency === 'MXN' ? 'selected' : ''}>MXN</option>
+                                    <option value="CAD" ${capture.currency === 'CAD' ? 'selected' : ''}>CAD</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Total <span style="color: var(--color-danger);">*</span></label>
+                                <input type="number" id="edit-qc-total" class="form-input" min="0" step="0.01" value="${capture.total || 0}" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Costo de Mercancía (MXN)</label>
+                                <input type="number" id="edit-qc-cost" class="form-input" min="0" step="0.01" value="${capture.merchandise_cost || 0}">
+                            </div>
+                            <div class="form-group" style="grid-column: 1 / -1; display: flex; gap: var(--spacing-sm);">
+                                <button type="submit" class="btn-primary" style="flex: 1;">
+                                    <i class="fas fa-save"></i> Guardar Cambios
+                                </button>
+                                <button type="button" class="btn-secondary" onclick="document.getElementById('edit-quick-capture-modal').remove()" style="flex: 1;">
+                                    Cancelar
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(modal);
+
+            // Event listener del formulario
+            const form = document.getElementById('edit-quick-capture-form');
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                try {
+                    const branchId = document.getElementById('edit-qc-branch').value;
+                    const sellerId = document.getElementById('edit-qc-seller').value;
+                    const guideId = document.getElementById('edit-qc-guide').value || null;
+                    const agencyId = document.getElementById('edit-qc-agency').value || null;
+                    const product = document.getElementById('edit-qc-product').value.trim();
+                    const quantity = parseInt(document.getElementById('edit-qc-quantity').value) || 1;
+                    const currency = document.getElementById('edit-qc-currency').value;
+                    const total = parseFloat(document.getElementById('edit-qc-total').value) || 0;
+                    const merchandiseCost = parseFloat(document.getElementById('edit-qc-cost').value) || 0;
+
+                    // Validar campos
+                    if (!branchId || !sellerId || !product || !currency || total <= 0) {
+                        Utils.showNotification('Por favor completa todos los campos requeridos', 'error');
+                        return;
+                    }
+
+                    // Obtener nombres para mostrar
+                    const seller = sellers.find(s => s.id === sellerId);
+                    const sellerName = seller ? seller.name : 'Desconocido';
+                    let guideName = null;
+                    if (guideId) {
+                        const guide = guides.find(g => g.id === guideId);
+                        guideName = guide ? guide.name : null;
+                    }
+                    let agencyName = null;
+                    if (agencyId) {
+                        const agency = agencies.find(a => a.id === agencyId);
+                        agencyName = agency ? agency.name : null;
+                    }
+                    const branch = branches.find(b => b.id === branchId);
+                    const branchName = branch ? branch.name : 'Desconocida';
+
+                    // Actualizar captura
+                    capture.branch_id = branchId;
+                    capture.branch_name = branchName;
+                    capture.seller_id = sellerId;
+                    capture.seller_name = sellerName;
+                    capture.guide_id = guideId;
+                    capture.guide_name = guideName;
+                    capture.agency_id = agencyId;
+                    capture.agency_name = agencyName;
+                    capture.product = product;
+                    capture.quantity = quantity;
+                    capture.currency = currency;
+                    capture.total = total;
+                    capture.merchandise_cost = merchandiseCost;
+                    capture.updated_at = new Date().toISOString();
+
+                    await DB.put('temp_quick_captures', capture);
+
+                    modal.remove();
+                    Utils.showNotification('Captura actualizada correctamente', 'success');
+                    await this.loadQuickCaptureData();
+                } catch (error) {
+                    console.error('Error actualizando captura:', error);
+                    Utils.showNotification('Error al actualizar la captura: ' + error.message, 'error');
+                }
+            });
+        } catch (error) {
+            console.error('Error abriendo edición:', error);
+            Utils.showNotification('Error al abrir edición: ' + error.message, 'error');
+        }
+    },
+
     async deleteQuickCaptureSale(captureId) {
         const confirm = await Utils.confirm('¿Eliminar esta captura?', 'Eliminar Captura');
         if (!confirm) return;
@@ -6113,6 +6395,201 @@ const Reports = {
         } catch (error) {
             console.error('Error exportando capturas:', error);
             Utils.showNotification('Error al exportar: ' + error.message, 'error');
+        }
+    },
+
+    async archiveQuickCaptureReport() {
+        try {
+            const today = new Date().toISOString().split('T')[0];
+            let captures = await DB.getAll('temp_quick_captures') || [];
+            captures = captures.filter(c => c.date === today);
+
+            if (captures.length === 0) {
+                Utils.showNotification('No hay capturas para archivar', 'warning');
+                return;
+            }
+
+            // Calcular todos los datos del reporte
+            const exchangeRates = await DB.query('exchange_rates_daily', 'date', today) || [];
+            const todayRate = exchangeRates[0] || { usd_to_mxn: 20.0, cad_to_mxn: 15.0 };
+            const usdRate = todayRate.usd_to_mxn || 20.0;
+            const cadRate = todayRate.cad_to_mxn || 15.0;
+
+            const totals = { USD: 0, MXN: 0, CAD: 0 };
+            let totalQuantity = 0;
+            let totalCOGS = 0;
+
+            captures.forEach(c => {
+                totals[c.currency] = (totals[c.currency] || 0) + c.total;
+                totalQuantity += c.quantity || 1;
+                totalCOGS += c.merchandise_cost || 0;
+            });
+
+            const totalSalesMXN = totals.USD * usdRate + totals.MXN + totals.CAD * cadRate;
+
+            // Calcular comisiones
+            const commissionRules = await DB.getAll('commission_rules') || [];
+            let totalCommissions = 0;
+            for (const capture of captures) {
+                if (capture.seller_id && capture.total > 0) {
+                    const sellerRule = commissionRules.find(r => 
+                        r.entity_type === 'seller' && r.entity_id === capture.seller_id
+                    ) || commissionRules.find(r => r.entity_type === 'seller' && r.entity_id === null);
+                    if (sellerRule) {
+                        const discountPct = sellerRule.discount_pct || 0;
+                        const multiplier = sellerRule.multiplier || 1;
+                        const afterDiscount = capture.total * (1 - (discountPct / 100));
+                        totalCommissions += afterDiscount * (multiplier / 100);
+                    }
+                }
+                if (capture.guide_id && capture.total > 0) {
+                    const guideRule = commissionRules.find(r => 
+                        r.entity_type === 'guide' && r.entity_id === capture.guide_id
+                    ) || commissionRules.find(r => r.entity_type === 'guide' && r.entity_id === null);
+                    if (guideRule) {
+                        const discountPct = guideRule.discount_pct || 0;
+                        const multiplier = guideRule.multiplier || 1;
+                        const afterDiscount = capture.total * (1 - (discountPct / 100));
+                        totalCommissions += afterDiscount * (multiplier / 100);
+                    }
+                }
+            }
+
+            // Obtener llegadas y costos
+            const arrivals = await DB.getAll('agency_arrivals') || [];
+            const todayArrivals = arrivals.filter(a => a.date === today);
+            const captureBranchIds = [...new Set(captures.map(c => c.branch_id).filter(Boolean))];
+            const filteredArrivals = todayArrivals.filter(a => 
+                captureBranchIds.length === 0 || !a.branch_id || captureBranchIds.includes(a.branch_id)
+            );
+            const totalArrivalCosts = filteredArrivals
+                .filter(a => a.passengers > 0 && (a.units > 0 || a.arrival_fee > 0 || a.calculated_fee > 0))
+                .reduce((sum, a) => sum + (a.calculated_fee || a.arrival_fee || 0), 0);
+
+            // Calcular costos operativos (usar la misma lógica que loadQuickCaptureProfits)
+            let totalOperatingCosts = 0;
+            let bankCommissions = 0;
+            try {
+                const allCosts = await DB.getAll('cost_entries') || [];
+                const targetDate = new Date(today);
+                const branchIdsToProcess = captureBranchIds.length > 0 ? captureBranchIds : [null];
+                
+                for (const branchId of branchIdsToProcess) {
+                    const branchCosts = allCosts.filter(c => 
+                        branchId === null ? (!c.branch_id || captureBranchIds.includes(c.branch_id)) : 
+                        (c.branch_id === branchId || !c.branch_id)
+                    );
+
+                    // Mensuales
+                    const monthlyCosts = branchCosts.filter(c => {
+                        const costDate = new Date(c.date || c.created_at);
+                        return c.period_type === 'monthly' && c.recurring === true &&
+                               costDate.getMonth() === targetDate.getMonth() &&
+                               costDate.getFullYear() === targetDate.getFullYear();
+                    });
+                    for (const cost of monthlyCosts) {
+                        const costDate = new Date(cost.date || cost.created_at);
+                        const daysInMonth = new Date(costDate.getFullYear(), costDate.getMonth() + 1, 0).getDate();
+                        totalOperatingCosts += (cost.amount || 0) / daysInMonth;
+                    }
+
+                    // Semanales
+                    const weeklyCosts = branchCosts.filter(c => {
+                        const costDate = new Date(c.date || c.created_at);
+                        const targetWeek = this.getWeekNumber(targetDate);
+                        const costWeek = this.getWeekNumber(costDate);
+                        return c.period_type === 'weekly' && c.recurring === true &&
+                               targetWeek === costWeek &&
+                               targetDate.getFullYear() === costDate.getFullYear();
+                    });
+                    for (const cost of weeklyCosts) {
+                        totalOperatingCosts += (cost.amount || 0) / 7;
+                    }
+
+                    // Anuales
+                    const annualCosts = branchCosts.filter(c => {
+                        const costDate = new Date(c.date || c.created_at);
+                        return c.period_type === 'annual' && c.recurring === true &&
+                               costDate.getFullYear() === targetDate.getFullYear();
+                    });
+                    for (const cost of annualCosts) {
+                        const daysInYear = ((targetDate.getFullYear() % 4 === 0 && targetDate.getFullYear() % 100 !== 0) || (targetDate.getFullYear() % 400 === 0)) ? 366 : 365;
+                        totalOperatingCosts += (cost.amount || 0) / daysInYear;
+                    }
+
+                    // Variables/diarios
+                    const variableCosts = branchCosts.filter(c => {
+                        const costDate = c.date || c.created_at;
+                        const costDateStr = costDate.split('T')[0];
+                        return costDateStr === today &&
+                               (c.period_type === 'one_time' || c.period_type === 'daily' || !c.period_type);
+                    });
+                    for (const cost of variableCosts) {
+                        if (cost.category === 'comisiones_bancarias') {
+                            bankCommissions += (cost.amount || 0);
+                        } else {
+                            totalOperatingCosts += (cost.amount || 0);
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn('Error calculando costos operativos:', e);
+            }
+
+            const grossProfit = totalSalesMXN - totalCOGS - totalCommissions;
+            const netProfit = grossProfit - totalArrivalCosts - totalOperatingCosts - bankCommissions;
+
+            // Crear objeto de reporte archivado
+            const archivedReport = {
+                id: 'archived_' + today + '_' + Date.now(),
+                date: today,
+                report_type: 'quick_capture',
+                captures: captures,
+                totals: totals,
+                total_quantity: totalQuantity,
+                total_sales_mxn: totalSalesMXN,
+                total_cogs: totalCOGS,
+                total_commissions: totalCommissions,
+                total_arrival_costs: totalArrivalCosts,
+                total_operating_costs: totalOperatingCosts,
+                bank_commissions: bankCommissions,
+                gross_profit: grossProfit,
+                net_profit: netProfit,
+                exchange_rates: { usd: usdRate, cad: cadRate },
+                arrivals: filteredArrivals,
+                archived_at: new Date().toISOString(),
+                archived_by: typeof UserManager !== 'undefined' && UserManager.currentUser ? UserManager.currentUser.id : null
+            };
+
+            // Guardar en IndexedDB (store permanente para historial)
+            await DB.put('archived_quick_captures', archivedReport);
+
+            // Opcional: Intentar guardar en backend si hay API disponible
+            if (typeof API !== 'undefined' && API.saveArchivedReport) {
+                try {
+                    await API.saveArchivedReport(archivedReport);
+                } catch (e) {
+                    console.warn('No se pudo guardar en backend, solo guardado local:', e);
+                }
+            }
+
+            const confirm = await Utils.confirm(
+                `¿Deseas limpiar las capturas temporales del día después de archivar?\n\nSe guardaron ${captures.length} capturas en el historial.`,
+                'Archivar Reporte'
+            );
+
+            if (confirm) {
+                for (const capture of captures) {
+                    await DB.delete('temp_quick_captures', capture.id);
+                }
+                Utils.showNotification(`Reporte archivado correctamente. ${captures.length} capturas eliminadas del día.`, 'success');
+                await this.loadQuickCaptureData();
+            } else {
+                Utils.showNotification('Reporte archivado correctamente. Las capturas temporales se mantienen.', 'success');
+            }
+        } catch (error) {
+            console.error('Error archivando reporte:', error);
+            Utils.showNotification('Error al archivar el reporte: ' + error.message, 'error');
         }
     },
 
@@ -6554,28 +7031,37 @@ const Reports = {
             const totalCommissions = (sellerEntries.reduce((sum, s) => sum + s.total, 0) || 0) + 
                                    (guideEntries.reduce((sum, g) => sum + g.total, 0) || 0);
 
-            // COGS: Intentar obtener costos de productos
+            // COGS: Usar costo de mercancía almacenado en capturas o buscar en inventario
             let totalCOGS = 0;
-            try {
-                const inventoryItems = await DB.getAll('inventory_items') || [];
-                for (const capture of captures) {
-                    // Buscar producto por nombre (aproximado)
-                    const item = inventoryItems.find(i => 
-                        i.name && capture.product && 
-                        i.name.toLowerCase().includes(capture.product.toLowerCase())
-                    );
-                    if (item && item.cost) {
-                        totalCOGS += (item.cost || 0) * (capture.quantity || 1);
+            for (const capture of captures) {
+                // Priorizar costo almacenado manualmente
+                if (capture.merchandise_cost && capture.merchandise_cost > 0) {
+                    totalCOGS += capture.merchandise_cost;
+                } else {
+                    // Si no hay costo almacenado, intentar obtener del inventario
+                    try {
+                        const inventoryItems = await DB.getAll('inventory_items') || [];
+                        const item = inventoryItems.find(i => 
+                            i.name && capture.product && 
+                            i.name.toLowerCase().includes(capture.product.toLowerCase())
+                        );
+                        if (item && item.cost) {
+                            totalCOGS += (item.cost || 0) * (capture.quantity || 1);
+                        }
+                    } catch (e) {
+                        console.warn('No se pudo obtener costo del inventario:', e);
                     }
                 }
-            } catch (e) {
-                console.warn('No se pudieron obtener costos de productos:', e);
             }
 
-            // Costos de llegadas
-            const totalArrivalCosts = todayArrivals
-                .filter(a => a.passengers > 0 && a.units > 0)
-                .reduce((sum, a) => sum + (a.arrival_fee || a.calculated_fee || 0), 0);
+            // Costos de llegadas (filtrar por sucursales de las capturas)
+            const captureBranchIds = [...new Set(captures.map(c => c.branch_id).filter(Boolean))];
+            const filteredArrivals = todayArrivals.filter(a => {
+                return captureBranchIds.length === 0 || !a.branch_id || captureBranchIds.includes(a.branch_id);
+            });
+            const totalArrivalCosts = filteredArrivals
+                .filter(a => a.passengers > 0 && (a.units > 0 || a.arrival_fee > 0 || a.calculated_fee > 0))
+                .reduce((sum, a) => sum + (a.calculated_fee || a.arrival_fee || 0), 0);
 
             // Costos operativos del día (prorrateados)
             let totalOperatingCosts = 0;
@@ -6583,11 +7069,15 @@ const Reports = {
             try {
                 const allCosts = await DB.getAll('cost_entries') || [];
                 const targetDate = new Date(today);
-                const branchIds = [...new Set(captures.map(c => c.branch_id).filter(Boolean))];
+                const captureBranchIds = [...new Set(captures.map(c => c.branch_id).filter(Boolean))];
                 
-                for (const branchId of branchIds.length > 0 ? branchIds : [null]) {
+                // Si no hay branchIds específicos, considerar costos globales
+                const branchIdsToProcess = captureBranchIds.length > 0 ? captureBranchIds : [null];
+                
+                for (const branchId of branchIdsToProcess) {
                     const branchCosts = allCosts.filter(c => 
-                        branchId === null || c.branch_id === branchId || !c.branch_id
+                        branchId === null ? (!c.branch_id || captureBranchIds.includes(c.branch_id)) : 
+                        (c.branch_id === branchId || !c.branch_id) // Incluir costos globales también
                     );
 
                     // Costos mensuales prorrateados
