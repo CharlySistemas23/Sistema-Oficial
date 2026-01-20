@@ -115,15 +115,17 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Rate limiting (después de trust proxy)
 const limiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutos
-  // 100/15min se queda corto para colas de sincronización. Subimos el default.
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 1000,
+  // Aumentamos el límite para operaciones de sincronización masivas
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 5000,
   message: 'Demasiadas solicitudes desde esta IP, intenta de nuevo más tarde.',
   standardHeaders: true,
   legacyHeaders: false
 });
 // No aplicar rate limit a preflight OPTIONS para evitar bloquear CORS
+// Excluir /api/auth/verify del rate limit (se usa frecuentemente para verificar tokens)
 app.use('/api/', (req, res, next) => {
   if (req.method === 'OPTIONS') return next();
+  if (req.path === '/auth/verify') return next(); // Sin rate limit para verify
   return limiter(req, res, next);
 });
 
