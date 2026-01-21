@@ -6304,6 +6304,7 @@ const Reports = {
             // 7. Costos operativos del día (prorrateados) - Por todas las sucursales involucradas
             // IMPORTANTE: Usar la fecha de las capturas, no la fecha actual
             // SEPARAR: Variables del día vs Fijos prorrateados
+            // Nota: captureBranchIds ya está definido arriba (línea 6298)
             let variableCostsDaily = 0;  // Costos variables registrados hoy
             let fixedCostsProrated = 0;  // Costos fijos prorrateados (mensuales, semanales, anuales)
             let bankCommissions = 0;
@@ -6312,7 +6313,7 @@ const Reports = {
             try {
                 const allCosts = await DB.getAll('cost_entries') || [];
                 const targetDate = new Date(captureDate);
-                const captureBranchIds = [...new Set(captures.map(c => c.branch_id).filter(Boolean))];
+                // captureBranchIds ya está definido arriba, no redefinir
                 console.log(`💰 Calculando costos operativos para ${captureDate}, sucursales: ${captureBranchIds.join(', ') || 'todas'}`);
                 
                 // Si no hay branchIds específicos, considerar costos globales (branch_id = null)
@@ -6424,12 +6425,27 @@ const Reports = {
             
             // Total de costos operativos (variables + fijos)
             const totalOperatingCosts = variableCostsDaily + fixedCostsProrated;
+            
+            // Log de verificación de cálculos
+            console.log('📊 Verificación de cálculos:');
+            console.log(`   Ingresos (Ventas): $${totalSalesMXN.toFixed(2)}`);
+            console.log(`   COGS: $${totalCOGS.toFixed(2)}`);
+            console.log(`   Comisiones: $${totalCommissions.toFixed(2)}`);
+            console.log(`   Utilidad Bruta: $${(totalSalesMXN - totalCOGS - totalCommissions).toFixed(2)}`);
+            console.log(`   Costos de Llegadas: $${totalArrivalCosts.toFixed(2)}`);
+            console.log(`   Gastos Variables del Día: $${variableCostsDaily.toFixed(2)} (${variableCostsDetail.length} items)`);
+            console.log(`   Gastos Fijos Prorrateados: $${fixedCostsProrated.toFixed(2)} (${fixedCostsDetail.length} items)`);
+            console.log(`   Total Costos Operativos: $${totalOperatingCosts.toFixed(2)}`);
+            console.log(`   Comisiones Bancarias: $${bankCommissions.toFixed(2)}`);
+            console.log(`   Total Gastos Operativos: $${(totalArrivalCosts + totalOperatingCosts + bankCommissions).toFixed(2)}`);
 
             // 8. Calcular utilidades
             const grossProfit = totalSalesMXN - totalCOGS - totalCommissions;
             const netProfit = grossProfit - totalArrivalCosts - totalOperatingCosts - bankCommissions;
             const grossMargin = totalSalesMXN > 0 ? (grossProfit / totalSalesMXN * 100) : 0;
             const netMargin = totalSalesMXN > 0 ? (netProfit / totalSalesMXN * 100) : 0;
+            
+            console.log(`   Utilidad Neta: $${netProfit.toFixed(2)} (${netMargin.toFixed(2)}%)`);
 
             // 9. Información básica del encabezado
             const branchId = captureBranchIds.length === 1 ? captureBranchIds[0] : null;
@@ -7991,7 +8007,8 @@ const Reports = {
             }
 
             // Guardar PDF
-            const filename = `Captura_Rapida_${today}_${Date.now()}.pdf`;
+            const todayStr = Utils.formatDate(new Date(captureDate), 'YYYYMMDD');
+            const filename = `Captura_Rapida_${todayStr}_${Date.now()}.pdf`;
             doc.save(filename);
 
             Utils.showNotification('PDF exportado correctamente', 'success');
