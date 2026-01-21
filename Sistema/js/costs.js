@@ -901,6 +901,20 @@ const Costs = {
                         filterByBranch: !viewAllBranches, 
                         branchIdField: 'branch_id' 
                     }) || [];
+                    
+                    // CRÍTICO: Aplicar filtro estricto DESPUÉS de recibir de IndexedDB
+                    // Esto asegura que costos sin branch_id se excluyan cuando se filtra por sucursal específica
+                    if (selectedBranchId) {
+                        const beforeStrictFilter = costs.length;
+                        costs = costs.filter(c => {
+                            // CRÍTICO: Excluir costos sin branch_id cuando se filtra por sucursal específica
+                            if (!c.branch_id) {
+                                return false; // NO mostrar costos sin branch_id
+                            }
+                            return String(c.branch_id) === String(selectedBranchId);
+                        });
+                        console.log(`📍 Costs: Filtrado estricto IndexedDB: ${beforeStrictFilter} → ${costs.length} (sucursal: ${selectedBranchId})`);
+                    }
                 }
             } else {
                 // Modo offline
@@ -908,6 +922,20 @@ const Costs = {
                     filterByBranch: !viewAllBranches, 
                     branchIdField: 'branch_id' 
                 }) || [];
+                
+                // CRÍTICO: Aplicar filtro estricto DESPUÉS de recibir de IndexedDB
+                // Esto asegura que costos sin branch_id se excluyan cuando se filtra por sucursal específica
+                if (selectedBranchId) {
+                    const beforeStrictFilter = costs.length;
+                    costs = costs.filter(c => {
+                        // CRÍTICO: Excluir costos sin branch_id cuando se filtra por sucursal específica
+                        if (!c.branch_id) {
+                            return false; // NO mostrar costos sin branch_id
+                        }
+                        return String(c.branch_id) === String(selectedBranchId);
+                    });
+                    console.log(`📍 Costs: Filtrado estricto offline: ${beforeStrictFilter} → ${costs.length} (sucursal: ${selectedBranchId})`);
+                }
             }
             
             const typeFilter = document.getElementById('cost-type-filter')?.value;
@@ -916,9 +944,8 @@ const Costs = {
             const dateFrom = document.getElementById('cost-date-from')?.value;
             const dateTo = document.getElementById('cost-date-to')?.value;
             
-            // Si ya cargamos desde API arriba, usar esos datos
-            // Si no, usar getFilteredCosts
-            if (costs.length === 0) {
+            // Si aún no hay costos, usar getFilteredCosts como último recurso
+            if (costs.length === 0 && selectedBranchId === null) {
                 costs = await this.getFilteredCosts({
                     branchId: selectedBranchId,
                     dateFrom: dateFrom || null,
