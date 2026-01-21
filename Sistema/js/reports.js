@@ -5303,7 +5303,20 @@ const Reports = {
                         <div class="form-group">
                             <label>Costo de Llegada (MXN)</label>
                             <input type="number" id="qc-arrival-cost" class="form-input" min="0" step="0.01" placeholder="0.00" readonly style="background: var(--color-bg-secondary);">
-                            <small style="color: var(--color-text-secondary); font-size: 9px;">Se calcula automáticamente</small>
+                            <small id="qc-arrival-cost-help" style="color: var(--color-text-secondary); font-size: 9px;">Se calcula automáticamente</small>
+                        </div>
+                        <div id="qc-arrival-override-container" style="display: none; grid-column: 1 / -1; padding: var(--spacing-md); background: var(--color-warning-bg, #fff3cd); border: 1px solid var(--color-warning, #ffc107); border-radius: var(--radius-sm);">
+                            <div style="margin-bottom: var(--spacing-sm); color: var(--color-warning-text, #856404); font-weight: 600; font-size: 11px;">
+                                <i class="fas fa-exclamation-triangle"></i> Se requiere override manual
+                            </div>
+                            <div class="form-group">
+                                <label>Monto Manual (MXN) <span style="color: var(--color-danger);">*</span></label>
+                                <input type="number" id="qc-arrival-override-amount" class="form-input" min="0" step="0.01" placeholder="0.00">
+                            </div>
+                            <div class="form-group">
+                                <label>Motivo del Override <span style="color: var(--color-danger);">*</span></label>
+                                <textarea id="qc-arrival-override-reason" class="form-textarea" rows="2" placeholder="Explica por qué se requiere override manual..."></textarea>
+                            </div>
                         </div>
                         <div class="form-group" style="grid-column: 1 / -1;">
                             <label>Notas</label>
@@ -5425,11 +5438,52 @@ const Reports = {
                         if (typeof ArrivalRules !== 'undefined' && ArrivalRules.calculateArrivalFee) {
                             const calculation = await ArrivalRules.calculateArrivalFee(agencyId, branchId, pax, unitType, today);
                             const costInput = document.getElementById('qc-arrival-cost');
+                            const costHelp = document.getElementById('qc-arrival-cost-help');
+                            const overrideContainer = document.getElementById('qc-arrival-override-container');
+                            const overrideAmountInput = document.getElementById('qc-arrival-override-amount');
+                            const overrideReasonInput = document.getElementById('qc-arrival-override-reason');
+                            
                             if (costInput) {
                                 if (calculation.overrideRequired && !calculation.calculatedFee) {
                                     costInput.value = 'Requiere Override';
+                                    costInput.style.color = 'var(--color-warning, #ffc107)';
+                                    if (costHelp) {
+                                        costHelp.textContent = 'No hay regla configurada, ingresa el monto manualmente';
+                                        costHelp.style.color = 'var(--color-warning, #ffc107)';
+                                    }
+                                    // Mostrar campos de override
+                                    if (overrideContainer) {
+                                        overrideContainer.style.display = 'block';
+                                    }
+                                    // Hacer los campos requeridos
+                                    if (overrideAmountInput) {
+                                        overrideAmountInput.required = true;
+                                        overrideAmountInput.value = '';
+                                    }
+                                    if (overrideReasonInput) {
+                                        overrideReasonInput.required = true;
+                                        overrideReasonInput.value = '';
+                                    }
                                 } else {
                                     costInput.value = (calculation.calculatedFee || 0).toFixed(2);
+                                    costInput.style.color = '';
+                                    if (costHelp) {
+                                        costHelp.textContent = 'Se calcula automáticamente según las reglas configuradas';
+                                        costHelp.style.color = 'var(--color-text-secondary)';
+                                    }
+                                    // Ocultar campos de override
+                                    if (overrideContainer) {
+                                        overrideContainer.style.display = 'none';
+                                    }
+                                    // Hacer los campos opcionales
+                                    if (overrideAmountInput) {
+                                        overrideAmountInput.required = false;
+                                        overrideAmountInput.value = '';
+                                    }
+                                    if (overrideReasonInput) {
+                                        overrideReasonInput.required = false;
+                                        overrideReasonInput.value = '';
+                                    }
                                 }
                             }
                         }
@@ -6007,13 +6061,34 @@ const Reports = {
             // Calcular costo de llegada
             const today = new Date().toISOString().split('T')[0];
             let arrivalFee = 0;
+            let overrideRequired = false;
+            let overrideAmount = null;
+            let overrideReason = null;
+            
             if (typeof ArrivalRules !== 'undefined' && ArrivalRules.calculateArrivalFee) {
                 const calculation = await ArrivalRules.calculateArrivalFee(agencyId, branchId, passengers, unitType, today);
-                if (calculation.overrideRequired && !calculation.calculatedFee) {
-                    Utils.showNotification('Esta llegada requiere override manual. Por favor usa el módulo de llegadas para configurarla.', 'warning');
-                    return;
+                
+                // Priorizar usar calculatedFee si está disponible (incluso si overrideRequired es true)
+                if (calculation.calculatedFee && calculation.calculatedFee > 0) {
+                    // Hay una tarifa calculada válida, usarla
+                    arrivalFee = calculation.calculatedFee;
+                    overrideRequired = false;
+                } else if (calculation.overrideRequired) {
+                    // No hay tarifa calculada y requiere override, verificar si se proporcionó monto manual
+                    overrideAmount = parseFloat(document.getElementById('qc-arrival-override-amount')?.value || 0);
+                    overrideReason = document.getElementById('qc-arrival-override-reason')?.value?.trim() || '';
+                    
+                    if (!overrideAmount || overrideAmount <= 0 || !overrideReason) {
+                        Utils.showNotification('Esta llegada requiere override manual. Por favor completa el monto y el motivo del override.', 'warning');
+                        return;
+                    }
+                    
+                    overrideRequired = true;
+                    arrivalFee = overrideAmount;
+                } else {
+                    // No hay tarifa calculada pero no requiere override explícito, usar 0
+                    arrivalFee = 0;
                 }
-                arrivalFee = calculation.calculatedFee || 0;
             }
 
             // Guardar llegada usando ArrivalRules.saveArrival
@@ -6027,6 +6102,10 @@ const Reports = {
                     units: units,
                     unit_type: unitType,
                     arrival_fee: arrivalFee,
+                    calculated_fee: overrideRequired ? 0 : arrivalFee,
+                    override: overrideRequired,
+                    override_amount: overrideAmount,
+                    override_reason: overrideReason,
                     date: today,
                     notes: notes,
                     created_by: typeof UserManager !== 'undefined' && UserManager.currentUser ? UserManager.currentUser.id : null
@@ -6068,11 +6147,32 @@ const Reports = {
             // Limpiar formulario
             document.getElementById('quick-arrivals-form')?.reset();
             const costInput = document.getElementById('qc-arrival-cost');
-            if (costInput) costInput.value = '';
+            if (costInput) {
+                costInput.value = '';
+                costInput.style.color = '';
+            }
+            const costHelp = document.getElementById('qc-arrival-cost-help');
+            if (costHelp) {
+                costHelp.textContent = 'Se calcula automáticamente';
+                costHelp.style.color = 'var(--color-text-secondary)';
+            }
+            const overrideContainer = document.getElementById('qc-arrival-override-container');
+            if (overrideContainer) {
+                overrideContainer.style.display = 'none';
+            }
 
-            // Recargar llegadas
+            // Recargar llegadas y recalcular utilidades
             await this.loadQuickCaptureArrivals();
             await this.loadQuickCaptureData(); // Recargar datos para actualizar utilidades
+            
+            // Recalcular utilidad diaria para que se actualice en el reporte
+            if (typeof ProfitCalculator !== 'undefined' && ProfitCalculator.calculateDailyProfit && branchId) {
+                try {
+                    await ProfitCalculator.calculateDailyProfit(today, branchId);
+                } catch (error) {
+                    console.warn('Error recalculando utilidad diaria:', error);
+                }
+            }
 
             Utils.showNotification('Llegada guardada correctamente', 'success');
         } catch (error) {
