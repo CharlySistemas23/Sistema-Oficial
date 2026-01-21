@@ -2600,6 +2600,7 @@ const Reports = {
             }) || [];
             
             // Filtrar costos de llegadas del día
+            // CRÍTICO: Aplicar filtro estricto por sucursal - NO incluir costos sin branch_id cuando se filtra por sucursal específica
             const arrivalCostEntries = allCosts.filter(c => {
                 const costDate = c.date || c.created_at;
                 const costDateStr = typeof costDate === 'string' ? costDate.split('T')[0] : new Date(costDate).toISOString().split('T')[0];
@@ -2610,13 +2611,22 @@ const Reports = {
                 // Verificar fecha
                 if (costDateStr !== dateStr) return false;
                 
-                // Verificar sucursal
+                // CRÍTICO: Verificar sucursal con filtro estricto
                 if (branchId !== null) {
-                    return c.branch_id === branchId || !c.branch_id; // Incluir costos globales
+                    // Sucursal específica: SOLO incluir costos de esta sucursal (excluir sin branch_id)
+                    if (!c.branch_id) {
+                        return false; // EXCLUIR costos sin branch_id cuando se filtra por sucursal específica
+                    }
+                    return String(c.branch_id) === String(branchId);
                 } else if (branchIds.length > 0) {
-                    return !c.branch_id || branchIds.includes(c.branch_id);
+                    // Múltiples sucursales específicas: SOLO incluir costos de esas sucursales (excluir sin branch_id)
+                    if (!c.branch_id) {
+                        return false; // EXCLUIR costos sin branch_id
+                    }
+                    return branchIds.includes(c.branch_id);
                 } else {
-                    return true; // Todas las sucursales
+                    // Todas las sucursales (master_admin): incluir todos los costos
+                    return true;
                 }
             });
             
@@ -6625,14 +6635,35 @@ const Reports = {
                 console.log(`💰 Calculando costos operativos para ${captureDate}, sucursales: ${captureBranchIds.join(', ') || 'todas'}`);
                 console.log(`   📊 Total costos en DB: ${allCosts.length}`);
                 
-                // Si no hay branchIds específicos, considerar costos globales (branch_id = null)
-                const branchIdsToProcess = captureBranchIds.length > 0 ? captureBranchIds : [null];
+                // CRÍTICO: Determinar si debemos incluir costos globales (sin branch_id)
+                // Solo incluirlos si el usuario es master_admin y está viendo todas las sucursales
+                const isMasterAdmin = typeof UserManager !== 'undefined' && (
+                    UserManager.currentUser?.role === 'master_admin' ||
+                    UserManager.currentUser?.is_master_admin ||
+                    UserManager.currentUser?.isMasterAdmin ||
+                    UserManager.currentEmployee?.role === 'master_admin'
+                );
+                const includeGlobalCosts = isMasterAdmin && captureBranchIds.length === 0;
+                
+                // Si hay branchIds específicos, procesar cada uno por separado con filtro estricto
+                const branchIdsToProcess = captureBranchIds.length > 0 ? captureBranchIds : (includeGlobalCosts ? [null] : []);
                 
                 for (const branchId of branchIdsToProcess) {
-                    const branchCosts = allCosts.filter(c => 
-                        branchId === null ? (!c.branch_id || captureBranchIds.includes(c.branch_id)) : 
-                        (c.branch_id === branchId || !c.branch_id) // Incluir costos globales también
-                    );
+                    // CRÍTICO: Filtro estricto por sucursal
+                    // Si branchId es null (costos globales), solo incluir costos sin branch_id
+                    // Si branchId tiene valor, SOLO incluir costos de esa sucursal (excluir globales)
+                    const branchCosts = allCosts.filter(c => {
+                        if (branchId === null) {
+                            // Costos globales: solo incluir si no tienen branch_id
+                            return !c.branch_id;
+                        } else {
+                            // Sucursal específica: SOLO incluir costos de esta sucursal (excluir sin branch_id)
+                            if (!c.branch_id) {
+                                return false; // EXCLUIR costos sin branch_id cuando se filtra por sucursal específica
+                            }
+                            return String(c.branch_id) === String(branchId);
+                        }
+                    });
                     console.log(`   🏢 Costos para sucursal ${branchId || 'todas'}: ${branchCosts.length}`);
                     console.log(`   📋 Costos recurrentes: ${branchCosts.filter(c => c.recurring === true).length}`);
                     
