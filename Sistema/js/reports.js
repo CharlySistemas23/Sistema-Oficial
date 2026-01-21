@@ -6791,6 +6791,71 @@ const Reports = {
                 console.warn('No se pudieron obtener costos operativos:', e);
             }
             
+            // 8. Gastos de caja (retiros) del día
+            // Los retiros de caja también son gastos operativos que deben incluirse
+            let cashExpenses = 0;
+            let cashExpensesDetail = [];
+            try {
+                // Obtener todas las sesiones de caja del día
+                const allSessions = await DB.getAll('cash_sessions') || [];
+                const daySessions = allSessions.filter(s => {
+                    const sessionDate = s.date || s.created_at;
+                    const sessionDateStr = typeof sessionDate === 'string' ? sessionDate.split('T')[0] : new Date(sessionDate).toISOString().split('T')[0];
+                    return sessionDateStr === captureDate;
+                });
+                
+                // Obtener todos los movimientos de caja
+                const allMovements = await DB.getAll('cash_movements') || [];
+                
+                // Obtener branches para mostrar nombres
+                const branches = await DB.getAll('catalog_branches') || [];
+                
+                // Filtrar movimientos de retiro (withdrawal) del día y de las sesiones del día
+                const sessionIds = daySessions.map(s => s.id);
+                const dayWithdrawals = allMovements.filter(m => {
+                    // Solo retiros (gastos)
+                    if (m.type !== 'withdrawal') return false;
+                    
+                    // Debe pertenecer a una sesión del día
+                    if (!sessionIds.includes(m.session_id)) return false;
+                    
+                    // Filtrar por sucursal si hay sucursales específicas
+                    if (captureBranchIds.length > 0) {
+                        const session = daySessions.find(s => s.id === m.session_id);
+                        if (!session || !session.branch_id) return false;
+                        if (!captureBranchIds.includes(session.branch_id)) return false;
+                    }
+                    
+                    return true;
+                });
+                
+                // Sumar retiros y agregar al detalle
+                for (const withdrawal of dayWithdrawals) {
+                    const amount = withdrawal.amount || 0;
+                    cashExpenses += amount;
+                    const session = daySessions.find(s => s.id === withdrawal.session_id);
+                    const branch = session?.branch_id ? branches.find(b => b.id === session.branch_id) : null;
+                    const branchName = branch?.name || 'Sin sucursal';
+                    
+                    cashExpensesDetail.push({
+                        category: 'Gasto de Caja',
+                        description: withdrawal.description || 'Retiro de caja',
+                        amount: amount,
+                        branch: branchName
+                    });
+                }
+                
+                if (cashExpenses > 0) {
+                    console.log(`💰 Gastos de caja (retiros) para ${captureDate}: $${cashExpenses.toFixed(2)} (${dayWithdrawals.length} retiros)`);
+                    // Agregar gastos de caja a los gastos variables del día
+                    variableCostsDaily += cashExpenses;
+                    // Agregar al detalle de costos variables
+                    variableCostsDetail = variableCostsDetail.concat(cashExpensesDetail);
+                }
+            } catch (e) {
+                console.warn('No se pudieron obtener gastos de caja:', e);
+            }
+            
             // Total de costos operativos (variables + fijos)
             const totalOperatingCosts = variableCostsDaily + fixedCostsProrated;
             
@@ -6802,6 +6867,9 @@ const Reports = {
             console.log(`   Utilidad Bruta: $${(totalSalesMXN - totalCOGS - totalCommissions).toFixed(2)}`);
             console.log(`   Costos de Llegadas: $${totalArrivalCosts.toFixed(2)}`);
             console.log(`   Gastos Variables del Día: $${variableCostsDaily.toFixed(2)} (${variableCostsDetail.length} items)`);
+            if (cashExpenses > 0) {
+                console.log(`   └─ Gastos de Caja (retiros): $${cashExpenses.toFixed(2)} (${cashExpensesDetail.length} retiros)`);
+            }
             console.log(`   Gastos Fijos Prorrateados: $${fixedCostsProrated.toFixed(2)} (${fixedCostsDetail.length} items)`);
             console.log(`   Total Costos Operativos: $${totalOperatingCosts.toFixed(2)}`);
             console.log(`   Comisiones Bancarias: $${bankCommissions.toFixed(2)}`);
