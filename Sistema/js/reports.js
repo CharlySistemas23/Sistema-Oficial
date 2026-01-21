@@ -6392,8 +6392,9 @@ const Reports = {
 
                     // Costos anuales prorrateados
                     // IMPORTANTE: Para costos recurrentes anuales, aplicar al año objetivo
+                    // NOTA: El schema usa 'yearly' pero aceptamos ambos 'annual' y 'yearly'
                     const annualCosts = branchCosts.filter(c => {
-                        return c.period_type === 'annual' && 
+                        return (c.period_type === 'annual' || c.period_type === 'yearly') && 
                                c.recurring === true &&
                                c.category !== 'pago_llegadas' &&
                                c.category !== 'comisiones_bancarias';
