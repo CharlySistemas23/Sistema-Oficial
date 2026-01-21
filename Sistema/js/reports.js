@@ -6303,8 +6303,12 @@ const Reports = {
 
             // 7. Costos operativos del día (prorrateados) - Por todas las sucursales involucradas
             // IMPORTANTE: Usar la fecha de las capturas, no la fecha actual
-            let totalOperatingCosts = 0;
+            // SEPARAR: Variables del día vs Fijos prorrateados
+            let variableCostsDaily = 0;  // Costos variables registrados hoy
+            let fixedCostsProrated = 0;  // Costos fijos prorrateados (mensuales, semanales, anuales)
             let bankCommissions = 0;
+            let variableCostsDetail = []; // Detalle de costos variables
+            let fixedCostsDetail = []; // Detalle de costos fijos
             try {
                 const allCosts = await DB.getAll('cost_entries') || [];
                 const targetDate = new Date(captureDate);
@@ -6320,77 +6324,106 @@ const Reports = {
                         (c.branch_id === branchId || !c.branch_id) // Incluir costos globales también
                     );
 
+                    // A) COSTOS FIJOS PRORRATEADOS (Mensuales, Semanales, Anuales)
                     // Costos mensuales prorrateados
-                    // EXCLUIR: pago_llegadas y comisiones_bancarias (ya se calculan por separado)
                     const monthlyCosts = branchCosts.filter(c => {
                         const costDate = new Date(c.date || c.created_at);
                         return c.period_type === 'monthly' && 
                                c.recurring === true &&
-                               c.category !== 'pago_llegadas' && // Excluir llegadas
-                               c.category !== 'comisiones_bancarias' && // Excluir comisiones bancarias
+                               c.category !== 'pago_llegadas' &&
+                               c.category !== 'comisiones_bancarias' &&
                                costDate.getMonth() === targetDate.getMonth() &&
                                costDate.getFullYear() === targetDate.getFullYear();
                     });
                     for (const cost of monthlyCosts) {
                         const costDate = new Date(cost.date || cost.created_at);
                         const daysInMonth = new Date(costDate.getFullYear(), costDate.getMonth() + 1, 0).getDate();
-                        totalOperatingCosts += (cost.amount || 0) / daysInMonth;
+                        const dailyAmount = (cost.amount || 0) / daysInMonth;
+                        fixedCostsProrated += dailyAmount;
+                        fixedCostsDetail.push({
+                            category: cost.category || 'Sin categoría',
+                            description: cost.description || cost.notes || '',
+                            amount: dailyAmount,
+                            period: 'Mensual prorrateado',
+                            original: cost.amount || 0
+                        });
                     }
 
                     // Costos semanales prorrateados
-                    // EXCLUIR: pago_llegadas y comisiones_bancarias (ya se calculan por separado)
                     const weeklyCosts = branchCosts.filter(c => {
                         const costDate = new Date(c.date || c.created_at);
                         const targetWeek = this.getWeekNumber(targetDate);
                         const costWeek = this.getWeekNumber(costDate);
                         return c.period_type === 'weekly' && 
                                c.recurring === true &&
-                               c.category !== 'pago_llegadas' && // Excluir llegadas
-                               c.category !== 'comisiones_bancarias' && // Excluir comisiones bancarias
+                               c.category !== 'pago_llegadas' &&
+                               c.category !== 'comisiones_bancarias' &&
                                targetWeek === costWeek &&
                                targetDate.getFullYear() === costDate.getFullYear();
                     });
                     for (const cost of weeklyCosts) {
-                        totalOperatingCosts += (cost.amount || 0) / 7;
+                        const dailyAmount = (cost.amount || 0) / 7;
+                        fixedCostsProrated += dailyAmount;
+                        fixedCostsDetail.push({
+                            category: cost.category || 'Sin categoría',
+                            description: cost.description || cost.notes || '',
+                            amount: dailyAmount,
+                            period: 'Semanal prorrateado',
+                            original: cost.amount || 0
+                        });
                     }
 
                     // Costos anuales prorrateados
-                    // EXCLUIR: pago_llegadas y comisiones_bancarias (ya se calculan por separado)
                     const annualCosts = branchCosts.filter(c => {
                         const costDate = new Date(c.date || c.created_at);
                         return c.period_type === 'annual' && 
                                c.recurring === true &&
-                               c.category !== 'pago_llegadas' && // Excluir llegadas
-                               c.category !== 'comisiones_bancarias' && // Excluir comisiones bancarias
+                               c.category !== 'pago_llegadas' &&
+                               c.category !== 'comisiones_bancarias' &&
                                costDate.getFullYear() === targetDate.getFullYear();
                     });
                     for (const cost of annualCosts) {
                         const daysInYear = ((targetDate.getFullYear() % 4 === 0 && targetDate.getFullYear() % 100 !== 0) || (targetDate.getFullYear() % 400 === 0)) ? 366 : 365;
-                        totalOperatingCosts += (cost.amount || 0) / daysInYear;
+                        const dailyAmount = (cost.amount || 0) / daysInYear;
+                        fixedCostsProrated += dailyAmount;
+                        fixedCostsDetail.push({
+                            category: cost.category || 'Sin categoría',
+                            description: cost.description || cost.notes || '',
+                            amount: dailyAmount,
+                            period: 'Anual prorrateado',
+                            original: cost.amount || 0
+                        });
                     }
 
-                    // Costos variables/diarios del día específico
-                    // EXCLUIR: pago_llegadas y comisiones_bancarias (ya se calculan por separado)
+                    // B) COSTOS VARIABLES DEL DÍA (registrados hoy)
                     const variableCosts = branchCosts.filter(c => {
                         const costDate = c.date || c.created_at;
                         const costDateStr = costDate.split('T')[0];
                         return costDateStr === captureDate &&
-                               c.category !== 'pago_llegadas' && // Excluir llegadas
-                               c.category !== 'comisiones_bancarias' && // Excluir comisiones bancarias
+                               c.category !== 'pago_llegadas' &&
+                               c.category !== 'comisiones_bancarias' &&
                                (c.period_type === 'one_time' || c.period_type === 'daily' || !c.period_type);
                     });
                     for (const cost of variableCosts) {
-                        // Las comisiones bancarias ya están excluidas en el filtro, pero por seguridad:
                         if (cost.category === 'comisiones_bancarias') {
                             bankCommissions += (cost.amount || 0);
                         } else {
-                            totalOperatingCosts += (cost.amount || 0);
+                            const amount = cost.amount || 0;
+                            variableCostsDaily += amount;
+                            variableCostsDetail.push({
+                                category: cost.category || 'Sin categoría',
+                                description: cost.description || cost.notes || '',
+                                amount: amount
+                            });
                         }
                     }
                 }
             } catch (e) {
                 console.warn('No se pudieron obtener costos operativos:', e);
             }
+            
+            // Total de costos operativos (variables + fijos)
+            const totalOperatingCosts = variableCostsDaily + fixedCostsProrated;
 
             // 8. Calcular utilidades
             const grossProfit = totalSalesMXN - totalCOGS - totalCommissions;
@@ -6398,12 +6431,49 @@ const Reports = {
             const grossMargin = totalSalesMXN > 0 ? (grossProfit / totalSalesMXN * 100) : 0;
             const netMargin = totalSalesMXN > 0 ? (netProfit / totalSalesMXN * 100) : 0;
 
-            // 9. Renderizar HTML
+            // 9. Información básica del encabezado
+            const branchId = captureBranchIds.length === 1 ? captureBranchIds[0] : null;
+            let branchName = 'Todas las sucursales';
+            if (branchId) {
+                try {
+                    const branch = await DB.get('catalog_branches', branchId);
+                    branchName = branch?.name || 'Sucursal';
+                } catch (e) {
+                    console.warn('Error obteniendo nombre de sucursal:', e);
+                }
+            }
+            const formattedDate = Utils.formatDate(new Date(captureDate), 'DD/MM/YYYY');
+            const ticketCount = captures.length;
+            const ticketAverage = ticketCount > 0 ? totalSalesMXN / ticketCount : 0;
+
+            // 10. Renderizar HTML
             const profitColor = netProfit >= 0 ? 'var(--color-success)' : 'var(--color-danger)';
             const marginColor = netMargin >= 0 ? 'var(--color-success)' : 'var(--color-danger)';
 
             let html = `
                 <div style="display: grid; gap: var(--spacing-md);">
+                    <!-- Encabezado del Reporte -->
+                    <div style="padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md); border-left: 4px solid var(--color-primary);">
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--spacing-sm); font-size: 11px;">
+                            <div>
+                                <span style="color: var(--color-text-secondary);">Sucursal:</span>
+                                <div style="font-weight: 600; color: var(--color-text-primary);">${branchName}</div>
+                            </div>
+                            <div>
+                                <span style="color: var(--color-text-secondary);">Fecha:</span>
+                                <div style="font-weight: 600; color: var(--color-text-primary);">${formattedDate}</div>
+                            </div>
+                            <div>
+                                <span style="color: var(--color-text-secondary);"># Tickets:</span>
+                                <div style="font-weight: 600; color: var(--color-text-primary);">${ticketCount}</div>
+                            </div>
+                            <div>
+                                <span style="color: var(--color-text-secondary);">Ticket Promedio:</span>
+                                <div style="font-weight: 600; color: var(--color-text-primary);">$${ticketAverage.toFixed(2)}</div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Resumen de Ingresos -->
                     <div style="padding: var(--spacing-md); background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: var(--radius-md); color: white;">
                         <h4 style="margin: 0 0 var(--spacing-sm) 0; font-size: 12px; text-transform: uppercase; opacity: 0.9;">Ingresos del Día</h4>
@@ -6457,22 +6527,69 @@ const Reports = {
                         <h4 style="margin: 0 0 var(--spacing-sm) 0; font-size: 12px; font-weight: 600; text-transform: uppercase; color: var(--color-text-primary);">
                             <i class="fas fa-minus-circle"></i> Gastos Operativos del Día
                         </h4>
-                        <div style="display: grid; gap: var(--spacing-xs); font-size: 12px;">
+                        <div style="display: grid; gap: var(--spacing-sm); font-size: 12px;">
+                            <!-- Costos de Llegadas -->
                             <div style="display: flex; justify-content: space-between;">
                                 <span style="color: var(--color-text-secondary);">Costos de Llegadas:</span>
                                 <span style="font-weight: 600;">$${totalArrivalCosts.toFixed(2)}</span>
                             </div>
-                            <div style="display: flex; justify-content: space-between;">
-                                <span style="color: var(--color-text-secondary);">Costos Operativos (Prorrateados):</span>
+                            
+                            <!-- A) Costos Variables del Día -->
+                            <div style="margin-top: var(--spacing-xs); padding-top: var(--spacing-xs); border-top: 1px solid var(--color-border-light);">
+                                <div style="display: flex; justify-content: space-between; margin-bottom: var(--spacing-xs);">
+                                    <span style="font-weight: 600; font-size: 11px; text-transform: uppercase; color: var(--color-text-primary);">
+                                        A) Gastos Variables del Día:
+                                    </span>
+                                    <span style="font-weight: 600;">$${variableCostsDaily.toFixed(2)}</span>
+                                </div>
+                                ${variableCostsDetail.length > 0 ? `
+                                    <div style="margin-left: var(--spacing-sm); font-size: 11px; color: var(--color-text-secondary);">
+                                        ${variableCostsDetail.map(c => `
+                                            <div style="display: flex; justify-content: space-between; padding: 2px 0;">
+                                                <span>• ${c.category}${c.description ? `: ${c.description}` : ''}</span>
+                                                <span>$${c.amount.toFixed(2)}</span>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                ` : '<div style="margin-left: var(--spacing-sm); font-size: 11px; color: var(--color-text-secondary); font-style: italic;">No hay gastos variables registrados hoy</div>'}
+                            </div>
+
+                            <!-- B) Costos Fijos Prorrateados -->
+                            <div style="margin-top: var(--spacing-xs); padding-top: var(--spacing-xs); border-top: 1px solid var(--color-border-light);">
+                                <div style="display: flex; justify-content: space-between; margin-bottom: var(--spacing-xs);">
+                                    <span style="font-weight: 600; font-size: 11px; text-transform: uppercase; color: var(--color-text-primary);">
+                                        B) Gastos Fijos Prorrateados:
+                                    </span>
+                                    <span style="font-weight: 600;">$${fixedCostsProrated.toFixed(2)}</span>
+                                </div>
+                                ${fixedCostsDetail.length > 0 ? `
+                                    <div style="margin-left: var(--spacing-sm); font-size: 11px; color: var(--color-text-secondary);">
+                                        ${fixedCostsDetail.map(c => `
+                                            <div style="display: flex; justify-content: space-between; padding: 2px 0;">
+                                                <span>• ${c.category}${c.description ? `: ${c.description}` : ''} <small style="opacity: 0.7;">(${c.period})</small></span>
+                                                <span>$${c.amount.toFixed(2)}</span>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                ` : '<div style="margin-left: var(--spacing-sm); font-size: 11px; color: var(--color-text-secondary); font-style: italic;">No hay gastos fijos prorrateados</div>'}
+                            </div>
+
+                            <!-- Costos Operativos Totales (Variables + Fijos) -->
+                            <div style="display: flex; justify-content: space-between; margin-top: var(--spacing-xs); padding-top: var(--spacing-xs); border-top: 1px solid var(--color-border-light);">
+                                <span style="color: var(--color-text-secondary);">Total Costos Operativos (Variables + Fijos):</span>
                                 <span style="font-weight: 600;">$${totalOperatingCosts.toFixed(2)}</span>
                             </div>
+
+                            <!-- Comisiones Bancarias -->
                             <div style="display: flex; justify-content: space-between;">
                                 <span style="color: var(--color-text-secondary);">Comisiones Bancarias:</span>
                                 <span style="font-weight: 600;">$${bankCommissions.toFixed(2)}</span>
                             </div>
-                            <div style="display: flex; justify-content: space-between; margin-top: var(--spacing-xs); padding-top: var(--spacing-xs); border-top: 1px solid var(--color-border-light);">
-                                <span style="font-weight: 600;">Total Gastos Operativos:</span>
-                                <span style="font-weight: 700; font-size: 14px;">$${(totalArrivalCosts + totalOperatingCosts + bankCommissions).toFixed(2)}</span>
+                            
+                            <!-- Total General de Gastos Operativos -->
+                            <div style="display: flex; justify-content: space-between; margin-top: var(--spacing-xs); padding-top: var(--spacing-xs); border-top: 2px solid var(--color-border-light);">
+                                <span style="font-weight: 700; font-size: 13px;">Total Gastos Operativos del Día:</span>
+                                <span style="font-weight: 700; font-size: 15px; color: var(--color-danger);">$${(totalArrivalCosts + totalOperatingCosts + bankCommissions).toFixed(2)}</span>
                             </div>
                         </div>
                     </div>
