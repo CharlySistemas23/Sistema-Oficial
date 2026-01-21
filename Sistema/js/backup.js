@@ -151,30 +151,135 @@ const BackupManager = {
                 throw new Error('Backup no encontrado');
             }
             
-            const stores = backup.data.stores || {};
-            
-            // Restaurar cada store
-            for (const [storeName, items] of Object.entries(stores)) {
-                try {
-                    // Limpiar store existente
-                    await DB.clear(storeName);
-                    
-                    // Restaurar items
-                    for (const item of items) {
-                        await DB.put(storeName, item);
-                    }
-                } catch (error) {
-                    console.error(`Error restaurando store ${storeName}:`, error);
-                }
-            }
-            
-            Utils.showNotification('Backup restaurado correctamente', 'success');
-            return true;
+            return await this.restoreBackupData(backup);
         } catch (error) {
             console.error('Error restaurando backup:', error);
             Utils.showNotification('Error al restaurar backup', 'error');
             return false;
         }
+    },
+    
+    async restoreBackupData(backup) {
+        try {
+            // Validar estructura del backup
+            if (!backup || !backup.data || !backup.data.stores) {
+                throw new Error('Formato de backup inválido. El archivo debe contener data.stores');
+            }
+            
+            const stores = backup.data.stores || {};
+            let restoredCount = 0;
+            let errorCount = 0;
+            
+            // Confirmar antes de restaurar (ya que va a limpiar datos existentes)
+            const confirm = await Utils.confirm(
+                `¿Estás seguro de restaurar este backup?\n\n` +
+                `Esto reemplazará TODOS los datos actuales con los del backup.\n` +
+                `Esta acción NO se puede deshacer.\n\n` +
+                `Fecha del backup: ${backup.timestamp ? new Date(backup.timestamp).toLocaleString('es-MX') : 'N/A'}\n` +
+                `Versión: ${backup.version || 'N/A'}`,
+                'Restaurar Backup'
+            );
+            
+            if (!confirm) {
+                Utils.showNotification('Restauración cancelada', 'info');
+                return false;
+            }
+            
+            // Restaurar cada store
+            for (const [storeName, items] of Object.entries(stores)) {
+                try {
+                    // Verificar que el store existe
+                    if (!DB.db || !DB.db.objectStoreNames.contains(storeName)) {
+                        console.warn(`Store ${storeName} no existe, saltando...`);
+                        continue;
+                    }
+                    
+                    // Limpiar store existente
+                    await DB.clear(storeName);
+                    
+                    // Restaurar items
+                    if (Array.isArray(items)) {
+                        for (const item of items) {
+                            try {
+                                await DB.put(storeName, item);
+                                restoredCount++;
+                            } catch (itemError) {
+                                console.error(`Error restaurando item en ${storeName}:`, itemError);
+                                errorCount++;
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.error(`Error restaurando store ${storeName}:`, error);
+                    errorCount++;
+                }
+            }
+            
+            const message = `Backup restaurado correctamente. ${restoredCount} elementos restaurados${errorCount > 0 ? `, ${errorCount} errores` : ''}`;
+            Utils.showNotification(message, errorCount > 0 ? 'warning' : 'success');
+            
+            // Recargar la página para actualizar todos los módulos
+            setTimeout(() => {
+                if (confirm('¿Deseas recargar la página para ver los cambios?')) {
+                    window.location.reload();
+                }
+            }, 2000);
+            
+            return true;
+        } catch (error) {
+            console.error('Error restaurando backup:', error);
+            Utils.showNotification('Error al restaurar backup: ' + error.message, 'error');
+            return false;
+        }
+    },
+    
+    async importBackupFromFile() {
+        return new Promise((resolve) => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.style.display = 'none';
+            
+            input.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (!file) {
+                    resolve(false);
+                    return;
+                }
+                
+                try {
+                    const fileContent = await this.readFileAsText(file);
+                    const backup = JSON.parse(fileContent);
+                    
+                    // Validar que sea un backup válido
+                    if (!backup.data || !backup.data.stores) {
+                        throw new Error('El archivo no es un backup válido. Debe contener data.stores');
+                    }
+                    
+                    // Restaurar directamente desde el archivo
+                    const success = await this.restoreBackupData(backup);
+                    resolve(success);
+                } catch (error) {
+                    console.error('Error importando backup:', error);
+                    Utils.showNotification('Error al importar backup: ' + error.message, 'error');
+                    resolve(false);
+                } finally {
+                    document.body.removeChild(input);
+                }
+            };
+            
+            document.body.appendChild(input);
+            input.click();
+        });
+    },
+    
+    readFileAsText(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target.result);
+            reader.onerror = (e) => reject(new Error('Error leyendo archivo'));
+            reader.readAsText(file);
+        });
     },
     
     async downloadBackup(backupKey) {
