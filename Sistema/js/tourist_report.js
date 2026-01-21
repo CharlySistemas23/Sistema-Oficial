@@ -2253,12 +2253,16 @@ const TouristReport = {
         
         const feeInput = row.querySelector('.arrival-fee');
         if (feeInput) {
-            if (calculation.overrideRequired && !calculation.calculatedFee) {
+            // Priorizar usar calculatedFee si está disponible (incluso si overrideRequired es true)
+            if (calculation.calculatedFee && calculation.calculatedFee > 0) {
+                feeInput.value = Utils.formatCurrency(calculation.calculatedFee);
+                feeInput.style.color = 'var(--color-text)';
+            } else if (calculation.overrideRequired) {
                 feeInput.value = 'Requiere Override';
                 feeInput.style.color = 'var(--color-danger)';
             } else {
-                feeInput.value = Utils.formatCurrency(calculation.calculatedFee);
-                feeInput.style.color = 'var(--color-text)';
+                feeInput.value = Utils.formatCurrency(0);
+                feeInput.style.color = 'var(--color-text-secondary)';
             }
         }
 
@@ -2307,10 +2311,21 @@ const TouristReport = {
         // Calcular costo
         const calculation = await ArrivalRules.calculateArrivalFee(agencyId, branchId, passengers, finalUnitType, date);
         
-        if (calculation.overrideRequired && !calculation.calculatedFee) {
-            // Mostrar modal de override
+        // Priorizar usar calculatedFee si está disponible (incluso si overrideRequired es true)
+        let arrivalFee = 0;
+        let overrideRequired = false;
+        
+        if (calculation.calculatedFee && calculation.calculatedFee > 0) {
+            // Hay una tarifa calculada válida, usarla
+            arrivalFee = calculation.calculatedFee;
+            overrideRequired = false;
+        } else if (calculation.overrideRequired) {
+            // No hay tarifa calculada y requiere override, mostrar modal
             await this.showOverrideModal(agencyId, finalUnitType);
             return;
+        } else {
+            // No hay tarifa calculada pero no requiere override explícito, usar 0
+            arrivalFee = 0;
         }
 
         // Guardar llegada - intentar con API primero
@@ -2326,8 +2341,8 @@ const TouristReport = {
                     passengers,
                     units,
                     unit_type: finalUnitType,
-                    calculated_fee: calculation.calculatedFee,
-                    override: false,
+                    calculated_fee: arrivalFee,
+                    override: overrideRequired,
                     notes
                 });
                 
@@ -2357,8 +2372,8 @@ const TouristReport = {
                     passengers,
                     units,
                     unit_type: finalUnitType,
-                    calculated_fee: calculation.calculatedFee,
-                    override: false,
+                    calculated_fee: arrivalFee,
+                    override: overrideRequired,
                     notes
                 });
             }
@@ -2371,14 +2386,23 @@ const TouristReport = {
                 passengers,
                 units,
                 unit_type: finalUnitType,
-                calculated_fee: calculation.calculatedFee,
-                override: false,
+                calculated_fee: arrivalFee,
+                override: overrideRequired,
                 notes
             });
         }
 
         Utils.showNotification('Llegada guardada', 'success');
-        this.updateArrivalsTotals();
+        await this.updateArrivalsTotals();
+        
+        // Recalcular utilidad diaria para que se actualice en el reporte
+        if (typeof ProfitCalculator !== 'undefined' && ProfitCalculator.calculateDailyProfit && branchId) {
+            try {
+                await ProfitCalculator.calculateDailyProfit(date, branchId);
+            } catch (error) {
+                console.warn('Error recalculando utilidad diaria:', error);
+            }
+        }
     },
 
     /**
