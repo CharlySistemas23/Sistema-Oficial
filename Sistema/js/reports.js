@@ -7852,7 +7852,9 @@ const Reports = {
 
             // Costos operativos del día (prorrateados)
             // IMPORTANTE: Usar la fecha de las capturas, no la fecha actual
-            let totalOperatingCosts = 0;
+            // SEPARAR: Variables del día vs Fijos prorrateados
+            let variableCostsDaily = 0;  // Costos variables registrados hoy
+            let fixedCostsProrated = 0;  // Costos fijos prorrateados (mensuales, semanales, anuales)
             let bankCommissions = 0;
             try {
                 const allCosts = await DB.getAll('cost_entries') || [];
@@ -7868,7 +7870,8 @@ const Reports = {
                         (c.branch_id === branchId || !c.branch_id) // Incluir costos globales también
                     );
 
-                    // Costos mensuales prorrateados (excluir pago_llegadas y comisiones_bancarias)
+                    // A) COSTOS FIJOS PRORRATEADOS (Mensuales, Semanales, Anuales)
+                    // Costos mensuales prorrateados (renta, nómina, luz, etc.)
                     const monthlyCosts = branchCosts.filter(c => {
                         const costDate = new Date(c.date || c.created_at);
                         return c.period_type === 'monthly' && 
@@ -7881,10 +7884,10 @@ const Reports = {
                     for (const cost of monthlyCosts) {
                         const costDate = new Date(cost.date || cost.created_at);
                         const daysInMonth = new Date(costDate.getFullYear(), costDate.getMonth() + 1, 0).getDate();
-                        totalOperatingCosts += (cost.amount || 0) / daysInMonth;
+                        fixedCostsProrated += (cost.amount || 0) / daysInMonth;
                     }
 
-                    // Costos semanales prorrateados (excluir pago_llegadas y comisiones_bancarias)
+                    // Costos semanales prorrateados
                     const weeklyCosts = branchCosts.filter(c => {
                         const costDate = new Date(c.date || c.created_at);
                         const targetWeek = this.getWeekNumber(targetDate);
@@ -7897,10 +7900,10 @@ const Reports = {
                                c.category !== 'comisiones_bancarias'; // Excluir comisiones bancarias
                     });
                     for (const cost of weeklyCosts) {
-                        totalOperatingCosts += (cost.amount || 0) / 7;
+                        fixedCostsProrated += (cost.amount || 0) / 7;
                     }
 
-                    // Costos anuales prorrateados (excluir pago_llegadas y comisiones_bancarias)
+                    // Costos anuales prorrateados
                     const annualCosts = branchCosts.filter(c => {
                         const costDate = new Date(c.date || c.created_at);
                         return c.period_type === 'annual' && 
@@ -7911,25 +7914,20 @@ const Reports = {
                     });
                     for (const cost of annualCosts) {
                         const daysInYear = ((targetDate.getFullYear() % 4 === 0 && targetDate.getFullYear() % 100 !== 0) || (targetDate.getFullYear() % 400 === 0)) ? 366 : 365;
-                        totalOperatingCosts += (cost.amount || 0) / daysInYear;
+                        fixedCostsProrated += (cost.amount || 0) / daysInYear;
                     }
 
-                    // Costos variables/diarios del día específico (incluir comisiones_bancarias para procesarlas por separado)
-                    // IMPORTANTE: Usar la fecha de las capturas, no la fecha actual
+                    // B) COSTOS VARIABLES DEL DÍA (registrados hoy)
                     const variableCosts = branchCosts.filter(c => {
                         const costDate = c.date || c.created_at;
                         const costDateStr = costDate.split('T')[0];
                         return costDateStr === captureDate &&
                                c.category !== 'pago_llegadas' && // Excluir llegadas (se calculan por separado)
+                               c.category !== 'comisiones_bancarias' && // Excluir comisiones bancarias
                                (c.period_type === 'one_time' || c.period_type === 'daily' || !c.period_type);
                     });
                     for (const cost of variableCosts) {
-                        if (cost.category === 'comisiones_bancarias') {
-                            // Las comisiones bancarias se suman por separado, no son costos operativos
-                            bankCommissions += (cost.amount || 0);
-                        } else {
-                            totalOperatingCosts += (cost.amount || 0);
-                        }
+                        variableCostsDaily += (cost.amount || 0);
                     }
                     
                     // También buscar comisiones bancarias en cost_entries para el día
@@ -7974,16 +7972,21 @@ const Reports = {
                 console.warn('No se pudieron obtener costos operativos:', e);
             }
 
+            // Total de costos operativos (variables + fijos prorrateados)
+            const totalOperatingCosts = variableCostsDaily + fixedCostsProrated;
+
             // Calcular utilidades
             // Utilidad Bruta = Ingresos - COGS - Comisiones
             const grossProfit = totalSalesMXN - totalCOGS - totalCommissions;
-            // Utilidad Neta = Utilidad Bruta - Costos Llegadas - Costos Operativos - Comisiones Bancarias
+            // Utilidad Neta = Utilidad Bruta - Costos Llegadas - Costos Operativos (variables + fijos prorrateados) - Comisiones Bancarias
             const netProfit = grossProfit - totalArrivalCosts - totalOperatingCosts - bankCommissions;
             const grossMargin = totalSalesMXN > 0 ? (grossProfit / totalSalesMXN * 100) : 0;
             const netMargin = totalSalesMXN > 0 ? (netProfit / totalSalesMXN * 100) : 0;
 
             // Mostrar sección de utilidades
-            if (y + 75 > pageHeight - 30) {
+            // Ajustar altura si hay gastos fijos prorrateados (necesita más espacio)
+            const utilSectionHeight = fixedCostsProrated > 0 ? 80 : 75;
+            if (y + utilSectionHeight > pageHeight - 30) {
                 doc.addPage();
                 y = margin;
             }
@@ -7998,9 +8001,9 @@ const Reports = {
             const detailX = pageWidth - margin - 120; // Posición para detalles de monedas
 
             doc.setFillColor(240, 255, 240);
-            doc.rect(margin, y, pageWidth - (margin * 2), 70, 'F');
+            doc.rect(margin, y, pageWidth - (margin * 2), utilSectionHeight, 'F');
             doc.setDrawColor(200, 200, 200);
-            doc.rect(margin, y, pageWidth - (margin * 2), 70);
+            doc.rect(margin, y, pageWidth - (margin * 2), utilSectionHeight);
 
             // Línea 1: Ingresos
             doc.setFontSize(10);
@@ -8036,25 +8039,35 @@ const Reports = {
             doc.text('(-) Costos Llegadas:', margin + 5, y + 41);
             doc.text(`$${totalArrivalCosts.toFixed(2)}`, valueX, y + 41, { align: 'right' });
 
-            // Línea 6: Costos Operativos
+            // Línea 6: Costos Operativos (incluye fijos prorrateados)
             doc.text('(-) Costos Operativos:', margin + 5, y + 48);
             doc.text(`$${totalOperatingCosts.toFixed(2)}`, valueX, y + 48, { align: 'right' });
+            // Nota sobre gastos fijos prorrateados en una línea adicional más pequeña
+            if (fixedCostsProrated > 0) {
+                doc.setFontSize(7);
+                doc.setTextColor(100, 100, 100);
+                doc.text(`Incluye fijos prorrateados: $${fixedCostsProrated.toFixed(2)} (renta, luz, nómina, etc.)`, margin + 5, y + 51.5);
+                doc.setFontSize(9);
+                doc.setTextColor(0, 0, 0);
+            }
 
             // Línea 7: Comisiones Bancarias
-            doc.text('(-) Comisiones Bancarias:', margin + 5, y + 55);
-            doc.text(`$${bankCommissions.toFixed(2)}`, valueX, y + 55, { align: 'right' });
+            const commissionY = fixedCostsProrated > 0 ? y + 58 : y + 55;
+            doc.text('(-) Comisiones Bancarias:', margin + 5, commissionY);
+            doc.text(`$${bankCommissions.toFixed(2)}`, valueX, commissionY, { align: 'right' });
 
             // Línea 8: Utilidad Neta
+            const netY = fixedCostsProrated > 0 ? y + 65 : y + 62;
             doc.setFontSize(10);
             doc.setFont('helvetica', 'bold');
             doc.setTextColor(0, 0, 255);
-            doc.text('= Utilidad Neta:', margin + 5, y + 62);
-            doc.text(`$${netProfit.toFixed(2)}`, valueX - 20, y + 62, { align: 'right' });
+            doc.text('= Utilidad Neta:', margin + 5, netY);
+            doc.text(`$${netProfit.toFixed(2)}`, valueX - 20, netY, { align: 'right' });
             doc.setFontSize(9);
-            doc.text(`(${netMargin.toFixed(2)}%)`, valueX + 5, y + 62);
+            doc.text(`(${netMargin.toFixed(2)}%)`, valueX + 5, netY);
 
             doc.setTextColor(0, 0, 0);
-            y += 75;
+            y += utilSectionHeight;
 
             // ========== FOOTER ==========
             const totalPages = doc.internal.getNumberOfPages();
