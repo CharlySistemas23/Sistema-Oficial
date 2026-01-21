@@ -4,6 +4,7 @@ const Costs = {
     initialized: false,
     isExporting: false, // Flag para prevenir múltiples exportaciones simultáneas
     currentTab: 'costs',
+    showArrivalCosts: false, // Control para mostrar/ocultar costos de llegadas (por defecto ocultos)
     
     // Helper para obtener costos filtrados por sucursal
     async getFilteredCosts(options = {}) {
@@ -257,6 +258,12 @@ const Costs = {
                 </div>
                 <div class="form-group" style="width: 150px; min-width: 120px;">
                     <input type="date" id="cost-date-to" class="form-input" placeholder="Hasta" style="width: 100%;">
+                </div>
+                <div class="form-group" style="display: flex; align-items: center; gap: var(--spacing-xs); padding: 0 var(--spacing-xs);">
+                    <input type="checkbox" id="cost-show-arrivals" style="cursor: pointer;">
+                    <label for="cost-show-arrivals" style="font-size: 11px; cursor: pointer; white-space: nowrap; user-select: none;">
+                        <i class="fas fa-plane"></i> Mostrar llegadas
+                    </label>
                 </div>
                 <button class="btn-primary btn-sm" id="cost-add-btn" style="white-space: nowrap; flex-shrink: 0;"><i class="fas fa-plus"></i> Nuevo</button>
                 <button class="btn-secondary btn-sm" id="cost-export-btn" style="white-space: nowrap; flex-shrink: 0;"><i class="fas fa-download"></i> Exportar</button>
@@ -800,6 +807,12 @@ const Costs = {
     },
 
     async loadCosts() {
+        // Cargar preferencia de mostrar costos de llegadas desde localStorage
+        const savedPreference = localStorage.getItem('costs_show_arrivals');
+        if (savedPreference !== null) {
+            this.showArrivalCosts = savedPreference === 'true';
+        }
+        
         // Setup event listeners
         document.getElementById('cost-add-btn')?.addEventListener('click', () => this.showAddForm());
         document.getElementById('cost-export-btn')?.addEventListener('click', () => this.exportCosts());
@@ -815,6 +828,17 @@ const Costs = {
         document.getElementById('cost-category-filter')?.addEventListener('change', () => this.loadCosts());
         document.getElementById('cost-date-from')?.addEventListener('change', () => this.loadCosts());
         document.getElementById('cost-date-to')?.addEventListener('change', () => this.loadCosts());
+        
+        // Toggle para mostrar/ocultar costos de llegadas
+        const showArrivalsCheckbox = document.getElementById('cost-show-arrivals');
+        if (showArrivalsCheckbox) {
+            showArrivalsCheckbox.checked = this.showArrivalCosts;
+            showArrivalsCheckbox.addEventListener('change', (e) => {
+                this.showArrivalCosts = e.target.checked;
+                localStorage.setItem('costs_show_arrivals', e.target.checked.toString());
+                this.loadCosts();
+            });
+        }
 
         // Cargar opciones de sucursales en el filtro
         await this.loadBranchFilter();
@@ -974,10 +998,23 @@ const Costs = {
                 costs = costs.filter(c => (c.date || c.created_at) <= dateTo);
             }
 
+            // CRÍTICO: Filtrar costos de llegadas automáticos (ocultos por defecto)
+            // Los costos de llegadas se calculan automáticamente desde agency_arrivals
+            // y pueden crear una lista muy larga, por lo que se ocultan por defecto
+            let hiddenArrivalCostsCount = 0;
+            if (!this.showArrivalCosts) {
+                const beforeFilter = costs.length;
+                hiddenArrivalCostsCount = costs.filter(c => c.category === 'pago_llegadas').length;
+                costs = costs.filter(c => c.category !== 'pago_llegadas');
+                if (hiddenArrivalCostsCount > 0) {
+                    console.log(`📋 Costos de llegadas ocultos: ${hiddenArrivalCostsCount} (usa el toggle para mostrarlos)`);
+                }
+            }
+
             // Ordenar por fecha descendente
             costs.sort((a, b) => new Date(b.date || b.created_at) - new Date(a.date || a.created_at));
 
-            this.displayCosts(costs);
+            this.displayCosts(costs, hiddenArrivalCostsCount);
         } catch (e) {
             console.error('Error loading costs:', e);
             Utils.showNotification('Error al cargar costos', 'error');
@@ -1057,12 +1094,25 @@ const Costs = {
         }
     },
 
-    async displayCosts(costs) {
+    async displayCosts(costs, hiddenArrivalCostsCount = 0) {
         const container = document.getElementById('costs-list');
         if (!container) return;
 
+        // Agregar nota informativa si hay costos de llegadas ocultos
+        let infoMessage = '';
+        if (hiddenArrivalCostsCount > 0) {
+            infoMessage = `
+                <div style="margin-bottom: var(--spacing-md); padding: var(--spacing-sm) var(--spacing-md); background: var(--color-bg-secondary); border-left: 4px solid var(--color-info); border-radius: var(--radius-sm); font-size: 11px; color: var(--color-text-secondary);">
+                    <i class="fas fa-info-circle"></i> 
+                    <strong>${hiddenArrivalCostsCount}</strong> costo(s) de llegadas oculto(s). 
+                    Los costos de llegadas se calculan automáticamente desde las llegadas y pueden hacer la lista muy larga. 
+                    Usa el checkbox "Mostrar llegadas" arriba para verlos.
+                </div>
+            `;
+        }
+
         if (costs.length === 0) {
-            container.innerHTML = '<div class="empty-state">No hay costos registrados</div>';
+            container.innerHTML = infoMessage + '<div class="empty-state">No hay costos registrados</div>';
             return;
         }
 
@@ -1127,7 +1177,7 @@ const Costs = {
                 </div>
             `;
             
-            container.innerHTML = html;
+            container.innerHTML = infoMessage + html;
             return;
         }
         
@@ -1214,7 +1264,7 @@ const Costs = {
             `;
         });
 
-        container.innerHTML = html;
+        container.innerHTML = infoMessage + html;
     },
 
     async loadOverview() {
