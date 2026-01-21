@@ -2,7 +2,7 @@
 
 const Costs = {
     initialized: false,
-    isExporting: false // Flag para prevenir múltiples exportaciones simultáneas,
+    isExporting: false, // Flag para prevenir múltiples exportaciones simultáneas
     currentTab: 'costs',
     
     // Helper para obtener costos filtrados por sucursal
