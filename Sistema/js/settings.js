@@ -6761,6 +6761,8 @@ const Settings = {
         setTimeout(() => {
             const createBtn = document.getElementById('backup-create-btn');
             const importBtn = document.getElementById('backup-import-btn');
+            const selectFolderBtn = document.getElementById('backup-select-folder-btn');
+            const clearFolderBtn = document.getElementById('backup-clear-folder-btn');
             
             if (createBtn) {
                 createBtn.addEventListener('click', () => this.createBackupManually());
@@ -6769,6 +6771,17 @@ const Settings = {
             if (importBtn) {
                 importBtn.addEventListener('click', () => this.importBackupManually());
             }
+
+            if (selectFolderBtn) {
+                selectFolderBtn.addEventListener('click', () => this.selectBackupFolder());
+            }
+
+            if (clearFolderBtn) {
+                clearFolderBtn.addEventListener('click', () => this.clearBackupFolder());
+            }
+
+            // Cargar información del directorio de backups
+            this.loadBackupDirectoryInfo();
 
             // Cargar lista de backups
             this.loadBackupsList();
@@ -7011,7 +7024,18 @@ const Settings = {
                         </div>
                     </div>
                     <div style="margin-bottom: var(--spacing-md); padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm); font-size: 11px; color: var(--color-text-secondary);">
-                        <i class="fas fa-info-circle"></i> Los backups se crean automáticamente cada 5 minutos y se descargan a tu carpeta de Descargas.
+                        <i class="fas fa-info-circle"></i> Los backups se crean automáticamente cada 5 minutos.
+                        <div id="backup-directory-info" style="margin-top: var(--spacing-xs); padding-top: var(--spacing-xs); border-top: 1px solid var(--color-border-light);">
+                            <i class="fas fa-folder"></i> <span id="backup-directory-path">No hay carpeta seleccionada (se descargarán automáticamente)</span>
+                        </div>
+                    </div>
+                    <div style="margin-bottom: var(--spacing-md); display: flex; gap: var(--spacing-xs);">
+                        <button class="btn-secondary btn-sm" id="backup-select-folder-btn">
+                            <i class="fas fa-folder-open"></i> Seleccionar Carpeta
+                        </button>
+                        <button class="btn-secondary btn-sm" id="backup-clear-folder-btn" style="display: none;">
+                            <i class="fas fa-times"></i> Deseleccionar Carpeta
+                        </button>
                     </div>
                     <div id="backups-list-container">
                         <div style="text-align: center; padding: var(--spacing-md); color: var(--color-text-secondary);">
@@ -7187,6 +7211,82 @@ const Settings = {
         } catch (error) {
             console.error('Error importando backup:', error);
             Utils.showNotification('Error al importar backup: ' + error.message, 'error');
+        }
+    },
+
+    async selectBackupFolder() {
+        try {
+            if (typeof BackupManager === 'undefined') {
+                Utils.showNotification('BackupManager no está disponible', 'error');
+                return;
+            }
+
+            const success = await BackupManager.selectBackupDirectory();
+            if (success) {
+                this.loadBackupDirectoryInfo();
+            }
+        } catch (error) {
+            console.error('Error seleccionando carpeta:', error);
+            Utils.showNotification('Error al seleccionar carpeta: ' + error.message, 'error');
+        }
+    },
+
+    async clearBackupFolder() {
+        try {
+            if (typeof BackupManager === 'undefined') {
+                Utils.showNotification('BackupManager no está disponible', 'error');
+                return;
+            }
+
+            if (!await Utils.confirm('¿Deseas deseleccionar la carpeta de backups? Los backups volverán a descargarse automáticamente.')) {
+                return;
+            }
+
+            const success = await BackupManager.clearBackupDirectory();
+            if (success) {
+                this.loadBackupDirectoryInfo();
+            }
+        } catch (error) {
+            console.error('Error deseleccionando carpeta:', error);
+            Utils.showNotification('Error al deseleccionar carpeta: ' + error.message, 'error');
+        }
+    },
+
+    loadBackupDirectoryInfo() {
+        try {
+            if (typeof BackupManager === 'undefined') {
+                return;
+            }
+
+            const info = BackupManager.getBackupDirectoryInfo();
+            const pathElement = document.getElementById('backup-directory-path');
+            const clearBtn = document.getElementById('backup-clear-folder-btn');
+            const selectBtn = document.getElementById('backup-select-folder-btn');
+
+            if (!info.available) {
+                if (pathElement) {
+                    pathElement.innerHTML = '<span style="color: var(--color-warning);">File System Access API no disponible. Usa Chrome, Edge o Opera para esta función.</span>';
+                }
+                if (selectBtn) selectBtn.disabled = true;
+                if (clearBtn) clearBtn.style.display = 'none';
+                return;
+            }
+
+            if (info.selected && info.path) {
+                if (pathElement) {
+                    pathElement.innerHTML = `<span style="color: var(--color-success);"><i class="fas fa-check-circle"></i> Carpeta seleccionada: <strong>${Utils.escapeHtml(info.path)}</strong></span>`;
+                }
+                if (clearBtn) clearBtn.style.display = 'inline-flex';
+            } else {
+                if (pathElement) {
+                    pathElement.innerHTML = '<span style="color: var(--color-text-secondary);">No hay carpeta seleccionada (se descargarán automáticamente)</span>';
+                }
+                if (clearBtn) clearBtn.style.display = 'none';
+            }
+
+            if (selectBtn) selectBtn.disabled = false;
+        } catch (error) {
+            console.error('Error cargando información del directorio:', error);
         }
     },
 };
