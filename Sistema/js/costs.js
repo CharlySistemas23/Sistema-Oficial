@@ -2483,27 +2483,6 @@ const Costs = {
         if (!amount || amount <= 0) return;
 
         try {
-            // Verificar si ya existe un costo para esta llegada para evitar duplicados
-            const allCosts = await DB.getAll('cost_entries') || [];
-            const existingCost = allCosts.find(c => 
-                c.category === 'pago_llegadas' && 
-                c.arrival_id === arrivalId
-            );
-            
-            if (existingCost) {
-                // Si existe y el monto es diferente, actualizar el costo existente
-                if (Math.abs(existingCost.amount - amount) > 0.01) {
-                    existingCost.amount = amount;
-                    existingCost.updated_at = new Date().toISOString();
-                    await DB.put('cost_entries', existingCost);
-                    if (typeof SyncManager !== 'undefined') {
-                        await SyncManager.addToQueue('cost_entry', existingCost.id);
-                    }
-                }
-                // Si existe y el monto es igual, no hacer nada (evitar duplicado)
-                return;
-            }
-            
             // Obtener fecha de la llegada si no se proporciona
             let costDate = arrivalDate;
             if (!costDate && arrivalId) {
@@ -2514,6 +2493,53 @@ const Costs = {
             }
             if (!costDate) {
                 costDate = Utils.formatDate(new Date(), 'YYYY-MM-DD');
+            }
+            
+            // Verificar si ya existe un costo para esta llegada para evitar duplicados
+            // Buscar por arrival_id PRIMERO (más específico)
+            const allCosts = await DB.getAll('cost_entries') || [];
+            let existingCost = allCosts.find(c => 
+                c.category === 'pago_llegadas' && 
+                c.arrival_id === arrivalId
+            );
+            
+            // Si no se encuentra por arrival_id, buscar por fecha, agencia y sucursal
+            // (para evitar duplicados cuando se crean llegadas con IDs diferentes)
+            if (!existingCost && costDate && agencyId && branchId) {
+                const dateStr = costDate.split('T')[0]; // Normalizar fecha
+                existingCost = allCosts.find(c => 
+                    c.category === 'pago_llegadas' && 
+                    c.agency_id === agencyId &&
+                    c.branch_id === branchId &&
+                    (c.date === dateStr || (c.date && c.date.split('T')[0] === dateStr)) &&
+                    Math.abs(c.amount - amount) < 0.01 // Mismo monto (evitar duplicados exactos)
+                );
+            }
+            
+            if (existingCost) {
+                // Si existe y el monto es diferente, actualizar el costo existente
+                if (Math.abs(existingCost.amount - amount) > 0.01) {
+                    existingCost.amount = amount;
+                    existingCost.updated_at = new Date().toISOString();
+                    // Asegurar que tenga arrival_id si no lo tiene
+                    if (!existingCost.arrival_id && arrivalId) {
+                        existingCost.arrival_id = arrivalId;
+                    }
+                    await DB.put('cost_entries', existingCost);
+                    if (typeof SyncManager !== 'undefined') {
+                        await SyncManager.addToQueue('cost_entry', existingCost.id);
+                    }
+                    console.log(`✅ Costo de llegada actualizado: $${amount.toFixed(2)} para llegada ${arrivalId}`);
+                } else {
+                    // Si existe y el monto es igual, asegurar que tenga arrival_id si no lo tiene
+                    if (!existingCost.arrival_id && arrivalId) {
+                        existingCost.arrival_id = arrivalId;
+                        await DB.put('cost_entries', existingCost);
+                    }
+                    console.log(`ℹ️ Costo de llegada ya existe con el mismo monto, omitiendo duplicado: $${amount.toFixed(2)}`);
+                }
+                // Si existe y el monto es igual, no hacer nada (evitar duplicado)
+                return;
             }
             
             const agency = await DB.get('catalog_agencies', agencyId);
