@@ -4,7 +4,6 @@ const Costs = {
     initialized: false,
     isExporting: false, // Flag para prevenir múltiples exportaciones simultáneas
     currentTab: 'costs',
-    showArrivalCosts: false, // Control para mostrar/ocultar costos de llegadas (por defecto ocultos)
     
     // Helper para obtener costos filtrados por sucursal
     async getFilteredCosts(options = {}) {
@@ -148,6 +147,7 @@ const Costs = {
         content.innerHTML = `
             <div id="costs-tabs" class="tabs-container" style="margin-bottom: var(--spacing-lg);">
                 <button class="tab-btn active" data-tab="costs"><i class="fas fa-dollar-sign"></i> Costos</button>
+                <button class="tab-btn" data-tab="arrivals"><i class="fas fa-plane"></i> Llegadas</button>
                 <button class="tab-btn" data-tab="recurring"><i class="fas fa-sync-alt"></i> Recurrentes</button>
                 <button class="tab-btn" data-tab="overview"><i class="fas fa-chart-line"></i> Resumen</button>
                 <button class="tab-btn" data-tab="analysis"><i class="fas fa-chart-bar"></i> Análisis</button>
@@ -184,6 +184,10 @@ const Costs = {
                 case 'costs':
                     content.innerHTML = await this.getCostsTab();
                     await this.loadCosts();
+                    break;
+                case 'arrivals':
+                    content.innerHTML = await this.getArrivalsTab();
+                    await this.loadArrivals();
                     break;
                 case 'recurring':
                     content.innerHTML = await this.getRecurringTab();
@@ -259,17 +263,294 @@ const Costs = {
                 <div class="form-group" style="width: 150px; min-width: 120px;">
                     <input type="date" id="cost-date-to" class="form-input" placeholder="Hasta" style="width: 100%;">
                 </div>
-                <div class="form-group" style="display: flex; align-items: center; gap: var(--spacing-xs); padding: 0 var(--spacing-xs);">
-                    <input type="checkbox" id="cost-show-arrivals" style="cursor: pointer;">
-                    <label for="cost-show-arrivals" style="font-size: 11px; cursor: pointer; white-space: nowrap; user-select: none;">
-                        <i class="fas fa-plane"></i> Mostrar llegadas
-                    </label>
-                </div>
                 <button class="btn-primary btn-sm" id="cost-add-btn" style="white-space: nowrap; flex-shrink: 0;"><i class="fas fa-plus"></i> Nuevo</button>
                 <button class="btn-secondary btn-sm" id="cost-export-btn" style="white-space: nowrap; flex-shrink: 0;"><i class="fas fa-download"></i> Exportar</button>
             </div>
             <div id="costs-list" style="width: 100%; max-width: 100%; box-sizing: border-box;"></div>
         `;
+    },
+
+    async getArrivalsTab() {
+        return `
+            <div class="filters-bar-compact" style="margin-bottom: var(--spacing-md); width: 100%; max-width: 100%; box-sizing: border-box;">
+                <div class="form-group" style="width: 180px; min-width: 150px;">
+                    <select id="arrivals-branch-filter" class="form-select" style="width: 100%;">
+                        <option value="">Todas las sucursales</option>
+                    </select>
+                </div>
+                <div class="form-group" style="width: 150px; min-width: 120px;">
+                    <input type="date" id="arrivals-date-from" class="form-input" placeholder="Desde" style="width: 100%;">
+                </div>
+                <div class="form-group" style="width: 150px; min-width: 120px;">
+                    <input type="date" id="arrivals-date-to" class="form-input" placeholder="Hasta" style="width: 100%;">
+                </div>
+                <div class="form-group" style="flex: 1;"></div>
+                <button class="btn-secondary btn-sm" id="arrivals-export-btn" style="white-space: nowrap; flex-shrink: 0;"><i class="fas fa-download"></i> Exportar</button>
+            </div>
+            <div id="arrivals-list" style="width: 100%; max-width: 100%; box-sizing: border-box;"></div>
+        `;
+    },
+
+    async loadArrivals() {
+        // Setup event listeners
+        document.getElementById('arrivals-export-btn')?.addEventListener('click', () => this.exportArrivals());
+        document.getElementById('arrivals-branch-filter')?.addEventListener('change', () => this.loadArrivals());
+        document.getElementById('arrivals-date-from')?.addEventListener('change', () => this.loadArrivals());
+        document.getElementById('arrivals-date-to')?.addEventListener('change', () => this.loadArrivals());
+
+        // Cargar opciones de sucursales en el filtro
+        await this.loadArrivalsBranchFilter();
+
+        try {
+            // Obtener sucursal seleccionada
+            const branchFilter = document.getElementById('arrivals-branch-filter');
+            const branchFilterValue = branchFilter?.value || '';
+            
+            // Verificar si el usuario es master_admin
+            const isMasterAdmin = typeof UserManager !== 'undefined' && (
+                UserManager.currentUser?.role === 'master_admin' ||
+                UserManager.currentUser?.is_master_admin ||
+                UserManager.currentUser?.isMasterAdmin ||
+                UserManager.currentEmployee?.role === 'master_admin'
+            );
+            
+            const currentBranchId = typeof BranchManager !== 'undefined' 
+                ? BranchManager.getCurrentBranchId() 
+                : localStorage.getItem('current_branch_id');
+            
+            const selectedBranchId = !isMasterAdmin ? currentBranchId : (branchFilterValue || null);
+            
+            // Obtener solo costos de llegadas
+            const allCosts = await DB.getAll('cost_entries') || [];
+            let arrivalCosts = allCosts.filter(c => c.category === 'pago_llegadas');
+            
+            // Aplicar filtro de sucursal
+            if (selectedBranchId) {
+                arrivalCosts = arrivalCosts.filter(c => {
+                    if (!c.branch_id) return false;
+                    return String(c.branch_id) === String(selectedBranchId);
+                });
+            }
+            
+            // Aplicar filtros de fecha
+            const dateFrom = document.getElementById('arrivals-date-from')?.value;
+            const dateTo = document.getElementById('arrivals-date-to')?.value;
+            
+            if (dateFrom) {
+                arrivalCosts = arrivalCosts.filter(c => (c.date || c.created_at) >= dateFrom);
+            }
+            if (dateTo) {
+                arrivalCosts = arrivalCosts.filter(c => (c.date || c.created_at) <= dateTo);
+            }
+            
+            // Agrupar por día
+            const costsByDate = {};
+            arrivalCosts.forEach(cost => {
+                const dateStr = (cost.date || cost.created_at).split('T')[0];
+                if (!costsByDate[dateStr]) {
+                    costsByDate[dateStr] = [];
+                }
+                costsByDate[dateStr].push(cost);
+            });
+            
+            // Ordenar fechas descendente
+            const sortedDates = Object.keys(costsByDate).sort((a, b) => b.localeCompare(a));
+            
+            // Mostrar agrupado por día
+            this.displayArrivalsByDate(costsByDate, sortedDates, selectedBranchId);
+            
+        } catch (e) {
+            console.error('Error loading arrivals:', e);
+            Utils.showNotification('Error al cargar llegadas', 'error');
+        }
+    },
+
+    async loadArrivalsBranchFilter() {
+        const branchFilter = document.getElementById('arrivals-branch-filter');
+        if (!branchFilter) return;
+
+        // Verificar si el usuario es master_admin
+        const isMasterAdmin = typeof UserManager !== 'undefined' && (
+            UserManager.currentUser?.role === 'master_admin' ||
+            UserManager.currentUser?.is_master_admin ||
+            UserManager.currentUser?.isMasterAdmin ||
+            UserManager.currentEmployee?.role === 'master_admin'
+        );
+
+        const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
+        
+        if (!isMasterAdmin) {
+            // Ocultar el dropdown y forzar filtro a su sucursal
+            const branchFilterContainer = branchFilter.parentElement;
+            if (branchFilterContainer && branchFilterContainer.style) {
+                branchFilterContainer.style.display = 'none';
+            }
+            branchFilter.innerHTML = currentBranchId 
+                ? `<option value="${currentBranchId}">${(await DB.get('catalog_branches', currentBranchId))?.name || 'Mi Sucursal'}</option>`
+                : '<option value="">Sin sucursal</option>';
+            branchFilter.value = currentBranchId || '';
+        } else {
+            // Master admin puede ver todas las sucursales
+            const branches = await DB.getAll('catalog_branches') || [];
+            const uniqueBranches = branches.filter((b, index, self) => 
+                index === self.findIndex(br => br.id === b.id)
+            );
+            
+            branchFilter.innerHTML = '<option value="">Todas las sucursales</option>' +
+                uniqueBranches.map(branch => 
+                    `<option value="${branch.id}">${branch.name}</option>`
+                ).join('');
+            
+            // Si no hay selección manual, usar la sucursal actual
+            if (!branchFilter.dataset.manualSelection) {
+                branchFilter.value = currentBranchId || '';
+            }
+        }
+    },
+
+    async displayArrivalsByDate(costsByDate, sortedDates, selectedBranchId) {
+        const container = document.getElementById('arrivals-list');
+        if (!container) return;
+
+        if (sortedDates.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-plane" style="font-size: 48px; opacity: 0.3; margin-bottom: var(--spacing-md);"></i>
+                    <p>No hay costos de llegadas registrados</p>
+                    <p style="font-size: 12px; color: var(--color-text-secondary); margin-top: var(--spacing-xs);">
+                        Los costos de llegadas se crean automáticamente al registrar llegadas en el módulo de Reportes
+                    </p>
+                </div>
+            `;
+            return;
+        }
+
+        const branches = await DB.getAll('catalog_branches') || [];
+        const agencies = await DB.getAll('catalog_agencies') || [];
+        
+        let html = '';
+        let grandTotal = 0;
+        let totalArrivals = 0;
+
+        sortedDates.forEach(dateStr => {
+            const dayCosts = costsByDate[dateStr];
+            const dayTotal = dayCosts.reduce((sum, c) => sum + (c.amount || 0), 0);
+            const dayCount = dayCosts.length;
+            grandTotal += dayTotal;
+            totalArrivals += dayCount;
+            
+            const date = new Date(dateStr + 'T00:00:00');
+            const formattedDate = Utils.formatDate(date, 'DD/MM/YYYY');
+            const dayName = Utils.formatDate(date, 'dddd', 'es-MX');
+            
+            html += `
+                <div class="module" style="margin-bottom: var(--spacing-md); padding: 0; background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light); overflow: hidden;">
+                    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: var(--spacing-md); display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <h3 style="margin: 0 0 var(--spacing-xs) 0; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+                                <i class="fas fa-plane"></i> ${dayName}, ${formattedDate}
+                            </h3>
+                            <div style="font-size: 11px; opacity: 0.9;">
+                                ${dayCount} llegada(s) registrada(s)
+                            </div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="font-size: 16px; font-weight: 700;">
+                                ${Utils.formatCurrency(dayTotal)}
+                            </div>
+                        </div>
+                    </div>
+                    <div style="padding: var(--spacing-md);">
+                        <div style="display: grid; gap: var(--spacing-sm);">
+            `;
+            
+            // Ordenar llegadas del día por hora (si tienen) o por monto descendente
+            dayCosts.sort((a, b) => {
+                // Intentar ordenar por hora si existe
+                const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+                const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+                return bTime - aTime; // Más recientes primero
+            });
+            
+            dayCosts.forEach(cost => {
+                const branch = cost.branch_id ? branches.find(b => b.id === cost.branch_id) : null;
+                const agency = cost.agency_id ? agencies.find(a => a.id === cost.agency_id) : null;
+                const branchName = branch?.name || 'Sin sucursal';
+                const agencyName = agency?.name || cost.notes || 'Agencia desconocida';
+                const timeStr = cost.created_at ? Utils.formatDate(cost.created_at, 'HH:mm') : '';
+                
+                html += `
+                    <div class="cost-item" style="display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm); border-left: 3px solid #667eea;">
+                        <div style="flex: 1;">
+                            <div style="font-weight: 600; font-size: 13px; margin-bottom: 2px;">
+                                ${agencyName}
+                                ${cost.passengers ? ` - ${cost.passengers} pasajeros` : ''}
+                            </div>
+                            <div style="font-size: 11px; color: var(--color-text-secondary);">
+                                ${branchName}${timeStr ? ` • ${timeStr}` : ''}
+                            </div>
+                            ${cost.notes && cost.notes !== agencyName ? `<div style="font-size: 10px; color: var(--color-text-secondary); margin-top: 2px;">${cost.notes}</div>` : ''}
+                        </div>
+                        <div style="text-align: right; margin-left: var(--spacing-md);">
+                            <div style="font-weight: 700; font-size: 14px; color: #667eea;">${Utils.formatCurrency(cost.amount || 0)}</div>
+                        </div>
+                        <div style="margin-left: var(--spacing-sm); display: flex; gap: var(--spacing-xs);">
+                            <button class="btn-icon btn-sm" onclick="window.Costs.editCost('${cost.id}')" title="Editar">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="btn-icon btn-sm" onclick="window.Costs.deleteCost('${cost.id}')" title="Eliminar" style="color: var(--color-danger);">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += `
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+
+        // Agregar resumen general al inicio
+        const summaryHtml = `
+            <div style="margin-bottom: var(--spacing-md); padding: var(--spacing-md); background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: var(--radius-md); color: white;">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--spacing-md);">
+                    <div>
+                        <div style="font-size: 11px; opacity: 0.9; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: var(--spacing-xs);">
+                            Total de Llegadas
+                        </div>
+                        <div style="font-size: 24px; font-weight: 700;">
+                            ${totalArrivals}
+                        </div>
+                    </div>
+                    <div>
+                        <div style="font-size: 11px; opacity: 0.9; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: var(--spacing-xs);">
+                            Total Pagado
+                        </div>
+                        <div style="font-size: 24px; font-weight: 700;">
+                            ${Utils.formatCurrency(grandTotal)}
+                        </div>
+                    </div>
+                    <div>
+                        <div style="font-size: 11px; opacity: 0.9; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: var(--spacing-xs);">
+                            Promedio por Llegada
+                        </div>
+                        <div style="font-size: 24px; font-weight: 700;">
+                            ${totalArrivals > 0 ? Utils.formatCurrency(grandTotal / totalArrivals) : '$0.00'}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        container.innerHTML = summaryHtml + html;
+    },
+
+    async exportArrivals() {
+        // TODO: Implementar exportación de llegadas
+        Utils.showNotification('Exportación de llegadas próximamente', 'info');
     },
 
     async getRecurringTab() {
@@ -807,12 +1088,6 @@ const Costs = {
     },
 
     async loadCosts() {
-        // Cargar preferencia de mostrar costos de llegadas desde localStorage
-        const savedPreference = localStorage.getItem('costs_show_arrivals');
-        if (savedPreference !== null) {
-            this.showArrivalCosts = savedPreference === 'true';
-        }
-        
         // Setup event listeners
         document.getElementById('cost-add-btn')?.addEventListener('click', () => this.showAddForm());
         document.getElementById('cost-export-btn')?.addEventListener('click', () => this.exportCosts());
@@ -828,17 +1103,6 @@ const Costs = {
         document.getElementById('cost-category-filter')?.addEventListener('change', () => this.loadCosts());
         document.getElementById('cost-date-from')?.addEventListener('change', () => this.loadCosts());
         document.getElementById('cost-date-to')?.addEventListener('change', () => this.loadCosts());
-        
-        // Toggle para mostrar/ocultar costos de llegadas
-        const showArrivalsCheckbox = document.getElementById('cost-show-arrivals');
-        if (showArrivalsCheckbox) {
-            showArrivalsCheckbox.checked = this.showArrivalCosts;
-            showArrivalsCheckbox.addEventListener('change', (e) => {
-                this.showArrivalCosts = e.target.checked;
-                localStorage.setItem('costs_show_arrivals', e.target.checked.toString());
-                this.loadCosts();
-            });
-        }
 
         // Cargar opciones de sucursales en el filtro
         await this.loadBranchFilter();
@@ -998,23 +1262,19 @@ const Costs = {
                 costs = costs.filter(c => (c.date || c.created_at) <= dateTo);
             }
 
-            // CRÍTICO: Filtrar costos de llegadas automáticos (ocultos por defecto)
-            // Los costos de llegadas se calculan automáticamente desde agency_arrivals
-            // y pueden crear una lista muy larga, por lo que se ocultan por defecto
-            let hiddenArrivalCostsCount = 0;
-            if (!this.showArrivalCosts) {
-                const beforeFilter = costs.length;
-                hiddenArrivalCostsCount = costs.filter(c => c.category === 'pago_llegadas').length;
-                costs = costs.filter(c => c.category !== 'pago_llegadas');
-                if (hiddenArrivalCostsCount > 0) {
-                    console.log(`📋 Costos de llegadas ocultos: ${hiddenArrivalCostsCount} (usa el toggle para mostrarlos)`);
-                }
+            // CRÍTICO: Excluir costos de llegadas de la pestaña "Costos"
+            // Los costos de llegadas tienen su propia pestaña "Llegadas" con historial por día
+            const beforeFilter = costs.length;
+            costs = costs.filter(c => c.category !== 'pago_llegadas');
+            const filteredCount = beforeFilter - costs.length;
+            if (filteredCount > 0) {
+                console.log(`📋 Costos de llegadas excluidos: ${filteredCount} (ver en pestaña "Llegadas")`);
             }
 
             // Ordenar por fecha descendente
             costs.sort((a, b) => new Date(b.date || b.created_at) - new Date(a.date || a.created_at));
 
-            this.displayCosts(costs, hiddenArrivalCostsCount);
+            this.displayCosts(costs, 0);
         } catch (e) {
             console.error('Error loading costs:', e);
             Utils.showNotification('Error al cargar costos', 'error');
