@@ -2618,13 +2618,17 @@ const Reports = {
                 }
             });
             
-            // Calcular total desde cost_entries
-            const totalFromCosts = arrivalCostEntries.reduce((sum, c) => sum + (c.amount || 0), 0);
+            // Calcular total desde cost_entries (asegurar que siempre sea un número)
+            const totalFromCosts = arrivalCostEntries.reduce((sum, c) => {
+                const amount = typeof c.amount === 'number' ? c.amount : parseFloat(c.amount || 0) || 0;
+                return sum + amount;
+            }, 0);
             
             // Si hay costos registrados (incluso si el total es 0 pero hay registros), retornar ese valor (fuente autorizada)
             if (arrivalCostEntries.length > 0) {
-                console.log(`✅ Costos de llegadas encontrados en cost_entries: ${arrivalCostEntries.length} registros, total: $${totalFromCosts.toFixed(2)}`);
-                return totalFromCosts;
+                const totalAsNumber = typeof totalFromCosts === 'number' ? totalFromCosts : parseFloat(totalFromCosts) || 0;
+                console.log(`✅ Costos de llegadas encontrados en cost_entries: ${arrivalCostEntries.length} registros, total: $${totalAsNumber.toFixed(2)}`);
+                return totalAsNumber;
             }
             
             console.warn(`⚠️ No se encontraron costos de llegadas en cost_entries para ${dateStr}, branchId: ${branchId || 'null'}, branchIds: [${branchIds.join(', ')}]`);
@@ -2654,7 +2658,9 @@ const Reports = {
             });
             
             const totalFromArrivals = dayArrivals.reduce((sum, a) => {
-                const fee = a.calculated_fee || a.arrival_fee || 0;
+                const fee = typeof (a.calculated_fee || a.arrival_fee) === 'number' 
+                    ? (a.calculated_fee || a.arrival_fee) 
+                    : parseFloat(a.calculated_fee || a.arrival_fee || 0) || 0;
                 return sum + fee;
             }, 0);
             
@@ -2695,13 +2701,18 @@ const Reports = {
                         return true;
                     }
                 });
-                const updatedTotal = updatedArrivalCosts.reduce((sum, c) => sum + (c.amount || 0), 0);
-                console.log(`✅ Total de costos de llegadas después de registro automático: $${updatedTotal.toFixed(2)}`);
-                return updatedTotal;
+                const updatedTotal = updatedArrivalCosts.reduce((sum, c) => {
+                    const amount = typeof c.amount === 'number' ? c.amount : parseFloat(c.amount || 0) || 0;
+                    return sum + amount;
+                }, 0);
+                const updatedTotalAsNumber = typeof updatedTotal === 'number' ? updatedTotal : parseFloat(updatedTotal) || 0;
+                console.log(`✅ Total de costos de llegadas después de registro automático: $${updatedTotalAsNumber.toFixed(2)}`);
+                return updatedTotalAsNumber;
             }
             
-            console.log(`📊 Total de costos de llegadas desde agency_arrivals: $${totalFromArrivals.toFixed(2)}`);
-            return totalFromArrivals;
+            const totalFromArrivalsAsNumber = typeof totalFromArrivals === 'number' ? totalFromArrivals : parseFloat(totalFromArrivals) || 0;
+            console.log(`📊 Total de costos de llegadas desde agency_arrivals: $${totalFromArrivalsAsNumber.toFixed(2)}`);
+            return totalFromArrivalsAsNumber;
         } catch (error) {
             console.error('Error calculando costos de llegadas:', error);
             return 0;
@@ -6286,7 +6297,8 @@ const Reports = {
             // IMPORTANTE: Usar la fecha de las capturas, no la fecha actual
             const captureBranchIds = [...new Set(captures.map(c => c.branch_id).filter(Boolean))];
             const branchIdForArrivals = captureBranchIds.length === 1 ? captureBranchIds[0] : null;
-            const totalArrivalCosts = await this.calculateArrivalCosts(captureDate, branchIdForArrivals, captureBranchIds);
+            const totalArrivalCostsRaw = await this.calculateArrivalCosts(captureDate, branchIdForArrivals, captureBranchIds);
+            const totalArrivalCosts = typeof totalArrivalCostsRaw === 'number' ? totalArrivalCostsRaw : parseFloat(totalArrivalCostsRaw) || 0;
             console.log(`✈️ Costos de llegadas para ${captureDate}: $${totalArrivalCosts.toFixed(2)} (sucursales: ${captureBranchIds.join(', ')})`);
 
             // 7. Costos operativos del día (prorrateados) - Por todas las sucursales involucradas
