@@ -2349,8 +2349,10 @@ const TouristReport = {
                 // Guardar en IndexedDB como caché
                 await DB.put('agency_arrivals', arrival);
                 
-                // Registrar costo de pago de llegadas automáticamente también cuando se guarda vía API
-                if (typeof Costs !== 'undefined' && arrival.arrival_fee > 0) {
+                // Registrar costo de pago de llegadas automáticamente cuando se guarda vía API
+                // registerArrivalPayment ahora tiene check mejorado para evitar duplicados
+                // (busca por arrival_id, o por fecha/agencia/sucursal si no encuentra)
+                if (typeof Costs !== 'undefined' && Costs.registerArrivalPayment && arrival.arrival_fee > 0) {
                     await Costs.registerArrivalPayment(
                         arrival.id,
                         arrival.arrival_fee,
