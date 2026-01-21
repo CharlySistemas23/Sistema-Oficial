@@ -6,9 +6,14 @@ const BackupManager = {
     isRunning: false,
     backupInterval: 5 * 60 * 1000, // 5 minutos en milisegundos
     maxBackups: 50, // Mantener máximo 50 backups
+    backupDirectoryHandle: null, // Handle del directorio de backups (File System Access API)
+    backupDirectoryPath: null, // Ruta del directorio (para mostrar en UI)
     
     async init() {
         if (this.isRunning) return;
+        
+        // Cargar directorio de backups guardado
+        await this.loadBackupDirectory();
         
         // Realizar primer backup inmediatamente
         await this.createBackup();
@@ -23,6 +28,169 @@ const BackupManager = {
         
         // Limpiar backups antiguos
         this.cleanOldBackups();
+    },
+    
+    // Verificar si File System Access API está disponible
+    isFileSystemAccessAvailable() {
+        return 'showDirectoryPicker' in window;
+    },
+    
+    // Cargar el directorio de backups desde localStorage
+    async loadBackupDirectory() {
+        try {
+            if (!this.isFileSystemAccessAvailable()) {
+                console.log('File System Access API no está disponible en este navegador');
+                return;
+            }
+            
+            // Los handles no se pueden serializar directamente, así que solo guardamos metadata
+            // El usuario necesitará volver a seleccionar la carpeta si recarga la página
+            // Esto es una limitación del navegador por seguridad
+            try {
+                const savedData = localStorage.getItem('backup_directory_info');
+                if (savedData) {
+                    const info = JSON.parse(savedData);
+                    this.backupDirectoryPath = info.path || null;
+                    // Nota: El handle no persiste entre sesiones por seguridad del navegador
+                    // El usuario necesitará volver a seleccionar la carpeta
+                    console.log('Información del directorio de backups cargada:', this.backupDirectoryPath);
+                }
+            } catch (error) {
+                console.warn('Error cargando información del directorio de backups:', error);
+            }
+        } catch (error) {
+            console.error('Error en loadBackupDirectory:', error);
+        }
+    },
+    
+    // Seleccionar y guardar directorio de backups
+    async selectBackupDirectory() {
+        try {
+            if (!this.isFileSystemAccessAvailable()) {
+                Utils.showNotification('File System Access API no está disponible en este navegador. Usa Chrome, Edge o Opera.', 'warning');
+                return false;
+            }
+            
+            // Abrir diálogo para seleccionar directorio
+            const handle = await window.showDirectoryPicker({
+                mode: 'readwrite',
+                startIn: 'documents'
+            });
+            
+            // Guardar el handle
+            this.backupDirectoryHandle = handle;
+            
+            // Intentar obtener el nombre del directorio
+            let directoryPath = 'Directorio seleccionado';
+            try {
+                // En algunos navegadores podemos obtener el nombre
+                if (handle.name) {
+                    directoryPath = handle.name;
+                }
+            } catch (e) {
+                // Si no podemos obtener el nombre, usar un valor genérico
+                directoryPath = 'Directorio de backups';
+            }
+            
+            this.backupDirectoryPath = directoryPath;
+            
+            // Guardar metadata en localStorage
+            // Nota: Los FileSystemDirectoryHandle no se pueden serializar directamente
+            // El handle solo estará disponible durante la sesión actual
+            // Si el usuario recarga la página, necesitará volver a seleccionar la carpeta
+            try {
+                localStorage.setItem('backup_directory_info', JSON.stringify({
+                    path: directoryPath,
+                    selectedAt: new Date().toISOString(),
+                    available: true
+                }));
+                
+                // También guardar en IndexedDB para referencia
+                await DB.put('settings', {
+                    key: 'backup_directory_handle',
+                    value: {
+                        path: directoryPath,
+                        selectedAt: new Date().toISOString(),
+                        available: true
+                    }
+                });
+            } catch (error) {
+                console.warn('Error guardando información del directorio:', error);
+            }
+            
+            Utils.showNotification(`Carpeta de backups seleccionada: ${directoryPath}`, 'success');
+            console.log('Directorio de backups seleccionado:', directoryPath);
+            
+            return true;
+        } catch (error) {
+            if (error.name === 'AbortError') {
+                // Usuario canceló
+                return false;
+            }
+            console.error('Error seleccionando directorio:', error);
+            Utils.showNotification('Error al seleccionar carpeta: ' + error.message, 'error');
+            return false;
+        }
+    },
+    
+    // Guardar backup en el directorio seleccionado
+    async saveBackupToDirectory(backupKey, backupContent) {
+        try {
+            if (!this.backupDirectoryHandle) {
+                return false; // No hay directorio seleccionado
+            }
+            
+            // Verificar permisos
+            const permissionStatus = await this.backupDirectoryHandle.requestPermission({ mode: 'readwrite' });
+            if (permissionStatus !== 'granted') {
+                console.warn('Permisos de escritura no otorgados para el directorio de backups');
+                return false;
+            }
+            
+            // Crear archivo en el directorio
+            const fileName = `${backupKey}.json`;
+            const fileHandle = await this.backupDirectoryHandle.getFileHandle(fileName, { create: true });
+            
+            // Escribir contenido
+            const writable = await fileHandle.createWritable();
+            await writable.write(backupContent);
+            await writable.close();
+            
+            console.log(`Backup guardado en directorio: ${fileName}`);
+            return true;
+        } catch (error) {
+            console.error('Error guardando backup en directorio:', error);
+            return false;
+        }
+    },
+    
+    // Obtener información del directorio de backups
+    getBackupDirectoryInfo() {
+        return {
+            available: this.isFileSystemAccessAvailable(),
+            selected: this.backupDirectoryHandle !== null,
+            path: this.backupDirectoryPath || null
+        };
+    },
+    
+    // Limpiar directorio de backups seleccionado
+    async clearBackupDirectory() {
+        try {
+            this.backupDirectoryHandle = null;
+            this.backupDirectoryPath = null;
+            localStorage.removeItem('backup_directory_info');
+            try {
+                await DB.delete('settings', 'backup_directory_handle');
+            } catch (e) {
+                // Ignorar si no existe
+            }
+            Utils.showNotification('Carpeta de backups deseleccionada', 'success');
+            return true;
+        } catch (error) {
+            console.error('Error limpiando directorio de backups:', error);
+            Utils.showNotification('Error al deseleccionar carpeta', 'error');
+            return false;
+        }
     },
     
     async createBackup() {
@@ -43,8 +211,17 @@ const BackupManager = {
             
             console.log(`Backup automático creado: ${backupKey}`);
             
-            // Descargar automáticamente sin preguntar al usuario
-            await this.downloadBackupAutomatic(backupKey);
+            // Guardar en directorio seleccionado (si está disponible)
+            const savedToDirectory = await this.saveBackupToDirectory(backupKey, JSON.stringify({
+                timestamp: new Date().toISOString(),
+                data: backupData,
+                version: DB.version
+            }));
+            
+            // Si no se guardó en directorio, descargar automáticamente (fallback)
+            if (!savedToDirectory) {
+                await this.downloadBackupAutomatic(backupKey);
+            }
             
         } catch (error) {
             console.error('Error creando backup automático:', error);
