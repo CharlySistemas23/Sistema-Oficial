@@ -594,8 +594,10 @@ const Dashboard = {
                         operating_costs: operatingCostsRealTime,
                         commissions: commissionsRealTime,
                         bank_commissions: bankCommissionsRealTime,
-                        gross_profit: revenueRealTime - merchandiseCostRealTime - arrivalCostsRealTime - operatingCostsRealTime,
-                        net_profit: (revenueRealTime - merchandiseCostRealTime - arrivalCostsRealTime - operatingCostsRealTime) - commissionsRealTime - bankCommissionsRealTime,
+                        // Utilidad Bruta = Ingresos - COGS - Comisiones (vendedores + guías)
+                        gross_profit: revenueRealTime - merchandiseCostRealTime - commissionsRealTime,
+                        // Utilidad Neta = Utilidad Bruta - Gastos Operativos (Costos de Llegadas + Costos Operativos + Comisiones Bancarias)
+                        net_profit: (revenueRealTime - merchandiseCostRealTime - commissionsRealTime) - arrivalCostsRealTime - operatingCostsRealTime - bankCommissionsRealTime,
                         total_passengers: todayPassengers
                     };
                 }
