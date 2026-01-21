@@ -6756,6 +6756,23 @@ const Settings = {
         } catch (error) {
             console.error('Error cargando estado de sincronización:', error);
         }
+
+        // Configurar eventos de los botones de backup
+        setTimeout(() => {
+            const createBtn = document.getElementById('backup-create-btn');
+            const importBtn = document.getElementById('backup-import-btn');
+            
+            if (createBtn) {
+                createBtn.addEventListener('click', () => this.createBackupManually());
+            }
+            
+            if (importBtn) {
+                importBtn.addEventListener('click', () => this.importBackupManually());
+            }
+
+            // Cargar lista de backups
+            this.loadBackupsList();
+        }, 100);
     },
 
     async saveServerURL() {
@@ -6949,7 +6966,229 @@ const Settings = {
                 `;
             }
         }
-    }
+    },
+
+    getSystemTab() {
+        return `
+            <div style="display: grid; gap: var(--spacing-md);">
+                <!-- Configuración del Servidor -->
+                <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light);">
+                    <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+                        <i class="fas fa-server"></i> Configuración del Servidor
+                    </h3>
+                    <div class="form-group">
+                        <label>URL del Servidor Railway</label>
+                        <div style="display: flex; gap: var(--spacing-xs);">
+                            <input type="text" id="server-url-input" class="form-input" placeholder="https://backend-production-xxxx.up.railway.app" style="flex: 1;">
+                            <button class="btn-primary" id="save-server-url-btn">
+                                <i class="fas fa-save"></i> Guardar
+                            </button>
+                            <button class="btn-secondary" id="test-server-connection-btn">
+                                <i class="fas fa-network-wired"></i> Probar
+                            </button>
+                        </div>
+                    </div>
+                    <div id="server-config-status" style="margin-top: var(--spacing-sm); padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm); font-size: 11px;">
+                        <div style="color: var(--color-text-secondary);">
+                            <i class="fas fa-info-circle"></i> Estado del servidor
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Gestión de Backups -->
+                <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-md);">
+                        <h3 style="margin: 0; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+                            <i class="fas fa-database"></i> Gestión de Backups
+                        </h3>
+                        <div style="display: flex; gap: var(--spacing-xs);">
+                            <button class="btn-primary btn-sm" id="backup-create-btn">
+                                <i class="fas fa-plus"></i> Crear Backup
+                            </button>
+                            <button class="btn-secondary btn-sm" id="backup-import-btn">
+                                <i class="fas fa-upload"></i> Importar Backup
+                            </button>
+                        </div>
+                    </div>
+                    <div style="margin-bottom: var(--spacing-md); padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm); font-size: 11px; color: var(--color-text-secondary);">
+                        <i class="fas fa-info-circle"></i> Los backups se crean automáticamente cada 5 minutos y se descargan a tu carpeta de Descargas.
+                    </div>
+                    <div id="backups-list-container">
+                        <div style="text-align: center; padding: var(--spacing-md); color: var(--color-text-secondary);">
+                            <i class="fas fa-spinner fa-spin"></i> Cargando backups...
+                        </div>
+                    </div>
+                    <div id="backup-storage-info" style="margin-top: var(--spacing-md); padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm); font-size: 10px; color: var(--color-text-secondary);">
+                        <i class="fas fa-hdd"></i> <span id="backup-storage-text">Cargando información...</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    },
+
+    async loadBackupsList() {
+        const container = document.getElementById('backups-list-container');
+        if (!container) return;
+
+        try {
+            if (typeof BackupManager === 'undefined') {
+                container.innerHTML = '<div style="text-align: center; padding: var(--spacing-md); color: var(--color-danger);">BackupManager no está disponible</div>';
+                return;
+            }
+
+            const backups = BackupManager.getBackupList();
+            const storageUsage = BackupManager.getStorageUsage();
+
+            if (backups.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; padding: var(--spacing-md); color: var(--color-text-secondary);">
+                        <i class="fas fa-database" style="font-size: 32px; margin-bottom: var(--spacing-sm); opacity: 0.5;"></i>
+                        <p>No hay backups guardados aún</p>
+                        <p style="font-size: 10px; margin-top: var(--spacing-xs);">Los backups automáticos aparecerán aquí</p>
+                    </div>
+                `;
+            } else {
+                container.innerHTML = `
+                    <div style="max-height: 400px; overflow-y: auto;">
+                        <table class="cart-table" style="font-size: 11px;">
+                            <thead>
+                                <tr>
+                                    <th>Fecha y Hora</th>
+                                    <th>Tamaño</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${backups.map(backup => {
+                                    const date = new Date(backup.date);
+                                    const sizeKB = (backup.size / 1024).toFixed(2);
+                                    const sizeMB = (backup.size / 1024 / 1024).toFixed(2);
+                                    const sizeText = backup.size > 1024 * 1024 ? `${sizeMB} MB` : `${sizeKB} KB`;
+                                    return `
+                                        <tr>
+                                            <td>
+                                                <div style="font-weight: 600;">${date.toLocaleString('es-MX')}</div>
+                                                <div style="font-size: 9px; color: var(--color-text-secondary);">${backup.key}</div>
+                                            </td>
+                                            <td>${sizeText}</td>
+                                            <td>
+                                                <div style="display: flex; gap: var(--spacing-xs);">
+                                                    <button class="btn-secondary btn-xs" onclick="window.Settings.restoreBackupFromList('${backup.key}')" title="Restaurar">
+                                                        <i class="fas fa-undo"></i>
+                                                    </button>
+                                                    <button class="btn-secondary btn-xs" onclick="window.Settings.downloadBackupFromList('${backup.key}')" title="Descargar">
+                                                        <i class="fas fa-download"></i>
+                                                    </button>
+                                                    <button class="btn-danger btn-xs" onclick="window.Settings.deleteBackupFromList('${backup.key}')" title="Eliminar">
+                                                        <i class="fas fa-trash"></i>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            }
+
+            // Actualizar información de almacenamiento
+            const storageText = document.getElementById('backup-storage-text');
+            if (storageText) {
+                storageText.textContent = `${storageUsage.count} backup(s) - ${storageUsage.totalSizeMB} MB total`;
+            }
+        } catch (error) {
+            console.error('Error cargando lista de backups:', error);
+            container.innerHTML = `<div style="text-align: center; padding: var(--spacing-md); color: var(--color-danger);">Error al cargar backups: ${error.message}</div>`;
+        }
+    },
+
+    async restoreBackupFromList(backupKey) {
+        try {
+            if (typeof BackupManager === 'undefined') {
+                Utils.showNotification('BackupManager no está disponible', 'error');
+                return;
+            }
+
+            const success = await BackupManager.restoreBackup(backupKey);
+            if (success) {
+                await this.loadBackupsList();
+            }
+        } catch (error) {
+            console.error('Error restaurando backup:', error);
+            Utils.showNotification('Error al restaurar backup: ' + error.message, 'error');
+        }
+    },
+
+    async downloadBackupFromList(backupKey) {
+        try {
+            if (typeof BackupManager === 'undefined') {
+                Utils.showNotification('BackupManager no está disponible', 'error');
+                return;
+            }
+
+            await BackupManager.downloadBackup(backupKey);
+        } catch (error) {
+            console.error('Error descargando backup:', error);
+            Utils.showNotification('Error al descargar backup: ' + error.message, 'error');
+        }
+    },
+
+    async deleteBackupFromList(backupKey) {
+        try {
+            if (!await Utils.confirm('¿Estás seguro de eliminar este backup? Esta acción no se puede deshacer.')) {
+                return;
+            }
+
+            if (typeof BackupManager === 'undefined') {
+                Utils.showNotification('BackupManager no está disponible', 'error');
+                return;
+            }
+
+            const success = BackupManager.deleteBackup(backupKey);
+            if (success) {
+                await this.loadBackupsList();
+            }
+        } catch (error) {
+            console.error('Error eliminando backup:', error);
+            Utils.showNotification('Error al eliminar backup: ' + error.message, 'error');
+        }
+    },
+
+    async createBackupManually() {
+        try {
+            if (typeof BackupManager === 'undefined') {
+                Utils.showNotification('BackupManager no está disponible', 'error');
+                return;
+            }
+
+            Utils.showNotification('Creando backup...', 'info');
+            await BackupManager.createBackup();
+            Utils.showNotification('Backup creado y descargado correctamente', 'success');
+            await this.loadBackupsList();
+        } catch (error) {
+            console.error('Error creando backup:', error);
+            Utils.showNotification('Error al crear backup: ' + error.message, 'error');
+        }
+    },
+
+    async importBackupManually() {
+        try {
+            if (typeof BackupManager === 'undefined') {
+                Utils.showNotification('BackupManager no está disponible', 'error');
+                return;
+            }
+
+            const success = await BackupManager.importBackupFromFile();
+            if (success) {
+                await this.loadBackupsList();
+            }
+        } catch (error) {
+            console.error('Error importando backup:', error);
+            Utils.showNotification('Error al importar backup: ' + error.message, 'error');
+        }
+    },
 };
 
 window.Settings = Settings;
