@@ -7924,15 +7924,15 @@ const Reports = {
             }
 
             // Calcular utilidades
-            // Utilidad Bruta = Ingresos - COGS - Comisiones - Costos de Llegadas
-            const grossProfit = totalSalesMXN - totalCOGS - totalCommissions - totalArrivalCosts;
-            // Utilidad Neta = Utilidad Bruta - Costos Operativos - Comisiones Bancarias
-            const netProfit = grossProfit - totalOperatingCosts - bankCommissions;
+            // Utilidad Bruta = Ingresos - COGS - Comisiones
+            const grossProfit = totalSalesMXN - totalCOGS - totalCommissions;
+            // Utilidad Neta = Utilidad Bruta - Costos Llegadas - Costos Operativos - Comisiones Bancarias
+            const netProfit = grossProfit - totalArrivalCosts - totalOperatingCosts - bankCommissions;
             const grossMargin = totalSalesMXN > 0 ? (grossProfit / totalSalesMXN * 100) : 0;
             const netMargin = totalSalesMXN > 0 ? (netProfit / totalSalesMXN * 100) : 0;
 
             // Mostrar sección de utilidades
-            if (y + 50 > pageHeight - 30) {
+            if (y + 60 > pageHeight - 30) {
                 doc.addPage();
                 y = margin;
             }
@@ -7943,9 +7943,9 @@ const Reports = {
             y += 10;
 
             doc.setFillColor(240, 255, 240);
-            doc.rect(margin, y, pageWidth - (margin * 2), 50, 'F');
+            doc.rect(margin, y, pageWidth - (margin * 2), 60, 'F');
             doc.setDrawColor(200, 200, 200);
-            doc.rect(margin, y, pageWidth - (margin * 2), 50);
+            doc.rect(margin, y, pageWidth - (margin * 2), 60);
 
             doc.setFontSize(10);
             doc.setFont('helvetica', 'bold');
@@ -7965,22 +7965,22 @@ const Reports = {
             doc.text('(-) Comisiones (Vendedores + Guías):', margin + 5, y + 19);
             doc.text(`$${totalCommissions.toFixed(2)}`, margin + 85, y + 19);
 
-            doc.text('(-) Costos Llegadas:', margin + 5, y + 25);
-            doc.text(`$${totalArrivalCosts.toFixed(2)}`, margin + 60, y + 25);
-
             doc.setFont('helvetica', 'bold');
             doc.setTextColor(0, 128, 0);
-            doc.text('= Utilidad Bruta:', margin + 5, y + 31);
-            doc.text(`$${grossProfit.toFixed(2)}`, margin + 55, y + 31);
-            doc.text(`(${grossMargin.toFixed(2)}%)`, margin + 105, y + 31);
+            doc.text('= Utilidad Bruta:', margin + 5, y + 25);
+            doc.text(`$${grossProfit.toFixed(2)}`, margin + 55, y + 25);
+            doc.text(`(${grossMargin.toFixed(2)}%)`, margin + 105, y + 25);
 
             doc.setFontSize(9);
             doc.setFont('helvetica', 'normal');
             doc.setTextColor(0, 0, 0);
-            doc.text('(-) Costos Operativos:', margin + 5, y + 37);
-            doc.text(`$${totalOperatingCosts.toFixed(2)}`, margin + 65, y + 37);
-            doc.text('(-) Comisiones Bancarias:', margin + 125, y + 37);
-            doc.text(`$${bankCommissions.toFixed(2)}`, margin + 190, y + 37);
+            doc.text('(-) Costos Llegadas:', margin + 5, y + 31);
+            doc.text(`$${totalArrivalCosts.toFixed(2)}`, margin + 60, y + 31);
+            doc.text('(-) Costos Operativos:', margin + 125, y + 31);
+            doc.text(`$${totalOperatingCosts.toFixed(2)}`, margin + 190, y + 31);
+
+            doc.text('(-) Comisiones Bancarias:', margin + 5, y + 37);
+            doc.text(`$${bankCommissions.toFixed(2)}`, margin + 85, y + 37);
 
             doc.setFontSize(10);
             doc.setFont('helvetica', 'bold');
@@ -7990,7 +7990,7 @@ const Reports = {
             doc.text(`(${netMargin.toFixed(2)}%)`, margin + 110, y + 43);
 
             doc.setTextColor(0, 0, 0);
-            y += 50;
+            y += 60;
 
             // ========== FOOTER ==========
             const totalPages = doc.internal.getNumberOfPages();
