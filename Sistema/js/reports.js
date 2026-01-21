@@ -6327,20 +6327,35 @@ const Reports = {
                     );
                     console.log(`   🏢 Costos para sucursal ${branchId || 'todas'}: ${branchCosts.length}`);
                     console.log(`   📋 Costos recurrentes: ${branchCosts.filter(c => c.recurring === true).length}`);
+                    
+                    // DEBUG: Mostrar detalles de los primeros 5 costos para diagnosticar
+                    if (branchCosts.length > 0) {
+                        console.log(`   🔍 DEBUG - Detalles de costos encontrados:`);
+                        branchCosts.slice(0, 5).forEach((c, idx) => {
+                            console.log(`      Costo ${idx + 1}:`, {
+                                id: c.id,
+                                category: c.category,
+                                type: c.type,
+                                period_type: c.period_type,
+                                recurring: c.recurring,
+                                amount: c.amount,
+                                date: c.date,
+                                branch_id: c.branch_id
+                            });
+                        });
+                    }
 
                     // A) COSTOS FIJOS PRORRATEADOS (Mensuales, Semanales, Anuales)
                     // Costos mensuales prorrateados
                     // IMPORTANTE: Para costos recurrentes mensuales, aplicar al mes objetivo completo
                     // independientemente de cuándo se creó el costo
+                    // NOTA: Aceptamos costos con period_type='monthly' Y (recurring=true O type='fijo')
                     const monthlyCosts = branchCosts.filter(c => {
-                        // Para costos recurrentes mensuales, verificar si son del mes objetivo
-                        // usando el mes objetivo para el prorrateo, no el mes de creación
-                        return c.period_type === 'monthly' && 
-                               c.recurring === true &&
-                               c.category !== 'pago_llegadas' &&
-                               c.category !== 'comisiones_bancarias';
-                        // Removido el filtro de mes porque los costos recurrentes se aplican siempre
-                        // que estén activos para ese mes
+                        const isMonthly = c.period_type === 'monthly';
+                        // Aceptar si tiene recurring=true O si tiene type='fijo' (para compatibilidad)
+                        const isRecurring = c.recurring === true || c.recurring === 'true' || c.type === 'fijo';
+                        const isValidCategory = c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias';
+                        return isMonthly && isRecurring && isValidCategory;
                     });
                     console.log(`   📅 Costos mensuales encontrados: ${monthlyCosts.length}`);
                     for (const cost of monthlyCosts) {
@@ -6363,18 +6378,12 @@ const Reports = {
                     // del año objetivo
                     const weeklyCosts = branchCosts.filter(c => {
                         const costDate = new Date(c.date || c.created_at);
-                        const targetWeek = this.getWeekNumber(targetDate);
-                        const costWeek = this.getWeekNumber(costDate);
                         // Para costos recurrentes semanales, aplicar si están en el mismo año
-                        // (se podría mejorar para verificar que estén activos en esa semana específica)
-                        return c.period_type === 'weekly' && 
-                               c.recurring === true &&
-                               c.category !== 'pago_llegadas' &&
-                               c.category !== 'comisiones_bancarias' &&
-                               targetDate.getFullYear() === costDate.getFullYear();
-                        // Para simplicidad, aplicamos todos los costos semanales del mismo año
-                        // En una implementación más avanzada, se podría verificar que el costo esté activo
-                        // en la semana específica usando un campo 'active_from' y 'active_to'
+                        const isWeekly = c.period_type === 'weekly';
+                        const isRecurring = c.recurring === true || c.recurring === 'true' || c.type === 'fijo';
+                        const isValidCategory = c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias';
+                        const isSameYear = targetDate.getFullYear() === costDate.getFullYear();
+                        return isWeekly && isRecurring && isValidCategory && isSameYear;
                     });
                     console.log(`   📅 Costos semanales encontrados: ${weeklyCosts.length}`);
                     for (const cost of weeklyCosts) {
@@ -6394,10 +6403,10 @@ const Reports = {
                     // IMPORTANTE: Para costos recurrentes anuales, aplicar al año objetivo
                     // NOTA: El schema usa 'yearly' pero aceptamos ambos 'annual' y 'yearly'
                     const annualCosts = branchCosts.filter(c => {
-                        return (c.period_type === 'annual' || c.period_type === 'yearly') && 
-                               c.recurring === true &&
-                               c.category !== 'pago_llegadas' &&
-                               c.category !== 'comisiones_bancarias';
+                        const isAnnual = c.period_type === 'annual' || c.period_type === 'yearly';
+                        const isRecurring = c.recurring === true || c.recurring === 'true' || c.type === 'fijo';
+                        const isValidCategory = c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias';
+                        return isAnnual && isRecurring && isValidCategory;
                         // Removido el filtro de año porque los costos recurrentes anuales se aplican siempre
                         // que estén activos para ese año
                     });
