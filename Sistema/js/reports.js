@@ -8842,15 +8842,15 @@ const Reports = {
                                     </div>
                                     <div>
                                         <div style="color: var(--color-text-secondary); font-size: 10px; text-transform: uppercase;">Ventas (MXN)</div>
-                                        <div style="font-weight: 600; font-size: 16px;">$${(report.total_sales_mxn || 0).toFixed(2)}</div>
+                                        <div style="font-weight: 600; font-size: 16px;">$${parseFloat(report.total_sales_mxn || 0).toFixed(2)}</div>
                                     </div>
                                     <div>
                                         <div style="color: var(--color-text-secondary); font-size: 10px; text-transform: uppercase;">Utilidad Bruta</div>
-                                        <div style="font-weight: 600; font-size: 16px; color: var(--color-success);">$${(report.gross_profit || 0).toFixed(2)}</div>
+                                        <div style="font-weight: 600; font-size: 16px; color: var(--color-success);">$${parseFloat(report.gross_profit || 0).toFixed(2)}</div>
                                     </div>
                                     <div>
                                         <div style="color: var(--color-text-secondary); font-size: 10px; text-transform: uppercase;">Utilidad Neta</div>
-                                        <div style="font-weight: 600; font-size: 16px; color: ${(report.net_profit || 0) >= 0 ? 'var(--color-success)' : 'var(--color-danger)'};">$${(report.net_profit || 0).toFixed(2)}</div>
+                                        <div style="font-weight: 600; font-size: 16px; color: ${parseFloat(report.net_profit || 0) >= 0 ? 'var(--color-success)' : 'var(--color-danger)'};">$${parseFloat(report.net_profit || 0).toFixed(2)}</div>
                                     </div>
                                 </div>
                             </div>
@@ -8861,23 +8861,23 @@ const Reports = {
                                 <div style="display: grid; gap: var(--spacing-xs); font-size: 12px;">
                                     <div style="display: flex; justify-content: space-between;">
                                         <span style="color: var(--color-text-secondary);">Costo Mercancía (COGS):</span>
-                                        <span style="font-weight: 600;">$${(report.total_cogs || 0).toFixed(2)}</span>
+                                        <span style="font-weight: 600;">$${parseFloat(report.total_cogs || 0).toFixed(2)}</span>
                                     </div>
                                     <div style="display: flex; justify-content: space-between;">
                                         <span style="color: var(--color-text-secondary);">Comisiones:</span>
-                                        <span style="font-weight: 600;">$${(report.total_commissions || 0).toFixed(2)}</span>
+                                        <span style="font-weight: 600;">$${parseFloat(report.total_commissions || 0).toFixed(2)}</span>
                                     </div>
                                     <div style="display: flex; justify-content: space-between;">
                                         <span style="color: var(--color-text-secondary);">Costos de Llegadas:</span>
-                                        <span style="font-weight: 600;">$${(report.total_arrival_costs || 0).toFixed(2)}</span>
+                                        <span style="font-weight: 600;">$${parseFloat(report.total_arrival_costs || 0).toFixed(2)}</span>
                                     </div>
                                     <div style="display: flex; justify-content: space-between;">
                                         <span style="color: var(--color-text-secondary);">Costos Operativos:</span>
-                                        <span style="font-weight: 600;">$${(report.total_operating_costs || 0).toFixed(2)}</span>
+                                        <span style="font-weight: 600;">$${parseFloat(report.total_operating_costs || 0).toFixed(2)}</span>
                                     </div>
                                     <div style="display: flex; justify-content: space-between;">
                                         <span style="color: var(--color-text-secondary);">Comisiones Bancarias:</span>
-                                        <span style="font-weight: 600;">$${(report.bank_commissions || 0).toFixed(2)}</span>
+                                        <span style="font-weight: 600;">$${parseFloat(report.bank_commissions || 0).toFixed(2)}</span>
                                     </div>
                                 </div>
                             </div>
@@ -8993,9 +8993,9 @@ const Reports = {
             doc.setFontSize(10);
             doc.setFont('helvetica', 'normal');
             doc.text(`Total Capturas: ${report.captures ? report.captures.length : 0}`, margin + 5, y + 15);
-            doc.text(`Ventas (MXN): $${(report.total_sales_mxn || 0).toFixed(2)}`, margin + 60, y + 15);
-            doc.text(`Utilidad Bruta: $${(report.gross_profit || 0).toFixed(2)}`, margin + 5, y + 22);
-            doc.text(`Utilidad Neta: $${(report.net_profit || 0).toFixed(2)}`, margin + 60, y + 22);
+            doc.text(`Ventas (MXN): $${parseFloat(report.total_sales_mxn || 0).toFixed(2)}`, margin + 60, y + 15);
+            doc.text(`Utilidad Bruta: $${parseFloat(report.gross_profit || 0).toFixed(2)}`, margin + 5, y + 22);
+            doc.text(`Utilidad Neta: $${parseFloat(report.net_profit || 0).toFixed(2)}`, margin + 60, y + 22);
 
             y += 40;
 
