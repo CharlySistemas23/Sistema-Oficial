@@ -3,6 +3,7 @@
 const Reports = {
     initialized: false,
     currentTab: 'reports',
+    pendingCaptures: [], // Lista de capturas pendientes antes de guardar
     
     async init() {
         // Verificar permiso
@@ -5234,11 +5235,39 @@ const Reports = {
                                 <i class="fas fa-sync-alt"></i> Actualizar
                             </button>
                         </div>
-                        <button type="submit" class="btn-primary" style="width: 100%; padding: var(--spacing-sm);">
-                            <i class="fas fa-save"></i> Guardar Captura
+                        <div style="display: flex; gap: var(--spacing-sm);">
+                            <button type="submit" class="btn-primary" style="flex: 1; padding: var(--spacing-sm);">
+                                <i class="fas fa-plus-circle"></i> Agregar a Lista
+                            </button>
+                            <button type="button" class="btn-success" onclick="window.Reports.saveAllPendingCaptures()" style="flex: 1; padding: var(--spacing-sm);" id="save-all-pending-btn" disabled>
+                                <i class="fas fa-save"></i> Guardar Todo (0)
                         </button>
+                        </div>
                     </div>
                 </form>
+            </div>
+
+            <!-- Lista de Capturas Pendientes (Antes de Guardar) -->
+            <div class="module" id="pending-captures-container" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light); margin-bottom: var(--spacing-lg); display: none;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-md);">
+                    <h3 style="margin: 0; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--color-warning, #ffc107);">
+                        <i class="fas fa-clock"></i> Capturas Pendientes (<span id="pending-count">0</span>)
+                    </h3>
+                    <div style="display: flex; gap: var(--spacing-sm);">
+                        <button class="btn-success btn-sm" onclick="window.Reports.saveAllPendingCaptures()" id="save-all-pending-btn-header">
+                            <i class="fas fa-save"></i> Guardar Todo
+                        </button>
+                        <button class="btn-danger btn-sm" onclick="window.Reports.clearPendingCaptures()">
+                            <i class="fas fa-times"></i> Limpiar Lista
+                        </button>
+                    </div>
+                </div>
+                <div id="pending-captures-list">
+                    <div style="text-align: center; padding: var(--spacing-lg); color: var(--color-text-secondary);">
+                        <i class="fas fa-inbox" style="font-size: 32px; opacity: 0.3; margin-bottom: var(--spacing-sm);"></i>
+                        <p>No hay capturas pendientes</p>
+                    </div>
+                </div>
             </div>
 
             <!-- Lista de Capturas del Día -->
@@ -5408,7 +5437,7 @@ const Reports = {
         if (form) {
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
-                await this.saveQuickCaptureSale();
+                await this.addToPendingList();
             });
         }
 
@@ -5516,6 +5545,12 @@ const Reports = {
                 await this.loadGuidesForAgency(agencySelect.value);
             });
         }
+
+        // Inicializar lista de capturas pendientes
+        await this.loadPendingCaptures();
+        
+        // Cargar datos guardados del día
+        await this.loadQuickCaptureData();
     },
 
     async loadExchangeRates() {
@@ -5668,7 +5703,7 @@ const Reports = {
         }
     },
 
-    async saveQuickCaptureSale() {
+    async addToPendingList() {
         try {
             const isMasterAdmin = typeof UserManager !== 'undefined' && (
                 UserManager.currentUser?.role === 'master_admin' ||
@@ -5735,9 +5770,9 @@ const Reports = {
                 }
             }
 
-            // Crear objeto de captura
+            // Crear objeto de captura (pendiente)
             const capture = {
-                id: 'qc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+                id: 'pending_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
                 branch_id: branchId,
                 branch_name: branchName,
                 seller_id: sellerId,
@@ -5750,14 +5785,15 @@ const Reports = {
                 quantity: quantity,
                 currency: currency,
                 total: total,
-                merchandise_cost: merchandiseCost, // Costo de mercancía manual o del inventario
+                merchandise_cost: merchandiseCost,
                 date: new Date().toISOString().split('T')[0],
                 created_at: new Date().toISOString(),
-                created_by: typeof UserManager !== 'undefined' && UserManager.currentUser ? UserManager.currentUser.id : null
+                created_by: typeof UserManager !== 'undefined' && UserManager.currentUser ? UserManager.currentUser.id : null,
+                isPending: true // Marca para identificar que es pendiente
             };
 
-            // Guardar en IndexedDB (store temporal)
-            await DB.put('temp_quick_captures', capture);
+            // Agregar a la lista pendiente en memoria
+            this.pendingCaptures.push(capture);
 
             // Limpiar formulario
             document.getElementById('quick-capture-form')?.reset();
@@ -5765,13 +5801,276 @@ const Reports = {
                 document.getElementById('qc-quantity').value = '1';
             }
 
-            // Recargar lista
+            // Actualizar lista de pendientes
+            await this.loadPendingCaptures();
+
+            Utils.showNotification(`Captura agregada a la lista (${this.pendingCaptures.length} pendientes)`, 'success');
+        } catch (error) {
+            console.error('Error agregando captura a lista pendiente:', error);
+            Utils.showNotification('Error al agregar la captura: ' + error.message, 'error');
+        }
+    },
+
+    async loadPendingCaptures() {
+        try {
+            const container = document.getElementById('pending-captures-container');
+            const listContainer = document.getElementById('pending-captures-list');
+            const countSpan = document.getElementById('pending-count');
+            const saveBtn = document.getElementById('save-all-pending-btn');
+            const saveBtnHeader = document.getElementById('save-all-pending-btn-header');
+
+            if (!container || !listContainer) return;
+
+            // Actualizar contador
+            if (countSpan) {
+                countSpan.textContent = this.pendingCaptures.length;
+            }
+            if (saveBtn) {
+                saveBtn.textContent = `Guardar Todo (${this.pendingCaptures.length})`;
+                saveBtn.disabled = this.pendingCaptures.length === 0;
+            }
+            if (saveBtnHeader) {
+                saveBtnHeader.textContent = `Guardar Todo (${this.pendingCaptures.length})`;
+                saveBtnHeader.disabled = this.pendingCaptures.length === 0;
+            }
+
+            // Mostrar/ocultar contenedor
+            if (this.pendingCaptures.length === 0) {
+                container.style.display = 'none';
+                return;
+            }
+            container.style.display = 'block';
+
+            // Calcular totales
+            const totals = {
+                USD: 0,
+                MXN: 0,
+                CAD: 0
+            };
+            let totalQuantity = 0;
+
+            this.pendingCaptures.forEach(c => {
+                totals[c.currency] = (totals[c.currency] || 0) + c.total;
+                totalQuantity += c.quantity || 1;
+            });
+
+            // Renderizar tabla
+            let html = `
+                <div style="margin-bottom: var(--spacing-md); padding: var(--spacing-md); background: var(--color-warning-bg, #fff3cd); border-radius: var(--radius-md); border: 1px solid var(--color-warning, #ffc107);">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--spacing-md);">
+                        <div>
+                            <div style="font-size: 11px; color: var(--color-text-secondary); text-transform: uppercase; margin-bottom: var(--spacing-xs);">Total Pendientes</div>
+                            <div style="font-size: 18px; font-weight: 600;">${this.pendingCaptures.length}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 11px; color: var(--color-text-secondary); text-transform: uppercase; margin-bottom: var(--spacing-xs);">Total Cantidad</div>
+                            <div style="font-size: 18px; font-weight: 600;">${totalQuantity}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 11px; color: var(--color-text-secondary); text-transform: uppercase; margin-bottom: var(--spacing-xs);">Total USD</div>
+                            <div style="font-size: 18px; font-weight: 600;">$${totals.USD.toFixed(2)}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 11px; color: var(--color-text-secondary); text-transform: uppercase; margin-bottom: var(--spacing-xs);">Total MXN</div>
+                            <div style="font-size: 18px; font-weight: 600;">$${totals.MXN.toFixed(2)}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 11px; color: var(--color-text-secondary); text-transform: uppercase; margin-bottom: var(--spacing-xs);">Total CAD</div>
+                            <div style="font-size: 18px; font-weight: 600;">$${totals.CAD.toFixed(2)}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="background: var(--color-bg-secondary); border-bottom: 2px solid var(--color-border-light);">
+                                <th style="padding: var(--spacing-sm); text-align: left; font-size: 11px; text-transform: uppercase; font-weight: 600;">#</th>
+                                <th style="padding: var(--spacing-sm); text-align: left; font-size: 11px; text-transform: uppercase; font-weight: 600;">Sucursal</th>
+                                <th style="padding: var(--spacing-sm); text-align: left; font-size: 11px; text-transform: uppercase; font-weight: 600;">Vendedor</th>
+                                <th style="padding: var(--spacing-sm); text-align: left; font-size: 11px; text-transform: uppercase; font-weight: 600;">Guía</th>
+                                <th style="padding: var(--spacing-sm); text-align: left; font-size: 11px; text-transform: uppercase; font-weight: 600;">Agencia</th>
+                                <th style="padding: var(--spacing-sm); text-align: left; font-size: 11px; text-transform: uppercase; font-weight: 600;">Producto</th>
+                                <th style="padding: var(--spacing-sm); text-align: center; font-size: 11px; text-transform: uppercase; font-weight: 600;">Cantidad</th>
+                                <th style="padding: var(--spacing-sm); text-align: right; font-size: 11px; text-transform: uppercase; font-weight: 600;">Moneda</th>
+                                <th style="padding: var(--spacing-sm); text-align: right; font-size: 11px; text-transform: uppercase; font-weight: 600;">Total</th>
+                                <th style="padding: var(--spacing-sm); text-align: right; font-size: 11px; text-transform: uppercase; font-weight: 600;">Costo</th>
+                                <th style="padding: var(--spacing-sm); text-align: center; font-size: 11px; text-transform: uppercase; font-weight: 600;">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${this.pendingCaptures.map((c, index) => {
+                                return `
+                                    <tr style="border-bottom: 1px solid var(--color-border-light);">
+                                        <td style="padding: var(--spacing-sm); font-size: 12px; font-weight: 600;">${index + 1}</td>
+                                        <td style="padding: var(--spacing-sm); font-size: 12px;">${c.branch_name || 'N/A'}</td>
+                                        <td style="padding: var(--spacing-sm); font-size: 12px;">${c.seller_name || 'N/A'}</td>
+                                        <td style="padding: var(--spacing-sm); font-size: 12px;">${c.guide_name || '-'}</td>
+                                        <td style="padding: var(--spacing-sm); font-size: 12px;">${c.agency_name || '-'}</td>
+                                        <td style="padding: var(--spacing-sm); font-size: 12px;">${c.product}</td>
+                                        <td style="padding: var(--spacing-sm); font-size: 12px; text-align: center;">${c.quantity}</td>
+                                        <td style="padding: var(--spacing-sm); font-size: 12px; text-align: right;">${c.currency}</td>
+                                        <td style="padding: var(--spacing-sm); font-size: 12px; text-align: right; font-weight: 600;">$${c.total.toFixed(2)}</td>
+                                        <td style="padding: var(--spacing-sm); font-size: 12px; text-align: right; color: var(--color-text-secondary);">$${(c.merchandise_cost || 0).toFixed(2)}</td>
+                                        <td style="padding: var(--spacing-sm); text-align: center;">
+                                            <div style="display: flex; gap: var(--spacing-xs); justify-content: center;">
+                                                <button class="btn-primary btn-xs" onclick="window.Reports.editPendingCapture('${c.id}')" title="Editar">
+                                                    <i class="fas fa-edit"></i>
+                                                </button>
+                                                <button class="btn-danger btn-xs" onclick="window.Reports.deletePendingCapture('${c.id}')" title="Eliminar">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+
+            listContainer.innerHTML = html;
+        } catch (error) {
+            console.error('Error cargando capturas pendientes:', error);
+        }
+    },
+
+    async editPendingCapture(captureId) {
+        try {
+            const capture = this.pendingCaptures.find(c => c.id === captureId);
+            if (!capture) {
+                Utils.showNotification('Captura no encontrada', 'error');
+                return;
+            }
+
+            // Llenar el formulario con los datos de la captura
+            const isMasterAdmin = typeof UserManager !== 'undefined' && (
+                UserManager.currentUser?.role === 'master_admin' ||
+                UserManager.currentUser?.is_master_admin ||
+                UserManager.currentUser?.isMasterAdmin
+            );
+
+            if (isMasterAdmin && document.getElementById('qc-branch')) {
+                document.getElementById('qc-branch').value = capture.branch_id;
+            }
+            if (document.getElementById('qc-seller')) {
+                document.getElementById('qc-seller').value = capture.seller_id;
+            }
+            if (document.getElementById('qc-guide')) {
+                document.getElementById('qc-guide').value = capture.guide_id || '';
+            }
+            if (document.getElementById('qc-agency')) {
+                document.getElementById('qc-agency').value = capture.agency_id || '';
+            }
+            if (document.getElementById('qc-product')) {
+                document.getElementById('qc-product').value = capture.product;
+            }
+            if (document.getElementById('qc-quantity')) {
+                document.getElementById('qc-quantity').value = capture.quantity;
+            }
+            if (document.getElementById('qc-currency')) {
+                document.getElementById('qc-currency').value = capture.currency;
+            }
+            if (document.getElementById('qc-total')) {
+                document.getElementById('qc-total').value = capture.total;
+            }
+            if (document.getElementById('qc-cost')) {
+                document.getElementById('qc-cost').value = capture.merchandise_cost || '';
+            }
+
+            // Eliminar la captura de la lista pendiente
+            this.pendingCaptures = this.pendingCaptures.filter(c => c.id !== captureId);
+            await this.loadPendingCaptures();
+
+            // Scroll al formulario
+            document.getElementById('quick-capture-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            document.getElementById('qc-product')?.focus();
+
+            Utils.showNotification('Captura cargada para edición', 'info');
+        } catch (error) {
+            console.error('Error editando captura pendiente:', error);
+            Utils.showNotification('Error al editar la captura: ' + error.message, 'error');
+        }
+    },
+
+    async deletePendingCapture(captureId) {
+        try {
+            if (!confirm('¿Estás seguro de eliminar esta captura de la lista?')) {
+                return;
+            }
+
+            this.pendingCaptures = this.pendingCaptures.filter(c => c.id !== captureId);
+            await this.loadPendingCaptures();
+
+            Utils.showNotification('Captura eliminada de la lista', 'success');
+        } catch (error) {
+            console.error('Error eliminando captura pendiente:', error);
+            Utils.showNotification('Error al eliminar la captura: ' + error.message, 'error');
+        }
+    },
+
+    async clearPendingCaptures() {
+        try {
+            if (this.pendingCaptures.length === 0) {
+                Utils.showNotification('No hay capturas pendientes', 'info');
+                return;
+            }
+
+            if (!confirm(`¿Estás seguro de eliminar todas las ${this.pendingCaptures.length} capturas pendientes?`)) {
+                return;
+            }
+
+            this.pendingCaptures = [];
+            await this.loadPendingCaptures();
+
+            Utils.showNotification('Lista de capturas pendientes limpiada', 'success');
+        } catch (error) {
+            console.error('Error limpiando capturas pendientes:', error);
+            Utils.showNotification('Error al limpiar la lista: ' + error.message, 'error');
+        }
+    },
+
+    async saveAllPendingCaptures() {
+        try {
+            if (this.pendingCaptures.length === 0) {
+                Utils.showNotification('No hay capturas pendientes para guardar', 'warning');
+                return;
+            }
+
+            if (!confirm(`¿Guardar todas las ${this.pendingCaptures.length} capturas pendientes?`)) {
+                return;
+            }
+
+            // Guardar cada captura en IndexedDB
+            let savedCount = 0;
+            for (const capture of this.pendingCaptures) {
+                try {
+                    // Generar nuevo ID para la captura guardada
+                    const savedCapture = {
+                        ...capture,
+                        id: 'qc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)
+                    };
+                    delete savedCapture.isPending;
+
+                    await DB.put('temp_quick_captures', savedCapture);
+                    savedCount++;
+                } catch (error) {
+                    console.error('Error guardando captura individual:', error);
+                }
+            }
+
+            // Limpiar lista pendiente
+            this.pendingCaptures = [];
+            await this.loadPendingCaptures();
+
+            // Recargar datos y generar estadísticas
             await this.loadQuickCaptureData();
 
-            Utils.showNotification('Captura guardada correctamente', 'success');
+            Utils.showNotification(`${savedCount} capturas guardadas exitosamente. Las estadísticas se han actualizado.`, 'success');
         } catch (error) {
-            console.error('Error guardando captura rápida:', error);
-            Utils.showNotification('Error al guardar la captura: ' + error.message, 'error');
+            console.error('Error guardando capturas pendientes:', error);
+            Utils.showNotification('Error al guardar las capturas: ' + error.message, 'error');
         }
     },
 
@@ -6473,7 +6772,7 @@ const Reports = {
             const netProfit = grossProfit - totalArrivalCosts - totalOperatingCosts - bankCommissions;
             const grossMargin = totalSalesMXN > 0 ? (grossProfit / totalSalesMXN * 100) : 0;
             const netMargin = totalSalesMXN > 0 ? (netProfit / totalSalesMXN * 100) : 0;
-            
+
             console.log(`   Utilidad Neta: $${netProfit.toFixed(2)} (${netMargin.toFixed(2)}%)`);
 
             // 9. Información básica del encabezado
@@ -7900,50 +8199,56 @@ const Reports = {
                     );
 
                     // A) COSTOS FIJOS PRORRATEADOS (Mensuales, Semanales, Anuales)
-                    // Costos mensuales prorrateados (renta, nómina, luz, etc.)
+                    // IMPORTANTE: Usar la misma lógica que loadQuickCaptureProfits
+                    // Costos mensuales prorrateados
+                    // IMPORTANTE: Para costos recurrentes mensuales, aplicar al mes objetivo completo
+                    // independientemente de cuándo se creó el costo
+                    // NOTA: Aceptamos costos con period_type='monthly' Y (recurring=true O type='fijo')
                     const monthlyCosts = branchCosts.filter(c => {
-                        const costDate = new Date(c.date || c.created_at);
-                        return c.period_type === 'monthly' && 
-                               c.recurring === true &&
-                               costDate.getMonth() === targetDate.getMonth() &&
-                               costDate.getFullYear() === targetDate.getFullYear() &&
-                               c.category !== 'pago_llegadas' && // Excluir llegadas
-                               c.category !== 'comisiones_bancarias'; // Excluir comisiones bancarias
+                        const isMonthly = c.period_type === 'monthly';
+                        // Aceptar si tiene recurring=true O si tiene type='fijo' (para compatibilidad)
+                        const isRecurring = c.recurring === true || c.recurring === 'true' || c.type === 'fijo';
+                        const isValidCategory = c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias';
+                        return isMonthly && isRecurring && isValidCategory;
                     });
                     for (const cost of monthlyCosts) {
-                        const costDate = new Date(cost.date || cost.created_at);
-                        const daysInMonth = new Date(costDate.getFullYear(), costDate.getMonth() + 1, 0).getDate();
-                        fixedCostsProrated += (cost.amount || 0) / daysInMonth;
+                        // Usar el mes objetivo (targetDate) para calcular días del mes, no el mes del costo
+                        const daysInMonth = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0).getDate();
+                        const dailyAmount = (cost.amount || 0) / daysInMonth;
+                        fixedCostsProrated += dailyAmount;
                     }
 
                     // Costos semanales prorrateados
+                    // IMPORTANTE: Para costos recurrentes semanales, aplicar si estamos en el mismo año
                     const weeklyCosts = branchCosts.filter(c => {
                         const costDate = new Date(c.date || c.created_at);
-                        const targetWeek = this.getWeekNumber(targetDate);
-                        const costWeek = this.getWeekNumber(costDate);
-                        return c.period_type === 'weekly' && 
-                               c.recurring === true &&
-                               targetWeek === costWeek &&
-                               targetDate.getFullYear() === costDate.getFullYear() &&
-                               c.category !== 'pago_llegadas' && // Excluir llegadas
-                               c.category !== 'comisiones_bancarias'; // Excluir comisiones bancarias
+                        // Para costos recurrentes semanales, aplicar si están en el mismo año
+                        const isWeekly = c.period_type === 'weekly';
+                        const isRecurring = c.recurring === true || c.recurring === 'true' || c.type === 'fijo';
+                        const isValidCategory = c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias';
+                        const isSameYear = targetDate.getFullYear() === costDate.getFullYear();
+                        return isWeekly && isRecurring && isValidCategory && isSameYear;
                     });
                     for (const cost of weeklyCosts) {
-                        fixedCostsProrated += (cost.amount || 0) / 7;
+                        const dailyAmount = (cost.amount || 0) / 7;
+                        fixedCostsProrated += dailyAmount;
                     }
 
                     // Costos anuales prorrateados
+                    // IMPORTANTE: Para costos recurrentes anuales, aplicar al año objetivo
+                    // NOTA: El schema usa 'yearly' pero aceptamos ambos 'annual' y 'yearly'
                     const annualCosts = branchCosts.filter(c => {
-                        const costDate = new Date(c.date || c.created_at);
-                        return c.period_type === 'annual' && 
-                               c.recurring === true &&
-                               costDate.getFullYear() === targetDate.getFullYear() &&
-                               c.category !== 'pago_llegadas' && // Excluir llegadas
-                               c.category !== 'comisiones_bancarias'; // Excluir comisiones bancarias
+                        const isAnnual = c.period_type === 'annual' || c.period_type === 'yearly';
+                        const isRecurring = c.recurring === true || c.recurring === 'true' || c.type === 'fijo';
+                        const isValidCategory = c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias';
+                        return isAnnual && isRecurring && isValidCategory;
+                        // Removido el filtro de año porque los costos recurrentes anuales se aplican siempre
+                        // que estén activos para ese año
                     });
                     for (const cost of annualCosts) {
                         const daysInYear = ((targetDate.getFullYear() % 4 === 0 && targetDate.getFullYear() % 100 !== 0) || (targetDate.getFullYear() % 400 === 0)) ? 366 : 365;
-                        fixedCostsProrated += (cost.amount || 0) / daysInYear;
+                        const dailyAmount = (cost.amount || 0) / daysInYear;
+                        fixedCostsProrated += dailyAmount;
                     }
 
                     // B) COSTOS VARIABLES DEL DÍA (registrados hoy)
