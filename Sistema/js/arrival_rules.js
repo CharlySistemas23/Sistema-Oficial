@@ -213,72 +213,132 @@ const ArrivalRules = {
      */
     async saveArrival(arrivalData) {
         try {
-            const { date, branch_id, agency_id, unit_type } = arrivalData;
+            const { date, branch_id, agency_id, unit_type, passengers, units } = arrivalData;
             
-            // Buscar si ya existe (buscar por agency_id y branch_id, unit_type puede variar)
-            const existing = await DB.query('agency_arrivals', 'date', date);
-            const existingArrival = existing.find(a => 
-                a.branch_id === branch_id && 
-                a.agency_id === agency_id &&
-                (a.unit_type || null) === (unit_type || null)
-            ) || existing.find(a => 
-                a.branch_id === branch_id && 
-                a.agency_id === agency_id &&
-                (!a.unit_type || a.unit_type === null) &&
-                (!unit_type || unit_type === null)
-            );
+            // MEJORAR: Buscar llegadas existentes de forma más robusta
+            // Buscar TODAS las llegadas del día (no solo por índice de fecha)
+            const allArrivals = await DB.getAll('agency_arrivals') || [];
+            const dateStr = date ? date.split('T')[0] : new Date().toISOString().split('T')[0];
+            
+            // Buscar llegada existente con criterios más estrictos
+            // 1. Misma fecha, sucursal, agencia
+            // 2. Mismo unit_type (o ambos null)
+            // 3. Preferir la más reciente si hay múltiples
+            let existingArrival = allArrivals
+                .filter(a => {
+                    const aDateStr = a.date ? a.date.split('T')[0] : new Date(a.date || a.created_at).toISOString().split('T')[0];
+                    if (aDateStr !== dateStr) return false;
+                    if (String(a.branch_id) !== String(branch_id)) return false;
+                    if (String(a.agency_id) !== String(agency_id)) return false;
+                    
+                    // Comparar unit_type (ambos null o iguales)
+                    const aUnitType = a.unit_type || null;
+                    const bUnitType = unit_type || null;
+                    if (aUnitType !== bUnitType) return false;
+                    
+                    return true;
+                })
+                .sort((a, b) => {
+                    // Ordenar por fecha de actualización (más reciente primero)
+                    const aTime = new Date(a.updated_at || a.created_at).getTime();
+                    const bTime = new Date(b.updated_at || b.created_at).getTime();
+                    return bTime - aTime;
+                })[0]; // Tomar la más reciente
+
+            // Si no se encuentra por unit_type exacto, buscar sin unit_type (para compatibilidad)
+            if (!existingArrival) {
+                existingArrival = allArrivals
+                    .filter(a => {
+                        const aDateStr = a.date ? a.date.split('T')[0] : new Date(a.date || a.created_at).toISOString().split('T')[0];
+                        if (aDateStr !== dateStr) return false;
+                        if (String(a.branch_id) !== String(branch_id)) return false;
+                        if (String(a.agency_id) !== String(agency_id)) return false;
+                        // Si ambos unit_type son null, considerar iguales
+                        return (!a.unit_type || a.unit_type === null) && (!unit_type || unit_type === null);
+                    })
+                    .sort((a, b) => {
+                        const aTime = new Date(a.updated_at || a.created_at).getTime();
+                        const bTime = new Date(b.updated_at || b.created_at).getTime();
+                        return bTime - aTime;
+                    })[0];
+            }
+
+            // Calcular arrival_fee
+            const arrivalFee = arrivalData.override ? 
+                (arrivalData.override_amount || 0) : 
+                (arrivalData.calculated_fee || arrivalData.arrival_fee || 0);
 
             const arrival = {
                 id: existingArrival?.id || Utils.generateId(),
-                date: date,
+                date: dateStr,
                 branch_id: branch_id,
                 agency_id: agency_id,
-                passengers: arrivalData.passengers || 0,
-                units: arrivalData.units || 1,
+                passengers: passengers || arrivalData.passengers || 0,
+                units: units || arrivalData.units || 1,
                 unit_type: unit_type || null,
                 calculated_fee: arrivalData.calculated_fee || 0,
                 override: arrivalData.override || false,
                 override_amount: arrivalData.override_amount || null,
                 override_reason: arrivalData.override_reason || null,
-                arrival_fee: arrivalData.override ? 
-                    (arrivalData.override_amount || 0) : 
-                    (arrivalData.calculated_fee || 0),
+                arrival_fee: arrivalFee,
                 notes: arrivalData.notes || '',
                 created_at: existingArrival?.created_at || new Date().toISOString(),
                 updated_at: new Date().toISOString(),
                 sync_status: 'pending'
             };
 
+            // Guardar llegada (actualizar si existe, crear si no)
             await DB.put('agency_arrivals', arrival);
-            await SyncManager.addToQueue('agency_arrival', arrival.id);
-
-            // Registrar o actualizar costo de pago de llegadas automáticamente
-            // registerArrivalPayment ya maneja duplicados: si existe, lo actualiza; si no, lo crea
-            if (typeof Costs !== 'undefined' && arrival.arrival_fee > 0) {
-                await Costs.registerArrivalPayment(
-                    arrival.id,
-                    arrival.arrival_fee,
-                    arrival.branch_id,
-                    arrival.agency_id,
-                    arrival.passengers,
-                    arrival.date // Pasar la fecha de la llegada
-                );
-            } else if (existingArrival && arrival.arrival_fee === 0 && typeof Costs !== 'undefined') {
-                // Si se actualiza una llegada y el fee ahora es 0, eliminar el costo si existe
+            
+            // Solo agregar a cola de sincronización si es nueva
+            if (!existingArrival) {
+                await SyncManager.addToQueue('agency_arrival', arrival.id);
+            } else {
+                // Si es actualización, actualizar en cola si existe
                 try {
-                    const allCosts = await DB.getAll('cost_entries') || [];
-                    const existingCost = allCosts.find(c => 
-                        c.category === 'pago_llegadas' && 
-                        c.arrival_id === arrival.id
-                    );
-                    if (existingCost) {
-                        await DB.delete('cost_entries', existingCost.id);
+                    const queueItems = await DB.getAll('sync_queue') || [];
+                    const queueItem = queueItems.find(q => q.entity_id === arrival.id && q.entity_type === 'agency_arrival');
+                    if (queueItem) {
+                        queueItem.data = arrival;
+                        queueItem.updated_at = new Date().toISOString();
+                        await DB.put('sync_queue', queueItem);
                     }
                 } catch (e) {
-                    console.warn('Error eliminando costo de llegada:', e);
+                    console.warn('Error actualizando en cola de sincronización:', e);
                 }
             }
 
+            // Registrar o actualizar costo de pago de llegadas automáticamente
+            // registerArrivalPayment ya maneja duplicados: si existe, lo actualiza; si no, lo crea
+            if (typeof Costs !== 'undefined' && Costs.registerArrivalPayment) {
+                if (arrival.arrival_fee > 0) {
+                    await Costs.registerArrivalPayment(
+                        arrival.id,
+                        arrival.arrival_fee,
+                        arrival.branch_id,
+                        arrival.agency_id,
+                        arrival.passengers,
+                        arrival.date
+                    );
+                } else if (existingArrival && arrival.arrival_fee === 0) {
+                    // Si se actualiza una llegada y el fee ahora es 0, eliminar el costo si existe
+                    try {
+                        const allCosts = await DB.getAll('cost_entries') || [];
+                        const existingCost = allCosts.find(c => 
+                            c.category === 'pago_llegadas' && 
+                            c.arrival_id === arrival.id
+                        );
+                        if (existingCost) {
+                            await DB.delete('cost_entries', existingCost.id);
+                            console.log(`🗑️ Costo de llegada eliminado (fee = 0) para llegada ${arrival.id}`);
+                        }
+                    } catch (e) {
+                        console.warn('Error eliminando costo de llegada:', e);
+                    }
+                }
+            }
+
+            console.log(`${existingArrival ? '✅ Llegada actualizada' : '➕ Llegada creada'}: ${arrival.agency_id} - ${arrival.passengers} pasajeros - $${arrival.arrival_fee.toFixed(2)}`);
             return arrival;
         } catch (e) {
             console.error('Error saving arrival:', e);
