@@ -6,6 +6,59 @@ const Reports = {
     pendingCaptures: [], // Lista de capturas pendientes antes de guardar
     isExporting: false, // Flag para prevenir múltiples exportaciones simultáneas
     
+    /**
+     * Calcular comisión basada en reglas de agencia, vendedor (Sebastian) o guía (Gloria)
+     * @param {number} totalMXN - Total en MXN
+     * @param {string} agencyName - Nombre de la agencia (opcional)
+     * @param {string} sellerName - Nombre del vendedor (opcional)
+     * @param {string} guideName - Nombre del guía (opcional)
+     * @returns {number} Monto de la comisión calculada
+     */
+    calculateCommissionByRules(totalMXN, agencyName = null, sellerName = null, guideName = null) {
+        if (!totalMXN || totalMXN <= 0) return 0;
+        
+        // Normalizar nombres para comparación
+        const normalizeName = (name) => name ? name.trim().toUpperCase() : '';
+        const agency = normalizeName(agencyName);
+        const seller = normalizeName(sellerName);
+        const guide = normalizeName(guideName);
+        
+        // PRIORIDAD 1: Reglas por AGENCIA
+        if (agency) {
+            if (agency === 'TROPICAL ADVENTURE') {
+                // (total - 18%) * 9% = (total * 0.82) * 0.09
+                return (totalMXN * 0.82) * 0.09;
+            } else if (agency === 'TRAVELEX') {
+                // (total - 18%) * 10% = (total * 0.82) * 0.10
+                return (totalMXN * 0.82) * 0.10;
+            } else if (agency === 'TANI TOURS' || agency === 'TANITOURS') {
+                // (total - 18%) * 9% = (total * 0.82) * 0.09
+                return (totalMXN * 0.82) * 0.09;
+            } else if (agency === 'VERANOS') {
+                // (total - 18%) * 9% = (total * 0.82) * 0.09
+                return (totalMXN * 0.82) * 0.09;
+            } else if (agency === 'DISCOVERY') {
+                // (total - 18%) * 10% = (total * 0.82) * 0.10
+                return (totalMXN * 0.82) * 0.10;
+            }
+        }
+        
+        // PRIORIDAD 2: Reglas especiales para vendedor Sebastian
+        if (seller === 'SEBASTIAN') {
+            // total * 10% directo
+            return totalMXN * 0.10;
+        }
+        
+        // PRIORIDAD 3: Reglas especiales para guía Gloria
+        if (guide === 'GLORIA') {
+            // total * 10% directo
+            return totalMXN * 0.10;
+        }
+        
+        // Si no hay regla específica, retornar 0 (las comisiones normales se calcularán por separado)
+        return 0;
+    },
+    
     async init() {
         // Verificar permiso
         if (typeof PermissionManager !== 'undefined' && !PermissionManager.hasPermission('reports.view')) {
@@ -6821,6 +6874,11 @@ const Reports = {
             // 4. Calcular comisiones totales (vendedores + guías)
             // IMPORTANTE: Las comisiones deben calcularse sobre el monto en MXN
             const commissionRules = await DB.getAll('commission_rules') || [];
+            // Obtener catálogos una sola vez antes del bucle
+            const agencies = await DB.getAll('catalog_agencies') || [];
+            const sellers = await DB.getAll('catalog_sellers') || [];
+            const guides = await DB.getAll('catalog_guides') || [];
+            
             let totalCommissions = 0;
             for (const capture of captures) {
                 // Convertir el total de la captura a MXN antes de calcular comisiones
@@ -6845,34 +6903,52 @@ const Reports = {
                     totalCommissions += streetCommission;
                     console.log(`💰 Comisión de calle (${capture.payment_method === 'card' ? 'Tarjeta' : 'Efectivo'}): $${streetCommission.toFixed(2)} MXN sobre $${captureTotalMXN.toFixed(2)} MXN`);
                 } else {
-                    // Comisiones normales (solo si NO es venta de calle)
-                    if (capture.seller_id && captureTotalMXN > 0 && !capture.is_street) {
-                        const sellerRule = commissionRules.find(r => 
-                            r.entity_type === 'seller' && r.entity_id === capture.seller_id
-                        ) || commissionRules.find(r => 
-                            r.entity_type === 'seller' && r.entity_id === null
-                        );
-                        if (sellerRule) {
-                            const discountPct = sellerRule.discount_pct || 0;
-                            const multiplier = sellerRule.multiplier || 1;
-                            const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
-                            const commission = afterDiscount * (multiplier / 100);
-                            totalCommissions += commission;
+                    // Comisiones basadas en reglas de agencia, Sebastian o Gloria
+                    const agency = agencies.find(a => a.id === capture.agency_id);
+                    const seller = sellers.find(s => s.id === capture.seller_id);
+                    const guide = guides.find(g => g.id === capture.guide_id);
+                    
+                    const agencyName = agency?.name || null;
+                    const sellerName = seller?.name || null;
+                    const guideName = guide?.name || null;
+                    
+                    // Calcular comisión usando las nuevas reglas
+                    const commissionByRules = this.calculateCommissionByRules(captureTotalMXN, agencyName, sellerName, guideName);
+                    
+                    if (commissionByRules > 0) {
+                        // Si hay una regla específica (agencia, Sebastian o Gloria), usar esa
+                        totalCommissions += commissionByRules;
+                        console.log(`💰 Comisión por regla (${agencyName || sellerName || guideName}): $${commissionByRules.toFixed(2)} MXN sobre $${captureTotalMXN.toFixed(2)} MXN`);
+                    } else {
+                        // Si no hay regla específica, usar reglas normales de vendedor/guía
+                        if (capture.seller_id && captureTotalMXN > 0 && !capture.is_street) {
+                            const sellerRule = commissionRules.find(r => 
+                                r.entity_type === 'seller' && r.entity_id === capture.seller_id
+                            ) || commissionRules.find(r => 
+                                r.entity_type === 'seller' && r.entity_id === null
+                            );
+                            if (sellerRule) {
+                                const discountPct = sellerRule.discount_pct || 0;
+                                const multiplier = sellerRule.multiplier || 1;
+                                const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
+                                const commission = afterDiscount * (multiplier / 100);
+                                totalCommissions += commission;
+                            }
                         }
-                    }
-                    // Comisiones de guías (siempre se calculan normalmente, no aplican reglas de calle)
-                    if (capture.guide_id && captureTotalMXN > 0) {
-                        const guideRule = commissionRules.find(r => 
-                            r.entity_type === 'guide' && r.entity_id === capture.guide_id
-                        ) || commissionRules.find(r => 
-                            r.entity_type === 'guide' && r.entity_id === null
-                        );
-                        if (guideRule) {
-                            const discountPct = guideRule.discount_pct || 0;
-                            const multiplier = guideRule.multiplier || 1;
-                            const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
-                            const commission = afterDiscount * (multiplier / 100);
-                            totalCommissions += commission;
+                        // Comisiones de guías (siempre se calculan normalmente, no aplican reglas de calle)
+                        if (capture.guide_id && captureTotalMXN > 0) {
+                            const guideRule = commissionRules.find(r => 
+                                r.entity_type === 'guide' && r.entity_id === capture.guide_id
+                            ) || commissionRules.find(r => 
+                                r.entity_type === 'guide' && r.entity_id === null
+                            );
+                            if (guideRule) {
+                                const discountPct = guideRule.discount_pct || 0;
+                                const multiplier = guideRule.multiplier || 1;
+                                const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
+                                const commission = afterDiscount * (multiplier / 100);
+                                totalCommissions += commission;
+                            }
                         }
                     }
                 }
@@ -7383,10 +7459,11 @@ const Reports = {
                 return;
             }
 
-            // Obtener reglas de comisión
+            // Obtener reglas de comisión y catálogos
             const commissionRules = await DB.getAll('commission_rules') || [];
             const sellers = await DB.getAll('catalog_sellers') || [];
             const guides = await DB.getAll('catalog_guides') || [];
+            const agencies = await DB.getAll('catalog_agencies') || [];
 
             // Obtener tipo de cambio del día (usar la fecha de las capturas)
             const captureDate = captures[0]?.date || new Date().toISOString().split('T')[0];
@@ -7432,18 +7509,35 @@ const Reports = {
                             commission = captureTotalMXN * 0.14;
                         }
                     } else {
-                        // Comisiones normales (solo si NO es venta de calle)
-                        const sellerRule = commissionRules.find(r => 
-                            r.entity_type === 'seller' && r.entity_id === capture.seller_id
-                        ) || commissionRules.find(r => 
-                            r.entity_type === 'seller' && r.entity_id === null
-                        );
+                        // Comisiones basadas en reglas de agencia, Sebastian o Gloria
+                        const agency = agencies.find(a => a.id === capture.agency_id);
+                        const seller = sellers.find(s => s.id === capture.seller_id);
+                        const guide = guides.find(g => g.id === capture.guide_id);
+                        
+                        const agencyName = agency?.name || null;
+                        const sellerName = seller?.name || null;
+                        const guideName = guide?.name || null;
+                        
+                        // Calcular comisión usando las nuevas reglas
+                        const commissionByRules = this.calculateCommissionByRules(captureTotalMXN, agencyName, sellerName, guideName);
+                        
+                        if (commissionByRules > 0) {
+                            // Si hay una regla específica (agencia, Sebastian o Gloria), usar esa
+                            commission = commissionByRules;
+                        } else {
+                            // Si no hay regla específica, usar reglas normales de vendedor
+                            const sellerRule = commissionRules.find(r => 
+                                r.entity_type === 'seller' && r.entity_id === capture.seller_id
+                            ) || commissionRules.find(r => 
+                                r.entity_type === 'seller' && r.entity_id === null
+                            );
 
-                        if (sellerRule) {
-                            const discountPct = sellerRule.discount_pct || 0;
-                            const multiplier = sellerRule.multiplier || 1;
-                            const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
-                            commission = afterDiscount * (multiplier / 100);
+                            if (sellerRule) {
+                                const discountPct = sellerRule.discount_pct || 0;
+                                const multiplier = sellerRule.multiplier || 1;
+                                const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
+                                commission = afterDiscount * (multiplier / 100);
+                            }
                         }
                     }
 
@@ -7475,18 +7569,39 @@ const Reports = {
                         };
                     }
 
-                    const guideRule = commissionRules.find(r => 
-                        r.entity_type === 'guide' && r.entity_id === capture.guide_id
-                    ) || commissionRules.find(r => 
-                        r.entity_type === 'guide' && r.entity_id === null
-                    );
+                    // Comisiones basadas en reglas de agencia, Sebastian o Gloria
+                    const agency = agencies.find(a => a.id === capture.agency_id);
+                    const seller = sellers.find(s => s.id === capture.seller_id);
+                    const guide = guides.find(g => g.id === capture.guide_id);
+                    
+                    const agencyName = agency?.name || null;
+                    const sellerName = seller?.name || null;
+                    const guideName = guide?.name || null;
+                    
+                    // Calcular comisión usando las nuevas reglas
+                    const commissionByRules = this.calculateCommissionByRules(captureTotalMXN, agencyName, sellerName, guideName);
+                    
+                    let commission = 0;
+                    if (commissionByRules > 0) {
+                        // Si hay una regla específica (agencia, Sebastian o Gloria), usar esa
+                        commission = commissionByRules;
+                    } else {
+                        // Si no hay regla específica, usar reglas normales de guía
+                        const guideRule = commissionRules.find(r => 
+                            r.entity_type === 'guide' && r.entity_id === capture.guide_id
+                        ) || commissionRules.find(r => 
+                            r.entity_type === 'guide' && r.entity_id === null
+                        );
 
-                    if (guideRule) {
-                        const discountPct = guideRule.discount_pct || 0;
-                        const multiplier = guideRule.multiplier || 1;
-                        const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
-                        const commission = afterDiscount * (multiplier / 100);
-                        
+                        if (guideRule) {
+                            const discountPct = guideRule.discount_pct || 0;
+                            const multiplier = guideRule.multiplier || 1;
+                            const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
+                            commission = afterDiscount * (multiplier / 100);
+                        }
+                    }
+                    
+                    if (commission > 0) {
                         guideCommissions[capture.guide_id].total += commission;
                         guideCommissions[capture.guide_id].sales += 1;
                         if (!guideCommissions[capture.guide_id].commissions[capture.currency]) {
@@ -8495,6 +8610,7 @@ const Reports = {
             const cadRate = todayRate.cad_to_mxn || 15.0;
 
             // Calcular comisiones (convertir cada captura a MXN antes de calcular comisiones)
+            // Nota: commissionRules, agencies, sellers y guides ya están declarados arriba
             const sellerCommissions = {};
             const guideCommissions = {};
 
@@ -8531,18 +8647,36 @@ const Reports = {
                             commission = captureTotalMXN * 0.14;
                         }
                     } else {
-                        // Comisiones normales (solo si NO es venta de calle)
-                        const sellerRule = commissionRules.find(r => 
-                            r.entity_type === 'seller' && r.entity_id === capture.seller_id
-                        ) || commissionRules.find(r => 
-                            r.entity_type === 'seller' && r.entity_id === null
-                        );
-                        if (sellerRule) {
-                            const discountPct = sellerRule.discount_pct || 0;
-                            const multiplier = sellerRule.multiplier || 1;
-                            // Calcular comisión sobre el total convertido a MXN
-                            const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
-                            commission = afterDiscount * (multiplier / 100);
+                        // Comisiones basadas en reglas de agencia, Sebastian o Gloria
+                        const agencies = await DB.getAll('catalog_agencies') || [];
+                        const agency = agencies.find(a => a.id === capture.agency_id);
+                        const seller = sellers.find(s => s.id === capture.seller_id);
+                        const guide = guides.find(g => g.id === capture.guide_id);
+                        
+                        const agencyName = agency?.name || null;
+                        const sellerName = seller?.name || null;
+                        const guideName = guide?.name || null;
+                        
+                        // Calcular comisión usando las nuevas reglas
+                        const commissionByRules = this.calculateCommissionByRules(captureTotalMXN, agencyName, sellerName, guideName);
+                        
+                        if (commissionByRules > 0) {
+                            // Si hay una regla específica (agencia, Sebastian o Gloria), usar esa
+                            commission = commissionByRules;
+                        } else {
+                            // Si no hay regla específica, usar reglas normales de vendedor
+                            const sellerRule = commissionRules.find(r => 
+                                r.entity_type === 'seller' && r.entity_id === capture.seller_id
+                            ) || commissionRules.find(r => 
+                                r.entity_type === 'seller' && r.entity_id === null
+                            );
+                            if (sellerRule) {
+                                const discountPct = sellerRule.discount_pct || 0;
+                                const multiplier = sellerRule.multiplier || 1;
+                                // Calcular comisión sobre el total convertido a MXN
+                                const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
+                                commission = afterDiscount * (multiplier / 100);
+                            }
                         }
                     }
                     
@@ -8571,17 +8705,40 @@ const Reports = {
                             commissions: {}
                         };
                     }
-                    const guideRule = commissionRules.find(r => 
-                        r.entity_type === 'guide' && r.entity_id === capture.guide_id
-                    ) || commissionRules.find(r => 
-                        r.entity_type === 'guide' && r.entity_id === null
-                    );
-                    if (guideRule) {
-                        const discountPct = guideRule.discount_pct || 0;
-                        const multiplier = guideRule.multiplier || 1;
-                        // Calcular comisión sobre el total convertido a MXN
-                        const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
-                        const commission = afterDiscount * (multiplier / 100);
+                    
+                    // Comisiones basadas en reglas de agencia, Sebastian o Gloria
+                    const agency = agencies.find(a => a.id === capture.agency_id);
+                    const seller = sellers.find(s => s.id === capture.seller_id);
+                    const guide = guides.find(g => g.id === capture.guide_id);
+                    
+                    const agencyName = agency?.name || null;
+                    const sellerName = seller?.name || null;
+                    const guideName = guide?.name || null;
+                    
+                    // Calcular comisión usando las nuevas reglas
+                    const commissionByRules = this.calculateCommissionByRules(captureTotalMXN, agencyName, sellerName, guideName);
+                    
+                    let commission = 0;
+                    if (commissionByRules > 0) {
+                        // Si hay una regla específica (agencia, Sebastian o Gloria), usar esa
+                        commission = commissionByRules;
+                    } else {
+                        // Si no hay regla específica, usar reglas normales de guía
+                        const guideRule = commissionRules.find(r => 
+                            r.entity_type === 'guide' && r.entity_id === capture.guide_id
+                        ) || commissionRules.find(r => 
+                            r.entity_type === 'guide' && r.entity_id === null
+                        );
+                        if (guideRule) {
+                            const discountPct = guideRule.discount_pct || 0;
+                            const multiplier = guideRule.multiplier || 1;
+                            // Calcular comisión sobre el total convertido a MXN
+                            const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
+                            commission = afterDiscount * (multiplier / 100);
+                        }
+                    }
+                    
+                    if (commission > 0) {
                         guideCommissions[capture.guide_id].total += commission;
                         // Mantener comisión en moneda original también para mostrar en PDF
                         if (!guideCommissions[capture.guide_id].commissions[capture.currency]) {
