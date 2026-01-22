@@ -8372,6 +8372,18 @@ const Reports = {
             doc.text('CAPTURAS REALIZADAS', margin, y);
             y += 8;
 
+            // Definir anchos de columnas para la tabla de capturas (mejor organizadas)
+            // IMPORTANTE: Definir ANTES de usar para evitar errores de inicialización
+            const captCol1X = margin + 2;      // Hora (10mm)
+            const captCol2X = margin + 15;     // Sucursal (18mm)
+            const captCol3X = margin + 35;     // Vendedor (18mm)
+            const captCol4X = margin + 55;     // Guía (15mm)
+            const captCol5X = margin + 72;     // Producto (20mm)
+            const captCol6X = margin + 94;     // Notas (25mm)
+            const captCol7X = pageWidth - margin - 50; // Cantidad (12mm)
+            const captCol8X = pageWidth - margin - 35; // Moneda (8mm)
+            const captCol9X = pageWidth - margin - 2;  // Total (alineado derecha)
+
             // Encabezados de tabla (mejor organizados)
             doc.setFillColor(245, 245, 245);
             doc.rect(margin, y, pageWidth - (margin * 2), 8, 'F');
@@ -8387,17 +8399,6 @@ const Reports = {
             doc.line(captCol6X - 2, y, captCol6X - 2, y + 8);
             doc.line(captCol7X - 2, y, captCol7X - 2, y + 8);
             doc.line(captCol8X - 2, y, captCol8X - 2, y + 8);
-
-            // Definir anchos de columnas para la tabla de capturas (mejor organizadas)
-            const captCol1X = margin + 2;      // Hora (10mm)
-            const captCol2X = margin + 15;     // Sucursal (18mm)
-            const captCol3X = margin + 35;     // Vendedor (18mm)
-            const captCol4X = margin + 55;     // Guía (15mm)
-            const captCol5X = margin + 72;     // Producto (20mm)
-            const captCol6X = margin + 94;     // Notas (25mm)
-            const captCol7X = pageWidth - margin - 50; // Cantidad (12mm)
-            const captCol8X = pageWidth - margin - 35; // Moneda (8mm)
-            const captCol9X = pageWidth - margin - 2;  // Total (alineado derecha)
 
             doc.setFontSize(7);
             doc.setFont('helvetica', 'bold');
