@@ -7,15 +7,15 @@ const Reports = {
     isExporting: false, // Flag para prevenir múltiples exportaciones simultáneas
     
     /**
-     * Calcular comisión basada en reglas de agencia, vendedor (Sebastian) o guía (Gloria)
+     * Calcular comisiones basadas en reglas de agencia, vendedor (Sebastian) o guía (Gloria)
      * @param {number} totalMXN - Total en MXN
      * @param {string} agencyName - Nombre de la agencia (opcional)
      * @param {string} sellerName - Nombre del vendedor (opcional)
      * @param {string} guideName - Nombre del guía (opcional)
-     * @returns {number} Monto de la comisión calculada
+     * @returns {Object} Objeto con {sellerCommission, guideCommission}
      */
     calculateCommissionByRules(totalMXN, agencyName = null, sellerName = null, guideName = null) {
-        if (!totalMXN || totalMXN <= 0) return 0;
+        if (!totalMXN || totalMXN <= 0) return { sellerCommission: 0, guideCommission: 0 };
         
         // Normalizar nombres para comparación
         const normalizeName = (name) => name ? name.trim().toUpperCase() : '';
@@ -23,40 +23,44 @@ const Reports = {
         const seller = normalizeName(sellerName);
         const guide = normalizeName(guideName);
         
-        // PRIORIDAD 1: Reglas por AGENCIA
+        let sellerCommission = 0;
+        let guideCommission = 0;
+        
+        // REGLAS PARA GUÍA:
+        // PRIORIDAD 1: Reglas por AGENCIA (aplican al guía)
         if (agency) {
             if (agency === 'TROPICAL ADVENTURE') {
                 // (total - 18%) * 9% = (total * 0.82) * 0.09
-                return (totalMXN * 0.82) * 0.09;
+                guideCommission = (totalMXN * 0.82) * 0.09;
             } else if (agency === 'TRAVELEX') {
                 // (total - 18%) * 10% = (total * 0.82) * 0.10
-                return (totalMXN * 0.82) * 0.10;
+                guideCommission = (totalMXN * 0.82) * 0.10;
             } else if (agency === 'TANI TOURS' || agency === 'TANITOURS') {
                 // (total - 18%) * 9% = (total * 0.82) * 0.09
-                return (totalMXN * 0.82) * 0.09;
+                guideCommission = (totalMXN * 0.82) * 0.09;
             } else if (agency === 'VERANOS') {
                 // (total - 18%) * 9% = (total * 0.82) * 0.09
-                return (totalMXN * 0.82) * 0.09;
+                guideCommission = (totalMXN * 0.82) * 0.09;
             } else if (agency === 'DISCOVERY') {
                 // (total - 18%) * 10% = (total * 0.82) * 0.10
-                return (totalMXN * 0.82) * 0.10;
+                guideCommission = (totalMXN * 0.82) * 0.10;
             }
+        } else if (guide === 'GLORIA') {
+            // PRIORIDAD 2: Regla especial para guía Gloria (solo si NO hay agencia)
+            // total * 10% directo
+            guideCommission = totalMXN * 0.10;
         }
+        // Si no hay regla de agencia ni Gloria, se calculará con reglas normales más abajo
         
-        // PRIORIDAD 2: Reglas especiales para vendedor Sebastian
+        // REGLAS PARA VENDEDOR:
+        // PRIORIDAD 1: Regla especial para vendedor Sebastian
         if (seller === 'SEBASTIAN') {
             // total * 10% directo
-            return totalMXN * 0.10;
+            sellerCommission = totalMXN * 0.10;
         }
+        // Si no es Sebastian, se calculará con reglas normales más abajo
         
-        // PRIORIDAD 3: Reglas especiales para guía Gloria
-        if (guide === 'GLORIA') {
-            // total * 10% directo
-            return totalMXN * 0.10;
-        }
-        
-        // Si no hay regla específica, retornar 0 (las comisiones normales se calcularán por separado)
-        return 0;
+        return { sellerCommission, guideCommission };
     },
     
     async init() {
@@ -6912,16 +6916,15 @@ const Reports = {
                     const sellerName = seller?.name || null;
                     const guideName = guide?.name || null;
                     
-                    // Calcular comisión usando las nuevas reglas
-                    const commissionByRules = this.calculateCommissionByRules(captureTotalMXN, agencyName, sellerName, guideName);
+                    // Calcular comisiones usando las nuevas reglas (retorna {sellerCommission, guideCommission})
+                    const commissionsByRules = this.calculateCommissionByRules(captureTotalMXN, agencyName, sellerName, guideName);
                     
-                    if (commissionByRules > 0) {
-                        // Si hay una regla específica (agencia, Sebastian o Gloria), usar esa
-                        totalCommissions += commissionByRules;
-                        console.log(`💰 Comisión por regla (${agencyName || sellerName || guideName}): $${commissionByRules.toFixed(2)} MXN sobre $${captureTotalMXN.toFixed(2)} MXN`);
-                    } else {
-                        // Si no hay regla específica, usar reglas normales de vendedor/guía
-                        if (capture.seller_id && captureTotalMXN > 0 && !capture.is_street) {
+                    // COMISIÓN DEL VENDEDOR
+                    if (capture.seller_id && captureTotalMXN > 0 && !capture.is_street) {
+                        let sellerCommission = commissionsByRules.sellerCommission;
+                        
+                        // Si no hay regla especial (Sebastian), usar reglas normales
+                        if (sellerCommission === 0) {
                             const sellerRule = commissionRules.find(r => 
                                 r.entity_type === 'seller' && r.entity_id === capture.seller_id
                             ) || commissionRules.find(r => 
@@ -6931,12 +6934,22 @@ const Reports = {
                                 const discountPct = sellerRule.discount_pct || 0;
                                 const multiplier = sellerRule.multiplier || 1;
                                 const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
-                                const commission = afterDiscount * (multiplier / 100);
-                                totalCommissions += commission;
+                                sellerCommission = afterDiscount * (multiplier / 100);
                             }
                         }
-                        // Comisiones de guías (siempre se calculan normalmente, no aplican reglas de calle)
-                        if (capture.guide_id && captureTotalMXN > 0) {
+                        
+                        if (sellerCommission > 0) {
+                            totalCommissions += sellerCommission;
+                            console.log(`💰 Comisión vendedor (${sellerName || 'N/A'}): $${sellerCommission.toFixed(2)} MXN`);
+                        }
+                    }
+                    
+                    // COMISIÓN DEL GUÍA
+                    if (capture.guide_id && captureTotalMXN > 0) {
+                        let guideCommission = commissionsByRules.guideCommission;
+                        
+                        // Si no hay regla especial (agencia o Gloria), usar reglas normales
+                        if (guideCommission === 0) {
                             const guideRule = commissionRules.find(r => 
                                 r.entity_type === 'guide' && r.entity_id === capture.guide_id
                             ) || commissionRules.find(r => 
@@ -6946,9 +6959,13 @@ const Reports = {
                                 const discountPct = guideRule.discount_pct || 0;
                                 const multiplier = guideRule.multiplier || 1;
                                 const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
-                                const commission = afterDiscount * (multiplier / 100);
-                                totalCommissions += commission;
+                                guideCommission = afterDiscount * (multiplier / 100);
                             }
+                        }
+                        
+                        if (guideCommission > 0) {
+                            totalCommissions += guideCommission;
+                            console.log(`💰 Comisión guía (${guideName || 'N/A'}${agencyName ? ` - ${agencyName}` : ''}): $${guideCommission.toFixed(2)} MXN`);
                         }
                     }
                 }
@@ -7518,14 +7535,14 @@ const Reports = {
                         const sellerName = seller?.name || null;
                         const guideName = guide?.name || null;
                         
-                        // Calcular comisión usando las nuevas reglas
-                        const commissionByRules = this.calculateCommissionByRules(captureTotalMXN, agencyName, sellerName, guideName);
+                        // Calcular comisiones usando las nuevas reglas (retorna {sellerCommission, guideCommission})
+                        const commissionsByRules = this.calculateCommissionByRules(captureTotalMXN, agencyName, sellerName, guideName);
                         
-                        if (commissionByRules > 0) {
-                            // Si hay una regla específica (agencia, Sebastian o Gloria), usar esa
-                            commission = commissionByRules;
-                        } else {
-                            // Si no hay regla específica, usar reglas normales de vendedor
+                        // Usar la comisión del vendedor de las reglas
+                        commission = commissionsByRules.sellerCommission;
+                        
+                        // Si no hay regla especial (Sebastian), usar reglas normales de vendedor
+                        if (commission === 0) {
                             const sellerRule = commissionRules.find(r => 
                                 r.entity_type === 'seller' && r.entity_id === capture.seller_id
                             ) || commissionRules.find(r => 
@@ -7578,15 +7595,14 @@ const Reports = {
                     const sellerName = seller?.name || null;
                     const guideName = guide?.name || null;
                     
-                    // Calcular comisión usando las nuevas reglas
-                    const commissionByRules = this.calculateCommissionByRules(captureTotalMXN, agencyName, sellerName, guideName);
+                    // Calcular comisiones usando las nuevas reglas (retorna {sellerCommission, guideCommission})
+                    const commissionsByRules = this.calculateCommissionByRules(captureTotalMXN, agencyName, sellerName, guideName);
                     
-                    let commission = 0;
-                    if (commissionByRules > 0) {
-                        // Si hay una regla específica (agencia, Sebastian o Gloria), usar esa
-                        commission = commissionByRules;
-                    } else {
-                        // Si no hay regla específica, usar reglas normales de guía
+                    // Usar la comisión del guía de las reglas
+                    let commission = commissionsByRules.guideCommission;
+                    
+                    // Si no hay regla especial (agencia o Gloria), usar reglas normales de guía
+                    if (commission === 0) {
                         const guideRule = commissionRules.find(r => 
                             r.entity_type === 'guide' && r.entity_id === capture.guide_id
                         ) || commissionRules.find(r => 
@@ -8657,14 +8673,14 @@ const Reports = {
                         const sellerName = seller?.name || null;
                         const guideName = guide?.name || null;
                         
-                        // Calcular comisión usando las nuevas reglas
-                        const commissionByRules = this.calculateCommissionByRules(captureTotalMXN, agencyName, sellerName, guideName);
+                        // Calcular comisiones usando las nuevas reglas (retorna {sellerCommission, guideCommission})
+                        const commissionsByRules = this.calculateCommissionByRules(captureTotalMXN, agencyName, sellerName, guideName);
                         
-                        if (commissionByRules > 0) {
-                            // Si hay una regla específica (agencia, Sebastian o Gloria), usar esa
-                            commission = commissionByRules;
-                        } else {
-                            // Si no hay regla específica, usar reglas normales de vendedor
+                        // Usar la comisión del vendedor de las reglas
+                        commission = commissionsByRules.sellerCommission;
+                        
+                        // Si no hay regla especial (Sebastian), usar reglas normales de vendedor
+                        if (commission === 0) {
                             const sellerRule = commissionRules.find(r => 
                                 r.entity_type === 'seller' && r.entity_id === capture.seller_id
                             ) || commissionRules.find(r => 
@@ -8715,15 +8731,14 @@ const Reports = {
                     const sellerName = seller?.name || null;
                     const guideName = guide?.name || null;
                     
-                    // Calcular comisión usando las nuevas reglas
-                    const commissionByRules = this.calculateCommissionByRules(captureTotalMXN, agencyName, sellerName, guideName);
+                    // Calcular comisiones usando las nuevas reglas (retorna {sellerCommission, guideCommission})
+                    const commissionsByRules = this.calculateCommissionByRules(captureTotalMXN, agencyName, sellerName, guideName);
                     
-                    let commission = 0;
-                    if (commissionByRules > 0) {
-                        // Si hay una regla específica (agencia, Sebastian o Gloria), usar esa
-                        commission = commissionByRules;
-                    } else {
-                        // Si no hay regla específica, usar reglas normales de guía
+                    // Usar la comisión del guía de las reglas
+                    let commission = commissionsByRules.guideCommission;
+                    
+                    // Si no hay regla especial (agencia o Gloria), usar reglas normales de guía
+                    if (commission === 0) {
                         const guideRule = commissionRules.find(r => 
                             r.entity_type === 'guide' && r.entity_id === capture.guide_id
                         ) || commissionRules.find(r => 
