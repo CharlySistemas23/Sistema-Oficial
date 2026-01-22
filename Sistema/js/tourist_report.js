@@ -2363,18 +2363,28 @@ const TouristReport = {
                 // Guardar en IndexedDB como caché
                 await DB.put('agency_arrivals', arrival);
                 
-                // Registrar costo de pago de llegadas automáticamente cuando se guarda vía API
-                // registerArrivalPayment ahora tiene check mejorado para evitar duplicados
-                // (busca por arrival_id, o por fecha/agencia/sucursal si no encuentra)
-                if (typeof Costs !== 'undefined' && Costs.registerArrivalPayment && arrival.arrival_fee > 0) {
-                    await Costs.registerArrivalPayment(
-                        arrival.id,
-                        arrival.arrival_fee,
-                        arrival.branch_id,
-                        arrival.agency_id,
-                        arrival.passengers,
-                        arrival.date
-                    );
+                // IMPORTANTE: NO llamar registerArrivalPayment aquí porque:
+                // 1. Si el backend procesa la llegada, puede crear el costo automáticamente
+                // 2. Si usamos ArrivalRules.saveArrival en el fallback, ya llama a registerArrivalPayment
+                // 3. Para evitar duplicados, usamos ArrivalRules.saveArrival que maneja todo centralmente
+                // Si la llegada viene del backend sin costo, lo registramos usando ArrivalRules
+                if (arrival.arrival_fee > 0 && typeof ArrivalRules !== 'undefined' && ArrivalRules.saveArrival) {
+                    // Usar ArrivalRules.saveArrival para asegurar que el costo se registre correctamente
+                    // Esta función ya maneja la detección de duplicados
+                    await ArrivalRules.saveArrival({
+                        date: arrival.date,
+                        branch_id: arrival.branch_id,
+                        agency_id: arrival.agency_id,
+                        passengers: arrival.passengers,
+                        units: arrival.units || 1,
+                        unit_type: arrival.unit_type || null,
+                        calculated_fee: arrival.calculated_fee || arrival.arrival_fee,
+                        arrival_fee: arrival.arrival_fee,
+                        override: arrival.override || false,
+                        override_amount: arrival.override_amount || null,
+                        override_reason: arrival.override_reason || null,
+                        notes: arrival.notes || ''
+                    });
                 }
                 
                 console.log('✅ Llegada guardada con API');
