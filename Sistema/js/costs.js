@@ -343,9 +343,33 @@ const Costs = {
                 arrivalCosts = arrivalCosts.filter(c => (c.date || c.created_at) <= dateTo);
             }
             
-            // Agrupar por día
-            const costsByDate = {};
+            // Eliminar duplicados ANTES de agrupar por día
+            // Agrupar por arrival_id primero (más confiable)
+            const uniqueCosts = new Map();
             arrivalCosts.forEach(cost => {
+                const amount = typeof cost.amount === 'number' ? cost.amount : parseFloat(cost.amount || 0) || 0;
+                
+                // Si tiene arrival_id, usar como clave única
+                if (cost.arrival_id) {
+                    const existing = uniqueCosts.get(cost.arrival_id);
+                    if (!existing || amount > (existing.amount || 0)) {
+                        uniqueCosts.set(cost.arrival_id, cost);
+                    }
+                } else {
+                    // Si no tiene arrival_id, usar combinación de fecha+agencia+sucursal+monto
+                    const key = `${cost.date || cost.created_at || ''}_${cost.agency_id || ''}_${cost.branch_id || ''}_${amount}`;
+                    if (!uniqueCosts.has(key)) {
+                        uniqueCosts.set(key, cost);
+                    }
+                }
+            });
+            
+            // Convertir Map a array
+            const uniqueArrivalCosts = Array.from(uniqueCosts.values());
+            
+            // Agrupar por día (solo costos únicos)
+            const costsByDate = {};
+            uniqueArrivalCosts.forEach(cost => {
                 const dateStr = (cost.date || cost.created_at).split('T')[0];
                 if (!costsByDate[dateStr]) {
                     costsByDate[dateStr] = [];
@@ -434,8 +458,27 @@ const Costs = {
 
         sortedDates.forEach(dateStr => {
             const dayCosts = costsByDate[dateStr];
-            const dayTotal = dayCosts.reduce((sum, c) => sum + (c.amount || 0), 0);
-            const dayCount = dayCosts.length;
+            
+            // Eliminar duplicados dentro del día (por arrival_id o por combinación única)
+            const uniqueDayCosts = new Map();
+            dayCosts.forEach(cost => {
+                const amount = typeof cost.amount === 'number' ? cost.amount : parseFloat(cost.amount || 0) || 0;
+                if (cost.arrival_id) {
+                    const existing = uniqueDayCosts.get(cost.arrival_id);
+                    if (!existing || amount > (existing.amount || 0)) {
+                        uniqueDayCosts.set(cost.arrival_id, cost);
+                    }
+                } else {
+                    const key = `${cost.agency_id || ''}_${cost.branch_id || ''}_${amount}`;
+                    if (!uniqueDayCosts.has(key)) {
+                        uniqueDayCosts.set(key, cost);
+                    }
+                }
+            });
+            const finalDayCosts = Array.from(uniqueDayCosts.values());
+            
+            const dayTotal = finalDayCosts.reduce((sum, c) => sum + (c.amount || 0), 0);
+            const dayCount = finalDayCosts.length;
             grandTotal += dayTotal;
             totalArrivals += dayCount;
             
@@ -465,14 +508,14 @@ const Costs = {
             `;
             
             // Ordenar llegadas del día por hora (si tienen) o por monto descendente
-            dayCosts.sort((a, b) => {
+            finalDayCosts.sort((a, b) => {
                 // Intentar ordenar por hora si existe
                 const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
                 const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
                 return bTime - aTime; // Más recientes primero
             });
             
-            dayCosts.forEach(cost => {
+            finalDayCosts.forEach(cost => {
                 const branch = cost.branch_id ? branches.find(b => b.id === cost.branch_id) : null;
                 const agency = cost.agency_id ? agencies.find(a => a.id === cost.agency_id) : null;
                 const branchName = branch?.name || 'Sin sucursal';
