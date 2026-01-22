@@ -8648,7 +8648,7 @@ const Reports = {
                         }
                     } else {
                         // Comisiones basadas en reglas de agencia, Sebastian o Gloria
-                        const agencies = await DB.getAll('catalog_agencies') || [];
+                        // Nota: agencies, sellers y guides ya están declarados arriba (líneas 8351-8353)
                         const agency = agencies.find(a => a.id === capture.agency_id);
                         const seller = sellers.find(s => s.id === capture.seller_id);
                         const guide = guides.find(g => g.id === capture.guide_id);
