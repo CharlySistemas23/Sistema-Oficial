@@ -5243,6 +5243,11 @@ const Reports = {
                         <small style="color: var(--color-text-secondary); font-size: 9px;">Opcional: Si no se ingresa, se buscará en inventario</small>
                     </div>
                     <div class="form-group">
+                        <label>Notas</label>
+                        <input type="text" id="qc-notes" class="form-input" placeholder="Notas adicionales (opcional)">
+                        <small style="color: var(--color-text-secondary); font-size: 9px;">Información adicional sobre la captura</small>
+                    </div>
+                    <div class="form-group">
                         <label style="display: flex; align-items: center; gap: var(--spacing-xs);">
                             <input type="checkbox" id="qc-is-street" style="width: auto; margin: 0;">
                             <span>Es venta de calle</span>
@@ -6024,6 +6029,9 @@ const Reports = {
                 }
             }
 
+            // Obtener notas
+            const notes = document.getElementById('qc-notes')?.value?.trim() || null;
+
             // Crear objeto de captura (pendiente)
             const capture = {
                 id: 'pending_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
@@ -6040,6 +6048,7 @@ const Reports = {
                 currency: currency,
                 total: total,
                 merchandise_cost: merchandiseCost,
+                notes: notes,
                 is_street: isStreet,
                 payment_method: paymentMethod,
                 date: new Date().toISOString().split('T')[0],
@@ -6239,6 +6248,9 @@ const Reports = {
             if (document.getElementById('qc-cost')) {
                 document.getElementById('qc-cost').value = capture.merchandise_cost || '';
             }
+            if (document.getElementById('qc-notes')) {
+                document.getElementById('qc-notes').value = capture.notes || '';
+            }
             if (document.getElementById('qc-is-street')) {
                 document.getElementById('qc-is-street').checked = capture.is_street || false;
                 // Disparar evento change para mostrar/ocultar campo de método de pago
@@ -6421,6 +6433,7 @@ const Reports = {
                                 <th style="padding: var(--spacing-sm); text-align: right; font-size: 11px; text-transform: uppercase; font-weight: 600;">Moneda</th>
                                 <th style="padding: var(--spacing-sm); text-align: right; font-size: 11px; text-transform: uppercase; font-weight: 600;">Total</th>
                                 <th style="padding: var(--spacing-sm); text-align: right; font-size: 11px; text-transform: uppercase; font-weight: 600;">Costo</th>
+                                <th style="padding: var(--spacing-sm); text-align: left; font-size: 11px; text-transform: uppercase; font-weight: 600;">Notas</th>
                                 <th style="padding: var(--spacing-sm); text-align: center; font-size: 11px; text-transform: uppercase; font-weight: 600;">Acciones</th>
                             </tr>
                         </thead>
@@ -6439,6 +6452,7 @@ const Reports = {
                                         <td style="padding: var(--spacing-sm); font-size: 12px; text-align: right;">${c.currency}</td>
                                         <td style="padding: var(--spacing-sm); font-size: 12px; text-align: right; font-weight: 600;">$${c.total.toFixed(2)}</td>
                                         <td style="padding: var(--spacing-sm); font-size: 12px; text-align: right; color: var(--color-text-secondary);">$${(c.merchandise_cost || 0).toFixed(2)}</td>
+                                        <td style="padding: var(--spacing-sm); font-size: 11px; color: var(--color-text-secondary); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${c.notes || ''}">${c.notes || '-'}</td>
                                         <td style="padding: var(--spacing-sm); text-align: center;">
                                             <div style="display: flex; gap: var(--spacing-xs); justify-content: center;">
                                                 <button class="btn-primary btn-xs" onclick="window.Reports.editQuickCaptureSale('${c.id}')" title="Editar">
@@ -7695,6 +7709,10 @@ const Reports = {
                                 <input type="number" id="edit-qc-cost" class="form-input" min="0" step="0.01" value="${capture.merchandise_cost || 0}">
                             </div>
                             <div class="form-group">
+                                <label>Notas</label>
+                                <input type="text" id="edit-qc-notes" class="form-input" value="${capture.notes || ''}" placeholder="Notas adicionales (opcional)">
+                            </div>
+                            <div class="form-group">
                                 <label style="display: flex; align-items: center; gap: var(--spacing-xs);">
                                     <input type="checkbox" id="edit-qc-is-street" style="width: auto; margin: 0;" ${capture.is_street ? 'checked' : ''}>
                                     <span>Es venta de calle</span>
@@ -7817,6 +7835,7 @@ const Reports = {
                     capture.currency = currency;
                     capture.total = total;
                     capture.merchandise_cost = merchandiseCost;
+                    capture.notes = notes;
                     capture.is_street = isStreet;
                     capture.payment_method = paymentMethod;
                     capture.updated_at = new Date().toISOString();
@@ -8210,25 +8229,36 @@ const Reports = {
                 totalQuantity += c.quantity || 1;
             });
 
+            // Obtener información de sucursal(es)
+            const captureBranchIdsForSummary = [...new Set(captures.map(c => c.branch_id).filter(Boolean))];
+            const branchNames = captureBranchIdsForSummary.map(bid => {
+                const branch = branches.find(b => b.id === bid);
+                return branch ? branch.name : 'N/A';
+            }).join(', ');
+
             doc.setFillColor(240, 248, 255);
-            doc.rect(margin, y, pageWidth - (margin * 2), 25, 'F');
+            doc.rect(margin, y, pageWidth - (margin * 2), 30, 'F');
             doc.setDrawColor(200, 200, 200);
-            doc.rect(margin, y, pageWidth - (margin * 2), 25);
+            doc.rect(margin, y, pageWidth - (margin * 2), 30);
 
             doc.setTextColor(0, 0, 0);
             doc.setFontSize(12);
             doc.setFont('helvetica', 'bold');
             doc.text('RESUMEN DEL DÍA', margin + 5, y + 8);
 
-            doc.setFontSize(10);
+            doc.setFontSize(9);
             doc.setFont('helvetica', 'normal');
-            doc.text(`Total Capturas: ${captures.length}`, margin + 5, y + 15);
-            doc.text(`Total Cantidad: ${totalQuantity}`, margin + 60, y + 15);
-            doc.text(`Total USD: $${totals.USD.toFixed(2)}`, margin + 5, y + 21);
-            doc.text(`Total MXN: $${totals.MXN.toFixed(2)}`, margin + 60, y + 21);
-            doc.text(`Total CAD: $${totals.CAD.toFixed(2)}`, margin + 115, y + 21);
+            doc.text(`Sucursal(es): ${branchNames || 'Todas'}`, margin + 5, y + 15);
+            doc.text(`Fecha: ${captureDate}`, pageWidth - margin - 5, y + 15, { align: 'right' });
 
-            y += 35;
+            doc.setFontSize(10);
+            doc.text(`Total Capturas: ${captures.length}`, margin + 5, y + 22);
+            doc.text(`Total Cantidad: ${totalQuantity}`, margin + 60, y + 22);
+            doc.text(`Total USD: $${totals.USD.toFixed(2)}`, margin + 5, y + 28);
+            doc.text(`Total MXN: $${totals.MXN.toFixed(2)}`, margin + 60, y + 28);
+            doc.text(`Total CAD: $${totals.CAD.toFixed(2)}`, margin + 115, y + 28);
+
+            y += 38;
 
             // ========== LLEGADAS DEL DÍA ==========
             if (todayArrivals.length > 0) {
@@ -8292,34 +8322,46 @@ const Reports = {
             doc.setFontSize(12);
             doc.setFont('helvetica', 'bold');
             doc.text('CAPTURAS REALIZADAS', margin, y);
-            y += 10;
+            y += 8;
 
-            // Encabezados de tabla
+            // Encabezados de tabla (mejor organizados)
             doc.setFillColor(245, 245, 245);
             doc.rect(margin, y, pageWidth - (margin * 2), 8, 'F');
             doc.setDrawColor(200, 200, 200);
             doc.rect(margin, y, pageWidth - (margin * 2), 8);
+            
+            // Líneas verticales para separar columnas (opcional, para mejor organización)
+            doc.setDrawColor(180, 180, 180);
+            doc.line(captCol2X - 2, y, captCol2X - 2, y + 8);
+            doc.line(captCol3X - 2, y, captCol3X - 2, y + 8);
+            doc.line(captCol4X - 2, y, captCol4X - 2, y + 8);
+            doc.line(captCol5X - 2, y, captCol5X - 2, y + 8);
+            doc.line(captCol6X - 2, y, captCol6X - 2, y + 8);
+            doc.line(captCol7X - 2, y, captCol7X - 2, y + 8);
+            doc.line(captCol8X - 2, y, captCol8X - 2, y + 8);
 
-            // Definir anchos de columnas para la tabla de capturas
-            const captCol1X = margin + 2;      // Hora (12mm)
-            const captCol2X = margin + 20;     // Sucursal (25mm)
-            const captCol3X = margin + 50;     // Vendedor (25mm)
-            const captCol4X = margin + 80;     // Guía (20mm)
-            const captCol5X = margin + 105;    // Producto (25mm)
-            const captCol6X = pageWidth - margin - 40; // Cantidad (10mm)
-            const captCol7X = pageWidth - margin - 28; // Moneda (8mm)
-            const captCol8X = pageWidth - margin - 2;  // Total (alineado derecha)
+            // Definir anchos de columnas para la tabla de capturas (mejor organizadas)
+            const captCol1X = margin + 2;      // Hora (10mm)
+            const captCol2X = margin + 15;     // Sucursal (18mm)
+            const captCol3X = margin + 35;     // Vendedor (18mm)
+            const captCol4X = margin + 55;     // Guía (15mm)
+            const captCol5X = margin + 72;     // Producto (20mm)
+            const captCol6X = margin + 94;     // Notas (25mm)
+            const captCol7X = pageWidth - margin - 50; // Cantidad (12mm)
+            const captCol8X = pageWidth - margin - 35; // Moneda (8mm)
+            const captCol9X = pageWidth - margin - 2;  // Total (alineado derecha)
 
-            doc.setFontSize(8);
+            doc.setFontSize(7);
             doc.setFont('helvetica', 'bold');
             doc.text('Hora', captCol1X, y + 5.5);
             doc.text('Sucursal', captCol2X, y + 5.5);
             doc.text('Vendedor', captCol3X, y + 5.5);
             doc.text('Guía', captCol4X, y + 5.5);
             doc.text('Producto', captCol5X, y + 5.5);
-            doc.text('Cant.', captCol6X, y + 5.5, { align: 'right' });
-            doc.text('Mon.', captCol7X, y + 5.5, { align: 'center' });
-            doc.text('Total', captCol8X, y + 5.5, { align: 'right' });
+            doc.text('Notas', captCol6X, y + 5.5);
+            doc.text('Cant.', captCol7X, y + 5.5, { align: 'right' });
+            doc.text('Mon.', captCol8X, y + 5.5, { align: 'center' });
+            doc.text('Total', captCol9X, y + 5.5, { align: 'right' });
 
             y += 8;
 
@@ -8335,16 +8377,28 @@ const Reports = {
                     doc.rect(margin, y, pageWidth - (margin * 2), 8, 'F');
                     doc.setDrawColor(200, 200, 200);
                     doc.rect(margin, y, pageWidth - (margin * 2), 8);
-                    doc.setFontSize(8);
+                    
+                    // Líneas verticales
+                    doc.setDrawColor(180, 180, 180);
+                    doc.line(captCol2X - 2, y, captCol2X - 2, y + 8);
+                    doc.line(captCol3X - 2, y, captCol3X - 2, y + 8);
+                    doc.line(captCol4X - 2, y, captCol4X - 2, y + 8);
+                    doc.line(captCol5X - 2, y, captCol5X - 2, y + 8);
+                    doc.line(captCol6X - 2, y, captCol6X - 2, y + 8);
+                    doc.line(captCol7X - 2, y, captCol7X - 2, y + 8);
+                    doc.line(captCol8X - 2, y, captCol8X - 2, y + 8);
+                    
+                    doc.setFontSize(7);
                     doc.setFont('helvetica', 'bold');
                     doc.text('Hora', captCol1X, y + 5.5);
                     doc.text('Sucursal', captCol2X, y + 5.5);
                     doc.text('Vendedor', captCol3X, y + 5.5);
                     doc.text('Guía', captCol4X, y + 5.5);
                     doc.text('Producto', captCol5X, y + 5.5);
-                    doc.text('Cant.', captCol6X, y + 5.5, { align: 'right' });
-                    doc.text('Mon.', captCol7X, y + 5.5, { align: 'center' });
-                    doc.text('Total', captCol8X, y + 5.5, { align: 'right' });
+                    doc.text('Notas', captCol6X, y + 5.5);
+                    doc.text('Cant.', captCol7X, y + 5.5, { align: 'right' });
+                    doc.text('Mon.', captCol8X, y + 5.5, { align: 'center' });
+                    doc.text('Total', captCol9X, y + 5.5, { align: 'right' });
                     y += 8;
                 }
 
@@ -8353,15 +8407,30 @@ const Reports = {
                 doc.setDrawColor(220, 220, 220);
                 doc.rect(margin, y, pageWidth - (margin * 2), 7);
                 
+                // Líneas verticales para filas (opcional, para mejor organización)
+                doc.setDrawColor(200, 200, 200);
+                doc.line(captCol2X - 2, y, captCol2X - 2, y + 7);
+                doc.line(captCol3X - 2, y, captCol3X - 2, y + 7);
+                doc.line(captCol4X - 2, y, captCol4X - 2, y + 7);
+                doc.line(captCol5X - 2, y, captCol5X - 2, y + 7);
+                doc.line(captCol6X - 2, y, captCol6X - 2, y + 7);
+                doc.line(captCol7X - 2, y, captCol7X - 2, y + 7);
+                doc.line(captCol8X - 2, y, captCol8X - 2, y + 7);
+                
+                doc.setFontSize(7);
+                doc.setFont('helvetica', 'normal');
                 doc.text(time, captCol1X, y + 5);
-                doc.text((c.branch_name || 'N/A').substring(0, 12), captCol2X, y + 5);
-                doc.text((c.seller_name || 'N/A').substring(0, 12), captCol3X, y + 5);
-                doc.text((c.guide_name || '-').substring(0, 12), captCol4X, y + 5);
-                doc.text((c.product || '').substring(0, 15), captCol5X, y + 5);
-                doc.text(c.quantity.toString(), captCol6X, y + 5, { align: 'right' });
-                doc.text(c.currency, captCol7X, y + 5, { align: 'center' });
+                doc.text((c.branch_name || 'N/A').substring(0, 10), captCol2X, y + 5);
+                doc.text((c.seller_name || 'N/A').substring(0, 10), captCol3X, y + 5);
+                doc.text((c.guide_name || '-').substring(0, 8), captCol4X, y + 5);
+                doc.text((c.product || '').substring(0, 12), captCol5X, y + 5);
+                // Notas (truncar si es muy largo)
+                const notesText = (c.notes || '-').substring(0, 18);
+                doc.text(notesText, captCol6X, y + 5);
+                doc.text(c.quantity.toString(), captCol7X, y + 5, { align: 'right' });
+                doc.text(c.currency, captCol8X, y + 5, { align: 'center' });
                 doc.setFont('helvetica', 'bold');
-                doc.text(`$${c.total.toFixed(2)}`, captCol8X, y + 5, { align: 'right' });
+                doc.text(`$${c.total.toFixed(2)}`, captCol9X, y + 5, { align: 'right' });
                 doc.setFont('helvetica', 'normal');
                 
                 y += 7;
@@ -8587,10 +8656,10 @@ const Reports = {
 
                     // Definir anchos de columnas (mismo que vendedores)
                     const col1X = margin + 2; // Guía
-                    const col2X = pageWidth - margin - 80; // Total
-                    const col3X = pageWidth - margin - 60; // USD
-                    const col4X = pageWidth - margin - 40; // MXN
-                    const col5X = pageWidth - margin - 20; // CAD
+                    const col2X = pageWidth - margin - 85; // Total
+                    const col3X = pageWidth - margin - 65; // USD
+                    const col4X = pageWidth - margin - 45; // MXN
+                    const col5X = pageWidth - margin - 25; // CAD
 
                     doc.setFontSize(8);
                     doc.setFont('helvetica', 'bold');
@@ -8692,14 +8761,14 @@ const Reports = {
             try {
                 const allCosts = await DB.getAll('cost_entries') || [];
                 const targetDate = new Date(captureDate);
-                const captureBranchIds = [...new Set(captures.map(c => c.branch_id).filter(Boolean))];
+                const captureBranchIdsForOperating = [...new Set(captures.map(c => c.branch_id).filter(Boolean))];
                 
                 // Si no hay branchIds específicos, considerar costos globales
-                const branchIdsToProcess = captureBranchIds.length > 0 ? captureBranchIds : [null];
+                const branchIdsToProcess = captureBranchIdsForOperating.length > 0 ? captureBranchIdsForOperating : [null];
                 
                 for (const branchId of branchIdsToProcess) {
                     const branchCosts = allCosts.filter(c => 
-                        branchId === null ? (!c.branch_id || captureBranchIds.includes(c.branch_id)) : 
+                        branchId === null ? (!c.branch_id || captureBranchIdsForOperating.includes(c.branch_id)) : 
                         (c.branch_id === branchId || !c.branch_id) // Incluir costos globales también
                     );
 
@@ -8824,7 +8893,7 @@ const Reports = {
 
             // Mostrar sección de utilidades
             // Ajustar altura si hay gastos fijos prorrateados (necesita más espacio)
-            const utilSectionHeight = fixedCostsProrated > 0 ? 80 : 75;
+            const utilSectionHeight = fixedCostsProrated > 0 ? 85 : 80;
             if (y + utilSectionHeight > pageHeight - 30) {
                 doc.addPage();
                 y = margin;
@@ -8833,76 +8902,80 @@ const Reports = {
             doc.setFontSize(12);
             doc.setFont('helvetica', 'bold');
             doc.text('UTILIDADES DEL DÍA', margin, y);
-            y += 10;
+            y += 8;
 
-            // Posición fija para alinear todos los números a la derecha
-            const valueX = pageWidth - margin - 45; // Posición fija para valores
-            const detailX = pageWidth - margin - 120; // Posición para detalles de monedas
+            // Posición fija para alinear todos los números a la derecha (mejor organizada)
+            const valueX = pageWidth - margin - 50; // Posición fija para valores (más espacio)
+            const labelX = margin + 5; // Posición fija para etiquetas
 
             doc.setFillColor(240, 255, 240);
             doc.rect(margin, y, pageWidth - (margin * 2), utilSectionHeight, 'F');
             doc.setDrawColor(200, 200, 200);
             doc.rect(margin, y, pageWidth - (margin * 2), utilSectionHeight);
+            
+            // Línea divisoria vertical para mejor organización
+            doc.setDrawColor(180, 180, 180);
+            doc.line(valueX - 10, y, valueX - 10, y + utilSectionHeight);
 
-            // Línea 1: Ingresos
+            // Línea 1: Ingresos (bien alineada)
             doc.setFontSize(10);
             doc.setFont('helvetica', 'bold');
-            doc.text('Ingresos:', margin + 5, y + 8);
+            doc.text('Ingresos:', labelX, y + 8);
             doc.text(`$${totalSalesMXN.toFixed(2)}`, valueX, y + 8, { align: 'right' });
             doc.setFont('helvetica', 'normal');
-            doc.setFontSize(8);
+            doc.setFontSize(7);
             const currencyDetails = `USD: $${totals.USD.toFixed(2)} (x${usdRate.toFixed(2)}) | MXN: $${totals.MXN.toFixed(2)} | CAD: $${totals.CAD.toFixed(2)} (x${cadRate.toFixed(2)})`;
-            doc.text(currencyDetails, margin + 10, y + 13, { maxWidth: pageWidth - (margin * 2) - 10 });
+            doc.text(currencyDetails, labelX + 5, y + 12.5, { maxWidth: valueX - labelX - 15 });
 
-            // Línea 2: COGS
+            // Línea 2: COGS (bien alineada)
             doc.setFontSize(10);
-            doc.text('(-) Costo Mercancía (COGS):', margin + 5, y + 20);
-            doc.text(`$${totalCOGS.toFixed(2)}`, valueX, y + 20, { align: 'right' });
+            doc.text('(-) Costo Mercancía (COGS):', labelX, y + 19);
+            doc.text(`$${totalCOGS.toFixed(2)}`, valueX, y + 19, { align: 'right' });
 
-            // Línea 3: Comisiones
-            doc.text('(-) Comisiones (Vendedores + Guías):', margin + 5, y + 27);
-            doc.text(`$${totalCommissions.toFixed(2)}`, valueX, y + 27, { align: 'right' });
+            // Línea 3: Comisiones (bien alineada)
+            doc.text('(-) Comisiones (Vendedores + Guías):', labelX, y + 26);
+            doc.text(`$${totalCommissions.toFixed(2)}`, valueX, y + 26, { align: 'right' });
 
-            // Línea 4: Utilidad Bruta
+            // Línea 4: Utilidad Bruta (bien alineada)
             doc.setFont('helvetica', 'bold');
             doc.setTextColor(0, 128, 0);
-            doc.text('= Utilidad Bruta:', margin + 5, y + 34);
-            doc.text(`$${grossProfit.toFixed(2)}`, valueX - 20, y + 34, { align: 'right' });
-            doc.setFontSize(9);
-            doc.text(`(${grossMargin.toFixed(2)}%)`, valueX + 5, y + 34);
+            doc.text('= Utilidad Bruta:', labelX, y + 33);
+            doc.text(`$${grossProfit.toFixed(2)}`, valueX - 15, y + 33, { align: 'right' });
+            doc.setFontSize(8);
+            doc.text(`(${grossMargin.toFixed(2)}%)`, valueX + 5, y + 33);
 
-            // Línea 5: Costos Llegadas
+            // Línea 5: Costos Llegadas (bien alineada)
             doc.setFontSize(9);
             doc.setFont('helvetica', 'normal');
             doc.setTextColor(0, 0, 0);
-            doc.text('(-) Costos Llegadas:', margin + 5, y + 41);
-            doc.text(`$${totalArrivalCosts.toFixed(2)}`, valueX, y + 41, { align: 'right' });
+            doc.text('(-) Costos Llegadas:', labelX, y + 40);
+            doc.text(`$${totalArrivalCosts.toFixed(2)}`, valueX, y + 40, { align: 'right' });
 
-            // Línea 6: Costos Operativos (incluye fijos prorrateados)
-            doc.text('(-) Costos Operativos:', margin + 5, y + 48);
-            doc.text(`$${totalOperatingCosts.toFixed(2)}`, valueX, y + 48, { align: 'right' });
+            // Línea 6: Costos Operativos (incluye fijos prorrateados) (bien alineada)
+            doc.text('(-) Costos Operativos:', labelX, y + 47);
+            doc.text(`$${totalOperatingCosts.toFixed(2)}`, valueX, y + 47, { align: 'right' });
             // Nota sobre gastos fijos prorrateados en una línea adicional más pequeña
             if (fixedCostsProrated > 0) {
                 doc.setFontSize(7);
                 doc.setTextColor(100, 100, 100);
-                doc.text(`Incluye fijos prorrateados: $${fixedCostsProrated.toFixed(2)} (renta, luz, nómina, etc.)`, margin + 5, y + 51.5);
+                doc.text(`Incluye fijos prorrateados: $${fixedCostsProrated.toFixed(2)} (renta, luz, nómina, etc.)`, labelX + 5, y + 50.5);
                 doc.setFontSize(9);
                 doc.setTextColor(0, 0, 0);
             }
 
-            // Línea 7: Comisiones Bancarias
+            // Línea 7: Comisiones Bancarias (bien alineada)
             const commissionY = fixedCostsProrated > 0 ? y + 58 : y + 55;
-            doc.text('(-) Comisiones Bancarias:', margin + 5, commissionY);
+            doc.text('(-) Comisiones Bancarias:', labelX, commissionY);
             doc.text(`$${bankCommissions.toFixed(2)}`, valueX, commissionY, { align: 'right' });
 
-            // Línea 8: Utilidad Neta
-            const netY = fixedCostsProrated > 0 ? y + 65 : y + 62;
+            // Línea 8: Utilidad Neta (bien alineada)
+            const netY = fixedCostsProrated > 0 ? y + 66 : y + 63;
             doc.setFontSize(10);
             doc.setFont('helvetica', 'bold');
             doc.setTextColor(0, 0, 255);
-            doc.text('= Utilidad Neta:', margin + 5, netY);
-            doc.text(`$${netProfit.toFixed(2)}`, valueX - 20, netY, { align: 'right' });
-            doc.setFontSize(9);
+            doc.text('= Utilidad Neta:', labelX, netY);
+            doc.text(`$${netProfit.toFixed(2)}`, valueX - 15, netY, { align: 'right' });
+            doc.setFontSize(8);
             doc.text(`(${netMargin.toFixed(2)}%)`, valueX + 5, netY);
 
             doc.setTextColor(0, 0, 0);
