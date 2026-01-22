@@ -8105,20 +8105,58 @@ const Reports = {
                 }
             }
 
-            const confirm = await Utils.confirm(
-                `¿Deseas limpiar las capturas temporales del día después de archivar?\n\nSe guardaron ${captures.length} capturas en el historial.`,
-                'Archivar Reporte'
-            );
-
-            if (confirm) {
-                for (const capture of captures) {
-                    await DB.delete('temp_quick_captures', capture.id);
-                }
-                Utils.showNotification(`Reporte archivado correctamente. ${captures.length} capturas eliminadas del día.`, 'success');
-                await this.loadQuickCaptureData();
-            } else {
-                Utils.showNotification('Reporte archivado correctamente. Las capturas temporales se mantienen.', 'success');
-            }
+            // Crear modal de confirmación personalizado (bien posicionado)
+            const confirmModal = document.createElement('div');
+            confirmModal.className = 'modal-overlay';
+            confirmModal.id = 'archive-confirm-modal';
+            confirmModal.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 10000;';
+            
+            confirmModal.innerHTML = `
+                <div class="modal-content" style="max-width: 500px; width: 90%; background: white; border-radius: var(--radius-md); padding: 0; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+                    <div class="modal-header" style="padding: var(--spacing-md); border-bottom: 1px solid var(--color-border-light);">
+                        <h3 style="margin: 0; font-size: 16px; font-weight: 600;">Archivar Reporte</h3>
+                    </div>
+                    <div class="modal-body" style="padding: var(--spacing-md);">
+                        <p style="margin: 0 0 var(--spacing-md) 0; font-size: 14px; line-height: 1.5;">
+                            Se guardaron <strong>${captures.length}</strong> capturas en el historial.
+                        </p>
+                        <p style="margin: 0; font-size: 14px; line-height: 1.5; color: var(--color-text-secondary);">
+                            ¿Deseas limpiar las capturas temporales del día después de archivar?
+                        </p>
+                    </div>
+                    <div class="modal-footer" style="padding: var(--spacing-md); border-top: 1px solid var(--color-border-light); display: flex; gap: var(--spacing-sm); justify-content: flex-end;">
+                        <button class="btn-secondary" id="archive-cancel-btn" style="min-width: 100px;">Cancelar</button>
+                        <button class="btn-primary" id="archive-confirm-btn" style="min-width: 100px;">Limpiar y Archivar</button>
+                        <button class="btn-secondary" id="archive-keep-btn" style="min-width: 100px;">Archivar sin Limpiar</button>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(confirmModal);
+            
+            // Manejar eventos
+            return new Promise((resolve) => {
+                document.getElementById('archive-confirm-btn').onclick = async () => {
+                    confirmModal.remove();
+                    for (const capture of captures) {
+                        await DB.delete('temp_quick_captures', capture.id);
+                    }
+                    Utils.showNotification(`Reporte archivado correctamente. ${captures.length} capturas eliminadas del día.`, 'success');
+                    await this.loadQuickCaptureData();
+                    resolve();
+                };
+                
+                document.getElementById('archive-keep-btn').onclick = async () => {
+                    confirmModal.remove();
+                    Utils.showNotification('Reporte archivado correctamente. Las capturas temporales se mantienen.', 'success');
+                    resolve();
+                };
+                
+                document.getElementById('archive-cancel-btn').onclick = () => {
+                    confirmModal.remove();
+                    resolve();
+                };
+            });
         } catch (error) {
             console.error('Error archivando reporte:', error);
             Utils.showNotification('Error al archivar el reporte: ' + error.message, 'error');
@@ -9343,9 +9381,12 @@ const Reports = {
                                             <small style="color: var(--color-text-secondary); font-size: 10px;">${netMargin}%</small>
                                         </td>
                                         <td style="padding: var(--spacing-sm); text-align: center;">
-                                            <div style="display: flex; gap: var(--spacing-xs); justify-content: center;">
+                                            <div style="display: flex; gap: var(--spacing-xs); justify-content: center; flex-wrap: wrap;">
                                                 <button class="btn-primary btn-xs" onclick="window.Reports.viewArchivedReport('${report.id}')" title="Ver Detalles">
                                                     <i class="fas fa-eye"></i>
+                                                </button>
+                                                <button class="btn-success btn-xs" onclick="window.Reports.restoreArchivedReport('${report.id}')" title="Restaurar y Editar">
+                                                    <i class="fas fa-edit"></i>
                                                 </button>
                                                 <button class="btn-secondary btn-xs" onclick="window.Reports.exportArchivedReportPDF('${report.id}')" title="Exportar PDF">
                                                     <i class="fas fa-file-pdf"></i>
@@ -9499,6 +9540,9 @@ const Reports = {
                         </div>
                     </div>
                     <div class="modal-footer" style="display: flex; gap: var(--spacing-sm); justify-content: flex-end; padding: var(--spacing-md); border-top: 1px solid var(--color-border-light);">
+                        <button class="btn-success" onclick="window.Reports.restoreArchivedReport('${report.id}'); document.getElementById('view-archived-report-modal').remove();">
+                            <i class="fas fa-edit"></i> Restaurar y Editar
+                        </button>
                         <button class="btn-secondary" onclick="window.Reports.exportArchivedReportPDF('${report.id}')">
                             <i class="fas fa-file-pdf"></i> Exportar PDF
                         </button>
@@ -9588,19 +9632,158 @@ const Reports = {
     },
 
     async deleteArchivedReport(reportId) {
-        const confirm = await Utils.confirm(
-            '¿Eliminar este reporte archivado? Esta acción no se puede deshacer.',
-            'Eliminar Reporte Archivado'
-        );
-        if (!confirm) return;
+        // Crear modal de confirmación personalizado (bien posicionado)
+        const confirmModal = document.createElement('div');
+        confirmModal.className = 'modal-overlay';
+        confirmModal.id = 'delete-archived-confirm-modal';
+        confirmModal.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 10000;';
+        
+        confirmModal.innerHTML = `
+            <div class="modal-content" style="max-width: 500px; width: 90%; background: white; border-radius: var(--radius-md); padding: 0; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+                <div class="modal-header" style="padding: var(--spacing-md); border-bottom: 1px solid var(--color-border-light);">
+                    <h3 style="margin: 0; font-size: 16px; font-weight: 600; color: var(--color-danger);">Eliminar Reporte Archivado</h3>
+                </div>
+                <div class="modal-body" style="padding: var(--spacing-md);">
+                    <p style="margin: 0; font-size: 14px; line-height: 1.5;">
+                        ¿Estás seguro de que deseas eliminar este reporte archivado?
+                    </p>
+                    <p style="margin: var(--spacing-sm) 0 0 0; font-size: 13px; line-height: 1.5; color: var(--color-danger);">
+                        <strong>Esta acción no se puede deshacer.</strong>
+                    </p>
+                </div>
+                <div class="modal-footer" style="padding: var(--spacing-md); border-top: 1px solid var(--color-border-light); display: flex; gap: var(--spacing-sm); justify-content: flex-end;">
+                    <button class="btn-secondary" id="delete-archived-cancel-btn" style="min-width: 100px;">Cancelar</button>
+                    <button class="btn-danger" id="delete-archived-confirm-btn" style="min-width: 100px;">Eliminar</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(confirmModal);
+        
+        // Manejar eventos
+        return new Promise((resolve) => {
+            document.getElementById('delete-archived-confirm-btn').onclick = async () => {
+                confirmModal.remove();
+                try {
+                    await DB.delete('archived_quick_captures', reportId);
+                    Utils.showNotification('Reporte archivado eliminado', 'success');
+                    await this.loadArchivedReports();
+                } catch (error) {
+                    console.error('Error eliminando reporte archivado:', error);
+                    Utils.showNotification('Error al eliminar: ' + error.message, 'error');
+                }
+                resolve();
+            };
+            
+            document.getElementById('delete-archived-cancel-btn').onclick = () => {
+                confirmModal.remove();
+                resolve();
+            };
+        });
+    },
 
+    async restoreArchivedReport(reportId) {
         try {
-            await DB.delete('archived_quick_captures', reportId);
-            Utils.showNotification('Reporte archivado eliminado', 'success');
-            await this.loadArchivedReports();
+            const report = await DB.get('archived_quick_captures', reportId);
+            if (!report) {
+                Utils.showNotification('Reporte no encontrado', 'error');
+                return;
+            }
+
+            if (!report.captures || report.captures.length === 0) {
+                Utils.showNotification('Este reporte no tiene capturas para restaurar', 'warning');
+                return;
+            }
+
+            // Crear modal de confirmación
+            const confirmModal = document.createElement('div');
+            confirmModal.className = 'modal-overlay';
+            confirmModal.id = 'restore-archived-confirm-modal';
+            confirmModal.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 10000;';
+            
+            confirmModal.innerHTML = `
+                <div class="modal-content" style="max-width: 500px; width: 90%; background: white; border-radius: var(--radius-md); padding: 0; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+                    <div class="modal-header" style="padding: var(--spacing-md); border-bottom: 1px solid var(--color-border-light);">
+                        <h3 style="margin: 0; font-size: 16px; font-weight: 600;">Restaurar Reporte</h3>
+                    </div>
+                    <div class="modal-body" style="padding: var(--spacing-md);">
+                        <p style="margin: 0 0 var(--spacing-sm) 0; font-size: 14px; line-height: 1.5;">
+                            Se restaurarán <strong>${report.captures.length}</strong> capturas del reporte del <strong>${new Date(report.date).toLocaleDateString('es-MX')}</strong>.
+                        </p>
+                        <p style="margin: 0; font-size: 13px; line-height: 1.5; color: var(--color-text-secondary);">
+                            Las capturas se agregarán a las capturas temporales del día actual y podrás editarlas.
+                        </p>
+                        <p style="margin: var(--spacing-sm) 0 0 0; font-size: 12px; line-height: 1.5; color: var(--color-warning);">
+                            <i class="fas fa-exclamation-triangle"></i> Si ya tienes capturas del día, estas se agregarán a las existentes.
+                        </p>
+                    </div>
+                    <div class="modal-footer" style="padding: var(--spacing-md); border-top: 1px solid var(--color-border-light); display: flex; gap: var(--spacing-sm); justify-content: flex-end;">
+                        <button class="btn-secondary" id="restore-cancel-btn" style="min-width: 100px;">Cancelar</button>
+                        <button class="btn-success" id="restore-confirm-btn" style="min-width: 100px;">
+                            <i class="fas fa-edit"></i> Restaurar
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(confirmModal);
+            
+            // Manejar eventos
+            return new Promise((resolve) => {
+                document.getElementById('restore-confirm-btn').onclick = async () => {
+                    confirmModal.remove();
+                    
+                    try {
+                        // Restaurar cada captura a temp_quick_captures
+                        let restoredCount = 0;
+                        for (const capture of report.captures) {
+                            try {
+                                // Generar nuevo ID para evitar conflictos
+                                const restoredCapture = {
+                                    ...capture,
+                                    id: 'qc_restored_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+                                    date: new Date().toISOString().split('T')[0], // Fecha actual
+                                    restored_from: reportId,
+                                    restored_at: new Date().toISOString()
+                                };
+                                
+                                await DB.put('temp_quick_captures', restoredCapture);
+                                restoredCount++;
+                            } catch (error) {
+                                console.error('Error restaurando captura individual:', error);
+                            }
+                        }
+                        
+                        if (restoredCount > 0) {
+                            Utils.showNotification(`${restoredCount} capturas restauradas correctamente. Puedes editarlas ahora.`, 'success');
+                            
+                            // Cambiar a la pestaña de captura rápida
+                            const quickCaptureTab = document.querySelector('[data-tab="quick-capture"]');
+                            if (quickCaptureTab) {
+                                quickCaptureTab.click();
+                            }
+                            
+                            // Recargar datos
+                            await this.loadQuickCaptureData();
+                        } else {
+                            Utils.showNotification('No se pudieron restaurar las capturas', 'error');
+                        }
+                    } catch (error) {
+                        console.error('Error restaurando reporte:', error);
+                        Utils.showNotification('Error al restaurar el reporte: ' + error.message, 'error');
+                    }
+                    
+                    resolve();
+                };
+                
+                document.getElementById('restore-cancel-btn').onclick = () => {
+                    confirmModal.remove();
+                    resolve();
+                };
+            });
         } catch (error) {
-            console.error('Error eliminando reporte archivado:', error);
-            Utils.showNotification('Error al eliminar: ' + error.message, 'error');
+            console.error('Error restaurando reporte archivado:', error);
+            Utils.showNotification('Error al restaurar el reporte: ' + error.message, 'error');
         }
     }
 };
