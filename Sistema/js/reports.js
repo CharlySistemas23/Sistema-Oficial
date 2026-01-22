@@ -6704,36 +6704,46 @@ const Reports = {
                     created_by: typeof UserManager !== 'undefined' && UserManager.currentUser ? UserManager.currentUser.id : null
                 });
             } else {
-                // Fallback: guardar directamente en IndexedDB
-                const arrival = {
-                    id: 'arrival_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-                    agency_id: agencyId,
-                    agency_name: agencyName,
-                    branch_id: branchId,
-                    branch_name: branchName,
-                    passengers: passengers,
-                    units: units,
-                    unit_type: unitType,
-                    arrival_fee: arrivalFee,
-                    calculated_fee: arrivalFee,
-                    date: today,
-                    notes: notes,
-                    created_at: new Date().toISOString(),
-                    created_by: typeof UserManager !== 'undefined' && UserManager.currentUser ? UserManager.currentUser.id : null,
-                    sync_status: 'pending'
-                };
-                await DB.put('agency_arrivals', arrival);
-
-                // Registrar costo de llegada
-                if (typeof Costs !== 'undefined' && Costs.registerArrivalPayment && arrivalFee > 0) {
-                    await Costs.registerArrivalPayment(
-                        arrival.id,
-                        arrivalFee,
-                        branchId,
-                        agencyId,
-                        passengers,
-                        today
-                    );
+                // Fallback: usar ArrivalRules.saveArrival para mantener consistencia
+                // y evitar duplicados (esta función ya maneja el registro de costos)
+                if (typeof ArrivalRules !== 'undefined' && ArrivalRules.saveArrival) {
+                    await ArrivalRules.saveArrival({
+                        date: today,
+                        branch_id: branchId,
+                        agency_id: agencyId,
+                        passengers: passengers,
+                        units: units,
+                        unit_type: unitType,
+                        calculated_fee: overrideRequired ? 0 : arrivalFee,
+                        arrival_fee: arrivalFee,
+                        override: overrideRequired,
+                        override_amount: overrideAmount,
+                        override_reason: overrideReason,
+                        notes: notes
+                    });
+                } else {
+                    // Último recurso: guardar directamente pero SIN registrar costo
+                    // (para evitar duplicados, el costo se registrará cuando se sincronice)
+                    const arrival = {
+                        id: 'arrival_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+                        agency_id: agencyId,
+                        agency_name: agencyName,
+                        branch_id: branchId,
+                        branch_name: branchName,
+                        passengers: passengers,
+                        units: units,
+                        unit_type: unitType,
+                        arrival_fee: arrivalFee,
+                        calculated_fee: arrivalFee,
+                        date: today,
+                        notes: notes,
+                        created_at: new Date().toISOString(),
+                        created_by: typeof UserManager !== 'undefined' && UserManager.currentUser ? UserManager.currentUser.id : null,
+                        sync_status: 'pending'
+                    };
+                    await DB.put('agency_arrivals', arrival);
+                    // NO registrar costo aquí para evitar duplicados
+                    // Se registrará cuando se procese la llegada correctamente
                 }
             }
 
