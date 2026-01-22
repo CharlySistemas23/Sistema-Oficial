@@ -2870,49 +2870,98 @@ const Costs = {
             }
             
             // Verificar si ya existe un costo para esta llegada para evitar duplicados
-            // Buscar por arrival_id PRIMERO (más específico)
+            // ESTRATEGIA: Buscar de más específico a menos específico
             const allCosts = await DB.getAll('cost_entries') || [];
-            let existingCost = allCosts.find(c => 
-                c.category === 'pago_llegadas' && 
-                c.arrival_id === arrivalId
-            );
+            const dateStr = costDate ? costDate.split('T')[0] : null; // Normalizar fecha
             
-            // Si no se encuentra por arrival_id, buscar por fecha, agencia y sucursal
-            // (para evitar duplicados cuando se crean llegadas con IDs diferentes)
-            if (!existingCost && costDate && agencyId && branchId) {
-                const dateStr = costDate.split('T')[0]; // Normalizar fecha
+            let existingCost = null;
+            
+            // 1. Buscar por arrival_id PRIMERO (más específico y confiable)
+            if (arrivalId) {
                 existingCost = allCosts.find(c => 
                     c.category === 'pago_llegadas' && 
-                    c.agency_id === agencyId &&
-                    c.branch_id === branchId &&
-                    (c.date === dateStr || (c.date && c.date.split('T')[0] === dateStr)) &&
-                    Math.abs(c.amount - amount) < 0.01 // Mismo monto (evitar duplicados exactos)
+                    c.arrival_id === arrivalId
                 );
             }
             
+            // 2. Si no se encuentra por arrival_id, buscar por fecha, agencia, sucursal y monto
+            // (para evitar duplicados cuando se crean llegadas con IDs diferentes o se sincronizan)
+            if (!existingCost && dateStr && agencyId && branchId) {
+                existingCost = allCosts.find(c => {
+                    if (c.category !== 'pago_llegadas') return false;
+                    if (c.agency_id !== agencyId) return false;
+                    if (c.branch_id !== branchId) return false;
+                    
+                    // Comparar fechas (normalizadas)
+                    const cDateStr = c.date ? c.date.split('T')[0] : null;
+                    if (cDateStr !== dateStr) return false;
+                    
+                    // Comparar montos (con tolerancia de 0.01 para errores de redondeo)
+                    if (Math.abs((c.amount || 0) - amount) >= 0.01) return false;
+                    
+                    return true;
+                });
+            }
+            
+            // 3. Si aún no se encuentra, buscar por fecha, agencia y sucursal (sin monto)
+            // (para casos donde el monto puede haber cambiado pero es la misma llegada)
+            if (!existingCost && dateStr && agencyId && branchId && arrivalId) {
+                // Solo hacer esta búsqueda más amplia si tenemos arrival_id
+                // para evitar falsos positivos
+                existingCost = allCosts.find(c => {
+                    if (c.category !== 'pago_llegadas') return false;
+                    if (c.agency_id !== agencyId) return false;
+                    if (c.branch_id !== branchId) return false;
+                    
+                    const cDateStr = c.date ? c.date.split('T')[0] : null;
+                    if (cDateStr !== dateStr) return false;
+                    
+                    // Si el costo existente no tiene arrival_id, actualizarlo
+                    if (!c.arrival_id && arrivalId) {
+                        return true; // Encontrado, se actualizará con arrival_id
+                    }
+                    
+                    return false;
+                });
+            }
+            
             if (existingCost) {
-                // Si existe y el monto es diferente, actualizar el costo existente
-                if (Math.abs(existingCost.amount - amount) > 0.01) {
+                // Costo existente encontrado - actualizar o mantener según corresponda
+                let needsUpdate = false;
+                
+                // 1. Actualizar arrival_id si no lo tiene (importante para futuras búsquedas)
+                if (!existingCost.arrival_id && arrivalId) {
+                    existingCost.arrival_id = arrivalId;
+                    needsUpdate = true;
+                }
+                
+                // 2. Actualizar monto si es diferente (con tolerancia de 0.01)
+                const amountDiff = Math.abs((existingCost.amount || 0) - amount);
+                if (amountDiff > 0.01) {
                     existingCost.amount = amount;
                     existingCost.updated_at = new Date().toISOString();
-                    // Asegurar que tenga arrival_id si no lo tiene
-                    if (!existingCost.arrival_id && arrivalId) {
-                        existingCost.arrival_id = arrivalId;
-                    }
+                    needsUpdate = true;
+                    console.log(`✅ Costo de llegada actualizado: $${amount.toFixed(2)} (antes: $${(existingCost.amount || 0).toFixed(2)}) para llegada ${arrivalId || 'N/A'}`);
+                }
+                
+                // 3. Actualizar pasajeros si es diferente
+                if (passengers && existingCost.passengers !== passengers) {
+                    existingCost.passengers = passengers;
+                    existingCost.notes = `Pago llegadas ${existingCost.notes?.split(' - ')[0] || 'Agencia'} - ${passengers} pasajeros`;
+                    needsUpdate = true;
+                }
+                
+                // Guardar actualización si es necesaria
+                if (needsUpdate) {
                     await DB.put('cost_entries', existingCost);
                     if (typeof SyncManager !== 'undefined') {
                         await SyncManager.addToQueue('cost_entry', existingCost.id);
                     }
-                    console.log(`✅ Costo de llegada actualizado: $${amount.toFixed(2)} para llegada ${arrivalId}`);
                 } else {
-                    // Si existe y el monto es igual, asegurar que tenga arrival_id si no lo tiene
-                    if (!existingCost.arrival_id && arrivalId) {
-                        existingCost.arrival_id = arrivalId;
-                        await DB.put('cost_entries', existingCost);
-                    }
-                    console.log(`ℹ️ Costo de llegada ya existe con el mismo monto, omitiendo duplicado: $${amount.toFixed(2)}`);
+                    console.log(`ℹ️ Costo de llegada ya existe (duplicado evitado): $${amount.toFixed(2)} para llegada ${arrivalId || 'N/A'}`);
                 }
-                // Si existe y el monto es igual, no hacer nada (evitar duplicado)
+                
+                // Siempre retornar para evitar crear duplicado
                 return;
             }
             
