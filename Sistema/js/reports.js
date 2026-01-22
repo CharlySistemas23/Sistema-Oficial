@@ -5671,24 +5671,21 @@ const Reports = {
                     sellers.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
             }
 
-            // Cargar agencias (filtrar duplicados por nombre)
+            // Cargar agencias (solo las 7 agencias permitidas, eliminar duplicados)
             const allAgencies = await DB.getAll('catalog_agencies') || [];
-            // Filtrar duplicados: mantener solo la primera agencia con cada nombre
-            const seenAgencyNames = new Set();
-            const agencies = allAgencies.filter(a => {
-                if (!a || !a.name) return false;
-                const normalizedName = a.name.trim().toUpperCase();
-                if (seenAgencyNames.has(normalizedName)) {
-                    console.warn(`⚠️ Agencia duplicada ignorada: ${a.name} (ID: ${a.id})`);
-                    return false;
-                }
-                seenAgencyNames.add(normalizedName);
-                return true;
-            });
+            const agencies = this.filterAllowedAgencies(allAgencies);
+            
+            // Log de agencias filtradas
+            const filteredOut = allAgencies.length - agencies.length;
+            if (filteredOut > 0) {
+                console.log(`⚠️ ${filteredOut} agencias filtradas (no permitidas o duplicadas)`);
+            }
+            
             const agencySelect = document.getElementById('qc-agency');
             if (agencySelect) {
                 agencySelect.innerHTML = '<option value="">Ninguna</option>' +
                     agencies.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+                console.log(`✅ ${agencies.length} agencias permitidas cargadas: ${agencies.map(a => a.name).join(', ')}`);
             }
 
             // Cargar TODAS las guías inicialmente (no solo cuando hay agencia seleccionada)
@@ -5697,13 +5694,49 @@ const Reports = {
             if (guideSelect) {
                 if (guides.length > 0) {
                     guideSelect.innerHTML = '<option value="">Ninguno</option>' +
-                        guides.map(g => `<option value="${g.id}">${g.name}${g.agency_id ? ' (' + (agencies.find(a => a.id === g.agency_id)?.name || '') + ')' : ''}</option>`).join('');
+                        guides.map(g => {
+                            const agencyName = g.agency_id ? (agencies.find(a => this.compareIds(a.id, g.agency_id))?.name || '') : '';
+                            return `<option value="${g.id}">${g.name}${agencyName ? ' (' + agencyName + ')' : ''}</option>`;
+                        }).join('');
                 } else {
                     guideSelect.innerHTML = '<option value="">Ninguno (no hay guías disponibles)</option>';
                 }
             }
         } catch (error) {
             console.error('Error cargando catálogos de captura rápida:', error);
+        }
+    },
+
+    async loadQuickArrivalsCatalogs() {
+        try {
+            // Cargar sucursales (si es master admin)
+            const isMasterAdmin = typeof UserManager !== 'undefined' && (
+                UserManager.currentUser?.role === 'master_admin' ||
+                UserManager.currentUser?.is_master_admin
+            );
+            if (isMasterAdmin) {
+                const branches = await DB.getAll('catalog_branches') || [];
+                const branchSelect = document.getElementById('qc-arrival-branch');
+                if (branchSelect) {
+                    branchSelect.innerHTML = '<option value="">Seleccionar...</option>' +
+                        branches.filter(b => b.active).map(b => 
+                            `<option value="${b.id}">${b.name}</option>`
+                        ).join('');
+                }
+            }
+
+            // Cargar agencias (solo las 7 agencias permitidas, eliminar duplicados)
+            const allAgencies = await DB.getAll('catalog_agencies') || [];
+            const agencies = this.filterAllowedAgencies(allAgencies);
+            
+            const agencySelect = document.getElementById('qc-arrival-agency');
+            if (agencySelect) {
+                agencySelect.innerHTML = '<option value="">Seleccionar...</option>' +
+                    agencies.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+                console.log(`✅ [Llegadas] ${agencies.length} agencias permitidas cargadas: ${agencies.map(a => a.name).join(', ')}`);
+            }
+        } catch (error) {
+            console.error('Error cargando catálogos de llegadas:', error);
         }
     },
 
@@ -5715,33 +5748,71 @@ const Reports = {
             
             if (!guideSelect) return;
 
-            if (!agencyId) {
+            console.log(`🔍 Cargando guías para agencia: ${agencyId}`);
+            console.log(`   Total guías en DB: ${guides.length}`);
+            console.log(`   Total agencias en DB: ${agencies.length}`);
+
+            if (!agencyId || agencyId === '') {
                 // Si no hay agencia seleccionada, mostrar TODAS las guías
                 if (guides.length > 0) {
                     guideSelect.innerHTML = '<option value="">Ninguno</option>' +
-                        guides.map(g => `<option value="${g.id}">${g.name}${g.agency_id ? ' (' + (agencies.find(a => a.id === g.agency_id)?.name || '') + ')' : ''}</option>`).join('');
+                        guides.map(g => {
+                            const agencyName = g.agency_id ? (agencies.find(a => this.compareIds(a.id, g.agency_id))?.name || '') : '';
+                            return `<option value="${g.id}">${g.name}${agencyName ? ' (' + agencyName + ')' : ''}</option>`;
+                        }).join('');
                 } else {
                     guideSelect.innerHTML = '<option value="">Ninguno (no hay guías disponibles)</option>';
                 }
                 return;
             }
 
+            // Buscar la agencia seleccionada (puede haber duplicados por nombre)
+            const selectedAgency = agencies.find(a => this.compareIds(a.id, agencyId));
+            if (!selectedAgency) {
+                console.warn(`⚠️ Agencia con ID ${agencyId} no encontrada`);
+                // Si no se encuentra la agencia, mostrar todas las guías
+                if (guides.length > 0) {
+                    guideSelect.innerHTML = '<option value="">Ninguno</option>' +
+                        guides.map(g => {
+                            const agencyName = g.agency_id ? (agencies.find(a => this.compareIds(a.id, g.agency_id))?.name || '') : '';
+                            return `<option value="${g.id}">${g.name}${agencyName ? ' (' + agencyName + ')' : ''}</option>`;
+                        }).join('');
+                } else {
+                    guideSelect.innerHTML = '<option value="">Ninguno (no hay guías disponibles)</option>';
+                }
+                return;
+            }
+
+            console.log(`   Agencia seleccionada: ${selectedAgency.name} (ID: ${selectedAgency.id})`);
+
             // Filtrar guías por agencia seleccionada
-            // Normalizar IDs para comparación (por si hay diferencias de formato)
+            // Usar comparación flexible de IDs
             const filteredGuides = guides.filter(g => {
-                const guideAgencyId = String(g.agency_id || '').trim();
-                const selectedAgencyId = String(agencyId || '').trim();
-                return guideAgencyId === selectedAgencyId && guideAgencyId !== '';
+                if (!g.agency_id) {
+                    return false; // Guías sin agencia no se muestran cuando hay una agencia seleccionada
+                }
+                const matches = this.compareIds(g.agency_id, agencyId);
+                if (matches) {
+                    console.log(`   ✅ Guía encontrada: ${g.name} (agency_id: ${g.agency_id})`);
+                }
+                return matches;
             });
+
+            console.log(`   Guías filtradas: ${filteredGuides.length}`);
 
             if (filteredGuides.length > 0) {
                 guideSelect.innerHTML = '<option value="">Ninguno</option>' +
                     filteredGuides.map(g => `<option value="${g.id}">${g.name}</option>`).join('');
+                console.log(`✅ ${filteredGuides.length} guías cargadas para agencia ${selectedAgency.name}`);
             } else {
                 // Si no hay guías para esta agencia, mostrar todas pero indicar que no hay para esta agencia
+                console.warn(`⚠️ No se encontraron guías para la agencia ${selectedAgency.name}`);
                 if (guides.length > 0) {
                     guideSelect.innerHTML = '<option value="">Ninguno (no hay guías para esta agencia)</option>' +
-                        guides.map(g => `<option value="${g.id}">${g.name}${g.agency_id ? ' (' + (agencies.find(a => a.id === g.agency_id)?.name || '') + ')' : ''}</option>`).join('');
+                        guides.map(g => {
+                            const agencyName = g.agency_id ? (agencies.find(a => this.compareIds(a.id, g.agency_id))?.name || '') : '';
+                            return `<option value="${g.id}">${g.name}${agencyName ? ' (' + agencyName + ')' : ''}</option>`;
+                        }).join('');
                 } else {
                     guideSelect.innerHTML = '<option value="">Ninguno (no hay guías disponibles)</option>';
                 }
@@ -5749,6 +5820,129 @@ const Reports = {
         } catch (error) {
             console.error('Error cargando guías:', error);
             const guideSelect = document.getElementById('qc-guide');
+            if (guideSelect) {
+                guideSelect.innerHTML = '<option value="">Error cargando guías</option>';
+            }
+        }
+    },
+
+    // Función auxiliar para comparar IDs de forma flexible
+    compareIds(id1, id2) {
+        if (!id1 || !id2) return false;
+        // Normalizar: convertir a string, trim, y comparar
+        const normalized1 = String(id1).trim().toLowerCase();
+        const normalized2 = String(id2).trim().toLowerCase();
+        return normalized1 === normalized2;
+    },
+
+    // Función auxiliar para filtrar y ordenar agencias permitidas
+    filterAllowedAgencies(allAgencies) {
+        // Lista de agencias permitidas (en mayúsculas para comparación)
+        const allowedAgencies = ['TRAVELEX', 'VERANOS', 'TANITOURS', 'DISCOVERY', 'TB', 'TTF', 'TROPICAL ADVENTURE'];
+        
+        // Filtrar: solo agencias permitidas y eliminar duplicados (mantener la primera de cada nombre)
+        const seenAgencyNames = new Set();
+        const filtered = allAgencies.filter(a => {
+            if (!a || !a.name) return false;
+            const normalizedName = a.name.trim().toUpperCase();
+            
+            // Verificar si es una agencia permitida
+            const isAllowed = allowedAgencies.some(allowed => 
+                normalizedName === allowed || 
+                normalizedName.includes(allowed) || 
+                allowed.includes(normalizedName)
+            );
+            
+            if (!isAllowed) {
+                return false;
+            }
+            
+            // Eliminar duplicados: mantener solo la primera agencia con cada nombre
+            if (seenAgencyNames.has(normalizedName)) {
+                return false;
+            }
+            seenAgencyNames.add(normalizedName);
+            return true;
+        });
+        
+        // Ordenar agencias según el orden de la lista permitida
+        filtered.sort((a, b) => {
+            const nameA = a.name.trim().toUpperCase();
+            const nameB = b.name.trim().toUpperCase();
+            const indexA = allowedAgencies.findIndex(allowed => 
+                nameA === allowed || nameA.includes(allowed) || allowed.includes(nameA)
+            );
+            const indexB = allowedAgencies.findIndex(allowed => 
+                nameB === allowed || nameB.includes(allowed) || allowed.includes(nameB)
+            );
+            return (indexA === -1 ? 999 : indexA) - (indexB === -1 ? 999 : indexB);
+        });
+        
+        return filtered;
+    },
+
+    // Cargar guías para agencia en el formulario de edición
+    async loadGuidesForAgencyInEdit(agencyId, currentGuideId = null) {
+        try {
+            const guides = await DB.getAll('catalog_guides') || [];
+            const agencies = await DB.getAll('catalog_agencies') || [];
+            const guideSelect = document.getElementById('edit-qc-guide');
+            
+            if (!guideSelect) return;
+
+            console.log(`🔍 [Edición] Cargando guías para agencia: ${agencyId}`);
+
+            if (!agencyId || agencyId === '') {
+                // Si no hay agencia seleccionada, mostrar TODAS las guías
+                if (guides.length > 0) {
+                    guideSelect.innerHTML = '<option value="">Ninguno</option>' +
+                        guides.map(g => {
+                            const agencyName = g.agency_id ? (agencies.find(a => this.compareIds(a.id, g.agency_id))?.name || '') : '';
+                            return `<option value="${g.id}" ${currentGuideId && this.compareIds(g.id, currentGuideId) ? 'selected' : ''}>${g.name}${agencyName ? ' (' + agencyName + ')' : ''}</option>`;
+                        }).join('');
+                } else {
+                    guideSelect.innerHTML = '<option value="">Ninguno (no hay guías disponibles)</option>';
+                }
+                return;
+            }
+
+            // Buscar la agencia seleccionada
+            const selectedAgency = agencies.find(a => this.compareIds(a.id, agencyId));
+            if (!selectedAgency) {
+                console.warn(`⚠️ [Edición] Agencia con ID ${agencyId} no encontrada`);
+                if (guides.length > 0) {
+                    guideSelect.innerHTML = '<option value="">Ninguno</option>' +
+                        guides.map(g => {
+                            const agencyName = g.agency_id ? (agencies.find(a => this.compareIds(a.id, g.agency_id))?.name || '') : '';
+                            return `<option value="${g.id}" ${currentGuideId && this.compareIds(g.id, currentGuideId) ? 'selected' : ''}>${g.name}${agencyName ? ' (' + agencyName + ')' : ''}</option>`;
+                        }).join('');
+                } else {
+                    guideSelect.innerHTML = '<option value="">Ninguno (no hay guías disponibles)</option>';
+                }
+                return;
+            }
+
+            // Filtrar guías por agencia seleccionada
+            const filteredGuides = guides.filter(g => {
+                if (!g.agency_id) return false;
+                return this.compareIds(g.agency_id, agencyId);
+            });
+
+            console.log(`   [Edición] Guías filtradas: ${filteredGuides.length}`);
+
+            if (filteredGuides.length > 0) {
+                guideSelect.innerHTML = '<option value="">Ninguno</option>' +
+                    filteredGuides.map(g => 
+                        `<option value="${g.id}" ${currentGuideId && this.compareIds(g.id, currentGuideId) ? 'selected' : ''}>${g.name}</option>`
+                    ).join('');
+                console.log(`✅ [Edición] ${filteredGuides.length} guías cargadas para agencia ${selectedAgency.name}`);
+            } else {
+                console.warn(`⚠️ [Edición] No se encontraron guías para la agencia ${selectedAgency.name}`);
+                guideSelect.innerHTML = '<option value="">Ninguno (no hay guías para esta agencia)</option>';
+            }
+        } catch (error) {
+            console.error('Error cargando guías en edición:', error);
+            const guideSelect = document.getElementById('edit-qc-guide');
             if (guideSelect) {
                 guideSelect.innerHTML = '<option value="">Error cargando guías</option>';
             }
@@ -7428,18 +7622,8 @@ const Reports = {
             const sellers = await DB.getAll('catalog_sellers') || [];
             const guides = await DB.getAll('catalog_guides') || [];
             const allAgencies = await DB.getAll('catalog_agencies') || [];
-            // Filtrar duplicados: mantener solo la primera agencia con cada nombre
-            const seenAgencyNames = new Set();
-            const agencies = allAgencies.filter(a => {
-                if (!a || !a.name) return false;
-                const normalizedName = a.name.trim().toUpperCase();
-                if (seenAgencyNames.has(normalizedName)) {
-                    console.warn(`⚠️ Agencia duplicada ignorada en edición: ${a.name} (ID: ${a.id})`);
-                    return false;
-                }
-                seenAgencyNames.add(normalizedName);
-                return true;
-            });
+            const agencies = this.filterAllowedAgencies(allAgencies);
+            
             const branches = await DB.getAll('catalog_branches') || [];
 
             modal.innerHTML = `
@@ -7540,6 +7724,13 @@ const Reports = {
             modalOverlay.appendChild(modal);
             document.body.appendChild(modalOverlay);
 
+            // Cargar guías filtradas si hay una agencia seleccionada
+            if (capture.agency_id) {
+                setTimeout(async () => {
+                    await this.loadGuidesForAgencyInEdit(capture.agency_id, capture.guide_id);
+                }, 100);
+            }
+
             // Event listener para mostrar/ocultar campo de método de pago
             const editIsStreetCheckbox = document.getElementById('edit-qc-is-street');
             const editPaymentMethodGroup = document.getElementById('edit-qc-payment-method-group');
@@ -7554,6 +7745,14 @@ const Reports = {
                         editPaymentMethodSelect.required = false;
                         editPaymentMethodSelect.value = '';
                     }
+                });
+            }
+
+            // Event listener para filtrar guías cuando cambia la agencia
+            const editAgencySelect = document.getElementById('edit-qc-agency');
+            if (editAgencySelect) {
+                editAgencySelect.addEventListener('change', async () => {
+                    await this.loadGuidesForAgencyInEdit(editAgencySelect.value, capture.guide_id);
                 });
             }
 
