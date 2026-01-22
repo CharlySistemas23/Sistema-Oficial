@@ -2631,15 +2631,33 @@ const Reports = {
             });
             
             // Calcular total desde cost_entries (asegurar que siempre sea un número)
-            const totalFromCosts = arrivalCostEntries.reduce((sum, c) => {
+            // IMPORTANTE: Agrupar por arrival_id para evitar sumar duplicados
+            const uniqueCosts = new Map();
+            arrivalCostEntries.forEach(c => {
                 const amount = typeof c.amount === 'number' ? c.amount : parseFloat(c.amount || 0) || 0;
-                return sum + amount;
-            }, 0);
+                
+                // Si tiene arrival_id, usar como clave única (evitar duplicados)
+                if (c.arrival_id) {
+                    // Si ya existe, tomar el monto mayor (por si hay actualizaciones)
+                    const existing = uniqueCosts.get(c.arrival_id) || 0;
+                    if (amount > existing) {
+                        uniqueCosts.set(c.arrival_id, amount);
+                    }
+                } else {
+                    // Si no tiene arrival_id, usar combinación de fecha+agencia+sucursal+monto como clave
+                    const key = `${c.date || ''}_${c.agency_id || ''}_${c.branch_id || ''}_${amount}`;
+                    if (!uniqueCosts.has(key)) {
+                        uniqueCosts.set(key, amount);
+                    }
+                }
+            });
+            
+            const totalFromCosts = Array.from(uniqueCosts.values()).reduce((sum, amount) => sum + amount, 0);
             
             // Si hay costos registrados (incluso si el total es 0 pero hay registros), retornar ese valor (fuente autorizada)
-            if (arrivalCostEntries.length > 0) {
+            if (uniqueCosts.size > 0) {
                 const totalAsNumber = typeof totalFromCosts === 'number' ? totalFromCosts : parseFloat(totalFromCosts) || 0;
-                console.log(`✅ Costos de llegadas encontrados en cost_entries: ${arrivalCostEntries.length} registros, total: $${totalAsNumber.toFixed(2)}`);
+                console.log(`✅ Costos de llegadas encontrados en cost_entries: ${arrivalCostEntries.length} registros, ${uniqueCosts.size} únicos, total: $${totalAsNumber.toFixed(2)}`);
                 return totalAsNumber;
             }
             
@@ -2669,12 +2687,21 @@ const Reports = {
                 }
             });
             
-            const totalFromArrivals = dayArrivals.reduce((sum, a) => {
+            // Agrupar llegadas por ID para evitar duplicados al calcular desde agency_arrivals
+            const uniqueArrivals = new Map();
+            dayArrivals.forEach(a => {
                 const fee = typeof (a.calculated_fee || a.arrival_fee) === 'number' 
                     ? (a.calculated_fee || a.arrival_fee) 
                     : parseFloat(a.calculated_fee || a.arrival_fee || 0) || 0;
-                return sum + fee;
-            }, 0);
+                // Usar ID de llegada como clave única
+                if (a.id) {
+                    const existing = uniqueArrivals.get(a.id) || 0;
+                    if (fee > existing) {
+                        uniqueArrivals.set(a.id, fee);
+                    }
+                }
+            });
+            const totalFromArrivals = Array.from(uniqueArrivals.values()).reduce((sum, fee) => sum + fee, 0);
             
             // Si encontramos llegadas sin costo registrado, registrar automáticamente
             if (totalFromArrivals > 0 && totalFromCosts === 0 && typeof Costs !== 'undefined') {
@@ -2713,10 +2740,23 @@ const Reports = {
                         return true;
                     }
                 });
-                const updatedTotal = updatedArrivalCosts.reduce((sum, c) => {
+                // Agrupar por arrival_id para evitar duplicados también en el recálculo
+                const updatedUniqueCosts = new Map();
+                updatedArrivalCosts.forEach(c => {
                     const amount = typeof c.amount === 'number' ? c.amount : parseFloat(c.amount || 0) || 0;
-                    return sum + amount;
-                }, 0);
+                    if (c.arrival_id) {
+                        const existing = updatedUniqueCosts.get(c.arrival_id) || 0;
+                        if (amount > existing) {
+                            updatedUniqueCosts.set(c.arrival_id, amount);
+                        }
+                    } else {
+                        const key = `${c.date || ''}_${c.agency_id || ''}_${c.branch_id || ''}_${amount}`;
+                        if (!updatedUniqueCosts.has(key)) {
+                            updatedUniqueCosts.set(key, amount);
+                        }
+                    }
+                });
+                const updatedTotal = Array.from(updatedUniqueCosts.values()).reduce((sum, amount) => sum + amount, 0);
                 const updatedTotalAsNumber = typeof updatedTotal === 'number' ? updatedTotal : parseFloat(updatedTotal) || 0;
                 console.log(`✅ Total de costos de llegadas después de registro automático: $${updatedTotalAsNumber.toFixed(2)}`);
                 return updatedTotalAsNumber;
@@ -6684,67 +6724,26 @@ const Reports = {
                 }
             }
 
-            // Guardar llegada usando ArrivalRules.saveArrival
+            // Guardar llegada usando ArrivalRules.saveArrival (única forma, evita duplicados)
             if (typeof ArrivalRules !== 'undefined' && ArrivalRules.saveArrival) {
                 await ArrivalRules.saveArrival({
-                    agency_id: agencyId,
-                    agency_name: agencyName,
+                    date: today,
                     branch_id: branchId,
-                    branch_name: branchName,
+                    agency_id: agencyId,
                     passengers: passengers,
                     units: units,
                     unit_type: unitType,
-                    arrival_fee: arrivalFee,
                     calculated_fee: overrideRequired ? 0 : arrivalFee,
+                    arrival_fee: arrivalFee,
                     override: overrideRequired,
                     override_amount: overrideAmount,
                     override_reason: overrideReason,
-                    date: today,
-                    notes: notes,
-                    created_by: typeof UserManager !== 'undefined' && UserManager.currentUser ? UserManager.currentUser.id : null
+                    notes: notes
                 });
             } else {
-                // Fallback: usar ArrivalRules.saveArrival para mantener consistencia
-                // y evitar duplicados (esta función ya maneja el registro de costos)
-                if (typeof ArrivalRules !== 'undefined' && ArrivalRules.saveArrival) {
-                    await ArrivalRules.saveArrival({
-                        date: today,
-                        branch_id: branchId,
-                        agency_id: agencyId,
-                        passengers: passengers,
-                        units: units,
-                        unit_type: unitType,
-                        calculated_fee: overrideRequired ? 0 : arrivalFee,
-                        arrival_fee: arrivalFee,
-                        override: overrideRequired,
-                        override_amount: overrideAmount,
-                        override_reason: overrideReason,
-                        notes: notes
-                    });
-                } else {
-                    // Último recurso: guardar directamente pero SIN registrar costo
-                    // (para evitar duplicados, el costo se registrará cuando se sincronice)
-                    const arrival = {
-                        id: 'arrival_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-                        agency_id: agencyId,
-                        agency_name: agencyName,
-                        branch_id: branchId,
-                        branch_name: branchName,
-                        passengers: passengers,
-                        units: units,
-                        unit_type: unitType,
-                        arrival_fee: arrivalFee,
-                        calculated_fee: arrivalFee,
-                        date: today,
-                        notes: notes,
-                        created_at: new Date().toISOString(),
-                        created_by: typeof UserManager !== 'undefined' && UserManager.currentUser ? UserManager.currentUser.id : null,
-                        sync_status: 'pending'
-                    };
-                    await DB.put('agency_arrivals', arrival);
-                    // NO registrar costo aquí para evitar duplicados
-                    // Se registrará cuando se procese la llegada correctamente
-                }
+                Utils.showNotification('Error: No se puede guardar la llegada. ArrivalRules no está disponible.', 'error');
+                console.error('ArrivalRules.saveArrival no está disponible');
+                return;
             }
 
             // Limpiar formulario
