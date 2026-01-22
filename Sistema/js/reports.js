@@ -5242,6 +5242,22 @@ const Reports = {
                         <input type="number" id="qc-cost" class="form-input" min="0" step="0.01" placeholder="0.00">
                         <small style="color: var(--color-text-secondary); font-size: 9px;">Opcional: Si no se ingresa, se buscará en inventario</small>
                     </div>
+                    <div class="form-group">
+                        <label style="display: flex; align-items: center; gap: var(--spacing-xs);">
+                            <input type="checkbox" id="qc-is-street" style="width: auto; margin: 0;">
+                            <span>Es venta de calle</span>
+                        </label>
+                        <small style="color: var(--color-text-secondary); font-size: 9px;">Marcar si es venta directa en calle (sin guía ni agencia)</small>
+                    </div>
+                    <div class="form-group" id="qc-payment-method-group" style="display: none;">
+                        <label>Método de Pago (Calle) <span style="color: var(--color-danger);">*</span></label>
+                        <select id="qc-payment-method" class="form-select">
+                            <option value="">Seleccionar...</option>
+                            <option value="card">Tarjeta</option>
+                            <option value="cash">Efectivo</option>
+                        </select>
+                        <small style="color: var(--color-text-secondary); font-size: 9px;">Tarjeta: (monto - 4.5%) * 12% | Efectivo: monto * 14%</small>
+                    </div>
                     <div class="form-group" style="grid-column: 1 / -1;">
                         <div style="display: flex; gap: var(--spacing-sm); align-items: center; margin-bottom: var(--spacing-sm); padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm);">
                             <div style="flex: 1;">
@@ -5565,6 +5581,23 @@ const Reports = {
             });
         }
 
+        // Mostrar/ocultar campo de método de pago según checkbox "Es venta de calle"
+        const isStreetCheckbox = document.getElementById('qc-is-street');
+        const paymentMethodGroup = document.getElementById('qc-payment-method-group');
+        const paymentMethodSelect = document.getElementById('qc-payment-method');
+        if (isStreetCheckbox && paymentMethodGroup && paymentMethodSelect) {
+            isStreetCheckbox.addEventListener('change', () => {
+                if (isStreetCheckbox.checked) {
+                    paymentMethodGroup.style.display = 'block';
+                    paymentMethodSelect.required = true;
+                } else {
+                    paymentMethodGroup.style.display = 'none';
+                    paymentMethodSelect.required = false;
+                    paymentMethodSelect.value = '';
+                }
+            });
+        }
+
         // Inicializar lista de capturas pendientes
         await this.loadPendingCaptures();
         
@@ -5740,10 +5773,18 @@ const Reports = {
             const quantity = parseInt(document.getElementById('qc-quantity')?.value) || 1;
             const currency = document.getElementById('qc-currency')?.value;
             const total = parseFloat(document.getElementById('qc-total')?.value) || 0;
+            const isStreet = document.getElementById('qc-is-street')?.checked || false;
+            const paymentMethod = document.getElementById('qc-payment-method')?.value || null;
 
             // Validar campos requeridos
             if (!branchId || !sellerId || !product || !currency || total <= 0) {
                 Utils.showNotification('Por favor completa todos los campos requeridos', 'error');
+                return;
+            }
+
+            // Si es venta de calle, validar que se haya seleccionado método de pago
+            if (isStreet && !paymentMethod) {
+                Utils.showNotification('Si es venta de calle, debes seleccionar el método de pago', 'error');
                 return;
             }
 
@@ -5805,6 +5846,8 @@ const Reports = {
                 currency: currency,
                 total: total,
                 merchandise_cost: merchandiseCost,
+                is_street: isStreet,
+                payment_method: paymentMethod,
                 date: new Date().toISOString().split('T')[0],
                 created_at: new Date().toISOString(),
                 created_by: typeof UserManager !== 'undefined' && UserManager.currentUser ? UserManager.currentUser.id : null,
@@ -5818,6 +5861,11 @@ const Reports = {
             document.getElementById('quick-capture-form')?.reset();
             if (document.getElementById('qc-quantity')) {
                 document.getElementById('qc-quantity').value = '1';
+            }
+            // Ocultar campo de método de pago
+            const paymentMethodGroup = document.getElementById('qc-payment-method-group');
+            if (paymentMethodGroup) {
+                paymentMethodGroup.style.display = 'none';
             }
 
             // Actualizar lista de pendientes
@@ -5996,6 +6044,14 @@ const Reports = {
             }
             if (document.getElementById('qc-cost')) {
                 document.getElementById('qc-cost').value = capture.merchandise_cost || '';
+            }
+            if (document.getElementById('qc-is-street')) {
+                document.getElementById('qc-is-street').checked = capture.is_street || false;
+                // Disparar evento change para mostrar/ocultar campo de método de pago
+                document.getElementById('qc-is-street').dispatchEvent(new Event('change'));
+            }
+            if (document.getElementById('qc-payment-method')) {
+                document.getElementById('qc-payment-method').value = capture.payment_method || '';
             }
 
             // Eliminar la captura de la lista pendiente
@@ -6558,32 +6614,49 @@ const Reports = {
                     captureTotalMXN = capture.total * cadRate;
                 }
                 
-                if (capture.seller_id && captureTotalMXN > 0) {
-                    const sellerRule = commissionRules.find(r => 
-                        r.entity_type === 'seller' && r.entity_id === capture.seller_id
-                    ) || commissionRules.find(r => 
-                        r.entity_type === 'seller' && r.entity_id === null
-                    );
-                    if (sellerRule) {
-                        const discountPct = sellerRule.discount_pct || 0;
-                        const multiplier = sellerRule.multiplier || 1;
-                        const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
-                        const commission = afterDiscount * (multiplier / 100);
-                        totalCommissions += commission;
+                // Si es venta de calle, aplicar reglas especiales de calle (solo para vendedores)
+                if (capture.is_street && capture.seller_id && captureTotalMXN > 0 && capture.payment_method) {
+                    let streetCommission = 0;
+                    if (capture.payment_method === 'card') {
+                        // Tarjeta: (monto - 4.5%) * 12%
+                        const afterDiscount = captureTotalMXN * (1 - 0.045); // Restar 4.5%
+                        streetCommission = afterDiscount * 0.12; // Multiplicar por 12%
+                    } else if (capture.payment_method === 'cash') {
+                        // Efectivo: monto * 14%
+                        streetCommission = captureTotalMXN * 0.14;
                     }
-                }
-                if (capture.guide_id && captureTotalMXN > 0) {
-                    const guideRule = commissionRules.find(r => 
-                        r.entity_type === 'guide' && r.entity_id === capture.guide_id
-                    ) || commissionRules.find(r => 
-                        r.entity_type === 'guide' && r.entity_id === null
-                    );
-                    if (guideRule) {
-                        const discountPct = guideRule.discount_pct || 0;
-                        const multiplier = guideRule.multiplier || 1;
-                        const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
-                        const commission = afterDiscount * (multiplier / 100);
-                        totalCommissions += commission;
+                    totalCommissions += streetCommission;
+                    console.log(`💰 Comisión de calle (${capture.payment_method === 'card' ? 'Tarjeta' : 'Efectivo'}): $${streetCommission.toFixed(2)} MXN sobre $${captureTotalMXN.toFixed(2)} MXN`);
+                } else {
+                    // Comisiones normales (solo si NO es venta de calle)
+                    if (capture.seller_id && captureTotalMXN > 0 && !capture.is_street) {
+                        const sellerRule = commissionRules.find(r => 
+                            r.entity_type === 'seller' && r.entity_id === capture.seller_id
+                        ) || commissionRules.find(r => 
+                            r.entity_type === 'seller' && r.entity_id === null
+                        );
+                        if (sellerRule) {
+                            const discountPct = sellerRule.discount_pct || 0;
+                            const multiplier = sellerRule.multiplier || 1;
+                            const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
+                            const commission = afterDiscount * (multiplier / 100);
+                            totalCommissions += commission;
+                        }
+                    }
+                    // Comisiones de guías (siempre se calculan normalmente, no aplican reglas de calle)
+                    if (capture.guide_id && captureTotalMXN > 0) {
+                        const guideRule = commissionRules.find(r => 
+                            r.entity_type === 'guide' && r.entity_id === capture.guide_id
+                        ) || commissionRules.find(r => 
+                            r.entity_type === 'guide' && r.entity_id === null
+                        );
+                        if (guideRule) {
+                            const discountPct = guideRule.discount_pct || 0;
+                            const multiplier = guideRule.multiplier || 1;
+                            const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
+                            const commission = afterDiscount * (multiplier / 100);
+                            totalCommissions += commission;
+                        }
                     }
                 }
             }
@@ -7098,13 +7171,28 @@ const Reports = {
             const sellers = await DB.getAll('catalog_sellers') || [];
             const guides = await DB.getAll('catalog_guides') || [];
 
+            // Obtener tipo de cambio del día (usar la fecha de las capturas)
+            const captureDate = captures[0]?.date || new Date().toISOString().split('T')[0];
+            const exchangeRates = await DB.query('exchange_rates_daily', 'date', captureDate) || [];
+            const todayRate = exchangeRates[0] || { usd_to_mxn: 20.0, cad_to_mxn: 15.0 };
+            const usdRate = todayRate.usd_to_mxn || 20.0;
+            const cadRate = todayRate.cad_to_mxn || 15.0;
+
             // Calcular comisiones por vendedor y guía
             const sellerCommissions = {};
             const guideCommissions = {};
 
             for (const capture of captures) {
+                // Convertir el total de la captura a MXN antes de calcular comisiones
+                let captureTotalMXN = capture.total;
+                if (capture.currency === 'USD') {
+                    captureTotalMXN = capture.total * usdRate;
+                } else if (capture.currency === 'CAD') {
+                    captureTotalMXN = capture.total * cadRate;
+                }
+
                 // Calcular comisión del vendedor
-                if (capture.seller_id && capture.total > 0) {
+                if (capture.seller_id && captureTotalMXN > 0) {
                     if (!sellerCommissions[capture.seller_id]) {
                         sellerCommissions[capture.seller_id] = {
                             seller: sellers.find(s => s.id === capture.seller_id),
@@ -7114,29 +7202,53 @@ const Reports = {
                         };
                     }
 
-                    const sellerRule = commissionRules.find(r => 
-                        r.entity_type === 'seller' && r.entity_id === capture.seller_id
-                    ) || commissionRules.find(r => 
-                        r.entity_type === 'seller' && r.entity_id === null
-                    );
+                    let commission = 0;
 
-                    if (sellerRule) {
-                        const discountPct = sellerRule.discount_pct || 0;
-                        const multiplier = sellerRule.multiplier || 1;
-                        const afterDiscount = capture.total * (1 - (discountPct / 100));
-                        const commission = afterDiscount * (multiplier / 100);
-                        
+                    // Si es venta de calle, aplicar reglas especiales de calle
+                    if (capture.is_street && capture.payment_method) {
+                        if (capture.payment_method === 'card') {
+                            // Tarjeta: (monto - 4.5%) * 12%
+                            const afterDiscount = captureTotalMXN * (1 - 0.045);
+                            commission = afterDiscount * 0.12;
+                        } else if (capture.payment_method === 'cash') {
+                            // Efectivo: monto * 14%
+                            commission = captureTotalMXN * 0.14;
+                        }
+                    } else {
+                        // Comisiones normales (solo si NO es venta de calle)
+                        const sellerRule = commissionRules.find(r => 
+                            r.entity_type === 'seller' && r.entity_id === capture.seller_id
+                        ) || commissionRules.find(r => 
+                            r.entity_type === 'seller' && r.entity_id === null
+                        );
+
+                        if (sellerRule) {
+                            const discountPct = sellerRule.discount_pct || 0;
+                            const multiplier = sellerRule.multiplier || 1;
+                            const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
+                            commission = afterDiscount * (multiplier / 100);
+                        }
+                    }
+
+                    if (commission > 0) {
                         sellerCommissions[capture.seller_id].total += commission;
                         sellerCommissions[capture.seller_id].sales += 1;
                         if (!sellerCommissions[capture.seller_id].commissions[capture.currency]) {
                             sellerCommissions[capture.seller_id].commissions[capture.currency] = 0;
                         }
-                        sellerCommissions[capture.seller_id].commissions[capture.currency] += commission;
+                        // Convertir comisión a moneda original para mostrar
+                        if (capture.currency === 'USD') {
+                            sellerCommissions[capture.seller_id].commissions[capture.currency] += commission / usdRate;
+                        } else if (capture.currency === 'CAD') {
+                            sellerCommissions[capture.seller_id].commissions[capture.currency] += commission / cadRate;
+                        } else {
+                            sellerCommissions[capture.seller_id].commissions[capture.currency] += commission;
+                        }
                     }
                 }
 
-                // Calcular comisión del guía
-                if (capture.guide_id && capture.total > 0) {
+                // Calcular comisión del guía (siempre se calculan normalmente, no aplican reglas de calle)
+                if (capture.guide_id && captureTotalMXN > 0) {
                     if (!guideCommissions[capture.guide_id]) {
                         guideCommissions[capture.guide_id] = {
                             guide: guides.find(g => g.id === capture.guide_id),
@@ -7155,7 +7267,7 @@ const Reports = {
                     if (guideRule) {
                         const discountPct = guideRule.discount_pct || 0;
                         const multiplier = guideRule.multiplier || 1;
-                        const afterDiscount = capture.total * (1 - (discountPct / 100));
+                        const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
                         const commission = afterDiscount * (multiplier / 100);
                         
                         guideCommissions[capture.guide_id].total += commission;
@@ -7163,7 +7275,14 @@ const Reports = {
                         if (!guideCommissions[capture.guide_id].commissions[capture.currency]) {
                             guideCommissions[capture.guide_id].commissions[capture.currency] = 0;
                         }
-                        guideCommissions[capture.guide_id].commissions[capture.currency] += commission;
+                        // Convertir comisión a moneda original para mostrar
+                        if (capture.currency === 'USD') {
+                            guideCommissions[capture.guide_id].commissions[capture.currency] += commission / usdRate;
+                        } else if (capture.currency === 'CAD') {
+                            guideCommissions[capture.guide_id].commissions[capture.currency] += commission / cadRate;
+                        } else {
+                            guideCommissions[capture.guide_id].commissions[capture.currency] += commission;
+                        }
                     }
                 }
             }
@@ -7391,6 +7510,20 @@ const Reports = {
                                 <label>Costo de Mercancía (MXN)</label>
                                 <input type="number" id="edit-qc-cost" class="form-input" min="0" step="0.01" value="${capture.merchandise_cost || 0}">
                             </div>
+                            <div class="form-group">
+                                <label style="display: flex; align-items: center; gap: var(--spacing-xs);">
+                                    <input type="checkbox" id="edit-qc-is-street" style="width: auto; margin: 0;" ${capture.is_street ? 'checked' : ''}>
+                                    <span>Es venta de calle</span>
+                                </label>
+                            </div>
+                            <div class="form-group" id="edit-qc-payment-method-group" style="${capture.is_street ? '' : 'display: none;'}">
+                                <label>Método de Pago (Calle) <span style="color: var(--color-danger);">*</span></label>
+                                <select id="edit-qc-payment-method" class="form-select">
+                                    <option value="">Seleccionar...</option>
+                                    <option value="card" ${capture.payment_method === 'card' ? 'selected' : ''}>Tarjeta</option>
+                                    <option value="cash" ${capture.payment_method === 'cash' ? 'selected' : ''}>Efectivo</option>
+                                </select>
+                            </div>
                             <div class="form-group" style="grid-column: 1 / -1; display: flex; gap: var(--spacing-sm);">
                                 <button type="submit" class="btn-primary" style="flex: 1;">
                                     <i class="fas fa-save"></i> Guardar Cambios
@@ -7406,6 +7539,23 @@ const Reports = {
 
             modalOverlay.appendChild(modal);
             document.body.appendChild(modalOverlay);
+
+            // Event listener para mostrar/ocultar campo de método de pago
+            const editIsStreetCheckbox = document.getElementById('edit-qc-is-street');
+            const editPaymentMethodGroup = document.getElementById('edit-qc-payment-method-group');
+            const editPaymentMethodSelect = document.getElementById('edit-qc-payment-method');
+            if (editIsStreetCheckbox && editPaymentMethodGroup && editPaymentMethodSelect) {
+                editIsStreetCheckbox.addEventListener('change', () => {
+                    if (editIsStreetCheckbox.checked) {
+                        editPaymentMethodGroup.style.display = 'block';
+                        editPaymentMethodSelect.required = true;
+                    } else {
+                        editPaymentMethodGroup.style.display = 'none';
+                        editPaymentMethodSelect.required = false;
+                        editPaymentMethodSelect.value = '';
+                    }
+                });
+            }
 
             // Event listener del formulario
             const form = document.getElementById('edit-quick-capture-form');
@@ -7423,10 +7573,18 @@ const Reports = {
                     const currency = document.getElementById('edit-qc-currency').value;
                     const total = parseFloat(document.getElementById('edit-qc-total').value) || 0;
                     const merchandiseCost = parseFloat(document.getElementById('edit-qc-cost').value) || 0;
+                    const isStreet = document.getElementById('edit-qc-is-street')?.checked || false;
+                    const paymentMethod = document.getElementById('edit-qc-payment-method')?.value || null;
 
                     // Validar campos
                     if (!branchId || !sellerId || !product || !currency || total <= 0) {
                         Utils.showNotification('Por favor completa todos los campos requeridos', 'error');
+                        return;
+                    }
+
+                    // Si es venta de calle, validar que se haya seleccionado método de pago
+                    if (isStreet && !paymentMethod) {
+                        Utils.showNotification('Si es venta de calle, debes seleccionar el método de pago', 'error');
                         return;
                     }
 
@@ -7460,6 +7618,8 @@ const Reports = {
                     capture.currency = currency;
                     capture.total = total;
                     capture.merchandise_cost = merchandiseCost;
+                    capture.is_street = isStreet;
+                    capture.payment_method = paymentMethod;
                     capture.updated_at = new Date().toISOString();
 
                     await DB.put('temp_quick_captures', capture);
@@ -8041,17 +8201,36 @@ const Reports = {
                             commissions: {}
                         };
                     }
-                    const sellerRule = commissionRules.find(r => 
-                        r.entity_type === 'seller' && r.entity_id === capture.seller_id
-                    ) || commissionRules.find(r => 
-                        r.entity_type === 'seller' && r.entity_id === null
-                    );
-                    if (sellerRule) {
-                        const discountPct = sellerRule.discount_pct || 0;
-                        const multiplier = sellerRule.multiplier || 1;
-                        // Calcular comisión sobre el total convertido a MXN
-                        const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
-                        const commission = afterDiscount * (multiplier / 100);
+                    
+                    let commission = 0;
+                    
+                    // Si es venta de calle, aplicar reglas especiales de calle
+                    if (capture.is_street && capture.payment_method) {
+                        if (capture.payment_method === 'card') {
+                            // Tarjeta: (monto - 4.5%) * 12%
+                            const afterDiscount = captureTotalMXN * (1 - 0.045);
+                            commission = afterDiscount * 0.12;
+                        } else if (capture.payment_method === 'cash') {
+                            // Efectivo: monto * 14%
+                            commission = captureTotalMXN * 0.14;
+                        }
+                    } else {
+                        // Comisiones normales (solo si NO es venta de calle)
+                        const sellerRule = commissionRules.find(r => 
+                            r.entity_type === 'seller' && r.entity_id === capture.seller_id
+                        ) || commissionRules.find(r => 
+                            r.entity_type === 'seller' && r.entity_id === null
+                        );
+                        if (sellerRule) {
+                            const discountPct = sellerRule.discount_pct || 0;
+                            const multiplier = sellerRule.multiplier || 1;
+                            // Calcular comisión sobre el total convertido a MXN
+                            const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
+                            commission = afterDiscount * (multiplier / 100);
+                        }
+                    }
+                    
+                    if (commission > 0) {
                         sellerCommissions[capture.seller_id].total += commission;
                         // Mantener comisión en moneda original también para mostrar en PDF
                         if (!sellerCommissions[capture.seller_id].commissions[capture.currency]) {
@@ -8588,30 +8767,57 @@ const Reports = {
 
             const totalSalesMXN = totals.USD * usdRate + totals.MXN + totals.CAD * cadRate;
 
-            // Calcular comisiones
+            // Calcular comisiones (usar misma lógica que loadQuickCaptureProfits)
+            // IMPORTANTE: Las comisiones deben calcularse sobre el monto en MXN
             const commissionRules = await DB.getAll('commission_rules') || [];
             let totalCommissions = 0;
             for (const capture of captures) {
-                if (capture.seller_id && capture.total > 0) {
-                    const sellerRule = commissionRules.find(r => 
-                        r.entity_type === 'seller' && r.entity_id === capture.seller_id
-                    ) || commissionRules.find(r => r.entity_type === 'seller' && r.entity_id === null);
-                    if (sellerRule) {
-                        const discountPct = sellerRule.discount_pct || 0;
-                        const multiplier = sellerRule.multiplier || 1;
-                        const afterDiscount = capture.total * (1 - (discountPct / 100));
-                        totalCommissions += afterDiscount * (multiplier / 100);
-                    }
+                // Convertir el total de la captura a MXN antes de calcular comisiones
+                let captureTotalMXN = capture.total;
+                if (capture.currency === 'USD') {
+                    captureTotalMXN = capture.total * usdRate;
+                } else if (capture.currency === 'CAD') {
+                    captureTotalMXN = capture.total * cadRate;
                 }
-                if (capture.guide_id && capture.total > 0) {
-                    const guideRule = commissionRules.find(r => 
-                        r.entity_type === 'guide' && r.entity_id === capture.guide_id
-                    ) || commissionRules.find(r => r.entity_type === 'guide' && r.entity_id === null);
-                    if (guideRule) {
-                        const discountPct = guideRule.discount_pct || 0;
-                        const multiplier = guideRule.multiplier || 1;
-                        const afterDiscount = capture.total * (1 - (discountPct / 100));
-                        totalCommissions += afterDiscount * (multiplier / 100);
+                
+                // Si es venta de calle, aplicar reglas especiales de calle (solo para vendedores)
+                if (capture.is_street && capture.seller_id && captureTotalMXN > 0 && capture.payment_method) {
+                    let streetCommission = 0;
+                    if (capture.payment_method === 'card') {
+                        // Tarjeta: (monto - 4.5%) * 12%
+                        const afterDiscount = captureTotalMXN * (1 - 0.045);
+                        streetCommission = afterDiscount * 0.12;
+                    } else if (capture.payment_method === 'cash') {
+                        // Efectivo: monto * 14%
+                        streetCommission = captureTotalMXN * 0.14;
+                    }
+                    totalCommissions += streetCommission;
+                } else {
+                    // Comisiones normales (solo si NO es venta de calle)
+                    if (capture.seller_id && captureTotalMXN > 0 && !capture.is_street) {
+                        const sellerRule = commissionRules.find(r => 
+                            r.entity_type === 'seller' && r.entity_id === capture.seller_id
+                        ) || commissionRules.find(r => r.entity_type === 'seller' && r.entity_id === null);
+                        if (sellerRule) {
+                            const discountPct = sellerRule.discount_pct || 0;
+                            const multiplier = sellerRule.multiplier || 1;
+                            const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
+                            const commission = afterDiscount * (multiplier / 100);
+                            totalCommissions += commission;
+                        }
+                    }
+                    // Comisiones de guías (siempre se calculan normalmente, no aplican reglas de calle)
+                    if (capture.guide_id && captureTotalMXN > 0) {
+                        const guideRule = commissionRules.find(r => 
+                            r.entity_type === 'guide' && r.entity_id === capture.guide_id
+                        ) || commissionRules.find(r => r.entity_type === 'guide' && r.entity_id === null);
+                        if (guideRule) {
+                            const discountPct = guideRule.discount_pct || 0;
+                            const multiplier = guideRule.multiplier || 1;
+                            const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
+                            const commission = afterDiscount * (multiplier / 100);
+                            totalCommissions += commission;
+                        }
                     }
                 }
             }
