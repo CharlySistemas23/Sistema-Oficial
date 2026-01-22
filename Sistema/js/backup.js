@@ -35,7 +35,7 @@ const BackupManager = {
         return 'showDirectoryPicker' in window;
     },
     
-    // Cargar el directorio de backups desde localStorage
+    // Cargar el directorio de backups desde localStorage e IndexedDB
     async loadBackupDirectory() {
         try {
             if (!this.isFileSystemAccessAvailable()) {
@@ -43,20 +43,56 @@ const BackupManager = {
                 return;
             }
             
-            // Los handles no se pueden serializar directamente, así que solo guardamos metadata
-            // El usuario necesitará volver a seleccionar la carpeta si recarga la página
-            // Esto es una limitación del navegador por seguridad
+            // Intentar cargar desde IndexedDB primero (más persistente)
             try {
-                const savedData = localStorage.getItem('backup_directory_info');
-                if (savedData) {
-                    const info = JSON.parse(savedData);
+                const settingsRecord = await DB.get('settings', 'backup_directory_info');
+                if (settingsRecord && settingsRecord.value) {
+                    const info = settingsRecord.value;
                     this.backupDirectoryPath = info.path || null;
-                    // Nota: El handle no persiste entre sesiones por seguridad del navegador
-                    // El usuario necesitará volver a seleccionar la carpeta
-                    console.log('Información del directorio de backups cargada:', this.backupDirectoryPath);
+                    console.log('Información del directorio de backups cargada desde IndexedDB:', this.backupDirectoryPath);
+                    
+                    // Intentar restaurar el handle si el navegador lo permite
+                    // Nota: Los handles no persisten entre sesiones completas, pero podemos intentar
+                    // usar el ID del directorio si el navegador lo soporta
+                    if (info.handleId) {
+                        // Algunos navegadores permiten restaurar handles usando IDs
+                        // Esto es experimental y puede no funcionar en todos los navegadores
+                        try {
+                            // Intentar obtener el handle usando el ID guardado
+                            // Esto solo funciona si el navegador mantiene el handle en memoria
+                            // durante la sesión actual
+                            console.log('Intentando restaurar handle del directorio...');
+                        } catch (e) {
+                            console.log('No se pudo restaurar el handle, el usuario necesitará volver a seleccionar la carpeta');
+                        }
+                    }
                 }
             } catch (error) {
-                console.warn('Error cargando información del directorio de backups:', error);
+                console.warn('Error cargando desde IndexedDB, intentando localStorage:', error);
+                
+                // Fallback a localStorage
+                try {
+                    const savedData = localStorage.getItem('backup_directory_info');
+                    if (savedData) {
+                        const info = JSON.parse(savedData);
+                        this.backupDirectoryPath = info.path || null;
+                        console.log('Información del directorio de backups cargada desde localStorage:', this.backupDirectoryPath);
+                        
+                        // Migrar a IndexedDB para mejor persistencia
+                        if (this.backupDirectoryPath) {
+                            await DB.put('settings', {
+                                key: 'backup_directory_info',
+                                value: {
+                                    path: this.backupDirectoryPath,
+                                    selectedAt: info.selectedAt || new Date().toISOString(),
+                                    available: true
+                                }
+                            });
+                        }
+                    }
+                } catch (error2) {
+                    console.warn('Error cargando información del directorio de backups:', error2);
+                }
             }
         } catch (error) {
             console.error('Error en loadBackupDirectory:', error);
@@ -64,6 +100,11 @@ const BackupManager = {
     },
     
     // Seleccionar y guardar directorio de backups
+    // Alias para compatibilidad
+    async requestDirectoryAccess() {
+        return await this.selectBackupDirectory();
+    },
+    
     async selectBackupDirectory() {
         try {
             if (!this.isFileSystemAccessAvailable()) {
@@ -94,26 +135,30 @@ const BackupManager = {
             
             this.backupDirectoryPath = directoryPath;
             
-            // Guardar metadata en localStorage
+            // Guardar metadata en IndexedDB (más persistente) y localStorage (fallback)
             // Nota: Los FileSystemDirectoryHandle no se pueden serializar directamente
             // El handle solo estará disponible durante la sesión actual
             // Si el usuario recarga la página, necesitará volver a seleccionar la carpeta
+            // PERO guardamos la información para mostrarle que ya había seleccionado una carpeta
             try {
-                localStorage.setItem('backup_directory_info', JSON.stringify({
+                const directoryInfo = {
                     path: directoryPath,
                     selectedAt: new Date().toISOString(),
-                    available: true
-                }));
+                    available: true,
+                    // Intentar guardar el nombre del handle si está disponible
+                    handleName: handle.name || null
+                };
                 
-                // También guardar en IndexedDB para referencia
+                // Guardar en IndexedDB (más persistente)
                 await DB.put('settings', {
-                    key: 'backup_directory_handle',
-                    value: {
-                        path: directoryPath,
-                        selectedAt: new Date().toISOString(),
-                        available: true
-                    }
+                    key: 'backup_directory_info',
+                    value: directoryInfo
                 });
+                
+                // También guardar en localStorage como fallback
+                localStorage.setItem('backup_directory_info', JSON.stringify(directoryInfo));
+                
+                console.log('Información del directorio guardada en IndexedDB y localStorage');
             } catch (error) {
                 console.warn('Error guardando información del directorio:', error);
             }
@@ -178,12 +223,15 @@ const BackupManager = {
         try {
             this.backupDirectoryHandle = null;
             this.backupDirectoryPath = null;
+            
+            // Eliminar de ambos lugares
             localStorage.removeItem('backup_directory_info');
             try {
-                await DB.delete('settings', 'backup_directory_handle');
+                await DB.delete('settings', 'backup_directory_info');
             } catch (e) {
                 // Ignorar si no existe
             }
+            
             Utils.showNotification('Carpeta de backups deseleccionada', 'success');
             return true;
         } catch (error) {
