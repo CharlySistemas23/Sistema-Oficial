@@ -8346,11 +8346,12 @@ const Reports = {
 
             const { jsPDF } = jspdfLib;
             
-            // Obtener datos
+            // Obtener datos - IMPORTANTE: Usar siempre la fecha del día actual
+            const today = new Date().toISOString().split('T')[0];
             let captures = await DB.getAll('temp_quick_captures') || [];
-            // Usar la fecha de las capturas (todas deberían tener la misma fecha)
-            const captureDate = captures.length > 0 ? captures[0].date : new Date().toISOString().split('T')[0];
-            captures = captures.filter(c => c.date === captureDate);
+            // Filtrar solo las capturas del día actual
+            captures = captures.filter(c => c.date === today);
+            const captureDate = today; // Usar fecha del día actual para consistencia
             
             if (captures.length === 0) {
                 Utils.showNotification('No hay capturas para exportar', 'warning');
@@ -9262,7 +9263,16 @@ const Reports = {
             // Calcular comisiones (usar misma lógica que loadQuickCaptureProfits)
             // IMPORTANTE: Las comisiones deben calcularse sobre el monto en MXN
             const commissionRules = await DB.getAll('commission_rules') || [];
+            // Obtener catálogos una sola vez antes del bucle
+            const agencies = await DB.getAll('catalog_agencies') || [];
+            const sellers = await DB.getAll('catalog_sellers') || [];
+            const guides = await DB.getAll('catalog_guides') || [];
+            
             let totalCommissions = 0;
+            // Calcular comisiones detalladas por vendedor y guía para guardar en el archivo
+            const sellerCommissions = {};
+            const guideCommissions = {};
+            
             for (const capture of captures) {
                 // Convertir el total de la captura a MXN antes de calcular comisiones
                 let captureTotalMXN = capture.total;
@@ -9285,120 +9295,258 @@ const Reports = {
                     }
                     totalCommissions += streetCommission;
                 } else {
-                    // Comisiones normales (solo si NO es venta de calle)
+                    // Comisiones basadas en reglas de agencia, Sebastian o Gloria
+                    // Nota: agencies, sellers y guides ya están declarados arriba
+                    const agency = agencies.find(a => a.id === capture.agency_id);
+                    const seller = sellers.find(s => s.id === capture.seller_id);
+                    const guide = guides.find(g => g.id === capture.guide_id);
+                    
+                    const agencyName = agency?.name || null;
+                    const sellerName = seller?.name || null;
+                    const guideName = guide?.name || null;
+                    
+                    // Calcular comisiones usando las nuevas reglas (retorna {sellerCommission, guideCommission})
+                    const commissionsByRules = this.calculateCommissionByRules(captureTotalMXN, agencyName, sellerName, guideName);
+                    
+                    // COMISIÓN DEL VENDEDOR
                     if (capture.seller_id && captureTotalMXN > 0 && !capture.is_street) {
-                        const sellerRule = commissionRules.find(r => 
-                            r.entity_type === 'seller' && r.entity_id === capture.seller_id
-                        ) || commissionRules.find(r => r.entity_type === 'seller' && r.entity_id === null);
-                        if (sellerRule) {
-                            const discountPct = sellerRule.discount_pct || 0;
-                            const multiplier = sellerRule.multiplier || 1;
-                            const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
-                            const commission = afterDiscount * (multiplier / 100);
-                            totalCommissions += commission;
+                        let sellerCommission = commissionsByRules.sellerCommission;
+                        
+                        // Si no hay regla especial (Sebastian), usar reglas normales
+                        if (sellerCommission === 0) {
+                            const sellerRule = commissionRules.find(r => 
+                                r.entity_type === 'seller' && r.entity_id === capture.seller_id
+                            ) || commissionRules.find(r => 
+                                r.entity_type === 'seller' && r.entity_id === null
+                            );
+                            if (sellerRule) {
+                                const discountPct = sellerRule.discount_pct || 0;
+                                const multiplier = sellerRule.multiplier || 1;
+                                const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
+                                sellerCommission = afterDiscount * (multiplier / 100);
+                            }
+                        }
+                        
+                        if (sellerCommission > 0) {
+                            totalCommissions += sellerCommission;
+                            
+                            // Guardar comisión detallada por vendedor
+                            if (!sellerCommissions[capture.seller_id]) {
+                                sellerCommissions[capture.seller_id] = {
+                                    seller: seller,
+                                    total: 0,
+                                    sales: 0,
+                                    commissions: {}
+                                };
+                            }
+                            sellerCommissions[capture.seller_id].total += sellerCommission;
+                            sellerCommissions[capture.seller_id].sales += 1;
+                            if (!sellerCommissions[capture.seller_id].commissions[capture.currency]) {
+                                sellerCommissions[capture.seller_id].commissions[capture.currency] = 0;
+                            }
+                            // Convertir comisión a moneda original para mostrar
+                            if (capture.currency === 'USD') {
+                                sellerCommissions[capture.seller_id].commissions[capture.currency] += sellerCommission / usdRate;
+                            } else if (capture.currency === 'CAD') {
+                                sellerCommissions[capture.seller_id].commissions[capture.currency] += sellerCommission / cadRate;
+                            } else {
+                                sellerCommissions[capture.seller_id].commissions[capture.currency] += sellerCommission;
+                            }
                         }
                     }
-                    // Comisiones de guías (siempre se calculan normalmente, no aplican reglas de calle)
+                    
+                    // COMISIÓN DEL GUÍA
                     if (capture.guide_id && captureTotalMXN > 0) {
-                        const guideRule = commissionRules.find(r => 
-                            r.entity_type === 'guide' && r.entity_id === capture.guide_id
-                        ) || commissionRules.find(r => r.entity_type === 'guide' && r.entity_id === null);
-                        if (guideRule) {
-                            const discountPct = guideRule.discount_pct || 0;
-                            const multiplier = guideRule.multiplier || 1;
-                            const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
-                            const commission = afterDiscount * (multiplier / 100);
-                            totalCommissions += commission;
+                        let guideCommission = commissionsByRules.guideCommission;
+                        
+                        // Si no hay regla especial (agencia o Gloria), usar reglas normales
+                        if (guideCommission === 0) {
+                            const guideRule = commissionRules.find(r => 
+                                r.entity_type === 'guide' && r.entity_id === capture.guide_id
+                            ) || commissionRules.find(r => 
+                                r.entity_type === 'guide' && r.entity_id === null
+                            );
+                            if (guideRule) {
+                                const discountPct = guideRule.discount_pct || 0;
+                                const multiplier = guideRule.multiplier || 1;
+                                const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
+                                guideCommission = afterDiscount * (multiplier / 100);
+                            }
+                        }
+                        
+                        if (guideCommission > 0) {
+                            totalCommissions += guideCommission;
+                            
+                            // Guardar comisión detallada por guía
+                            if (!guideCommissions[capture.guide_id]) {
+                                guideCommissions[capture.guide_id] = {
+                                    guide: guide,
+                                    total: 0,
+                                    sales: 0,
+                                    commissions: {}
+                                };
+                            }
+                            guideCommissions[capture.guide_id].total += guideCommission;
+                            guideCommissions[capture.guide_id].sales += 1;
+                            if (!guideCommissions[capture.guide_id].commissions[capture.currency]) {
+                                guideCommissions[capture.guide_id].commissions[capture.currency] = 0;
+                            }
+                            // Convertir comisión a moneda original para mostrar
+                            if (capture.currency === 'USD') {
+                                guideCommissions[capture.guide_id].commissions[capture.currency] += guideCommission / usdRate;
+                            } else if (capture.currency === 'CAD') {
+                                guideCommissions[capture.guide_id].commissions[capture.currency] += guideCommission / cadRate;
+                            } else {
+                                guideCommissions[capture.guide_id].commissions[capture.currency] += guideCommission;
+                            }
                         }
                     }
                 }
             }
 
             // Obtener llegadas y costos (usar misma lógica que loadQuickCaptureProfits)
+            const captureBranchIds = [...new Set(captures.map(c => c.branch_id).filter(Boolean))];
+            const branchIdForArrivals = captureBranchIds.length === 1 ? captureBranchIds[0] : null;
+            // Usar calculateArrivalCosts para obtener costos de llegadas correctamente
+            const totalArrivalCostsRaw = await this.calculateArrivalCosts(today, branchIdForArrivals, captureBranchIds);
+            const totalArrivalCosts = typeof totalArrivalCostsRaw === 'number' ? totalArrivalCostsRaw : parseFloat(totalArrivalCostsRaw) || 0;
+            
+            // Obtener llegadas para guardar en el archivo
             const arrivals = await DB.getAll('agency_arrivals') || [];
             const todayArrivals = arrivals.filter(a => a.date === today);
-            const captureBranchIds = [...new Set(captures.map(c => c.branch_id).filter(Boolean))];
             const filteredArrivals = todayArrivals.filter(a => 
                 captureBranchIds.length === 0 || !a.branch_id || captureBranchIds.includes(a.branch_id)
             );
-            const totalArrivalCosts = filteredArrivals
-                .filter(a => a.passengers > 0 && (a.units > 0 || a.arrival_fee > 0 || a.calculated_fee > 0))
-                .reduce((sum, a) => sum + (a.calculated_fee || a.arrival_fee || 0), 0);
 
-            // Calcular costos operativos
-            let totalOperatingCosts = 0;
+            // Calcular costos operativos (usar misma lógica que loadQuickCaptureProfits)
+            let variableCostsDaily = 0;  // Costos variables registrados hoy
+            let fixedCostsProrated = 0;  // Costos fijos prorrateados (mensuales, semanales, anuales)
             let bankCommissions = 0;
             try {
                 const allCosts = await DB.getAll('cost_entries') || [];
                 const targetDate = new Date(today);
-                const branchIdsToProcess = captureBranchIds.length > 0 ? captureBranchIds : [null];
+                
+                // Determinar si debemos incluir costos globales
+                const isMasterAdmin = typeof UserManager !== 'undefined' && (
+                    UserManager.currentUser?.role === 'master_admin' ||
+                    UserManager.currentUser?.is_master_admin ||
+                    UserManager.currentUser?.isMasterAdmin ||
+                    UserManager.currentEmployee?.role === 'master_admin'
+                );
+                const includeGlobalCosts = isMasterAdmin && captureBranchIds.length === 0;
+                const branchIdsToProcess = captureBranchIds.length > 0 ? captureBranchIds : (includeGlobalCosts ? [null] : []);
                 
                 for (const branchId of branchIdsToProcess) {
-                    const branchCosts = allCosts.filter(c => 
-                        branchId === null ? (!c.branch_id || captureBranchIds.includes(c.branch_id)) : 
-                        (c.branch_id === branchId || !c.branch_id)
-                    );
+                    // Filtro estricto por sucursal
+                    const branchCosts = allCosts.filter(c => {
+                        if (branchId === null) {
+                            return !c.branch_id;
+                        } else {
+                            if (!c.branch_id) return false;
+                            return String(c.branch_id) === String(branchId);
+                        }
+                    });
 
+                    // A) COSTOS FIJOS PRORRATEADOS
                     // Mensuales
                     const monthlyCosts = branchCosts.filter(c => {
-                        const costDate = new Date(c.date || c.created_at);
-                        return c.period_type === 'monthly' && c.recurring === true &&
-                               costDate.getMonth() === targetDate.getMonth() &&
-                               costDate.getFullYear() === targetDate.getFullYear();
+                        const isMonthly = c.period_type === 'monthly';
+                        const isRecurring = c.recurring === true || c.recurring === 'true' || c.type === 'fijo';
+                        const isValidCategory = c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias';
+                        return isMonthly && isRecurring && isValidCategory;
                     });
                     for (const cost of monthlyCosts) {
-                        const costDate = new Date(cost.date || cost.created_at);
-                        const daysInMonth = new Date(costDate.getFullYear(), costDate.getMonth() + 1, 0).getDate();
-                        totalOperatingCosts += (cost.amount || 0) / daysInMonth;
+                        const daysInMonth = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0).getDate();
+                        fixedCostsProrated += (cost.amount || 0) / daysInMonth;
                     }
 
                     // Semanales
                     const weeklyCosts = branchCosts.filter(c => {
+                        const isWeekly = c.period_type === 'weekly';
+                        const isRecurring = c.recurring === true || c.recurring === 'true' || c.type === 'fijo';
+                        const isValidCategory = c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias';
                         const costDate = new Date(c.date || c.created_at);
-                        const targetWeek = this.getWeekNumber(targetDate);
-                        const costWeek = this.getWeekNumber(costDate);
-                        return c.period_type === 'weekly' && c.recurring === true &&
-                               targetWeek === costWeek &&
-                               targetDate.getFullYear() === costDate.getFullYear();
+                        const isSameYear = targetDate.getFullYear() === costDate.getFullYear();
+                        return isWeekly && isRecurring && isValidCategory && isSameYear;
                     });
                     for (const cost of weeklyCosts) {
-                        totalOperatingCosts += (cost.amount || 0) / 7;
+                        fixedCostsProrated += (cost.amount || 0) / 7;
                     }
 
-                    // Anuales
+                    // Anuales/Yearly
                     const annualCosts = branchCosts.filter(c => {
-                        const costDate = new Date(c.date || c.created_at);
-                        return c.period_type === 'annual' && c.recurring === true &&
-                               costDate.getFullYear() === targetDate.getFullYear();
+                        const isAnnual = c.period_type === 'annual' || c.period_type === 'yearly';
+                        const isRecurring = c.recurring === true || c.recurring === 'true' || c.type === 'fijo';
+                        const isValidCategory = c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias';
+                        return isAnnual && isRecurring && isValidCategory;
                     });
                     for (const cost of annualCosts) {
                         const daysInYear = ((targetDate.getFullYear() % 4 === 0 && targetDate.getFullYear() % 100 !== 0) || (targetDate.getFullYear() % 400 === 0)) ? 366 : 365;
-                        totalOperatingCosts += (cost.amount || 0) / daysInYear;
+                        fixedCostsProrated += (cost.amount || 0) / daysInYear;
                     }
 
-                    // Variables/diarios
+                    // B) COSTOS VARIABLES DEL DÍA
                     const variableCosts = branchCosts.filter(c => {
                         const costDate = c.date || c.created_at;
                         const costDateStr = costDate.split('T')[0];
                         return costDateStr === today &&
+                               c.category !== 'pago_llegadas' &&
+                               c.category !== 'comisiones_bancarias' &&
                                (c.period_type === 'one_time' || c.period_type === 'daily' || !c.period_type);
                     });
                     for (const cost of variableCosts) {
                         if (cost.category === 'comisiones_bancarias') {
                             bankCommissions += (cost.amount || 0);
                         } else {
-                            totalOperatingCosts += (cost.amount || 0);
+                            variableCostsDaily += (cost.amount || 0);
                         }
                     }
+                }
+                
+                // C) GASTOS DE CAJA (retiros) del día
+                let cashExpenses = 0;
+                try {
+                    const allSessions = await DB.getAll('cash_sessions') || [];
+                    const daySessions = allSessions.filter(s => {
+                        const sessionDate = s.date || s.created_at;
+                        const sessionDateStr = typeof sessionDate === 'string' ? sessionDate.split('T')[0] : new Date(sessionDate).toISOString().split('T')[0];
+                        return sessionDateStr === today;
+                    });
+                    
+                    const allMovements = await DB.getAll('cash_movements') || [];
+                    const sessionIds = daySessions.map(s => s.id);
+                    const dayWithdrawals = allMovements.filter(m => {
+                        if (m.type !== 'withdrawal') return false;
+                        if (!sessionIds.includes(m.session_id)) return false;
+                        if (captureBranchIds.length > 0) {
+                            const session = daySessions.find(s => s.id === m.session_id);
+                            if (!session || !session.branch_id) return false;
+                            if (!captureBranchIds.includes(session.branch_id)) return false;
+                        }
+                        return true;
+                    });
+                    
+                    for (const withdrawal of dayWithdrawals) {
+                        cashExpenses += withdrawal.amount || 0;
+                    }
+                    
+                    if (cashExpenses > 0) {
+                        variableCostsDaily += cashExpenses;
+                    }
+                } catch (e) {
+                    console.warn('No se pudieron obtener gastos de caja:', e);
                 }
             } catch (e) {
                 console.warn('Error calculando costos operativos:', e);
             }
+            
+            // Total de costos operativos (variables + fijos)
+            const totalOperatingCosts = variableCostsDaily + fixedCostsProrated;
 
             const grossProfit = totalSalesMXN - totalCOGS - totalCommissions;
             const netProfit = grossProfit - totalArrivalCosts - totalOperatingCosts - bankCommissions;
 
-            // Crear objeto de reporte archivado
+            // Crear objeto de reporte archivado con TODOS los datos calculados
             const archivedReport = {
                 id: 'archived_' + today + '_' + Date.now(),
                 date: today,
@@ -9409,13 +9557,31 @@ const Reports = {
                 total_sales_mxn: totalSalesMXN,
                 total_cogs: totalCOGS,
                 total_commissions: totalCommissions,
+                // Comisiones detalladas por vendedor y guía
+                seller_commissions: Object.values(sellerCommissions).map(s => ({
+                    seller_id: s.seller?.id,
+                    seller_name: s.seller?.name,
+                    total: s.total,
+                    sales: s.sales,
+                    commissions: s.commissions
+                })),
+                guide_commissions: Object.values(guideCommissions).map(g => ({
+                    guide_id: g.guide?.id,
+                    guide_name: g.guide?.name,
+                    total: g.total,
+                    sales: g.sales,
+                    commissions: g.commissions
+                })),
                 total_arrival_costs: totalArrivalCosts,
                 total_operating_costs: totalOperatingCosts,
+                variable_costs_daily: variableCostsDaily,
+                fixed_costs_prorated: fixedCostsProrated,
                 bank_commissions: bankCommissions,
                 gross_profit: grossProfit,
                 net_profit: netProfit,
                 exchange_rates: { usd: usdRate, cad: cadRate },
                 arrivals: filteredArrivals,
+                branch_ids: captureBranchIds,
                 archived_at: new Date().toISOString(),
                 archived_by: typeof UserManager !== 'undefined' && UserManager.currentUser ? UserManager.currentUser.id : null
             };
@@ -9744,16 +9910,25 @@ const Reports = {
 
     async exportArchivedReportPDF(reportId) {
         try {
+            if (this.isExporting) {
+                Utils.showNotification('Ya se está exportando un reporte. Por favor espera...', 'warning');
+                return;
+            }
+            this.isExporting = true;
+
             const report = await DB.get('archived_quick_captures', reportId);
             if (!report) {
                 Utils.showNotification('Reporte no encontrado', 'error');
+                this.isExporting = false;
                 return;
             }
 
-            // Reutilizar la función de exportación PDF pero con datos del reporte archivado
+            // IMPORTANTE: Usar los datos guardados en el reporte archivado
+            // El reporte ya tiene todos los cálculos guardados, solo necesitamos renderizarlos
             const jspdfLib = Utils.checkJsPDF();
             if (!jspdfLib) {
                 Utils.showNotification('jsPDF no está disponible', 'error');
+                this.isExporting = false;
                 return;
             }
 
@@ -9764,7 +9939,7 @@ const Reports = {
             const margin = 15;
             let y = margin;
 
-            // Header
+            // ========== HEADER ==========
             doc.setFillColor(52, 73, 94);
             doc.rect(0, 0, pageWidth, 35, 'F');
             doc.setTextColor(255, 255, 255);
@@ -9782,7 +9957,7 @@ const Reports = {
 
             y = 45;
 
-            // Resumen
+            // ========== RESUMEN ==========
             doc.setFillColor(240, 248, 255);
             doc.rect(margin, y, pageWidth - (margin * 2), 30, 'F');
             doc.setDrawColor(200, 200, 200);
@@ -9791,16 +9966,227 @@ const Reports = {
             doc.setTextColor(0, 0, 0);
             doc.setFontSize(12);
             doc.setFont('helvetica', 'bold');
-            doc.text('RESUMEN', margin + 5, y + 8);
+            doc.text('RESUMEN DEL DÍA', margin + 5, y + 8);
+
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'normal');
+            doc.text(`Fecha: ${report.date}`, pageWidth - margin - 5, y + 15, { align: 'right' });
 
             doc.setFontSize(10);
-            doc.setFont('helvetica', 'normal');
             doc.text(`Total Capturas: ${report.captures ? report.captures.length : 0}`, margin + 5, y + 15);
-            doc.text(`Ventas (MXN): $${parseFloat(report.total_sales_mxn || 0).toFixed(2)}`, margin + 60, y + 15);
-            doc.text(`Utilidad Bruta: $${parseFloat(report.gross_profit || 0).toFixed(2)}`, margin + 5, y + 22);
-            doc.text(`Utilidad Neta: $${parseFloat(report.net_profit || 0).toFixed(2)}`, margin + 60, y + 22);
+            doc.text(`Total Cantidad: ${report.total_quantity || 0}`, margin + 60, y + 15);
+            doc.text(`Total USD: $${(report.totals?.USD || 0).toFixed(2)}`, margin + 5, y + 22);
+            doc.text(`Total MXN: $${(report.totals?.MXN || 0).toFixed(2)}`, margin + 60, y + 22);
+            doc.text(`Total CAD: $${(report.totals?.CAD || 0).toFixed(2)}`, margin + 115, y + 22);
+            doc.text(`Ventas Totales (MXN): $${parseFloat(report.total_sales_mxn || 0).toFixed(2)}`, margin + 5, y + 28);
 
-            y += 40;
+            y += 38;
+
+            // ========== UTILIDADES DEL DÍA (usar datos guardados) ==========
+            if (y + 85 > pageHeight - 30) {
+                doc.addPage();
+                y = margin;
+            }
+
+            doc.setFillColor(240, 255, 240);
+            const utilSectionHeight = 85;
+            doc.rect(margin, y, pageWidth - (margin * 2), utilSectionHeight, 'F');
+            doc.setDrawColor(200, 200, 200);
+            doc.rect(margin, y, pageWidth - (margin * 2), utilSectionHeight);
+
+            doc.setFontSize(12);
+            doc.setFont('helvetica', 'bold');
+            doc.text('UTILIDADES DEL DÍA', margin + 5, y + 8);
+
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'normal');
+            let utilY = y + 15;
+
+            // Usar los datos guardados en el reporte
+            const totalSalesMXN = parseFloat(report.total_sales_mxn || 0);
+            const totalCOGS = parseFloat(report.total_cogs || 0);
+            const totalCommissions = parseFloat(report.total_commissions || 0);
+            const totalArrivalCosts = parseFloat(report.total_arrival_costs || 0);
+            const totalOperatingCosts = parseFloat(report.total_operating_costs || 0);
+            const bankCommissions = parseFloat(report.bank_commissions || 0);
+            const grossProfit = parseFloat(report.gross_profit || 0);
+            const netProfit = parseFloat(report.net_profit || 0);
+
+            doc.text(`Ventas Totales (MXN):`, margin + 5, utilY);
+            doc.text(`$${totalSalesMXN.toFixed(2)}`, pageWidth - margin - 5, utilY, { align: 'right' });
+            utilY += 6;
+
+            doc.text(`Costo de Mercancía:`, margin + 5, utilY);
+            doc.text(`$${totalCOGS.toFixed(2)}`, pageWidth - margin - 5, utilY, { align: 'right' });
+            utilY += 6;
+
+            doc.text(`Comisiones:`, margin + 5, utilY);
+            doc.text(`$${totalCommissions.toFixed(2)}`, pageWidth - margin - 5, utilY, { align: 'right' });
+            utilY += 6;
+
+            doc.setFont('helvetica', 'bold');
+            doc.text(`Utilidad Bruta:`, margin + 5, utilY);
+            doc.text(`$${grossProfit.toFixed(2)}`, pageWidth - margin - 5, utilY, { align: 'right' });
+            utilY += 6;
+            doc.setFont('helvetica', 'normal');
+
+            doc.text(`Costos Llegadas:`, margin + 5, utilY);
+            doc.text(`$${totalArrivalCosts.toFixed(2)}`, pageWidth - margin - 5, utilY, { align: 'right' });
+            utilY += 6;
+
+            doc.text(`Gastos Operativos:`, margin + 5, utilY);
+            doc.text(`$${totalOperatingCosts.toFixed(2)}`, pageWidth - margin - 5, utilY, { align: 'right' });
+            utilY += 6;
+
+            doc.text(`Comisiones Bancarias:`, margin + 5, utilY);
+            doc.text(`$${bankCommissions.toFixed(2)}`, pageWidth - margin - 5, utilY, { align: 'right' });
+            utilY += 6;
+
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(netProfit >= 0 ? 0 : 255, netProfit >= 0 ? 150 : 0, 0);
+            doc.text(`Utilidad Neta:`, margin + 5, utilY);
+            doc.text(`$${netProfit.toFixed(2)}`, pageWidth - margin - 5, utilY, { align: 'right' });
+            doc.setTextColor(0, 0, 0);
+
+            y += utilSectionHeight + 5;
+
+            // ========== CAPTURAS (si están guardadas) ==========
+            if (report.captures && report.captures.length > 0) {
+                if (y + 30 > pageHeight - 30) {
+                    doc.addPage();
+                    y = margin;
+                }
+
+                doc.setFontSize(12);
+                doc.setFont('helvetica', 'bold');
+                doc.text('CAPTURAS REALIZADAS', margin, y);
+                y += 8;
+
+                // Encabezados
+                doc.setFillColor(245, 245, 245);
+                doc.rect(margin, y, pageWidth - (margin * 2), 8, 'F');
+                doc.setDrawColor(200, 200, 200);
+                doc.rect(margin, y, pageWidth - (margin * 2), 8);
+
+                doc.setFontSize(7);
+                doc.setFont('helvetica', 'bold');
+                doc.text('Hora', margin + 2, y + 5.5);
+                doc.text('Vendedor', margin + 20, y + 5.5);
+                doc.text('Producto', margin + 50, y + 5.5);
+                doc.text('Cant.', pageWidth - margin - 50, y + 5.5, { align: 'right' });
+                doc.text('Total', pageWidth - margin - 2, y + 5.5, { align: 'right' });
+                y += 8;
+
+                // Filas
+                doc.setFontSize(8);
+                doc.setFont('helvetica', 'normal');
+                report.captures.forEach(c => {
+                    if (y + 7 > pageHeight - 30) {
+                        doc.addPage();
+                        y = margin;
+                    }
+                    const time = c.created_at ? new Date(c.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '-';
+                    doc.setDrawColor(220, 220, 220);
+                    doc.rect(margin, y, pageWidth - (margin * 2), 7);
+                    doc.text(time, margin + 2, y + 5);
+                    doc.text((c.seller_name || 'N/A').substring(0, 20), margin + 20, y + 5);
+                    doc.text((c.product || '').substring(0, 25), margin + 50, y + 5);
+                    doc.text((c.quantity || 1).toString(), pageWidth - margin - 50, y + 5, { align: 'right' });
+                    doc.setFont('helvetica', 'bold');
+                    doc.text(`$${parseFloat(c.total || 0).toFixed(2)} ${c.currency || 'MXN'}`, pageWidth - margin - 2, y + 5, { align: 'right' });
+                    doc.setFont('helvetica', 'normal');
+                    y += 7;
+                });
+                y += 5;
+            }
+
+            // ========== COMISIONES (si están guardadas) ==========
+            if (report.seller_commissions && report.seller_commissions.length > 0) {
+                if (y + 30 > pageHeight - 30) {
+                    doc.addPage();
+                    y = margin;
+                }
+
+                doc.setFontSize(12);
+                doc.setFont('helvetica', 'bold');
+                doc.text('COMISIONES DE VENDEDORES', margin, y);
+                y += 8;
+
+                doc.setFillColor(245, 245, 245);
+                doc.rect(margin, y, pageWidth - (margin * 2), 6, 'F');
+                doc.setDrawColor(200, 200, 200);
+                doc.rect(margin, y, pageWidth - (margin * 2), 6);
+
+                doc.setFontSize(8);
+                doc.setFont('helvetica', 'bold');
+                doc.text('Vendedor', margin + 2, y + 4);
+                doc.text('Total', pageWidth - margin - 2, y + 4, { align: 'right' });
+                y += 6;
+
+                doc.setFont('helvetica', 'normal');
+                report.seller_commissions.forEach(s => {
+                    if (y + 6 > pageHeight - 30) {
+                        doc.addPage();
+                        y = margin;
+                    }
+                    doc.setDrawColor(220, 220, 220);
+                    doc.rect(margin, y, pageWidth - (margin * 2), 6);
+                    doc.text((s.seller_name || 'N/A').substring(0, 40), margin + 2, y + 4);
+                    doc.text(`$${parseFloat(s.total || 0).toFixed(2)}`, pageWidth - margin - 2, y + 4, { align: 'right' });
+                    y += 6;
+                });
+                y += 5;
+            }
+
+            if (report.guide_commissions && report.guide_commissions.length > 0) {
+                if (y + 30 > pageHeight - 30) {
+                    doc.addPage();
+                    y = margin;
+                }
+
+                doc.setFontSize(12);
+                doc.setFont('helvetica', 'bold');
+                doc.text('COMISIONES DE GUÍAS', margin, y);
+                y += 8;
+
+                doc.setFillColor(245, 245, 245);
+                doc.rect(margin, y, pageWidth - (margin * 2), 6, 'F');
+                doc.setDrawColor(200, 200, 200);
+                doc.rect(margin, y, pageWidth - (margin * 2), 6);
+
+                doc.setFontSize(8);
+                doc.setFont('helvetica', 'bold');
+                doc.text('Guía', margin + 2, y + 4);
+                doc.text('Total', pageWidth - margin - 2, y + 4, { align: 'right' });
+                y += 6;
+
+                doc.setFont('helvetica', 'normal');
+                report.guide_commissions.forEach(g => {
+                    if (y + 6 > pageHeight - 30) {
+                        doc.addPage();
+                        y = margin;
+                    }
+                    doc.setDrawColor(220, 220, 220);
+                    doc.rect(margin, y, pageWidth - (margin * 2), 6);
+                    doc.text((g.guide_name || 'N/A').substring(0, 40), margin + 2, y + 4);
+                    doc.text(`$${parseFloat(g.total || 0).toFixed(2)}`, pageWidth - margin - 2, y + 4, { align: 'right' });
+                    y += 6;
+                });
+            }
+
+            // ========== FOOTER ==========
+            const totalPages = doc.internal.getNumberOfPages();
+            for (let i = 1; i <= totalPages; i++) {
+                doc.setPage(i);
+                doc.setFontSize(8);
+                doc.setTextColor(150, 150, 150);
+                doc.text(
+                    `Página ${i} de ${totalPages}`,
+                    pageWidth / 2,
+                    pageHeight - 10,
+                    { align: 'center' }
+                );
+            }
 
             // Guardar PDF
             const filename = `Reporte_Archivado_${report.date}_${Date.now()}.pdf`;
@@ -9810,6 +10196,8 @@ const Reports = {
         } catch (error) {
             console.error('Error exportando PDF del reporte archivado:', error);
             Utils.showNotification('Error al exportar PDF: ' + error.message, 'error');
+        } finally {
+            this.isExporting = false;
         }
     },
 
