@@ -5323,6 +5323,11 @@ const Reports = {
                         <input type="number" id="qc-quantity" class="form-input" min="1" step="1" value="1" required>
                     </div>
                     <div class="form-group">
+                        <label>Fecha <span style="color: var(--color-danger);">*</span></label>
+                        <input type="date" id="qc-date" class="form-input" value="${today}" required>
+                        <small style="color: var(--color-text-secondary); font-size: 9px;">Fecha de la captura (por defecto: hoy)</small>
+                    </div>
+                    <div class="form-group">
                         <label>Tipo de Moneda <span style="color: var(--color-danger);">*</span></label>
                         <select id="qc-currency" class="form-select" required>
                             <option value="USD">USD</option>
@@ -5330,9 +5335,33 @@ const Reports = {
                             <option value="CAD">CAD</option>
                         </select>
                     </div>
-                    <div class="form-group">
-                        <label>Total <span style="color: var(--color-danger);">*</span></label>
-                        <input type="number" id="qc-total" class="form-input" min="0" step="0.01" placeholder="0.00" required>
+                    <div class="form-group" style="grid-column: 1 / -1;">
+                        <label>Pagos <span style="color: var(--color-danger);">*</span></label>
+                        <div id="qc-payments-container" style="display: flex; flex-direction: column; gap: var(--spacing-xs);">
+                            <div class="payment-row" style="display: grid; grid-template-columns: 1fr 150px 100px; gap: var(--spacing-xs); align-items: center;">
+                                <select class="form-select payment-method" required>
+                                    <option value="">Método...</option>
+                                    <option value="cash">Efectivo</option>
+                                    <option value="card">Tarjeta</option>
+                                    <option value="transfer">Transferencia</option>
+                                    <option value="other">Otro</option>
+                                </select>
+                                <input type="number" class="form-input payment-amount" min="0" step="0.01" placeholder="0.00" required>
+                                <button type="button" class="btn-danger btn-xs remove-payment" style="display: none;" onclick="this.closest('.payment-row').remove(); window.Reports.updatePaymentsTotal();">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: var(--spacing-xs);">
+                            <button type="button" class="btn-secondary btn-xs" onclick="window.Reports.addPaymentRow()">
+                                <i class="fas fa-plus"></i> Agregar Pago
+                            </button>
+                            <div style="font-weight: 600; font-size: 12px;">
+                                Total: <span id="qc-payments-total">$0.00</span>
+                            </div>
+                        </div>
+                        <input type="hidden" id="qc-total" value="0">
+                        <small style="color: var(--color-text-secondary); font-size: 9px;">Puedes agregar múltiples pagos (ej: $1000 efectivo + $500 tarjeta)</small>
                     </div>
                     <div class="form-group">
                         <label>Costo de Mercancía (MXN)</label>
@@ -5683,22 +5712,8 @@ const Reports = {
             });
         }
 
-        // Mostrar/ocultar campo de método de pago según checkbox "Es venta de calle"
-        const isStreetCheckbox = document.getElementById('qc-is-street');
-        const paymentMethodGroup = document.getElementById('qc-payment-method-group');
-        const paymentMethodSelect = document.getElementById('qc-payment-method');
-        if (isStreetCheckbox && paymentMethodGroup && paymentMethodSelect) {
-            isStreetCheckbox.addEventListener('change', () => {
-                if (isStreetCheckbox.checked) {
-                    paymentMethodGroup.style.display = 'block';
-                    paymentMethodSelect.required = true;
-                } else {
-                    paymentMethodGroup.style.display = 'none';
-                    paymentMethodSelect.required = false;
-                    paymentMethodSelect.value = '';
-                }
-            });
-        }
+        // Inicializar sistema de pagos múltiples
+        this.initializePaymentsSystem();
 
         // Inicializar lista de capturas pendientes
         await this.loadPendingCaptures();
@@ -6068,19 +6083,27 @@ const Reports = {
             const product = document.getElementById('qc-product')?.value.trim();
             const quantity = parseInt(document.getElementById('qc-quantity')?.value) || 1;
             const currency = document.getElementById('qc-currency')?.value;
-            const total = parseFloat(document.getElementById('qc-total')?.value) || 0;
+            const captureDate = document.getElementById('qc-date')?.value || new Date().toISOString().split('T')[0];
+            
+            // Obtener pagos múltiples
+            const payments = this.getPaymentsFromForm();
+            if (!payments || payments.length === 0) {
+                Utils.showNotification('Debes agregar al menos un pago', 'error');
+                return;
+            }
+            
+            // Calcular total de todos los pagos
+            const total = payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+            if (total <= 0) {
+                Utils.showNotification('El total de los pagos debe ser mayor a 0', 'error');
+                return;
+            }
+            
             const isStreet = document.getElementById('qc-is-street')?.checked || false;
-            const paymentMethod = document.getElementById('qc-payment-method')?.value || null;
 
             // Validar campos requeridos
             if (!branchId || !sellerId || !product || !currency || total <= 0) {
                 Utils.showNotification('Por favor completa todos los campos requeridos', 'error');
-                return;
-            }
-
-            // Si es venta de calle, validar que se haya seleccionado método de pago
-            if (isStreet && !paymentMethod) {
-                Utils.showNotification('Si es venta de calle, debes seleccionar el método de pago', 'error');
                 return;
             }
 
@@ -6147,8 +6170,9 @@ const Reports = {
                 merchandise_cost: merchandiseCost,
                 notes: notes,
                 is_street: isStreet,
-                payment_method: paymentMethod,
-                date: new Date().toISOString().split('T')[0],
+                payments: payments, // Array de pagos múltiples
+                payment_method: payments.length === 1 ? payments[0].method : 'mixed', // Para compatibilidad
+                date: captureDate, // Fecha manual seleccionada
                 created_at: new Date().toISOString(),
                 created_by: typeof UserManager !== 'undefined' && UserManager.currentUser ? UserManager.currentUser.id : null,
                 isPending: true // Marca para identificar que es pendiente
@@ -6162,11 +6186,13 @@ const Reports = {
             if (document.getElementById('qc-quantity')) {
                 document.getElementById('qc-quantity').value = '1';
             }
-            // Ocultar campo de método de pago
-            const paymentMethodGroup = document.getElementById('qc-payment-method-group');
-            if (paymentMethodGroup) {
-                paymentMethodGroup.style.display = 'none';
+            // Restablecer fecha a hoy
+            const today = new Date().toISOString().split('T')[0];
+            if (document.getElementById('qc-date')) {
+                document.getElementById('qc-date').value = today;
             }
+            // Reinicializar sistema de pagos
+            this.initializePaymentsSystem();
 
             // Actualizar lista de pendientes
             await this.loadPendingCaptures();
@@ -6176,6 +6202,123 @@ const Reports = {
             console.error('Error agregando captura a lista pendiente:', error);
             Utils.showNotification('Error al agregar la captura: ' + error.message, 'error');
         }
+    },
+
+    initializePaymentsSystem() {
+        // Inicializar el sistema de pagos múltiples
+        const container = document.getElementById('qc-payments-container');
+        if (!container) return;
+        
+        // Limpiar y agregar una fila inicial
+        container.innerHTML = `
+            <div class="payment-row" style="display: grid; grid-template-columns: 1fr 150px 100px; gap: var(--spacing-xs); align-items: center;">
+                <select class="form-select payment-method" required>
+                    <option value="">Método...</option>
+                    <option value="cash">Efectivo</option>
+                    <option value="card">Tarjeta</option>
+                    <option value="transfer">Transferencia</option>
+                    <option value="other">Otro</option>
+                </select>
+                <input type="number" class="form-input payment-amount" min="0" step="0.01" placeholder="0.00" required>
+                <button type="button" class="btn-danger btn-xs remove-payment" style="display: none;" onclick="this.closest('.payment-row').remove(); window.Reports.updatePaymentsTotal();">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        `;
+        
+        // Agregar event listeners a los campos de pago
+        container.querySelectorAll('.payment-amount').forEach(input => {
+            input.addEventListener('input', () => this.updatePaymentsTotal());
+        });
+        
+        this.updatePaymentsTotal();
+    },
+
+    addPaymentRow() {
+        const container = document.getElementById('qc-payments-container');
+        if (!container) return;
+        
+        const row = document.createElement('div');
+        row.className = 'payment-row';
+        row.style.cssText = 'display: grid; grid-template-columns: 1fr 150px 100px; gap: var(--spacing-xs); align-items: center;';
+        row.innerHTML = `
+            <select class="form-select payment-method" required>
+                <option value="">Método...</option>
+                <option value="cash">Efectivo</option>
+                <option value="card">Tarjeta</option>
+                <option value="transfer">Transferencia</option>
+                <option value="other">Otro</option>
+            </select>
+            <input type="number" class="form-input payment-amount" min="0" step="0.01" placeholder="0.00" required>
+            <button type="button" class="btn-danger btn-xs remove-payment" onclick="this.closest('.payment-row').remove(); window.Reports.updatePaymentsTotal();">
+                <i class="fas fa-times"></i>
+            </button>
+        `;
+        
+        container.appendChild(row);
+        
+        // Agregar event listener al nuevo campo de monto
+        row.querySelector('.payment-amount').addEventListener('input', () => this.updatePaymentsTotal());
+        
+        // Mostrar botones de eliminar si hay más de una fila
+        this.updateRemoveButtons();
+    },
+
+    updateRemoveButtons() {
+        const container = document.getElementById('qc-payments-container');
+        if (!container) return;
+        
+        const rows = container.querySelectorAll('.payment-row');
+        rows.forEach((row, index) => {
+            const removeBtn = row.querySelector('.remove-payment');
+            if (removeBtn) {
+                removeBtn.style.display = rows.length > 1 ? 'block' : 'none';
+            }
+        });
+    },
+
+    updatePaymentsTotal() {
+        const container = document.getElementById('qc-payments-container');
+        if (!container) return;
+        
+        const amounts = Array.from(container.querySelectorAll('.payment-amount'))
+            .map(input => parseFloat(input.value) || 0);
+        
+        const total = amounts.reduce((sum, amount) => sum + amount, 0);
+        
+        const totalDisplay = document.getElementById('qc-payments-total');
+        if (totalDisplay) {
+            totalDisplay.textContent = `$${total.toFixed(2)}`;
+        }
+        
+        const totalInput = document.getElementById('qc-total');
+        if (totalInput) {
+            totalInput.value = total;
+        }
+        
+        this.updateRemoveButtons();
+    },
+
+    getPaymentsFromForm() {
+        const container = document.getElementById('qc-payments-container');
+        if (!container) return [];
+        
+        const payments = [];
+        const rows = container.querySelectorAll('.payment-row');
+        
+        rows.forEach(row => {
+            const method = row.querySelector('.payment-method')?.value;
+            const amount = parseFloat(row.querySelector('.payment-amount')?.value || 0);
+            
+            if (method && amount > 0) {
+                payments.push({
+                    method: method,
+                    amount: amount
+                });
+            }
+        });
+        
+        return payments;
     },
 
     async loadPendingCaptures() {
@@ -8334,6 +8477,13 @@ const Reports = {
             return;
         }
         
+        // Mostrar modal para seleccionar fecha del reporte
+        const selectedDate = await this.showDateSelectorModal();
+        if (!selectedDate) {
+            // Usuario canceló
+            return;
+        }
+        
         this.isExporting = true;
         try {
             const jspdfLib = Utils.checkJsPDF();
@@ -8346,7 +8496,7 @@ const Reports = {
 
             const { jsPDF } = jspdfLib;
             
-            // Obtener datos - Usar la fecha de las capturas (puede ser del día actual o de un reporte restaurado)
+            // Obtener datos - Usar la fecha seleccionada o la fecha de las capturas
             let captures = await DB.getAll('temp_quick_captures') || [];
             
             // Determinar la fecha del reporte:
@@ -10430,6 +10580,71 @@ const Reports = {
             console.error('Error restaurando reporte archivado:', error);
             Utils.showNotification('Error al restaurar el reporte: ' + error.message, 'error');
         }
+    },
+
+    async showDateSelectorModal() {
+        return new Promise((resolve) => {
+            // Obtener todas las fechas disponibles de las capturas
+            const getAvailableDates = async () => {
+                const captures = await DB.getAll('temp_quick_captures') || [];
+                const dates = [...new Set(captures.map(c => c.original_report_date || c.date).filter(Boolean))];
+                return dates.sort().reverse(); // Más recientes primero
+            };
+            
+            getAvailableDates().then(availableDates => {
+                const today = new Date().toISOString().split('T')[0];
+                const defaultDate = availableDates.length > 0 ? availableDates[0] : today;
+                
+                const modal = document.createElement('div');
+                modal.className = 'modal-overlay';
+                modal.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 10000;';
+                
+                modal.innerHTML = `
+                    <div class="modal-content" style="max-width: 400px; width: 90%; background: white; border-radius: var(--radius-md); padding: 0; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+                        <div class="modal-header" style="padding: var(--spacing-md); border-bottom: 1px solid var(--color-border-light);">
+                            <h3 style="margin: 0; font-size: 16px; font-weight: 600;">Seleccionar Fecha del Reporte</h3>
+                        </div>
+                        <div class="modal-body" style="padding: var(--spacing-md);">
+                            <div class="form-group">
+                                <label>Fecha del Reporte <span style="color: var(--color-danger);">*</span></label>
+                                <input type="date" id="export-date-selector" class="form-input" value="${defaultDate}" required style="width: 100%;">
+                            </div>
+                            ${availableDates.length > 0 ? `
+                            <div style="margin-top: var(--spacing-sm);">
+                                <small style="color: var(--color-text-secondary); font-size: 11px;">Fechas disponibles en capturas:</small>
+                                <div style="display: flex; flex-wrap: wrap; gap: var(--spacing-xs); margin-top: var(--spacing-xs);">
+                                    ${availableDates.slice(0, 5).map(date => `
+                                        <button type="button" class="btn-secondary btn-xs" onclick="document.getElementById('export-date-selector').value='${date}';">
+                                            ${new Date(date + 'T00:00:00').toLocaleDateString('es-MX')}
+                                        </button>
+                                    `).join('')}
+                                </div>
+                            </div>
+                            ` : ''}
+                        </div>
+                        <div class="modal-footer" style="padding: var(--spacing-md); border-top: 1px solid var(--color-border-light); display: flex; gap: var(--spacing-sm); justify-content: flex-end;">
+                            <button class="btn-secondary" id="export-date-cancel-btn" style="min-width: 100px;">Cancelar</button>
+                            <button class="btn-primary" id="export-date-confirm-btn" style="min-width: 100px;">
+                                <i class="fas fa-file-pdf"></i> Exportar
+                            </button>
+                        </div>
+                    </div>
+                `;
+                
+                document.body.appendChild(modal);
+                
+                document.getElementById('export-date-confirm-btn').onclick = () => {
+                    const selectedDate = document.getElementById('export-date-selector').value;
+                    modal.remove();
+                    resolve(selectedDate);
+                };
+                
+                document.getElementById('export-date-cancel-btn').onclick = () => {
+                    modal.remove();
+                    resolve(null);
+                };
+            });
+        });
     }
 };
 
