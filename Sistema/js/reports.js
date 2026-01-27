@@ -8623,8 +8623,9 @@ const Reports = {
             // IMPORTANTE: Usar la fecha de las capturas, no la fecha actual
             const exchangeRates = await DB.query('exchange_rates_daily', 'date', captureDate) || [];
             const todayRate = exchangeRates[0] || { usd_to_mxn: 20.0, cad_to_mxn: 15.0 };
-            const usdRate = todayRate.usd_to_mxn || 20.0;
-            const cadRate = todayRate.cad_to_mxn || 15.0;
+            // Asegurar que sean números
+            const usdRate = parseFloat(todayRate.usd_to_mxn) || 20.0;
+            const cadRate = parseFloat(todayRate.cad_to_mxn) || 15.0;
 
             // Calcular comisiones (convertir cada captura a MXN antes de calcular comisiones)
             // Nota: commissionRules, agencies, sellers y guides ya están declarados arriba
@@ -8633,13 +8634,15 @@ const Reports = {
 
             for (const capture of captures) {
                 // Convertir total de captura a MXN
+                // IMPORTANTE: Asegurar que capture.total sea un número
+                const captureTotal = parseFloat(capture.total) || 0;
                 let captureTotalMXN = 0;
                 if (capture.currency === 'USD') {
-                    captureTotalMXN = capture.total * usdRate;
+                    captureTotalMXN = captureTotal * usdRate;
                 } else if (capture.currency === 'CAD') {
-                    captureTotalMXN = capture.total * cadRate;
+                    captureTotalMXN = captureTotal * cadRate;
                 } else {
-                    captureTotalMXN = capture.total; // Ya está en MXN
+                    captureTotalMXN = captureTotal; // Ya está en MXN
                 }
 
                 if (capture.seller_id && captureTotalMXN > 0) {
@@ -8937,19 +8940,27 @@ const Reports = {
 
             // ========== UTILIDADES (MARGEN BRUTO Y NETO) ==========
             // El tipo de cambio ya se obtuvo arriba, reutilizarlo
-            // Convertir totales a MXN
-            const totalSalesMXN = totals.USD * usdRate + totals.MXN + totals.CAD * cadRate;
+            // Convertir totales a MXN - Asegurar que todos sean números
+            const totalsUSD = parseFloat(totals.USD) || 0;
+            const totalsMXN = parseFloat(totals.MXN) || 0;
+            const totalsCAD = parseFloat(totals.CAD) || 0;
+            const usdRateNum = parseFloat(usdRate) || 20.0;
+            const cadRateNum = parseFloat(cadRate) || 15.0;
+            const totalSalesMXN = totalsUSD * usdRateNum + totalsMXN + totalsCAD * cadRateNum;
 
             // Calcular comisiones totales (ya están en MXN según el cálculo anterior)
-            const totalCommissions = (sellerEntries.reduce((sum, s) => sum + s.total, 0) || 0) + 
-                                   (guideEntries.reduce((sum, g) => sum + g.total, 0) || 0);
+            // Asegurar que sean números
+            const sellerTotal = sellerEntries.reduce((sum, s) => sum + (parseFloat(s.total) || 0), 0);
+            const guideTotal = guideEntries.reduce((sum, g) => sum + (parseFloat(g.total) || 0), 0);
+            const totalCommissions = sellerTotal + guideTotal;
 
             // COGS: Usar costo de mercancía almacenado en capturas o buscar en inventario
             let totalCOGS = 0;
             for (const capture of captures) {
                 // Priorizar costo almacenado manualmente
-                if (capture.merchandise_cost && capture.merchandise_cost > 0) {
-                    totalCOGS += capture.merchandise_cost;
+                const merchandiseCost = parseFloat(capture.merchandise_cost) || 0;
+                if (merchandiseCost > 0) {
+                    totalCOGS += merchandiseCost;
                 } else {
                     // Si no hay costo almacenado, intentar obtener del inventario
                     try {
@@ -8959,7 +8970,9 @@ const Reports = {
                             i.name.toLowerCase().includes(capture.product.toLowerCase())
                         );
                         if (item && item.cost) {
-                            totalCOGS += (item.cost || 0) * (capture.quantity || 1);
+                            const itemCost = parseFloat(item.cost) || 0;
+                            const quantity = parseFloat(capture.quantity) || 1;
+                            totalCOGS += itemCost * quantity;
                         }
                     } catch (e) {
                         console.warn('No se pudo obtener costo del inventario:', e);
@@ -8971,7 +8984,9 @@ const Reports = {
             // IMPORTANTE: Usar la fecha de las capturas, no la fecha actual
             const captureBranchIds = [...new Set(captures.map(c => c.branch_id).filter(Boolean))];
             const branchIdForArrivals = captureBranchIds.length === 1 ? captureBranchIds[0] : null;
-            const totalArrivalCosts = await this.calculateArrivalCosts(captureDate, branchIdForArrivals, captureBranchIds);
+            const totalArrivalCostsRaw = await this.calculateArrivalCosts(captureDate, branchIdForArrivals, captureBranchIds);
+            // Asegurar que sea un número
+            const totalArrivalCosts = typeof totalArrivalCostsRaw === 'number' ? totalArrivalCostsRaw : parseFloat(totalArrivalCostsRaw) || 0;
 
             // Costos operativos del día (prorrateados)
             // IMPORTANTE: Usar la fecha de las capturas, no la fecha actual
@@ -9080,13 +9095,15 @@ const Reports = {
                     // Por ahora, verificar en settings si hay una comisión bancaria configurada por defecto
                     if (capture.payment_method && capture.payment_method !== 'cash') {
                         // Calcular comisión bancaria sobre el total convertido a MXN
+                        // IMPORTANTE: Asegurar que capture.total sea un número
+                        const captureTotal = parseFloat(capture.total) || 0;
                         let captureTotalMXN = 0;
                         if (capture.currency === 'USD') {
-                            captureTotalMXN = capture.total * usdRate;
+                            captureTotalMXN = captureTotal * usdRate;
                         } else if (capture.currency === 'CAD') {
-                            captureTotalMXN = capture.total * cadRate;
+                            captureTotalMXN = captureTotal * cadRate;
                         } else {
-                            captureTotalMXN = capture.total;
+                            captureTotalMXN = captureTotal;
                         }
                         
                         // Buscar configuración de comisión bancaria
@@ -9102,19 +9119,31 @@ const Reports = {
             }
 
             // Total de costos operativos (variables + fijos prorrateados)
-            const totalOperatingCosts = variableCostsDaily + fixedCostsProrated;
+            // IMPORTANTE: Asegurar que siempre sean números antes de sumar
+            const variableCostsDailyNum = parseFloat(variableCostsDaily) || 0;
+            const fixedCostsProratedNum = parseFloat(fixedCostsProrated) || 0;
+            const totalOperatingCostsRaw = variableCostsDailyNum + fixedCostsProratedNum;
+            // Asegurar que totalOperatingCosts sea un número
+            const totalOperatingCosts = typeof totalOperatingCostsRaw === 'number' ? totalOperatingCostsRaw : parseFloat(totalOperatingCostsRaw) || 0;
 
             // Calcular utilidades
+            // IMPORTANTE: Asegurar que todos los valores sean números antes de calcular
+            const totalSalesMXNNum = parseFloat(totalSalesMXN) || 0;
+            const totalCOGSNum = parseFloat(totalCOGS) || 0;
+            const totalCommissionsNum = parseFloat(totalCommissions) || 0;
+            const totalArrivalCostsNum = typeof totalArrivalCosts === 'number' ? totalArrivalCosts : parseFloat(totalArrivalCosts) || 0;
+            const bankCommissionsNum = parseFloat(bankCommissions) || 0;
+            
             // Utilidad Bruta = Ingresos - COGS - Comisiones
-            const grossProfit = totalSalesMXN - totalCOGS - totalCommissions;
+            const grossProfit = totalSalesMXNNum - totalCOGSNum - totalCommissionsNum;
             // Utilidad Neta = Utilidad Bruta - Costos Llegadas - Costos Operativos (variables + fijos prorrateados) - Comisiones Bancarias
-            const netProfit = grossProfit - totalArrivalCosts - totalOperatingCosts - bankCommissions;
-            const grossMargin = totalSalesMXN > 0 ? (grossProfit / totalSalesMXN * 100) : 0;
-            const netMargin = totalSalesMXN > 0 ? (netProfit / totalSalesMXN * 100) : 0;
+            const netProfit = grossProfit - totalArrivalCostsNum - totalOperatingCosts - bankCommissionsNum;
+            const grossMargin = totalSalesMXNNum > 0 ? (grossProfit / totalSalesMXNNum * 100) : 0;
+            const netMargin = totalSalesMXNNum > 0 ? (netProfit / totalSalesMXNNum * 100) : 0;
 
             // Mostrar sección de utilidades
             // Ajustar altura si hay gastos fijos prorrateados (necesita más espacio)
-            const utilSectionHeight = fixedCostsProrated > 0 ? 85 : 80;
+            const utilSectionHeight = fixedCostsProratedNum > 0 ? 85 : 80;
             if (y + utilSectionHeight > pageHeight - 30) {
                 doc.addPage();
                 y = margin;
@@ -9142,20 +9171,20 @@ const Reports = {
             doc.setFontSize(10);
             doc.setFont('helvetica', 'bold');
             doc.text('Ingresos:', labelX, y + 8);
-            doc.text(`$${totalSalesMXN.toFixed(2)}`, valueX, y + 8, { align: 'right' });
+            doc.text(`$${totalSalesMXNNum.toFixed(2)}`, valueX, y + 8, { align: 'right' });
             doc.setFont('helvetica', 'normal');
             doc.setFontSize(7);
-            const currencyDetails = `USD: $${totals.USD.toFixed(2)} (x${usdRate.toFixed(2)}) | MXN: $${totals.MXN.toFixed(2)} | CAD: $${totals.CAD.toFixed(2)} (x${cadRate.toFixed(2)})`;
+            const currencyDetails = `USD: $${(parseFloat(totals.USD) || 0).toFixed(2)} (x${(parseFloat(usdRate) || 0).toFixed(2)}) | MXN: $${(parseFloat(totals.MXN) || 0).toFixed(2)} | CAD: $${(parseFloat(totals.CAD) || 0).toFixed(2)} (x${(parseFloat(cadRate) || 0).toFixed(2)})`;
             doc.text(currencyDetails, labelX + 5, y + 12.5, { maxWidth: valueX - labelX - 15 });
 
             // Línea 2: COGS (bien alineada)
             doc.setFontSize(10);
             doc.text('(-) Costo Mercancía (COGS):', labelX, y + 19);
-            doc.text(`$${totalCOGS.toFixed(2)}`, valueX, y + 19, { align: 'right' });
+            doc.text(`$${totalCOGSNum.toFixed(2)}`, valueX, y + 19, { align: 'right' });
 
             // Línea 3: Comisiones (bien alineada)
             doc.text('(-) Comisiones (Vendedores + Guías):', labelX, y + 26);
-            doc.text(`$${totalCommissions.toFixed(2)}`, valueX, y + 26, { align: 'right' });
+            doc.text(`$${totalCommissionsNum.toFixed(2)}`, valueX, y + 26, { align: 'right' });
 
             // Línea 4: Utilidad Bruta (bien alineada)
             doc.setFont('helvetica', 'bold');
@@ -9170,27 +9199,27 @@ const Reports = {
             doc.setFont('helvetica', 'normal');
             doc.setTextColor(0, 0, 0);
             doc.text('(-) Costos Llegadas:', labelX, y + 40);
-            doc.text(`$${totalArrivalCosts.toFixed(2)}`, valueX, y + 40, { align: 'right' });
+            doc.text(`$${totalArrivalCostsNum.toFixed(2)}`, valueX, y + 40, { align: 'right' });
 
             // Línea 6: Costos Operativos (incluye fijos prorrateados) (bien alineada)
             doc.text('(-) Costos Operativos:', labelX, y + 47);
             doc.text(`$${totalOperatingCosts.toFixed(2)}`, valueX, y + 47, { align: 'right' });
             // Nota sobre gastos fijos prorrateados en una línea adicional más pequeña
-            if (fixedCostsProrated > 0) {
+            if (fixedCostsProratedNum > 0) {
                 doc.setFontSize(7);
                 doc.setTextColor(100, 100, 100);
-                doc.text(`Incluye fijos prorrateados: $${fixedCostsProrated.toFixed(2)} (renta, luz, nómina, etc.)`, labelX + 5, y + 50.5);
+                doc.text(`Incluye fijos prorrateados: $${fixedCostsProratedNum.toFixed(2)} (renta, luz, nómina, etc.)`, labelX + 5, y + 50.5);
                 doc.setFontSize(9);
                 doc.setTextColor(0, 0, 0);
             }
 
             // Línea 7: Comisiones Bancarias (bien alineada)
-            const commissionY = fixedCostsProrated > 0 ? y + 58 : y + 55;
+            const commissionY = fixedCostsProratedNum > 0 ? y + 58 : y + 55;
             doc.text('(-) Comisiones Bancarias:', labelX, commissionY);
-            doc.text(`$${bankCommissions.toFixed(2)}`, valueX, commissionY, { align: 'right' });
+            doc.text(`$${bankCommissionsNum.toFixed(2)}`, valueX, commissionY, { align: 'right' });
 
             // Línea 8: Utilidad Neta (bien alineada)
-            const netY = fixedCostsProrated > 0 ? y + 66 : y + 63;
+            const netY = fixedCostsProratedNum > 0 ? y + 66 : y + 63;
             doc.setFontSize(10);
             doc.setFont('helvetica', 'bold');
             doc.setTextColor(0, 0, 255);
@@ -9975,9 +10004,9 @@ const Reports = {
             doc.setFontSize(10);
             doc.text(`Total Capturas: ${report.captures ? report.captures.length : 0}`, margin + 5, y + 15);
             doc.text(`Total Cantidad: ${report.total_quantity || 0}`, margin + 60, y + 15);
-            doc.text(`Total USD: $${(report.totals?.USD || 0).toFixed(2)}`, margin + 5, y + 22);
-            doc.text(`Total MXN: $${(report.totals?.MXN || 0).toFixed(2)}`, margin + 60, y + 22);
-            doc.text(`Total CAD: $${(report.totals?.CAD || 0).toFixed(2)}`, margin + 115, y + 22);
+            doc.text(`Total USD: $${(parseFloat(report.totals?.USD) || 0).toFixed(2)}`, margin + 5, y + 22);
+            doc.text(`Total MXN: $${(parseFloat(report.totals?.MXN) || 0).toFixed(2)}`, margin + 60, y + 22);
+            doc.text(`Total CAD: $${(parseFloat(report.totals?.CAD) || 0).toFixed(2)}`, margin + 115, y + 22);
             doc.text(`Ventas Totales (MXN): $${parseFloat(report.total_sales_mxn || 0).toFixed(2)}`, margin + 5, y + 28);
 
             y += 38;
