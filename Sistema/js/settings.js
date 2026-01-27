@@ -110,12 +110,18 @@ const Settings = {
                 break;
             case 'system':
                 content.innerHTML = this.getSystemTab();
-                await this.loadSystemTab();
+                await this.loadBackupsList();
+                // Cargar información del directorio de backups
+                this.loadBackupDirectoryInfo();
                 // Configurar eventos de los botones después de cargar el HTML
                 setTimeout(() => {
                     const saveBtn = document.getElementById('save-server-url-btn');
                     const testBtn = document.getElementById('test-server-connection-btn');
                     const urlInput = document.getElementById('server-url-input');
+                    const createBtn = document.getElementById('backup-create-btn');
+                    const importBtn = document.getElementById('backup-import-btn');
+                    const selectBtn = document.getElementById('backup-select-folder-btn');
+                    const clearBtn = document.getElementById('backup-clear-folder-btn');
                     
                     if (saveBtn) {
                         saveBtn.addEventListener('click', () => {
@@ -136,6 +142,20 @@ const Settings = {
                                 this.saveServerURL();
                             }
                         });
+                    }
+                    
+                    // Event listeners para botones de backup
+                    if (createBtn) {
+                        createBtn.onclick = () => this.createBackupManually();
+                    }
+                    if (importBtn) {
+                        importBtn.onclick = () => this.importBackupManually();
+                    }
+                    if (selectBtn) {
+                        selectBtn.onclick = () => this.selectBackupFolder();
+                    }
+                    if (clearBtn) {
+                        clearBtn.onclick = () => this.clearBackupFolder();
                     }
                 }, 100);
                 break;
@@ -7026,7 +7046,7 @@ const Settings = {
                     <div style="margin-bottom: var(--spacing-md); padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm); font-size: 11px; color: var(--color-text-secondary);">
                         <i class="fas fa-info-circle"></i> Los backups se crean automáticamente cada 5 minutos.
                         <div id="backup-directory-info" style="margin-top: var(--spacing-xs); padding-top: var(--spacing-xs); border-top: 1px solid var(--color-border-light);">
-                            <i class="fas fa-folder"></i> <span id="backup-directory-path">No hay carpeta seleccionada (se descargarán automáticamente)</span>
+                            <i class="fas fa-folder"></i> <span id="backup-directory-path">No hay carpeta seleccionada (los backups se guardarán solo en localStorage)</span>
                         </div>
                     </div>
                     <div style="margin-bottom: var(--spacing-md); display: flex; gap: var(--spacing-xs);">
@@ -7238,7 +7258,7 @@ const Settings = {
                 return;
             }
 
-            if (!await Utils.confirm('¿Deseas deseleccionar la carpeta de backups? Los backups volverán a descargarse automáticamente.')) {
+            if (!await Utils.confirm('¿Deseas deseleccionar la carpeta de backups? Los backups se guardarán solo en localStorage.')) {
                 return;
             }
 
@@ -7278,8 +7298,16 @@ const Settings = {
                 }
                 if (clearBtn) clearBtn.style.display = 'inline-flex';
             } else {
-                if (pathElement) {
-                    pathElement.innerHTML = '<span style="color: var(--color-text-secondary);">No hay carpeta seleccionada (se descargarán automáticamente)</span>';
+                // Verificar si hay información guardada pero sin handle (después de recargar)
+                const savedInfo = BackupManager.backupDirectoryPath;
+                if (savedInfo) {
+                    if (pathElement) {
+                        pathElement.innerHTML = `<span style="color: var(--color-warning);"><i class="fas fa-exclamation-triangle"></i> Carpeta guardada: <strong>${Utils.escapeHtml(savedInfo)}</strong> (necesitas volver a seleccionarla después de recargar)</span>`;
+                    }
+                } else {
+                    if (pathElement) {
+                        pathElement.innerHTML = '<span style="color: var(--color-text-secondary);">No hay carpeta seleccionada (los backups se guardarán solo en localStorage)</span>';
+                    }
                 }
                 if (clearBtn) clearBtn.style.display = 'none';
             }
