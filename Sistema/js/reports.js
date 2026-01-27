@@ -64,31 +64,48 @@ const Reports = {
     },
     
     async init() {
-        // Verificar permiso
-        if (typeof PermissionManager !== 'undefined' && !PermissionManager.hasPermission('reports.view')) {
-            const content = document.getElementById('module-content');
-            if (content) {
-                content.innerHTML = '<div style="padding: var(--spacing-lg); text-align: center; color: var(--color-text-secondary);">No tienes permiso para ver reportes</div>';
+        try {
+            // Verificar permiso
+            if (typeof PermissionManager !== 'undefined' && !PermissionManager.hasPermission('reports.view')) {
+                const content = document.getElementById('module-content');
+                if (content) {
+                    content.innerHTML = '<div style="padding: var(--spacing-lg); text-align: center; color: var(--color-text-secondary);">No tienes permiso para ver reportes</div>';
+                }
+                return;
             }
-            return;
-        }
 
-        if (this.initialized) {
-            const activeTab = document.querySelector('#reports-tabs .tab-btn.active')?.dataset.tab || 'reports';
-            await this.loadTab(activeTab);
-            return;
-        }
-        this.setupUI();
-        await this.loadTab('reports');
-        this.initialized = true;
-        
-        // Escuchar cambios de sucursal para recargar reportes
-        window.addEventListener('branch-changed', async () => {
             if (this.initialized) {
                 const activeTab = document.querySelector('#reports-tabs .tab-btn.active')?.dataset.tab || 'reports';
                 await this.loadTab(activeTab);
+                return;
             }
-        });
+            this.setupUI();
+            await this.loadTab('reports');
+            this.initialized = true;
+        } catch (error) {
+            console.error('Error inicializando módulo Reports:', error);
+            const content = document.getElementById('module-content');
+            if (content) {
+                content.innerHTML = `<div style="padding: var(--spacing-lg); text-align: center; color: var(--color-danger);">
+                    <h3>Error al cargar el módulo de Reportes</h3>
+                    <p>${error.message}</p>
+                    <p style="font-size: 12px; color: var(--color-text-secondary);">Por favor, recarga la página o contacta al administrador.</p>
+                </div>`;
+            }
+            // No lanzar el error para evitar que rompa otros módulos
+        }
+        
+            // Escuchar cambios de sucursal para recargar reportes
+            window.addEventListener('branch-changed', async () => {
+                try {
+                    if (this.initialized) {
+                        const activeTab = document.querySelector('#reports-tabs .tab-btn.active')?.dataset.tab || 'reports';
+                        await this.loadTab(activeTab);
+                    }
+                } catch (error) {
+                    console.error('Error recargando reportes por cambio de sucursal:', error);
+                }
+            });
         
         // Escuchar eventos para actualización en tiempo real
         if (typeof Utils !== 'undefined' && Utils.EventBus) {
@@ -5586,140 +5603,165 @@ const Reports = {
     },
 
     async setupQuickCaptureListeners() {
-        // Cargar catálogos
-        await this.loadQuickCaptureCatalogs();
-        
-        // Cargar catálogos para formulario de llegadas
-        await this.loadQuickArrivalsCatalogs();
-        
-        // Cargar tipo de cambio en tiempo real
-        await this.loadExchangeRates();
-        
-        // Cargar historial de reportes archivados
-        await this.loadArchivedReports();
-        
-        // Event listener del formulario de capturas
-        const form = document.getElementById('quick-capture-form');
-        if (form) {
-            form.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                await this.addToPendingList();
-            });
-        }
+        try {
+            // Cargar catálogos
+            await this.loadQuickCaptureCatalogs();
+            
+            // Cargar catálogos para formulario de llegadas
+            await this.loadQuickArrivalsCatalogs();
+            
+            // Cargar tipo de cambio en tiempo real
+            await this.loadExchangeRates();
+            
+            // Cargar historial de reportes archivados
+            await this.loadArchivedReports();
+            
+            // Event listener del formulario de capturas
+            const form = document.getElementById('quick-capture-form');
+            if (form) {
+                form.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    await this.addToPendingList();
+                });
+            }
 
-        // Event listener del formulario de llegadas
-        const arrivalsForm = document.getElementById('quick-arrivals-form');
-        if (arrivalsForm) {
-            arrivalsForm.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                await this.saveQuickArrival();
-            });
-            
-            // Calcular costo cuando cambian los campos
-            const paxInput = document.getElementById('qc-arrival-pax');
-            const unitsInput = document.getElementById('qc-arrival-units');
-            const agencySelect = document.getElementById('qc-arrival-agency');
-            const unitTypeSelect = document.getElementById('qc-arrival-unit-type');
-            const branchSelect = document.getElementById('qc-arrival-branch');
-            
-            const calculateArrivalCost = async () => {
-                const pax = parseInt(paxInput?.value || 0);
-                const units = parseInt(unitsInput?.value || 0);
-                const agencyId = agencySelect?.value;
-                const unitType = unitTypeSelect?.value || null;
+            // Event listener del formulario de llegadas
+            const arrivalsForm = document.getElementById('quick-arrivals-form');
+            if (arrivalsForm) {
+                arrivalsForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    await this.saveQuickArrival();
+                });
                 
-                if (pax > 0 && units > 0 && agencyId) {
-                    const isMasterAdmin = typeof UserManager !== 'undefined' && (
-                        UserManager.currentUser?.role === 'master_admin' ||
-                        UserManager.currentUser?.is_master_admin ||
-                        UserManager.currentUser?.isMasterAdmin
-                    );
-                    const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
-                    const branchId = isMasterAdmin && branchSelect?.value 
-                        ? branchSelect.value 
-                        : currentBranchId;
-                    
-                    if (branchId) {
-                        const today = new Date().toISOString().split('T')[0];
-                        if (typeof ArrivalRules !== 'undefined' && ArrivalRules.calculateArrivalFee) {
-                            const calculation = await ArrivalRules.calculateArrivalFee(agencyId, branchId, pax, unitType, today);
-                            const costInput = document.getElementById('qc-arrival-cost');
-                            const costHelp = document.getElementById('qc-arrival-cost-help');
-                            const overrideContainer = document.getElementById('qc-arrival-override-container');
-                            const overrideAmountInput = document.getElementById('qc-arrival-override-amount');
-                            const overrideReasonInput = document.getElementById('qc-arrival-override-reason');
+                // Calcular costo cuando cambian los campos
+                const paxInput = document.getElementById('qc-arrival-pax');
+                const unitsInput = document.getElementById('qc-arrival-units');
+                const agencySelect = document.getElementById('qc-arrival-agency');
+                const unitTypeSelect = document.getElementById('qc-arrival-unit-type');
+                const branchSelect = document.getElementById('qc-arrival-branch');
+                
+                const calculateArrivalCost = async () => {
+                    try {
+                        const pax = parseInt(paxInput?.value || 0);
+                        const units = parseInt(unitsInput?.value || 0);
+                        const agencyId = agencySelect?.value;
+                        const unitType = unitTypeSelect?.value || null;
+                        
+                        if (pax > 0 && units > 0 && agencyId) {
+                            const isMasterAdmin = typeof UserManager !== 'undefined' && (
+                                UserManager.currentUser?.role === 'master_admin' ||
+                                UserManager.currentUser?.is_master_admin ||
+                                UserManager.currentUser?.isMasterAdmin
+                            );
+                            const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
+                            const branchId = isMasterAdmin && branchSelect?.value 
+                                ? branchSelect.value 
+                                : currentBranchId;
                             
-                            if (costInput) {
-                                if (calculation.overrideRequired && !calculation.calculatedFee) {
-                                    costInput.value = 'Requiere Override';
-                                    costInput.style.color = 'var(--color-warning, #ffc107)';
-                                    if (costHelp) {
-                                        costHelp.textContent = 'No hay regla configurada, ingresa el monto manualmente';
-                                        costHelp.style.color = 'var(--color-warning, #ffc107)';
-                                    }
-                                    // Mostrar campos de override
-                                    if (overrideContainer) {
-                                        overrideContainer.style.display = 'block';
-                                    }
-                                    // Hacer los campos requeridos
-                                    if (overrideAmountInput) {
-                                        overrideAmountInput.required = true;
-                                        overrideAmountInput.value = '';
-                                    }
-                                    if (overrideReasonInput) {
-                                        overrideReasonInput.required = true;
-                                        overrideReasonInput.value = '';
-                                    }
-                                } else {
-                                    costInput.value = (calculation.calculatedFee || 0).toFixed(2);
-                                    costInput.style.color = '';
-                                    if (costHelp) {
-                                        costHelp.textContent = 'Se calcula automáticamente según las reglas configuradas';
-                                        costHelp.style.color = 'var(--color-text-secondary)';
-                                    }
-                                    // Ocultar campos de override
-                                    if (overrideContainer) {
-                                        overrideContainer.style.display = 'none';
-                                    }
-                                    // Hacer los campos opcionales
-                                    if (overrideAmountInput) {
-                                        overrideAmountInput.required = false;
-                                        overrideAmountInput.value = '';
-                                    }
-                                    if (overrideReasonInput) {
-                                        overrideReasonInput.required = false;
-                                        overrideReasonInput.value = '';
+                            if (branchId) {
+                                const today = new Date().toISOString().split('T')[0];
+                                if (typeof ArrivalRules !== 'undefined' && ArrivalRules.calculateArrivalFee) {
+                                    const calculation = await ArrivalRules.calculateArrivalFee(agencyId, branchId, pax, unitType, today);
+                                    const costInput = document.getElementById('qc-arrival-cost');
+                                    const costHelp = document.getElementById('qc-arrival-cost-help');
+                                    const overrideContainer = document.getElementById('qc-arrival-override-container');
+                                    const overrideAmountInput = document.getElementById('qc-arrival-override-amount');
+                                    const overrideReasonInput = document.getElementById('qc-arrival-override-reason');
+                                    
+                                    if (costInput) {
+                                        if (calculation.overrideRequired && !calculation.calculatedFee) {
+                                            costInput.value = 'Requiere Override';
+                                            costInput.style.color = 'var(--color-warning, #ffc107)';
+                                            if (costHelp) {
+                                                costHelp.textContent = 'No hay regla configurada, ingresa el monto manualmente';
+                                                costHelp.style.color = 'var(--color-warning, #ffc107)';
+                                            }
+                                            // Mostrar campos de override
+                                            if (overrideContainer) {
+                                                overrideContainer.style.display = 'block';
+                                            }
+                                            // Hacer los campos requeridos
+                                            if (overrideAmountInput) {
+                                                overrideAmountInput.required = true;
+                                                overrideAmountInput.value = '';
+                                            }
+                                            if (overrideReasonInput) {
+                                                overrideReasonInput.required = true;
+                                                overrideReasonInput.value = '';
+                                            }
+                                        } else {
+                                            costInput.value = (calculation.calculatedFee || 0).toFixed(2);
+                                            costInput.style.color = '';
+                                            if (costHelp) {
+                                                costHelp.textContent = 'Se calcula automáticamente según las reglas configuradas';
+                                                costHelp.style.color = 'var(--color-text-secondary)';
+                                            }
+                                            // Ocultar campos de override
+                                            if (overrideContainer) {
+                                                overrideContainer.style.display = 'none';
+                                            }
+                                            // Hacer los campos opcionales
+                                            if (overrideAmountInput) {
+                                                overrideAmountInput.required = false;
+                                                overrideAmountInput.value = '';
+                                            }
+                                            if (overrideReasonInput) {
+                                                overrideReasonInput.required = false;
+                                                overrideReasonInput.value = '';
+                                            }
+                                        }
                                     }
                                 }
                             }
                         }
+                    } catch (error) {
+                        console.error('Error calculando costo de llegada:', error);
                     }
-                }
-            };
+                };
+                
+                if (paxInput) paxInput.addEventListener('input', calculateArrivalCost);
+                if (unitsInput) unitsInput.addEventListener('input', calculateArrivalCost);
+                if (agencySelect) agencySelect.addEventListener('change', calculateArrivalCost);
+                if (unitTypeSelect) unitTypeSelect.addEventListener('change', calculateArrivalCost);
+                if (branchSelect) branchSelect.addEventListener('change', calculateArrivalCost);
+            }
+
+            // Cuando cambia la agencia, actualizar guías
+            const agencySelect = document.getElementById('qc-agency');
+            if (agencySelect) {
+                agencySelect.addEventListener('change', async () => {
+                    try {
+                        await this.loadGuidesForAgency(agencySelect.value);
+                    } catch (error) {
+                        console.error('Error cargando guías:', error);
+                    }
+                });
+            }
+
+            // Inicializar sistema de pagos múltiples (solo si el contenedor existe)
+            const container = document.getElementById('qc-payments-container');
+            if (container) {
+                // Esperar un momento para asegurar que el DOM esté completamente renderizado
+                setTimeout(() => {
+                    try {
+                        if (this.initializePaymentsSystem) {
+                            this.initializePaymentsSystem();
+                        }
+                    } catch (error) {
+                        console.error('Error inicializando sistema de pagos:', error);
+                    }
+                }, 100);
+            }
+
+            // Inicializar lista de capturas pendientes
+            await this.loadPendingCaptures();
             
-            if (paxInput) paxInput.addEventListener('input', calculateArrivalCost);
-            if (unitsInput) unitsInput.addEventListener('input', calculateArrivalCost);
-            if (agencySelect) agencySelect.addEventListener('change', calculateArrivalCost);
-            if (unitTypeSelect) unitTypeSelect.addEventListener('change', calculateArrivalCost);
-            if (branchSelect) branchSelect.addEventListener('change', calculateArrivalCost);
+            // Cargar datos guardados del día
+            await this.loadQuickCaptureData();
+        } catch (error) {
+            console.error('Error en setupQuickCaptureListeners:', error);
+            // No lanzar el error para evitar que rompa otros módulos
         }
-
-        // Cuando cambia la agencia, actualizar guías
-        const agencySelect = document.getElementById('qc-agency');
-        if (agencySelect) {
-            agencySelect.addEventListener('change', async () => {
-                await this.loadGuidesForAgency(agencySelect.value);
-            });
-        }
-
-        // Inicializar sistema de pagos múltiples
-        this.initializePaymentsSystem();
-
-        // Inicializar lista de capturas pendientes
-        await this.loadPendingCaptures();
-        
-        // Cargar datos guardados del día
-        await this.loadQuickCaptureData();
     },
 
     async loadExchangeRates() {
@@ -6205,13 +6247,59 @@ const Reports = {
     },
 
     initializePaymentsSystem() {
-        // Inicializar el sistema de pagos múltiples
-        const container = document.getElementById('qc-payments-container');
-        if (!container) return;
-        
-        // Limpiar y agregar una fila inicial
-        container.innerHTML = `
-            <div class="payment-row" style="display: grid; grid-template-columns: 1fr 150px 100px; gap: var(--spacing-xs); align-items: center;">
+        try {
+            // Inicializar el sistema de pagos múltiples
+            const container = document.getElementById('qc-payments-container');
+            if (!container) return;
+            
+            // Limpiar y agregar una fila inicial
+            container.innerHTML = `
+                <div class="payment-row" style="display: grid; grid-template-columns: 1fr 150px 100px; gap: var(--spacing-xs); align-items: center;">
+                    <select class="form-select payment-method" required>
+                        <option value="">Método...</option>
+                        <option value="cash">Efectivo</option>
+                        <option value="card">Tarjeta</option>
+                        <option value="transfer">Transferencia</option>
+                        <option value="other">Otro</option>
+                    </select>
+                    <input type="number" class="form-input payment-amount" min="0" step="0.01" placeholder="0.00" required>
+                    <button type="button" class="btn-danger btn-xs remove-payment" style="display: none;" onclick="if(window.Reports && window.Reports.updatePaymentsTotal) window.Reports.updatePaymentsTotal(); this.closest('.payment-row').remove();">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            `;
+            
+            // Agregar event listeners a los campos de pago
+            const amountInputs = container.querySelectorAll('.payment-amount');
+            if (amountInputs && amountInputs.length > 0) {
+                amountInputs.forEach(input => {
+                    if (input) {
+                        input.addEventListener('input', () => {
+                            if (this.updatePaymentsTotal) {
+                                this.updatePaymentsTotal();
+                            }
+                        });
+                    }
+                });
+            }
+            
+            if (this.updatePaymentsTotal) {
+                this.updatePaymentsTotal();
+            }
+        } catch (error) {
+            console.error('Error inicializando sistema de pagos:', error);
+        }
+    },
+
+    addPaymentRow() {
+        try {
+            const container = document.getElementById('qc-payments-container');
+            if (!container) return;
+            
+            const row = document.createElement('div');
+            row.className = 'payment-row';
+            row.style.cssText = 'display: grid; grid-template-columns: 1fr 150px 100px; gap: var(--spacing-xs); align-items: center;';
+            row.innerHTML = `
                 <select class="form-select payment-method" required>
                     <option value="">Método...</option>
                     <option value="cash">Efectivo</option>
@@ -6220,48 +6308,30 @@ const Reports = {
                     <option value="other">Otro</option>
                 </select>
                 <input type="number" class="form-input payment-amount" min="0" step="0.01" placeholder="0.00" required>
-                <button type="button" class="btn-danger btn-xs remove-payment" style="display: none;" onclick="this.closest('.payment-row').remove(); window.Reports.updatePaymentsTotal();">
+                <button type="button" class="btn-danger btn-xs remove-payment" onclick="if(window.Reports && window.Reports.updatePaymentsTotal) window.Reports.updatePaymentsTotal(); this.closest('.payment-row').remove();">
                     <i class="fas fa-times"></i>
                 </button>
-            </div>
-        `;
-        
-        // Agregar event listeners a los campos de pago
-        container.querySelectorAll('.payment-amount').forEach(input => {
-            input.addEventListener('input', () => this.updatePaymentsTotal());
-        });
-        
-        this.updatePaymentsTotal();
-    },
-
-    addPaymentRow() {
-        const container = document.getElementById('qc-payments-container');
-        if (!container) return;
-        
-        const row = document.createElement('div');
-        row.className = 'payment-row';
-        row.style.cssText = 'display: grid; grid-template-columns: 1fr 150px 100px; gap: var(--spacing-xs); align-items: center;';
-        row.innerHTML = `
-            <select class="form-select payment-method" required>
-                <option value="">Método...</option>
-                <option value="cash">Efectivo</option>
-                <option value="card">Tarjeta</option>
-                <option value="transfer">Transferencia</option>
-                <option value="other">Otro</option>
-            </select>
-            <input type="number" class="form-input payment-amount" min="0" step="0.01" placeholder="0.00" required>
-            <button type="button" class="btn-danger btn-xs remove-payment" onclick="this.closest('.payment-row').remove(); window.Reports.updatePaymentsTotal();">
-                <i class="fas fa-times"></i>
-            </button>
-        `;
-        
-        container.appendChild(row);
-        
-        // Agregar event listener al nuevo campo de monto
-        row.querySelector('.payment-amount').addEventListener('input', () => this.updatePaymentsTotal());
-        
-        // Mostrar botones de eliminar si hay más de una fila
-        this.updateRemoveButtons();
+            `;
+            
+            container.appendChild(row);
+            
+            // Agregar event listener al nuevo campo de monto
+            const amountInput = row.querySelector('.payment-amount');
+            if (amountInput) {
+                amountInput.addEventListener('input', () => {
+                    if (this.updatePaymentsTotal) {
+                        this.updatePaymentsTotal();
+                    }
+                });
+            }
+            
+            // Mostrar botones de eliminar si hay más de una fila
+            if (this.updateRemoveButtons) {
+                this.updateRemoveButtons();
+            }
+        } catch (error) {
+            console.error('Error agregando fila de pago:', error);
+        }
     },
 
     updateRemoveButtons() {
@@ -6278,47 +6348,70 @@ const Reports = {
     },
 
     updatePaymentsTotal() {
-        const container = document.getElementById('qc-payments-container');
-        if (!container) return;
-        
-        const amounts = Array.from(container.querySelectorAll('.payment-amount'))
-            .map(input => parseFloat(input.value) || 0);
-        
-        const total = amounts.reduce((sum, amount) => sum + amount, 0);
-        
-        const totalDisplay = document.getElementById('qc-payments-total');
-        if (totalDisplay) {
-            totalDisplay.textContent = `$${total.toFixed(2)}`;
+        try {
+            const container = document.getElementById('qc-payments-container');
+            if (!container) return;
+            
+            const amountInputs = container.querySelectorAll('.payment-amount');
+            const amounts = Array.from(amountInputs || [])
+                .map(input => parseFloat(input?.value) || 0);
+            
+            const total = amounts.reduce((sum, amount) => sum + amount, 0);
+            
+            const totalDisplay = document.getElementById('qc-payments-total');
+            if (totalDisplay) {
+                totalDisplay.textContent = `$${total.toFixed(2)}`;
+            }
+            
+            const totalInput = document.getElementById('qc-total');
+            if (totalInput) {
+                totalInput.value = total;
+            }
+            
+            if (this.updateRemoveButtons) {
+                this.updateRemoveButtons();
+            }
+        } catch (error) {
+            console.error('Error actualizando total de pagos:', error);
         }
-        
-        const totalInput = document.getElementById('qc-total');
-        if (totalInput) {
-            totalInput.value = total;
-        }
-        
-        this.updateRemoveButtons();
     },
 
     getPaymentsFromForm() {
-        const container = document.getElementById('qc-payments-container');
-        if (!container) return [];
-        
-        const payments = [];
-        const rows = container.querySelectorAll('.payment-row');
-        
-        rows.forEach(row => {
-            const method = row.querySelector('.payment-method')?.value;
-            const amount = parseFloat(row.querySelector('.payment-amount')?.value || 0);
+        try {
+            const container = document.getElementById('qc-payments-container');
+            if (!container) return [];
             
-            if (method && amount > 0) {
-                payments.push({
-                    method: method,
-                    amount: amount
+            const payments = [];
+            const rows = container.querySelectorAll('.payment-row');
+            
+            if (rows && rows.length > 0) {
+                rows.forEach(row => {
+                    try {
+                        const methodSelect = row.querySelector('.payment-method');
+                        const amountInput = row.querySelector('.payment-amount');
+                        
+                        if (methodSelect && amountInput) {
+                            const method = methodSelect.value;
+                            const amount = parseFloat(amountInput.value || 0);
+                            
+                            if (method && amount > 0) {
+                                payments.push({
+                                    method: method,
+                                    amount: amount
+                                });
+                            }
+                        }
+                    } catch (rowError) {
+                        console.warn('Error procesando fila de pago:', rowError);
+                    }
                 });
             }
-        });
-        
-        return payments;
+            
+            return payments;
+        } catch (error) {
+            console.error('Error obteniendo pagos del formulario:', error);
+            return [];
+        }
     },
 
     async loadPendingCaptures() {
@@ -6628,7 +6721,13 @@ const Reports = {
             let totalQuantity = 0;
 
             captures.forEach(c => {
-                totals[c.currency] = (totals[c.currency] || 0) + c.total;
+                // Si hay múltiples pagos, calcular el total desde los pagos
+                let captureTotal = c.total || 0;
+                if ((!captureTotal || captureTotal === 0) && c.payments && Array.isArray(c.payments) && c.payments.length > 0) {
+                    captureTotal = c.payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+                }
+                captureTotal = parseFloat(captureTotal) || 0;
+                totals[c.currency] = (totals[c.currency] || 0) + captureTotal;
                 totalQuantity += c.quantity || 1;
             });
 
@@ -6690,7 +6789,7 @@ const Reports = {
                                         <td style="padding: var(--spacing-sm); font-size: 12px;">${c.product}</td>
                                         <td style="padding: var(--spacing-sm); font-size: 12px; text-align: center;">${c.quantity}</td>
                                         <td style="padding: var(--spacing-sm); font-size: 12px; text-align: right;">${c.currency}</td>
-                                        <td style="padding: var(--spacing-sm); font-size: 12px; text-align: right; font-weight: 600;">$${c.total.toFixed(2)}</td>
+                                        <td style="padding: var(--spacing-sm); font-size: 12px; text-align: right; font-weight: 600;">$${((c.total || 0) || (c.payments && Array.isArray(c.payments) && c.payments.length > 0 ? c.payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0) : 0)).toFixed(2)}</td>
                                         <td style="padding: var(--spacing-sm); font-size: 12px; text-align: right; color: var(--color-text-secondary);">$${(c.merchandise_cost || 0).toFixed(2)}</td>
                                         <td style="padding: var(--spacing-sm); font-size: 11px; color: var(--color-text-secondary); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${c.notes || ''}">${c.notes || '-'}</td>
                                         <td style="padding: var(--spacing-sm); text-align: center;">
@@ -7012,7 +7111,14 @@ const Reports = {
             // 2. Calcular totales de ventas por moneda
             const totals = { USD: 0, MXN: 0, CAD: 0 };
             captures.forEach(c => {
-                totals[c.currency] = (totals[c.currency] || 0) + c.total;
+                // Si hay múltiples pagos, calcular el total desde los pagos
+                let captureTotal = c.total || 0;
+                if ((!captureTotal || captureTotal === 0) && c.payments && Array.isArray(c.payments) && c.payments.length > 0) {
+                    captureTotal = c.payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+                }
+                // Asegurar que captureTotal sea un número válido
+                captureTotal = parseFloat(captureTotal) || 0;
+                totals[c.currency] = (totals[c.currency] || 0) + captureTotal;
             });
 
             // 3. Convertir totales a MXN
@@ -7028,12 +7134,19 @@ const Reports = {
             
             let totalCommissions = 0;
             for (const capture of captures) {
+                // Calcular el total de la captura (puede venir de payments si hay múltiples pagos)
+                let captureTotal = capture.total || 0;
+                if ((!captureTotal || captureTotal === 0) && capture.payments && Array.isArray(capture.payments) && capture.payments.length > 0) {
+                    captureTotal = capture.payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+                }
+                captureTotal = parseFloat(captureTotal) || 0;
+                
                 // Convertir el total de la captura a MXN antes de calcular comisiones
-                let captureTotalMXN = capture.total;
+                let captureTotalMXN = captureTotal;
                 if (capture.currency === 'USD') {
-                    captureTotalMXN = capture.total * usdRate;
+                    captureTotalMXN = captureTotal * usdRate;
                 } else if (capture.currency === 'CAD') {
-                    captureTotalMXN = capture.total * cadRate;
+                    captureTotalMXN = captureTotal * cadRate;
                 }
                 
                 // Si es venta de calle, aplicar reglas especiales de calle (solo para vendedores)
