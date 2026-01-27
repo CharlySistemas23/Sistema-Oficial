@@ -51,23 +51,15 @@ const BackupManager = {
                     this.backupDirectoryPath = info.path || null;
                     console.log('Información del directorio de backups cargada desde IndexedDB:', this.backupDirectoryPath);
                     
-                    // NOTA: Los FileSystemDirectoryHandle NO se pueden serializar ni restaurar
-                    // después de recargar la página por razones de seguridad del navegador.
-                    // El handle solo estará disponible durante la sesión actual del navegador.
-                    // Si el usuario recarga la página, necesitará volver a seleccionar la carpeta,
-                    // pero guardamos la información (path, handleName) para mostrarle que ya
-                    // había seleccionado una carpeta anteriormente.
+                    // IMPORTANTE: Los FileSystemDirectoryHandle no se pueden restaurar automáticamente
+                    // sin interacción del usuario por razones de seguridad del navegador.
+                    // Sin embargo, Chrome/Edge pueden mantener permisos persistentes si el usuario
+                    // los otorga explícitamente. Cuando el usuario vuelve a seleccionar la carpeta
+                    // con el mismo ID, el navegador puede recordar la selección anterior.
                     // 
-                    // Chrome/Edge pueden mantener permisos persistentes si el usuario los otorga
-                    // explícitamente, pero el handle en sí no se puede restaurar.
-                    console.log('Información del directorio cargada. El handle se restaurará cuando el usuario vuelva a seleccionar la carpeta.');
-                    
-                    // Si tenemos información pero no handle, intentar restaurar usando el nombre
-                    if (!this.backupDirectoryHandle && info.handleName) {
-                        // Los handles no se pueden restaurar directamente, pero guardamos la info
-                        // para mostrar al usuario que ya había seleccionado una carpeta
-                        console.log('Información del directorio encontrada, pero el handle necesita ser restaurado por el usuario');
-                    }
+                    // Por ahora, guardamos la información y cuando el usuario necesite usar la carpeta,
+                    // intentaremos restaurarla automáticamente en saveBackupToDirectory().
+                    console.log('Información del directorio cargada. El handle se restaurará automáticamente cuando sea necesario.');
                 }
             } catch (error) {
                 console.warn('Error cargando desde IndexedDB, intentando localStorage:', error);
@@ -88,7 +80,8 @@ const BackupManager = {
                                     path: this.backupDirectoryPath,
                                     selectedAt: info.selectedAt || new Date().toISOString(),
                                     available: true,
-                                    handleName: info.handleName || null
+                                    handleName: info.handleName || null,
+                                    handleId: info.handleId || null
                                 }
                             });
                         }
@@ -116,9 +109,11 @@ const BackupManager = {
             }
             
             // Abrir diálogo para seleccionar directorio
+            // IMPORTANTE: Usar id para permitir que el navegador recuerde la selección
             const handle = await window.showDirectoryPicker({
                 mode: 'readwrite',
-                startIn: 'documents'
+                startIn: 'documents',
+                id: 'backup-directory' // ID persistente para que el navegador recuerde la selección
             });
             
             // Guardar el handle
@@ -138,14 +133,22 @@ const BackupManager = {
             
             this.backupDirectoryPath = directoryPath;
             
+            // Solicitar permisos persistentes explícitamente
+            // Esto permite que el navegador recuerde la selección incluso después de recargar
+            try {
+                const permissionStatus = await handle.requestPermission({ mode: 'readwrite' });
+                if (permissionStatus === 'granted') {
+                    console.log('✅ Permisos persistentes otorgados para el directorio de backups');
+                }
+            } catch (e) {
+                console.warn('No se pudieron obtener permisos persistentes:', e);
+            }
+            
             // Guardar metadata en IndexedDB (más persistente) y localStorage (fallback)
-            // IMPORTANTE: Los FileSystemDirectoryHandle no se pueden serializar directamente
-            // El handle solo estará disponible durante la sesión actual
-            // Si el usuario recarga la página, el handle se perderá pero guardamos la información
-            // para que el usuario sepa que ya había seleccionado una carpeta
+            // IMPORTANTE: Con el ID persistente y permisos persistentes, el navegador puede
+            // restaurar automáticamente el handle después de recargar la página
             try {
                 // Intentar obtener un ID único del handle si está disponible
-                // Chrome/Edge pueden mantener referencias usando el ID
                 let handleId = null;
                 try {
                     // Algunos navegadores exponen un ID único del handle
@@ -153,7 +156,8 @@ const BackupManager = {
                         handleId = handle.id;
                     }
                 } catch (e) {
-                    // El ID no está disponible, no es crítico
+                    // El ID no está disponible, usar el ID que pasamos a showDirectoryPicker
+                    handleId = 'backup-directory';
                 }
                 
                 const directoryInfo = {
@@ -161,9 +165,11 @@ const BackupManager = {
                     selectedAt: new Date().toISOString(),
                     available: true,
                     handleName: handle.name || null,
-                    handleId: handleId,
+                    handleId: handleId || 'backup-directory',
                     // Guardar también el nombre completo del directorio para referencia
-                    fullPath: directoryPath
+                    fullPath: directoryPath,
+                    // Marcar que los permisos fueron otorgados
+                    permissionsGranted: true
                 };
                 
                 // Guardar en IndexedDB (más persistente)
@@ -175,7 +181,7 @@ const BackupManager = {
                 // También guardar en localStorage como fallback
                 localStorage.setItem('backup_directory_info', JSON.stringify(directoryInfo));
                 
-                console.log('Información del directorio guardada en IndexedDB y localStorage:', directoryInfo);
+                console.log('✅ Información del directorio guardada en IndexedDB y localStorage:', directoryInfo);
             } catch (error) {
                 console.warn('Error guardando información del directorio:', error);
             }
@@ -195,11 +201,64 @@ const BackupManager = {
         }
     },
     
+    // Intentar restaurar el handle automáticamente usando el ID persistente
+    async restoreDirectoryHandle() {
+        try {
+            // Cargar información guardada
+            const settingsRecord = await DB.get('settings', 'backup_directory_info');
+            if (!settingsRecord || !settingsRecord.value) {
+                return false;
+            }
+            
+            const info = settingsRecord.value;
+            if (!info.handleId || !info.permissionsGranted) {
+                return false;
+            }
+            
+            // Intentar restaurar usando showDirectoryPicker con el mismo ID
+            // Si los permisos son persistentes, Chrome/Edge restaurarán automáticamente
+            // sin mostrar el diálogo (o mostrando uno mínimo)
+            try {
+                const restoredHandle = await window.showDirectoryPicker({
+                    mode: 'readwrite',
+                    id: info.handleId // Usar el mismo ID para restaurar
+                });
+                
+                if (restoredHandle) {
+                    const permissionStatus = await restoredHandle.requestPermission({ mode: 'readwrite' });
+                    if (permissionStatus === 'granted') {
+                        this.backupDirectoryHandle = restoredHandle;
+                        this.backupDirectoryPath = restoredHandle.name || info.path;
+                        console.log('✅ Handle del directorio restaurado automáticamente');
+                        return true;
+                    }
+                }
+            } catch (e) {
+                if (e.name === 'AbortError') {
+                    console.log('Usuario canceló la restauración del handle');
+                } else {
+                    console.log('No se pudo restaurar el handle:', e);
+                }
+                return false;
+            }
+            
+            return false;
+        } catch (error) {
+            console.warn('Error restaurando handle:', error);
+            return false;
+        }
+    },
+    
     // Guardar backup en el directorio seleccionado
     async saveBackupToDirectory(backupKey, backupContent) {
         try {
+            // Si no hay handle pero hay información guardada, intentar restaurar automáticamente
             if (!this.backupDirectoryHandle) {
-                return false; // No hay directorio seleccionado
+                const restored = await this.restoreDirectoryHandle();
+                if (!restored) {
+                    console.log('No se pudo restaurar el handle automáticamente. El backup se guardó solo en localStorage.');
+                    return false; // No se pudo restaurar
+                }
             }
             
             // Verificar permisos
