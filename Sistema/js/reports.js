@@ -8346,12 +8346,49 @@ const Reports = {
 
             const { jsPDF } = jspdfLib;
             
-            // Obtener datos - IMPORTANTE: Usar siempre la fecha del día actual
-            const today = new Date().toISOString().split('T')[0];
+            // Obtener datos - Usar la fecha de las capturas (puede ser del día actual o de un reporte restaurado)
             let captures = await DB.getAll('temp_quick_captures') || [];
-            // Filtrar solo las capturas del día actual
-            captures = captures.filter(c => c.date === today);
-            const captureDate = today; // Usar fecha del día actual para consistencia
+            
+            // Determinar la fecha del reporte:
+            // 1. Si todas las capturas son de un reporte restaurado, usar la fecha del reporte original
+            // 2. Si hay capturas restauradas con la misma fecha original, usar esa fecha
+            // 3. Si no, usar la fecha más común entre las capturas
+            // 4. Si no hay capturas, usar la fecha actual
+            let captureDate = new Date().toISOString().split('T')[0];
+            
+            if (captures.length > 0) {
+                // Verificar si todas las capturas son de un reporte restaurado con la misma fecha original
+                const restoredCaptures = captures.filter(c => c.restored_from && c.original_report_date);
+                if (restoredCaptures.length === captures.length) {
+                    // Todas son restauradas, usar la fecha original del reporte (debería ser la misma para todas)
+                    const originalDates = [...new Set(restoredCaptures.map(c => c.original_report_date || c.date))];
+                    if (originalDates.length === 1) {
+                        captureDate = originalDates[0];
+                    } else {
+                        // Si hay diferentes fechas, usar la más común
+                        const dateCounts = {};
+                        restoredCaptures.forEach(c => {
+                            const date = c.original_report_date || c.date;
+                            dateCounts[date] = (dateCounts[date] || 0) + 1;
+                        });
+                        captureDate = Object.keys(dateCounts).reduce((a, b) => dateCounts[a] > dateCounts[b] ? a : b);
+                    }
+                } else {
+                    // Hay capturas mixtas, usar la fecha más común
+                    const dateCounts = {};
+                    captures.forEach(c => {
+                        const date = c.original_report_date || c.date;
+                        dateCounts[date] = (dateCounts[date] || 0) + 1;
+                    });
+                    captureDate = Object.keys(dateCounts).reduce((a, b) => dateCounts[a] > dateCounts[b] ? a : b);
+                }
+                
+                // Filtrar capturas que coincidan con la fecha determinada
+                captures = captures.filter(c => {
+                    const captureDateValue = c.original_report_date || c.date;
+                    return captureDateValue === captureDate;
+                });
+            }
             
             if (captures.length === 0) {
                 Utils.showNotification('No hay capturas para exportar', 'warning');
@@ -8396,7 +8433,14 @@ const Reports = {
                 ? Utils.formatDate(new Date(), 'DD/MM/YYYY HH:mm')
                 : new Date().toLocaleString('es-MX');
             doc.text(dateStr, pageWidth - margin, 15, { align: 'right' });
-            doc.text(`Fecha: ${captureDate}`, pageWidth - margin, 22, { align: 'right' });
+            // Formatear la fecha del reporte para que sea más legible
+            const reportDate = new Date(captureDate + 'T00:00:00');
+            const formattedDate = reportDate.toLocaleDateString('es-MX', { 
+                year: 'numeric', 
+                month: '2-digit', 
+                day: '2-digit' 
+            });
+            doc.text(`Fecha del Reporte: ${formattedDate}`, pageWidth - margin, 22, { align: 'right' });
 
             y = 45;
 
@@ -10338,12 +10382,14 @@ const Reports = {
                         for (const capture of report.captures) {
                             try {
                                 // Generar nuevo ID para evitar conflictos
+                                // IMPORTANTE: Mantener la fecha original del reporte archivado
                                 const restoredCapture = {
                                     ...capture,
                                     id: 'qc_restored_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-                                    date: new Date().toISOString().split('T')[0], // Fecha actual
+                                    date: report.date, // Mantener la fecha original del reporte archivado
                                     restored_from: reportId,
-                                    restored_at: new Date().toISOString()
+                                    restored_at: new Date().toISOString(),
+                                    original_report_date: report.date // Guardar la fecha original para referencia
                                 };
                                 
                                 await DB.put('temp_quick_captures', restoredCapture);
