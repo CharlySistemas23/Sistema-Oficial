@@ -7298,17 +7298,17 @@ const Settings = {
                 }
                 if (clearBtn) clearBtn.style.display = 'inline-flex';
             } else {
-                // Verificar si hay información guardada pero sin handle (después de recargar)
-                const savedInfo = BackupManager.backupDirectoryPath;
-                if (savedInfo) {
-                    if (pathElement) {
-                        pathElement.innerHTML = `<span style="color: var(--color-warning);"><i class="fas fa-exclamation-triangle"></i> Carpeta guardada: <strong>${Utils.escapeHtml(savedInfo)}</strong> (necesitas volver a seleccionarla después de recargar)</span>`;
+                    // Verificar si hay información guardada pero sin handle (después de recargar)
+                    const savedInfo = BackupManager.backupDirectoryPath;
+                    if (savedInfo) {
+                        if (pathElement) {
+                            pathElement.innerHTML = `<span style="color: var(--color-success);"><i class="fas fa-check-circle"></i> Carpeta guardada: <strong>${Utils.escapeHtml(savedInfo)}</strong> (se restaurará automáticamente cuando sea necesario)</span>`;
+                        }
+                    } else {
+                        if (pathElement) {
+                            pathElement.innerHTML = '<span style="color: var(--color-text-secondary);">No hay carpeta seleccionada (los backups se guardarán solo en localStorage)</span>';
+                        }
                     }
-                } else {
-                    if (pathElement) {
-                        pathElement.innerHTML = '<span style="color: var(--color-text-secondary);">No hay carpeta seleccionada (los backups se guardarán solo en localStorage)</span>';
-                    }
-                }
                 if (clearBtn) clearBtn.style.display = 'none';
             }
 
