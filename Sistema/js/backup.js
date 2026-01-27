@@ -51,20 +51,22 @@ const BackupManager = {
                     this.backupDirectoryPath = info.path || null;
                     console.log('Información del directorio de backups cargada desde IndexedDB:', this.backupDirectoryPath);
                     
-                    // Intentar restaurar el handle si el navegador lo permite
-                    // Nota: Los handles no persisten entre sesiones completas, pero podemos intentar
-                    // usar el ID del directorio si el navegador lo soporta
-                    if (info.handleId) {
-                        // Algunos navegadores permiten restaurar handles usando IDs
-                        // Esto es experimental y puede no funcionar en todos los navegadores
-                        try {
-                            // Intentar obtener el handle usando el ID guardado
-                            // Esto solo funciona si el navegador mantiene el handle en memoria
-                            // durante la sesión actual
-                            console.log('Intentando restaurar handle del directorio...');
-                        } catch (e) {
-                            console.log('No se pudo restaurar el handle, el usuario necesitará volver a seleccionar la carpeta');
-                        }
+                    // NOTA: Los FileSystemDirectoryHandle NO se pueden serializar ni restaurar
+                    // después de recargar la página por razones de seguridad del navegador.
+                    // El handle solo estará disponible durante la sesión actual del navegador.
+                    // Si el usuario recarga la página, necesitará volver a seleccionar la carpeta,
+                    // pero guardamos la información (path, handleName) para mostrarle que ya
+                    // había seleccionado una carpeta anteriormente.
+                    // 
+                    // Chrome/Edge pueden mantener permisos persistentes si el usuario los otorga
+                    // explícitamente, pero el handle en sí no se puede restaurar.
+                    console.log('Información del directorio cargada. El handle se restaurará cuando el usuario vuelva a seleccionar la carpeta.');
+                    
+                    // Si tenemos información pero no handle, intentar restaurar usando el nombre
+                    if (!this.backupDirectoryHandle && info.handleName) {
+                        // Los handles no se pueden restaurar directamente, pero guardamos la info
+                        // para mostrar al usuario que ya había seleccionado una carpeta
+                        console.log('Información del directorio encontrada, pero el handle necesita ser restaurado por el usuario');
                     }
                 }
             } catch (error) {
@@ -85,7 +87,8 @@ const BackupManager = {
                                 value: {
                                     path: this.backupDirectoryPath,
                                     selectedAt: info.selectedAt || new Date().toISOString(),
-                                    available: true
+                                    available: true,
+                                    handleName: info.handleName || null
                                 }
                             });
                         }
@@ -136,17 +139,31 @@ const BackupManager = {
             this.backupDirectoryPath = directoryPath;
             
             // Guardar metadata en IndexedDB (más persistente) y localStorage (fallback)
-            // Nota: Los FileSystemDirectoryHandle no se pueden serializar directamente
+            // IMPORTANTE: Los FileSystemDirectoryHandle no se pueden serializar directamente
             // El handle solo estará disponible durante la sesión actual
-            // Si el usuario recarga la página, necesitará volver a seleccionar la carpeta
-            // PERO guardamos la información para mostrarle que ya había seleccionado una carpeta
+            // Si el usuario recarga la página, el handle se perderá pero guardamos la información
+            // para que el usuario sepa que ya había seleccionado una carpeta
             try {
+                // Intentar obtener un ID único del handle si está disponible
+                // Chrome/Edge pueden mantener referencias usando el ID
+                let handleId = null;
+                try {
+                    // Algunos navegadores exponen un ID único del handle
+                    if (handle.id) {
+                        handleId = handle.id;
+                    }
+                } catch (e) {
+                    // El ID no está disponible, no es crítico
+                }
+                
                 const directoryInfo = {
                     path: directoryPath,
                     selectedAt: new Date().toISOString(),
                     available: true,
-                    // Intentar guardar el nombre del handle si está disponible
-                    handleName: handle.name || null
+                    handleName: handle.name || null,
+                    handleId: handleId,
+                    // Guardar también el nombre completo del directorio para referencia
+                    fullPath: directoryPath
                 };
                 
                 // Guardar en IndexedDB (más persistente)
@@ -158,7 +175,7 @@ const BackupManager = {
                 // También guardar en localStorage como fallback
                 localStorage.setItem('backup_directory_info', JSON.stringify(directoryInfo));
                 
-                console.log('Información del directorio guardada en IndexedDB y localStorage');
+                console.log('Información del directorio guardada en IndexedDB y localStorage:', directoryInfo);
             } catch (error) {
                 console.warn('Error guardando información del directorio:', error);
             }
@@ -266,9 +283,10 @@ const BackupManager = {
                 version: DB.version
             }));
             
-            // Si no se guardó en directorio, descargar automáticamente (fallback)
-            if (!savedToDirectory) {
-                await this.downloadBackupAutomatic(backupKey);
+            // NO descargar automáticamente si no hay directorio seleccionado
+            // El usuario debe seleccionar una carpeta primero
+            if (!savedToDirectory && !this.backupDirectoryHandle) {
+                console.log('No hay carpeta de backups seleccionada. El backup se guardó solo en localStorage.');
             }
             
         } catch (error) {
