@@ -9525,22 +9525,22 @@ const Reports = {
             }
 
             // Costos de llegadas - Leer desde cost_entries (fuente autorizada)
-            // IMPORTANTE: Usar la fecha de las capturas, no la fecha actual
+            // IMPORTANTE: Usar la fecha seleccionada, no la fecha actual
             const captureBranchIds = [...new Set(captures.map(c => c.branch_id).filter(Boolean))];
             const branchIdForArrivals = captureBranchIds.length === 1 ? captureBranchIds[0] : null;
-            const totalArrivalCostsRaw = await this.calculateArrivalCosts(captureDate, branchIdForArrivals, captureBranchIds);
+            const totalArrivalCostsRaw = await this.calculateArrivalCosts(selectedDate, branchIdForArrivals, captureBranchIds);
             // Asegurar que sea un número
             const totalArrivalCosts = typeof totalArrivalCostsRaw === 'number' ? totalArrivalCostsRaw : parseFloat(totalArrivalCostsRaw) || 0;
 
             // Costos operativos del día (prorrateados)
-            // IMPORTANTE: Usar la fecha de las capturas, no la fecha actual
+            // IMPORTANTE: Usar la fecha seleccionada, no la fecha actual
             // SEPARAR: Variables del día vs Fijos prorrateados
             let variableCostsDaily = 0;  // Costos variables registrados hoy
             let fixedCostsProrated = 0;  // Costos fijos prorrateados (mensuales, semanales, anuales)
             let bankCommissions = 0;
             try {
                 const allCosts = await DB.getAll('cost_entries') || [];
-                const targetDate = new Date(captureDate);
+                const targetDate = new Date(selectedDate);
                 const captureBranchIdsForOperating = [...new Set(captures.map(c => c.branch_id).filter(Boolean))];
                 
                 // Si no hay branchIds específicos, considerar costos globales
