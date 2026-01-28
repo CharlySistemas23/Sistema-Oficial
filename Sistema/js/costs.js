@@ -592,8 +592,281 @@ const Costs = {
     },
 
     async exportArrivals() {
-        // TODO: Implementar exportación de llegadas
-        Utils.showNotification('Exportación de llegadas próximamente', 'info');
+        try {
+            // Prevenir múltiples ejecuciones simultáneas
+            if (this.isExporting) {
+                console.warn('Exportación ya en progreso, ignorando llamada duplicada');
+                return;
+            }
+            
+            this.isExporting = true;
+            
+            // Verificar jsPDF
+            const jspdfLib = Utils.checkJsPDF();
+            if (!jspdfLib) {
+                Utils.showNotification('jsPDF no está disponible. Por favor, recarga la página.', 'error');
+                this.isExporting = false;
+                return;
+            }
+
+            const { jsPDF } = jspdfLib;
+            
+            // Obtener filtros actuales
+            const branchFilter = document.getElementById('arrivals-branch-filter');
+            const dateFrom = document.getElementById('arrivals-date-from')?.value;
+            const dateTo = document.getElementById('arrivals-date-to')?.value;
+            
+            const isMasterAdmin = typeof UserManager !== 'undefined' && (
+                UserManager.currentUser?.role === 'master_admin' ||
+                UserManager.currentUser?.is_master_admin ||
+                UserManager.currentUser?.isMasterAdmin ||
+                UserManager.currentEmployee?.role === 'master_admin'
+            );
+            
+            const currentBranchId = typeof BranchManager !== 'undefined' 
+                ? BranchManager.getCurrentBranchId() 
+                : localStorage.getItem('current_branch_id');
+            
+            const selectedBranchId = !isMasterAdmin ? currentBranchId : (branchFilter?.value || null);
+            
+            // Obtener llegadas desde agency_arrivals (no solo costos)
+            const allArrivals = await DB.getAll('agency_arrivals') || [];
+            let filteredArrivals = allArrivals.filter(a => {
+                // Filtrar por sucursal
+                if (selectedBranchId) {
+                    if (!a.branch_id || String(a.branch_id) !== String(selectedBranchId)) {
+                        return false;
+                    }
+                }
+                // Filtrar por fecha
+                if (dateFrom && a.date < dateFrom) return false;
+                if (dateTo && a.date > dateTo) return false;
+                return true;
+            });
+            
+            // Obtener costos relacionados para tener el monto pagado
+            const allCosts = await DB.getAll('cost_entries') || [];
+            const arrivalCosts = allCosts.filter(c => c.category === 'pago_llegadas');
+            
+            // Obtener catálogos
+            const agencies = await DB.getAll('catalog_agencies') || [];
+            const branches = await DB.getAll('catalog_branches') || [];
+            const guides = await DB.getAll('catalog_guides') || [];
+            
+            if (filteredArrivals.length === 0) {
+                Utils.showNotification('No hay llegadas para exportar con los filtros seleccionados', 'warning');
+                this.isExporting = false;
+                return;
+            }
+            
+            // Crear PDF
+            const doc = new jsPDF('p', 'mm', 'a4');
+            const pageWidth = doc.internal.pageSize.getWidth();
+            const pageHeight = doc.internal.pageSize.getHeight();
+            const margin = 15;
+            let y = margin;
+            
+            // ========== HEADER ==========
+            doc.setFillColor(52, 73, 94);
+            doc.rect(0, 0, pageWidth, 35, 'F');
+            
+            doc.setTextColor(255, 255, 255);
+            doc.setFontSize(20);
+            doc.setFont('helvetica', 'bold');
+            doc.text('OPAL & CO', margin, 15);
+            
+            doc.setFontSize(14);
+            doc.setFont('helvetica', 'normal');
+            doc.text('Reporte de Llegadas', margin, 22);
+            
+            doc.setFontSize(10);
+            doc.setTextColor(220, 220, 220);
+            const dateStr = typeof Utils !== 'undefined' && Utils.formatDate 
+                ? Utils.formatDate(new Date(), 'DD/MM/YYYY HH:mm')
+                : new Date().toLocaleString('es-MX');
+            doc.text(dateStr, pageWidth - margin, 15, { align: 'right' });
+            
+            // Rango de fechas
+            if (dateFrom || dateTo) {
+                const dateRange = `${dateFrom ? Utils.formatDate(dateFrom, 'DD/MM/YYYY') : 'Inicio'} - ${dateTo ? Utils.formatDate(dateTo, 'DD/MM/YYYY') : 'Fin'}`;
+                doc.text(`Período: ${dateRange}`, pageWidth - margin, 22, { align: 'right' });
+            }
+            
+            y = 45;
+            
+            // ========== RESUMEN ==========
+            const totalArrivals = filteredArrivals.length;
+            const totalPassengers = filteredArrivals.reduce((sum, a) => sum + (a.passengers || 0), 0);
+            const totalAmount = filteredArrivals.reduce((sum, a) => {
+                const cost = arrivalCosts.find(c => c.arrival_id === a.id);
+                return sum + (cost?.amount || a.arrival_fee || 0);
+            }, 0);
+            
+            doc.setFillColor(240, 248, 255);
+            doc.rect(margin, y, pageWidth - (margin * 2), 25, 'F');
+            doc.setDrawColor(200, 200, 200);
+            doc.rect(margin, y, pageWidth - (margin * 2), 25);
+            
+            doc.setTextColor(0, 0, 0);
+            doc.setFontSize(12);
+            doc.setFont('helvetica', 'bold');
+            doc.text('RESUMEN', margin + 5, y + 8);
+            
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'normal');
+            const branchName = selectedBranchId 
+                ? (branches.find(b => b.id === selectedBranchId)?.name || 'Sucursal seleccionada')
+                : 'Todas las sucursales';
+            doc.text(`Sucursal(es): ${branchName}`, margin + 5, y + 15);
+            
+            doc.setFontSize(10);
+            doc.text(`Total Llegadas: ${totalArrivals}`, margin + 5, y + 22);
+            doc.text(`Total Pasajeros: ${totalPassengers}`, margin + 60, y + 22);
+            doc.text(`Total Pagado: $${totalAmount.toFixed(2)}`, margin + 120, y + 22);
+            
+            y += 32;
+            
+            // ========== TABLA DE LLEGADAS ==========
+            if (y + 30 > pageHeight - 30) {
+                doc.addPage();
+                y = margin;
+            }
+            
+            doc.setFontSize(12);
+            doc.setFont('helvetica', 'bold');
+            doc.text('DETALLE DE LLEGADAS', margin, y);
+            y += 8;
+            
+            // Encabezados de tabla
+            const col1X = margin + 2;      // Fecha
+            const col2X = margin + 30;    // Agencia
+            const col3X = margin + 80;    // Guía
+            const col4X = margin + 110;   // Pasajeros
+            const col5X = margin + 130;   // Unidades
+            const col6X = margin + 145;   // Tipo Unidad
+            const col7X = pageWidth - margin - 30; // Monto
+            
+            doc.setFillColor(245, 245, 245);
+            doc.rect(margin, y, pageWidth - (margin * 2), 8, 'F');
+            doc.setDrawColor(200, 200, 200);
+            doc.rect(margin, y, pageWidth - (margin * 2), 8);
+            
+            doc.setFontSize(7);
+            doc.setFont('helvetica', 'bold');
+            doc.text('Fecha', col1X, y + 5.5);
+            doc.text('Agencia', col2X, y + 5.5);
+            doc.text('Guía', col3X, y + 5.5);
+            doc.text('PAX', col4X, y + 5.5, { align: 'center' });
+            doc.text('Unid.', col5X, y + 5.5, { align: 'center' });
+            doc.text('Tipo', col6X, y + 5.5, { align: 'center' });
+            doc.text('Monto', col7X, y + 5.5, { align: 'right' });
+            
+            y += 8;
+            
+            // Ordenar llegadas por fecha descendente
+            filteredArrivals.sort((a, b) => {
+                const dateA = new Date(a.date || a.created_at);
+                const dateB = new Date(b.date || b.created_at);
+                return dateB - dateA;
+            });
+            
+            // Obtener todas las ventas de una vez para buscar guías
+            const allSales = await DB.getAll('sales') || [];
+            
+            // Filas de llegadas
+            doc.setFontSize(8);
+            doc.setFont('helvetica', 'normal');
+            for (const arrival of filteredArrivals) {
+                if (y + 7 > pageHeight - 30) {
+                    doc.addPage();
+                    y = margin;
+                    // Re-dibujar encabezados
+                    doc.setFillColor(245, 245, 245);
+                    doc.rect(margin, y, pageWidth - (margin * 2), 8, 'F');
+                    doc.setDrawColor(200, 200, 200);
+                    doc.rect(margin, y, pageWidth - (margin * 2), 8);
+                    
+                    doc.setFontSize(7);
+                    doc.setFont('helvetica', 'bold');
+                    doc.text('Fecha', col1X, y + 5.5);
+                    doc.text('Agencia', col2X, y + 5.5);
+                    doc.text('Guía', col3X, y + 5.5);
+                    doc.text('PAX', col4X, y + 5.5, { align: 'center' });
+                    doc.text('Unid.', col5X, y + 5.5, { align: 'center' });
+                    doc.text('Tipo', col6X, y + 5.5, { align: 'center' });
+                    doc.text('Monto', col7X, y + 5.5, { align: 'right' });
+                    y += 8;
+                }
+                
+                const agency = agencies.find(a => a.id === arrival.agency_id);
+                const agencyName = agency?.name || 'Desconocida';
+                
+                // Buscar guía que trajo los pasajeros:
+                // 1. Buscar en ventas del día con la misma agencia y fecha
+                // 2. Si no hay ventas, buscar guías de la agencia
+                let guideName = '-';
+                const arrivalDateStr = arrival.date || arrival.created_at;
+                if (arrivalDateStr) {
+                    const dateStr = arrivalDateStr.split('T')[0];
+                    const daySales = allSales.filter(s => {
+                        const saleDate = s.created_at ? s.created_at.split('T')[0] : null;
+                        return saleDate === dateStr && 
+                               s.agency_id === arrival.agency_id &&
+                               s.branch_id === arrival.branch_id &&
+                               s.guide_id;
+                    });
+                    
+                    if (daySales.length > 0) {
+                        // Usar la guía de la primera venta del día de esa agencia
+                        const guideId = daySales[0].guide_id;
+                        const guide = guides.find(g => g.id === guideId);
+                        guideName = guide?.name || '-';
+                    } else {
+                        // Si no hay ventas, buscar guías de la agencia
+                        const agencyGuides = guides.filter(g => g.agency_id === arrival.agency_id);
+                        if (agencyGuides.length > 0) {
+                            guideName = agencyGuides[0].name;
+                        }
+                    }
+                }
+                
+                const cost = arrivalCosts.find(c => c.arrival_id === arrival.id);
+                const amount = cost?.amount || arrival.arrival_fee || 0;
+                
+                const formattedDate = arrivalDateStr ? Utils.formatDate(arrivalDateStr, 'DD/MM/YYYY') : '-';
+                
+                doc.setDrawColor(220, 220, 220);
+                doc.rect(margin, y, pageWidth - (margin * 2), 7);
+                
+                doc.setFontSize(7);
+                doc.setFont('helvetica', 'normal');
+                doc.text(formattedDate, col1X, y + 5);
+                doc.text(agencyName.substring(0, 20), col2X, y + 5);
+                doc.text(guideName.substring(0, 15), col3X, y + 5);
+                doc.text((arrival.passengers || 0).toString(), col4X, y + 5, { align: 'center' });
+                doc.text((arrival.units || 1).toString(), col5X, y + 5, { align: 'center' });
+                doc.text((arrival.unit_type || '-').substring(0, 8), col6X, y + 5, { align: 'center' });
+                doc.setFont('helvetica', 'bold');
+                doc.text(`$${amount.toFixed(2)}`, col7X, y + 5, { align: 'right' });
+                doc.setFont('helvetica', 'normal');
+                
+                y += 7;
+            }
+            
+            // Guardar PDF
+            const dateRangeStr = dateFrom && dateTo 
+                ? `${Utils.formatDate(dateFrom, 'YYYYMMDD')}_${Utils.formatDate(dateTo, 'YYYYMMDD')}`
+                : Utils.formatDate(new Date(), 'YYYYMMDD');
+            const filename = `reporte_llegadas_${dateRangeStr}_${Date.now()}.pdf`;
+            doc.save(filename);
+            
+            Utils.showNotification('Reporte de llegadas exportado correctamente', 'success');
+        } catch (error) {
+            console.error('Error exportando llegadas:', error);
+            Utils.showNotification(`Error al exportar: ${error.message}`, 'error');
+        } finally {
+            this.isExporting = false;
+        }
     },
 
     async getRecurringTab() {
