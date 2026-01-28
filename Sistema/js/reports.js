@@ -9790,7 +9790,7 @@ const Reports = {
             }
 
             // Guardar PDF
-            const todayStr = Utils.formatDate(new Date(captureDate), 'YYYYMMDD');
+            const todayStr = Utils.formatDate(new Date(selectedDate + 'T00:00:00'), 'YYYYMMDD');
             const filename = `Captura_Rapida_${todayStr}_${Date.now()}.pdf`;
             doc.save(filename);
 
