@@ -7533,7 +7533,9 @@ const Reports = {
                     console.warn('Error obteniendo nombre de sucursal:', e);
                 }
             }
-            const formattedDate = Utils.formatDate(new Date(captureDate), 'DD/MM/YYYY');
+            const formattedDate = (typeof Utils !== 'undefined' && Utils.formatDate) 
+                ? Utils.formatDate(new Date(captureDate), 'DD/MM/YYYY')
+                : new Date(captureDate).toLocaleDateString('es-MX');
             const ticketCount = captures.length;
             const ticketAverage = ticketCount > 0 ? totalSalesMXN / ticketCount : 0;
 
@@ -7638,7 +7640,7 @@ const Reports = {
                                         ${variableCostsDetail.map(c => `
                                             <div style="display: flex; justify-content: space-between; padding: 2px 0;">
                                                 <span>• ${c.category}${c.description ? `: ${c.description}` : ''}</span>
-                                                <span>$${c.amount.toFixed(2)}</span>
+                                                <span>$${(parseFloat(c.amount) || 0).toFixed(2)}</span>
                                             </div>
                                         `).join('')}
                                     </div>
@@ -7658,7 +7660,7 @@ const Reports = {
                                         ${fixedCostsDetail.map(c => `
                                             <div style="display: flex; justify-content: space-between; padding: 2px 0;">
                                                 <span>• ${c.category}${c.description ? `: ${c.description}` : ''} <small style="opacity: 0.7;">(${c.period})</small></span>
-                                                <span>$${c.amount.toFixed(2)}</span>
+                                                <span>$${(parseFloat(c.amount) || 0).toFixed(2)}</span>
                                             </div>
                                         `).join('')}
                                     </div>
@@ -8229,8 +8231,8 @@ const Reports = {
                     capture.product = product;
                     capture.quantity = quantity;
                     capture.currency = currency;
-                    capture.total = total;
-                    capture.merchandise_cost = merchandiseCost;
+                    capture.total = parseFloat(total) || 0;
+                    capture.merchandise_cost = parseFloat(merchandiseCost) || 0;
                     capture.notes = notes;
                     capture.is_street = isStreet;
                     capture.payment_method = paymentMethod;
@@ -9147,10 +9149,10 @@ const Reports = {
                         doc.setDrawColor(220, 220, 220);
                         doc.rect(margin, y, pageWidth - (margin * 2), 6);
                         doc.text((s.seller?.name || 'N/A').substring(0, 25), col1X, y + 4);
-                        doc.text(`$${s.total.toFixed(2)}`, col2X, y + 4, { align: 'right' });
-                        doc.text(s.commissions.USD ? `$${s.commissions.USD.toFixed(2)}` : '-', col3X, y + 4, { align: 'right' });
-                        doc.text(s.commissions.MXN ? `$${s.commissions.MXN.toFixed(2)}` : '-', col4X, y + 4, { align: 'right' });
-                        doc.text(s.commissions.CAD ? `$${s.commissions.CAD.toFixed(2)}` : '-', col5X, y + 4, { align: 'right' });
+                        doc.text(`$${(parseFloat(s.total) || 0).toFixed(2)}`, col2X, y + 4, { align: 'right' });
+                        doc.text(s.commissions?.USD ? `$${(parseFloat(s.commissions.USD) || 0).toFixed(2)}` : '-', col3X, y + 4, { align: 'right' });
+                        doc.text(s.commissions?.MXN ? `$${(parseFloat(s.commissions.MXN) || 0).toFixed(2)}` : '-', col4X, y + 4, { align: 'right' });
+                        doc.text(s.commissions?.CAD ? `$${(parseFloat(s.commissions.CAD) || 0).toFixed(2)}` : '-', col5X, y + 4, { align: 'right' });
                         y += 6;
                     });
 
@@ -9159,12 +9161,12 @@ const Reports = {
                         doc.addPage();
                         y = margin;
                     }
-                    const totalSellerComm = sellerEntries.reduce((sum, s) => sum + s.total, 0);
+                    const totalSellerComm = sellerEntries.reduce((sum, s) => sum + (parseFloat(s.total) || 0), 0);
                     doc.setFillColor(240, 240, 240);
                     doc.rect(margin, y, pageWidth - (margin * 2), 6, 'F');
                     doc.setFont('helvetica', 'bold');
                     doc.text('TOTAL VENDEDORES', col1X, y + 4);
-                    doc.text(`$${totalSellerComm.toFixed(2)}`, col2X, y + 4, { align: 'right' });
+                    doc.text(`$${(parseFloat(totalSellerComm) || 0).toFixed(2)}`, col2X, y + 4, { align: 'right' });
                     y += 8;
                 }
 
@@ -9223,10 +9225,10 @@ const Reports = {
                         doc.setDrawColor(220, 220, 220);
                         doc.rect(margin, y, pageWidth - (margin * 2), 6);
                         doc.text((g.guide?.name || 'N/A').substring(0, 25), col1X, y + 4);
-                        doc.text(`$${g.total.toFixed(2)}`, col2X, y + 4, { align: 'right' });
-                        doc.text(g.commissions.USD ? `$${g.commissions.USD.toFixed(2)}` : '-', col3X, y + 4, { align: 'right' });
-                        doc.text(g.commissions.MXN ? `$${g.commissions.MXN.toFixed(2)}` : '-', col4X, y + 4, { align: 'right' });
-                        doc.text(g.commissions.CAD ? `$${g.commissions.CAD.toFixed(2)}` : '-', col5X, y + 4, { align: 'right' });
+                        doc.text(`$${(parseFloat(g.total) || 0).toFixed(2)}`, col2X, y + 4, { align: 'right' });
+                        doc.text(g.commissions?.USD ? `$${(parseFloat(g.commissions.USD) || 0).toFixed(2)}` : '-', col3X, y + 4, { align: 'right' });
+                        doc.text(g.commissions?.MXN ? `$${(parseFloat(g.commissions.MXN) || 0).toFixed(2)}` : '-', col4X, y + 4, { align: 'right' });
+                        doc.text(g.commissions?.CAD ? `$${(parseFloat(g.commissions.CAD) || 0).toFixed(2)}` : '-', col5X, y + 4, { align: 'right' });
                         y += 6;
                     });
 
@@ -9235,12 +9237,12 @@ const Reports = {
                         doc.addPage();
                         y = margin;
                     }
-                    const totalGuideComm = guideEntries.reduce((sum, g) => sum + g.total, 0);
+                    const totalGuideComm = guideEntries.reduce((sum, g) => sum + (parseFloat(g.total) || 0), 0);
                     doc.setFillColor(240, 240, 240);
                     doc.rect(margin, y, pageWidth - (margin * 2), 6, 'F');
                     doc.setFont('helvetica', 'bold');
                     doc.text('TOTAL GUÍAS', col1X, y + 4);
-                    doc.text(`$${totalGuideComm.toFixed(2)}`, col2X, y + 4, { align: 'right' });
+                    doc.text(`$${(parseFloat(totalGuideComm) || 0).toFixed(2)}`, col2X, y + 4, { align: 'right' });
                     y += 8;
                 }
             }
