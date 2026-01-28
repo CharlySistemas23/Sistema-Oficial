@@ -2778,63 +2778,11 @@ const Reports = {
             });
             const totalFromArrivals = Array.from(uniqueArrivals.values()).reduce((sum, fee) => sum + fee, 0);
             
-            // Si encontramos llegadas sin costo registrado, registrar automáticamente
-            if (totalFromArrivals > 0 && totalFromCosts === 0 && typeof Costs !== 'undefined') {
-                console.log(`📝 Registrando automáticamente ${dayArrivals.length} costos de llegadas desde agency_arrivals...`);
-                for (const arrival of dayArrivals) {
-                    if (arrival.arrival_fee > 0 || arrival.calculated_fee > 0) {
-                        const fee = arrival.calculated_fee || arrival.arrival_fee || 0;
-                        if (fee > 0) {
-                            try {
-                                await Costs.registerArrivalPayment(
-                                    arrival.id,
-                                    fee,
-                                    arrival.branch_id,
-                                    arrival.agency_id,
-                                    arrival.passengers,
-                                    arrival.date // Pasar la fecha de la llegada
-                                );
-                                console.log(`✅ Costo de llegada registrado: $${fee.toFixed(2)} para llegada ${arrival.id}`);
-                            } catch (e) {
-                                console.warn('Error registrando costo de llegada automáticamente:', e);
-                            }
-                        }
-                    }
-                }
-                // Después de registrar, recalcular desde cost_entries
-                const updatedCosts = await DB.getAll('cost_entries') || [];
-                const updatedArrivalCosts = updatedCosts.filter(c => {
-                    const costDate = c.date || c.created_at;
-                    const costDateStr = typeof costDate === 'string' ? costDate.split('T')[0] : new Date(costDate).toISOString().split('T')[0];
-                    if (c.category !== 'pago_llegadas' || costDateStr !== dateStr) return false;
-                    if (branchId !== null) {
-                        return c.branch_id === branchId || !c.branch_id;
-                    } else if (branchIds.length > 0) {
-                        return !c.branch_id || branchIds.includes(c.branch_id);
-                    } else {
-                        return true;
-                    }
-                });
-                // Agrupar por arrival_id para evitar duplicados también en el recálculo
-                const updatedUniqueCosts = new Map();
-                updatedArrivalCosts.forEach(c => {
-                    const amount = typeof c.amount === 'number' ? c.amount : parseFloat(c.amount || 0) || 0;
-                    if (c.arrival_id) {
-                        const existing = updatedUniqueCosts.get(c.arrival_id) || 0;
-                        if (amount > existing) {
-                            updatedUniqueCosts.set(c.arrival_id, amount);
-                        }
-                    } else {
-                        const key = `${c.date || ''}_${c.agency_id || ''}_${c.branch_id || ''}_${amount}`;
-                        if (!updatedUniqueCosts.has(key)) {
-                            updatedUniqueCosts.set(key, amount);
-                        }
-                    }
-                });
-                const updatedTotal = Array.from(updatedUniqueCosts.values()).reduce((sum, amount) => sum + amount, 0);
-                const updatedTotalAsNumber = typeof updatedTotal === 'number' ? updatedTotal : parseFloat(updatedTotal) || 0;
-                console.log(`✅ Total de costos de llegadas después de registro automático: $${updatedTotalAsNumber.toFixed(2)}`);
-                return updatedTotalAsNumber;
+            // DESHABILITADO: No registrar costos automáticamente
+            // El usuario debe crear los costos manualmente desde el módulo de llegadas
+            // Esto evita que se generen costos no deseados de datos demo o históricos
+            if (totalFromArrivals > 0 && totalFromCosts === 0) {
+                console.warn(`⚠️ Se encontraron ${dayArrivals.length} llegadas sin costos registrados para ${dateStr}, pero NO se crearán automáticamente. El usuario debe crear los costos manualmente si lo desea.`);
             }
             
             const totalFromArrivalsAsNumber = typeof totalFromArrivals === 'number' ? totalFromArrivals : parseFloat(totalFromArrivals) || 0;
