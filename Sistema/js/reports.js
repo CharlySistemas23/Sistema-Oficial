@@ -6349,15 +6349,20 @@ const Reports = {
                 // Agregar a la lista pendiente en memoria
                 this.pendingCaptures.push(capture);
 
-                // Limpiar formulario
+                // Limpiar formulario (pero mantener la fecha)
+                const currentDate = document.getElementById('qc-date')?.value || new Date().toISOString().split('T')[0];
                 document.getElementById('quick-capture-form')?.reset();
                 if (document.getElementById('qc-quantity')) {
                     document.getElementById('qc-quantity').value = '1';
                 }
-                // Restablecer fecha a hoy
-                const today = new Date().toISOString().split('T')[0];
+                // Restaurar la fecha después de resetear (NO resetear a hoy)
                 if (document.getElementById('qc-date')) {
-                    document.getElementById('qc-date').value = today;
+                    document.getElementById('qc-date').value = currentDate;
+                }
+                // Sincronizar fecha con formulario de llegadas
+                const arrivalDateInput = document.getElementById('qc-arrival-date');
+                if (arrivalDateInput) {
+                    arrivalDateInput.value = currentDate;
                 }
                 // Reinicializar sistema de pagos
                 this.initializePaymentsSystem();
@@ -6847,15 +6852,33 @@ const Reports = {
             let savedCount = 0;
             for (const capture of this.pendingCaptures) {
                 try {
+                    // Asegurar que la fecha esté presente y correcta
+                    if (!capture.date) {
+                        console.warn('⚠️ Captura sin fecha, usando fecha del formulario:', capture.id);
+                        const dateInput = document.getElementById('qc-date');
+                        capture.date = dateInput?.value || new Date().toISOString().split('T')[0];
+                    }
+                    
                     // Generar nuevo ID para la captura guardada
                     const savedCapture = {
                         ...capture,
-                        id: 'qc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)
+                        id: 'qc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+                        date: capture.date, // Asegurar que la fecha se preserve
+                        created_at: capture.created_at || new Date().toISOString()
                     };
                     delete savedCapture.isPending;
 
+                    console.log(`💾 Guardando captura: ${savedCapture.product}, fecha: ${savedCapture.date}`);
                     await DB.put('temp_quick_captures', savedCapture);
-                    savedCount++;
+                    
+                    // Verificar que se guardó correctamente
+                    const verify = await DB.get('temp_quick_captures', savedCapture.id);
+                    if (verify && verify.date === savedCapture.date) {
+                        savedCount++;
+                        console.log(`✅ Captura guardada correctamente: ${savedCapture.id}`);
+                    } else {
+                        console.error(`❌ Error: La captura no se guardó correctamente o la fecha no coincide`);
+                    }
                 } catch (error) {
                     console.error('Error guardando captura individual:', error);
                 }
@@ -6883,11 +6906,23 @@ const Reports = {
             
             // Obtener todas las capturas y filtrar por la fecha seleccionada
             let captures = await DB.getAll('temp_quick_captures') || [];
+            console.log(`📊 Total capturas en BD: ${captures.length}, filtrando por fecha: ${selectedDate}`);
             captures = captures.filter(c => {
-                // Normalizar fechas para comparación
-                const captureDate = c.date ? c.date.split('T')[0] : null;
-                return captureDate === selectedDate;
+                // Normalizar fechas para comparación (usar original_report_date si existe, sino date)
+                const captureDate = c.original_report_date || c.date;
+                if (!captureDate) {
+                    console.warn('⚠️ Captura sin fecha:', c.id);
+                    return false;
+                }
+                const normalizedCaptureDate = captureDate.split('T')[0];
+                const normalizedSelectedDate = selectedDate.split('T')[0];
+                const matches = normalizedCaptureDate === normalizedSelectedDate;
+                if (!matches) {
+                    console.log(`   Fecha no coincide: ${normalizedCaptureDate} !== ${normalizedSelectedDate}`);
+                }
+                return matches;
             });
+            console.log(`✅ Capturas filtradas: ${captures.length} para fecha ${selectedDate}`);
             
             // Ordenar por fecha de creación (más recientes primero)
             captures.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
@@ -8799,11 +8834,17 @@ const Reports = {
             return;
         }
         
-        // Mostrar modal para seleccionar fecha del reporte
-        const selectedDate = await this.showDateSelectorModal();
-        if (!selectedDate) {
-            // Usuario canceló
-            return;
+        // Obtener fecha del formulario o mostrar modal para seleccionar
+        const dateInput = document.getElementById('qc-date');
+        let selectedDate = dateInput?.value || new Date().toISOString().split('T')[0];
+        
+        // Si no hay fecha en el formulario, mostrar modal
+        if (!dateInput?.value) {
+            selectedDate = await this.showDateSelectorModal();
+            if (!selectedDate) {
+                // Usuario canceló
+                return;
+            }
         }
         
         this.isExporting = true;
@@ -8818,59 +8859,43 @@ const Reports = {
 
             const { jsPDF } = jspdfLib;
             
-            // Obtener datos - Usar la fecha seleccionada o la fecha de las capturas
+            // Obtener capturas filtradas por la fecha seleccionada
             let captures = await DB.getAll('temp_quick_captures') || [];
             
-            // Determinar la fecha del reporte:
-            // 1. Si todas las capturas son de un reporte restaurado, usar la fecha del reporte original
-            // 2. Si hay capturas restauradas con la misma fecha original, usar esa fecha
-            // 3. Si no, usar la fecha más común entre las capturas
-            // 4. Si no hay capturas, usar la fecha actual
-            let captureDate = new Date().toISOString().split('T')[0];
-            
-            if (captures.length > 0) {
-                // Verificar si todas las capturas son de un reporte restaurado con la misma fecha original
-                const restoredCaptures = captures.filter(c => c.restored_from && c.original_report_date);
-                if (restoredCaptures.length === captures.length) {
-                    // Todas son restauradas, usar la fecha original del reporte (debería ser la misma para todas)
-                    const originalDates = [...new Set(restoredCaptures.map(c => c.original_report_date || c.date))];
-                    if (originalDates.length === 1) {
-                        captureDate = originalDates[0];
-                    } else {
-                        // Si hay diferentes fechas, usar la más común
-                        const dateCounts = {};
-                        restoredCaptures.forEach(c => {
-                            const date = c.original_report_date || c.date;
-                            dateCounts[date] = (dateCounts[date] || 0) + 1;
-                        });
-                        captureDate = Object.keys(dateCounts).reduce((a, b) => dateCounts[a] > dateCounts[b] ? a : b);
-                    }
-                } else {
-                    // Hay capturas mixtas, usar la fecha más común
-                    const dateCounts = {};
-                    captures.forEach(c => {
-                        const date = c.original_report_date || c.date;
-                        dateCounts[date] = (dateCounts[date] || 0) + 1;
-                    });
-                    captureDate = Object.keys(dateCounts).reduce((a, b) => dateCounts[a] > dateCounts[b] ? a : b);
-                }
-                
-                // Filtrar capturas que coincidan con la fecha determinada
-                captures = captures.filter(c => {
-                    const captureDateValue = c.original_report_date || c.date;
-                    return captureDateValue === captureDate;
-                });
-            }
+            // Filtrar capturas por la fecha seleccionada (normalizar fechas)
+            captures = captures.filter(c => {
+                const captureDateValue = c.original_report_date || c.date;
+                if (!captureDateValue) return false;
+                // Normalizar fecha para comparación
+                const normalizedCaptureDate = captureDateValue.split('T')[0];
+                const normalizedSelectedDate = selectedDate.split('T')[0];
+                return normalizedCaptureDate === normalizedSelectedDate;
+            });
             
             if (captures.length === 0) {
-                Utils.showNotification('No hay capturas para exportar', 'warning');
+                Utils.showNotification(`No hay capturas para exportar para la fecha ${Utils.formatDate(selectedDate, 'DD/MM/YYYY')}`, 'warning');
+                this.isExporting = false;
                 return;
             }
 
-            // Obtener llegadas
-            // IMPORTANTE: Usar la fecha de las capturas, no la fecha actual
+            // Obtener llegadas SOLO de la fecha seleccionada
+            // IMPORTANTE: Solo mostrar llegadas que realmente existan para esa fecha
             const arrivals = await DB.getAll('agency_arrivals') || [];
-            const todayArrivals = arrivals.filter(a => a.date === captureDate);
+            const filteredArrivals = arrivals.filter(a => {
+                if (!a.date) return false;
+                const arrivalDate = a.date.split('T')[0];
+                const normalizedSelectedDate = selectedDate.split('T')[0];
+                return arrivalDate === normalizedSelectedDate;
+            });
+            
+            // Obtener IDs de agencias de las capturas para filtrar llegadas relacionadas
+            const captureAgencyIds = [...new Set(captures.map(c => c.agency_id).filter(Boolean))];
+            
+            // Filtrar llegadas para mostrar solo las que están relacionadas con las capturas
+            // O si no hay agencias en capturas, mostrar todas las llegadas de esa fecha
+            const todayArrivals = captureAgencyIds.length > 0
+                ? filteredArrivals.filter(a => captureAgencyIds.includes(a.agency_id))
+                : filteredArrivals;
             
             // Calcular comisiones
             const commissionRules = await DB.getAll('commission_rules') || [];
@@ -8906,7 +8931,7 @@ const Reports = {
                 : new Date().toLocaleString('es-MX');
             doc.text(dateStr, pageWidth - margin, 15, { align: 'right' });
             // Formatear la fecha del reporte para que sea más legible
-            const reportDate = new Date(captureDate + 'T00:00:00');
+            const reportDate = new Date(selectedDate + 'T00:00:00');
             const formattedDate = reportDate.toLocaleDateString('es-MX', { 
                 year: 'numeric', 
                 month: '2-digit', 
@@ -8944,7 +8969,7 @@ const Reports = {
             doc.setFontSize(9);
             doc.setFont('helvetica', 'normal');
             doc.text(`Sucursal(es): ${branchNames || 'Todas'}`, margin + 5, y + 15);
-            doc.text(`Fecha: ${captureDate}`, pageWidth - margin - 5, y + 15, { align: 'right' });
+            doc.text(`Fecha: ${selectedDate}`, pageWidth - margin - 5, y + 15, { align: 'right' });
 
             doc.setFontSize(10);
             doc.text(`Total Capturas: ${captures.length}`, margin + 5, y + 22);
