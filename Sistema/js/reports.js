@@ -4,6 +4,7 @@ const Reports = {
     initialized: false,
     currentTab: 'reports',
     pendingCaptures: [], // Lista de capturas pendientes antes de guardar
+    editingPendingCaptureId: null, // ID de la captura pendiente que se está editando
     isExporting: false, // Flag para prevenir múltiples exportaciones simultáneas
     
     /**
@@ -5288,12 +5289,12 @@ const Reports = {
         const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
         
         return `
-            <div style="padding: var(--spacing-sm) var(--spacing-md); background: linear-gradient(135deg, #fff3cd 0%, #ffe69c 100%); border-radius: var(--radius-md); border-left: 4px solid #ffc107; margin-bottom: var(--spacing-md); box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-                <div style="display: flex; align-items: center; gap: var(--spacing-sm);">
-                    <i class="fas fa-exclamation-triangle" style="color: #856404; font-size: 18px;"></i>
+            <div style="padding: 8px 12px; background: linear-gradient(135deg, #fff3cd 0%, #ffe69c 100%); border-radius: 6px; border-left: 3px solid #ffc107; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <i class="fas fa-exclamation-triangle" style="color: #856404; font-size: 14px;"></i>
                     <div style="flex: 1;">
-                        <h3 style="margin: 0 0 2px 0; color: #856404; font-size: 13px; font-weight: 600;">MÓDULO TEMPORAL - Captura Rápida</h3>
-                        <p style="margin: 0; color: #856404; font-size: 11px; line-height: 1.4;">
+                        <h3 style="margin: 0 0 2px 0; color: #856404; font-size: 11px; font-weight: 600;">MÓDULO TEMPORAL - Captura Rápida</h3>
+                        <p style="margin: 0; color: #856404; font-size: 10px; line-height: 1.3;">
                             Los datos se guardan localmente y NO afectan el sistema principal. Exporta y elimina cuando termines.
                         </p>
                     </div>
@@ -5301,14 +5302,14 @@ const Reports = {
             </div>
 
             <!-- Formulario de Captura -->
-            <div class="module" style="padding: var(--spacing-lg); background: white; border-radius: var(--radius-md); border: 1px solid #e0e0e0; margin-bottom: var(--spacing-md); box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-                <div style="display: flex; align-items: center; gap: var(--spacing-sm); margin-bottom: var(--spacing-lg); padding-bottom: var(--spacing-md); border-bottom: 2px solid #f0f0f0;">
-                    <div style="width: 4px; height: 24px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 2px;"></div>
-                    <h3 style="margin: 0; font-size: 14px; font-weight: 600; color: #333; text-transform: uppercase; letter-spacing: 0.5px;">
-                        <i class="fas fa-plus-circle" style="color: #667eea; margin-right: 6px;"></i> Nueva Captura
+            <div class="module" style="padding: 12px; background: white; border-radius: 6px; border: 1px solid #e0e0e0; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06);">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #f0f0f0;">
+                    <div style="width: 3px; height: 18px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 2px;"></div>
+                    <h3 style="margin: 0; font-size: 12px; font-weight: 600; color: #333; text-transform: uppercase; letter-spacing: 0.3px;">
+                        <i class="fas fa-plus-circle" style="color: #667eea; margin-right: 4px; font-size: 11px;"></i> Nueva Captura
                     </h3>
                 </div>
-                <form id="quick-capture-form" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--spacing-md);">
+                <form id="quick-capture-form" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px;">
                     ${isMasterAdmin ? `
                     <div class="form-group">
                         <label>Sucursal <span style="color: var(--color-danger);">*</span></label>
@@ -5356,33 +5357,33 @@ const Reports = {
                             <option value="CAD">CAD</option>
                         </select>
                     </div>
-                    <div class="form-group" style="grid-column: 1 / -1;">
-                        <label>Pagos <span style="color: var(--color-danger);">*</span></label>
-                        <div id="qc-payments-container" style="display: flex; flex-direction: column; gap: var(--spacing-xs);">
-                            <div class="payment-row" style="display: grid; grid-template-columns: 1fr 150px 100px; gap: var(--spacing-xs); align-items: center;">
-                                <select class="form-select payment-method" required>
+                    <div class="form-group" style="grid-column: 1 / -1; padding: 8px; background: #f8f9fa; border-radius: 4px; border: 1px solid #dee2e6;">
+                        <label style="font-weight: 600; margin-bottom: 6px; display: block; font-size: 11px;">Pagos <span style="color: var(--color-danger);">*</span></label>
+                        <div id="qc-payments-container" style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 6px;">
+                            <div class="payment-row" style="display: grid; grid-template-columns: 1fr 140px 70px; gap: 6px; align-items: center; padding: 4px; background: white; border-radius: 4px; border: 1px solid #dee2e6;">
+                                <select class="form-select payment-method" required style="border: 1px solid #ced4da; font-size: 11px; padding: 6px;">
                                     <option value="">Método...</option>
                                     <option value="cash">Efectivo</option>
                                     <option value="card">Tarjeta</option>
                                     <option value="transfer">Transferencia</option>
                                     <option value="other">Otro</option>
                                 </select>
-                                <input type="number" class="form-input payment-amount" min="0" step="0.01" placeholder="0.00" required>
-                                <button type="button" class="btn-danger btn-xs remove-payment" style="display: none;" onclick="this.closest('.payment-row').remove(); window.Reports.updatePaymentsTotal();">
+                                <input type="number" class="form-input payment-amount" min="0" step="0.01" placeholder="0.00" required style="border: 1px solid #ced4da; font-size: 11px; padding: 6px;">
+                                <button type="button" class="btn-danger btn-xs remove-payment" style="display: none; padding: 4px 6px; font-size: 10px;" onclick="this.closest('.payment-row').remove(); window.Reports.updatePaymentsTotal();">
                                     <i class="fas fa-times"></i>
                                 </button>
                             </div>
                         </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: var(--spacing-xs);">
-                            <button type="button" class="btn-secondary btn-xs" onclick="window.Reports.addPaymentRow()">
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 6px; border-top: 1px solid #dee2e6;">
+                            <button type="button" class="btn-secondary btn-xs" onclick="window.Reports.addPaymentRow()" style="font-weight: 600; padding: 6px 10px; font-size: 11px;">
                                 <i class="fas fa-plus"></i> Agregar Pago
                             </button>
-                            <div style="font-weight: 600; font-size: 12px;">
-                                Total: <span id="qc-payments-total">$0.00</span>
+                            <div style="font-weight: 700; font-size: 12px; color: #495057; padding: 4px 8px; background: white; border-radius: 4px; border: 2px solid #28a745;">
+                                Total: <span id="qc-payments-total" style="color: #28a745;">$0.00</span>
                             </div>
                         </div>
                         <input type="hidden" id="qc-total" value="0">
-                        <small style="color: var(--color-text-secondary); font-size: 9px;">Puedes agregar múltiples pagos (ej: $1000 efectivo + $500 tarjeta)</small>
+                        <small style="color: #6c757d; font-size: 9px; margin-top: 4px; display: block;">💡 Puedes agregar múltiples pagos (ej: $1000 efectivo + $500 tarjeta)</small>
                     </div>
                     <div class="form-group">
                         <label>Costo de Mercancía (MXN)</label>
@@ -5411,22 +5412,22 @@ const Reports = {
                         <small style="color: var(--color-text-secondary); font-size: 9px;">Tarjeta: (monto - 4.5%) * 12% | Efectivo: monto * 14%</small>
                     </div>
                     <div class="form-group" style="grid-column: 1 / -1;">
-                        <div style="display: flex; gap: var(--spacing-md); align-items: stretch; margin-bottom: var(--spacing-md);">
-                            <div style="flex: 1; padding: var(--spacing-md); background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-radius: var(--radius-sm); border: 1px solid #dee2e6;">
-                                <div style="font-size: 10px; color: #6c757d; margin-bottom: var(--spacing-xs); text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Tipo de Cambio Actual</div>
-                                <div id="qc-exchange-rates-display" style="font-size: 12px; font-weight: 500; color: #495057;">
+                        <div style="display: flex; gap: 8px; align-items: stretch; margin-bottom: 10px;">
+                            <div style="flex: 1; padding: 8px 10px; background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-radius: 4px; border: 1px solid #dee2e6;">
+                                <div style="font-size: 9px; color: #6c757d; margin-bottom: 4px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Tipo de Cambio Actual</div>
+                                <div id="qc-exchange-rates-display" style="font-size: 11px; font-weight: 500; color: #495057;">
                                     <i class="fas fa-spinner fa-spin"></i> Obteniendo...
                                 </div>
                             </div>
-                            <button type="button" class="btn-secondary" onclick="window.Reports.refreshExchangeRates()" title="Actualizar Tipo de Cambio" style="padding: var(--spacing-md); align-self: center;">
+                            <button type="button" class="btn-secondary" onclick="window.Reports.refreshExchangeRates()" title="Actualizar Tipo de Cambio" style="padding: 8px 12px; align-self: center; font-size: 11px;">
                                 <i class="fas fa-sync-alt"></i>
                             </button>
                         </div>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md); padding-top: var(--spacing-md); border-top: 2px solid #f0f0f0;">
-                            <button type="submit" class="btn-primary" style="padding: var(--spacing-md); font-weight: 600; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding-top: 10px; border-top: 1px solid #f0f0f0;">
+                            <button type="submit" class="btn-primary" style="padding: 10px; font-weight: 600; font-size: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
                                 <i class="fas fa-plus-circle"></i> Agregar a Lista
                             </button>
-                            <button type="button" class="btn-success" onclick="window.Reports.saveAllPendingCaptures()" style="padding: var(--spacing-md); font-weight: 600; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);" id="save-all-pending-btn" disabled>
+                            <button type="button" class="btn-success" onclick="window.Reports.saveAllPendingCaptures()" style="padding: 10px; font-weight: 600; font-size: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);" id="save-all-pending-btn" disabled>
                                 <i class="fas fa-save"></i> Guardar Todo (<span id="pending-count-header">0</span>)
                             </button>
                         </div>
@@ -5435,19 +5436,19 @@ const Reports = {
             </div>
 
             <!-- Lista de Capturas Pendientes (Antes de Guardar) -->
-            <div class="module" id="pending-captures-container" style="padding: var(--spacing-lg); background: linear-gradient(135deg, #fff9e6 0%, #fff3cd 100%); border-radius: var(--radius-md); border: 2px solid #ffc107; margin-bottom: var(--spacing-md); display: none; box-shadow: 0 2px 8px rgba(255,193,7,0.2);">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-md); padding-bottom: var(--spacing-md); border-bottom: 2px solid rgba(255,193,7,0.3);">
-                    <div style="display: flex; align-items: center; gap: var(--spacing-sm);">
-                        <div style="width: 4px; height: 24px; background: #ffc107; border-radius: 2px;"></div>
-                        <h3 style="margin: 0; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #856404;">
-                            <i class="fas fa-clock" style="color: #ffc107;"></i> Capturas Pendientes (<span id="pending-count">0</span>)
+            <div class="module" id="pending-captures-container" style="padding: 10px; background: linear-gradient(135deg, #fff9e6 0%, #fff3cd 100%); border-radius: 6px; border: 1px solid #ffc107; margin-bottom: 12px; display: none; box-shadow: 0 1px 4px rgba(255,193,7,0.15);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,193,7,0.3);">
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <div style="width: 3px; height: 18px; background: #ffc107; border-radius: 2px;"></div>
+                        <h3 style="margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; color: #856404;">
+                            <i class="fas fa-clock" style="color: #ffc107; font-size: 11px; margin-right: 4px;"></i> Capturas Pendientes (<span id="pending-count">0</span>)
                         </h3>
                     </div>
-                    <div style="display: flex; gap: var(--spacing-sm);">
-                        <button class="btn-success btn-sm" onclick="window.Reports.saveAllPendingCaptures()" id="save-all-pending-btn-header" style="font-weight: 600; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                    <div style="display: flex; gap: 6px;">
+                        <button class="btn-success btn-sm" onclick="window.Reports.saveAllPendingCaptures()" id="save-all-pending-btn-header" style="font-weight: 600; padding: 6px 10px; font-size: 11px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
                             <i class="fas fa-save"></i> Guardar Todo
                         </button>
-                        <button class="btn-danger btn-sm" onclick="window.Reports.clearPendingCaptures()" style="font-weight: 600; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                        <button class="btn-danger btn-sm" onclick="window.Reports.clearPendingCaptures()" style="font-weight: 600; padding: 6px 10px; font-size: 11px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
                             <i class="fas fa-times"></i> Limpiar
                         </button>
                     </div>
@@ -5461,26 +5462,26 @@ const Reports = {
             </div>
 
             <!-- Lista de Capturas del Día -->
-            <div class="module" style="padding: var(--spacing-lg); background: white; border-radius: var(--radius-md); border: 1px solid #e0e0e0; margin-bottom: var(--spacing-md); box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-lg); padding-bottom: var(--spacing-md); border-bottom: 2px solid #f0f0f0;">
-                    <div style="display: flex; align-items: center; gap: var(--spacing-sm);">
-                        <div style="width: 4px; height: 24px; background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); border-radius: 2px;"></div>
-                        <h3 style="margin: 0; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #333;">
-                            <i class="fas fa-list" style="color: #11998e; margin-right: 6px;"></i> Capturas del Día
-                            <span style="color: #6c757d; font-size: 12px; font-weight: 400; margin-left: 6px;">(${today})</span>
+            <div class="module" style="padding: 10px; background: white; border-radius: 6px; border: 1px solid #e0e0e0; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #f0f0f0;">
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <div style="width: 3px; height: 18px; background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); border-radius: 2px;"></div>
+                        <h3 style="margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; color: #333;">
+                            <i class="fas fa-list" style="color: #11998e; margin-right: 4px; font-size: 11px;"></i> Capturas del Día
+                            <span style="color: #6c757d; font-size: 10px; font-weight: 400; margin-left: 4px;">(${today})</span>
                         </h3>
                     </div>
-                    <div style="display: flex; gap: var(--spacing-xs); flex-wrap: wrap;">
-                        <button class="btn-success btn-sm" onclick="window.Reports.archiveQuickCaptureReport()" title="Guardar reporte permanentemente en historial" style="font-weight: 600; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                    <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+                        <button class="btn-success btn-sm" onclick="window.Reports.archiveQuickCaptureReport()" title="Guardar reporte permanentemente en historial" style="font-weight: 600; padding: 6px 10px; font-size: 11px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
                             <i class="fas fa-archive"></i> Archivar
                         </button>
-                        <button class="btn-primary btn-sm" onclick="window.Reports.exportQuickCapturePDF()" style="font-weight: 600; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                        <button class="btn-primary btn-sm" onclick="window.Reports.exportQuickCapturePDF()" style="font-weight: 600; padding: 6px 10px; font-size: 11px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
                             <i class="fas fa-file-pdf"></i> PDF
                         </button>
-                        <button class="btn-secondary btn-sm" onclick="window.Reports.exportQuickCapture()" style="font-weight: 600; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                        <button class="btn-secondary btn-sm" onclick="window.Reports.exportQuickCapture()" style="font-weight: 600; padding: 6px 10px; font-size: 11px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
                             <i class="fas fa-download"></i> CSV
                         </button>
-                        <button class="btn-danger btn-sm" onclick="window.Reports.clearQuickCapture()" style="font-weight: 600; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                        <button class="btn-danger btn-sm" onclick="window.Reports.clearQuickCapture()" style="font-weight: 600; padding: 6px 10px; font-size: 11px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
                             <i class="fas fa-trash"></i> Limpiar
                         </button>
                     </div>
@@ -5493,17 +5494,17 @@ const Reports = {
             </div>
 
             <!-- Sección de Llegadas del Día (Desplegable) -->
-            <div class="module" style="padding: var(--spacing-lg); background: white; border-radius: var(--radius-md); border: 1px solid #e0e0e0; margin-bottom: var(--spacing-md); box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-md); padding-bottom: var(--spacing-md); border-bottom: 2px solid #f0f0f0; cursor: pointer;" onclick="window.Reports.toggleArrivalsForm()">
-                    <div style="display: flex; align-items: center; gap: var(--spacing-sm);">
-                        <div style="width: 4px; height: 24px; background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); border-radius: 2px;"></div>
-                        <h3 style="margin: 0; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #333;">
-                            <i class="fas fa-plane-arrival" style="color: #fa709a; margin-right: 6px;"></i> Llegadas del Día
+            <div class="module" style="padding: 10px; background: white; border-radius: 6px; border: 1px solid #e0e0e0; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #f0f0f0; cursor: pointer;" onclick="window.Reports.toggleArrivalsForm()">
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <div style="width: 3px; height: 18px; background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); border-radius: 2px;"></div>
+                        <h3 style="margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; color: #333;">
+                            <i class="fas fa-plane-arrival" style="color: #fa709a; margin-right: 4px; font-size: 11px;"></i> Llegadas del Día
                         </h3>
                     </div>
-                    <i id="arrivals-form-toggle-icon" class="fas fa-chevron-down" style="transition: transform 0.3s; color: #6c757d;"></i>
+                    <i id="arrivals-form-toggle-icon" class="fas fa-chevron-down" style="transition: transform 0.3s; color: #6c757d; font-size: 11px;"></i>
                 </div>
-                <div id="quick-capture-arrivals-form-container" style="display: none; margin-bottom: var(--spacing-md); padding: var(--spacing-lg); background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-radius: var(--radius-sm); border: 1px solid #dee2e6; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                <div id="quick-capture-arrivals-form-container" style="display: none; margin-bottom: 10px; padding: 10px; background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-radius: 4px; border: 1px solid #dee2e6; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
                     <form id="quick-arrivals-form" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--spacing-md);">
                         ${isMasterAdmin ? `
                         <div class="form-group">
@@ -5574,11 +5575,11 @@ const Reports = {
             </div>
 
             <!-- Sección de Comisiones -->
-            <div class="module" style="padding: var(--spacing-lg); background: white; border-radius: var(--radius-md); border: 1px solid #e0e0e0; margin-bottom: var(--spacing-md); box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-                <div style="display: flex; align-items: center; gap: var(--spacing-sm); margin-bottom: var(--spacing-md); padding-bottom: var(--spacing-md); border-bottom: 2px solid #f0f0f0;">
-                    <div style="width: 4px; height: 24px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 2px;"></div>
-                    <h3 style="margin: 0; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #333;">
-                        <i class="fas fa-percent" style="color: #667eea; margin-right: 6px;"></i> Comisiones Calculadas
+            <div class="module" style="padding: 10px; background: white; border-radius: 6px; border: 1px solid #e0e0e0; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06);">
+                <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #f0f0f0;">
+                    <div style="width: 3px; height: 18px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 2px;"></div>
+                    <h3 style="margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; color: #333;">
+                        <i class="fas fa-percent" style="color: #667eea; margin-right: 4px; font-size: 11px;"></i> Comisiones Calculadas
                     </h3>
                 </div>
                 <div id="quick-capture-commissions">
@@ -5589,11 +5590,11 @@ const Reports = {
             </div>
 
             <!-- Sección de Utilidades del Día -->
-            <div class="module" style="padding: var(--spacing-lg); background: white; border-radius: var(--radius-md); border: 1px solid #e0e0e0; margin-bottom: var(--spacing-md); box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-                <div style="display: flex; align-items: center; gap: var(--spacing-sm); margin-bottom: var(--spacing-md); padding-bottom: var(--spacing-md); border-bottom: 2px solid #f0f0f0;">
-                    <div style="width: 4px; height: 24px; background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); border-radius: 2px;"></div>
-                    <h3 style="margin: 0; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #333;">
-                        <i class="fas fa-chart-line" style="color: #11998e; margin-right: 6px;"></i> Utilidades del Día
+            <div class="module" style="padding: 10px; background: white; border-radius: 6px; border: 1px solid #e0e0e0; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06);">
+                <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #f0f0f0;">
+                    <div style="width: 3px; height: 18px; background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); border-radius: 2px;"></div>
+                    <h3 style="margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; color: #333;">
+                        <i class="fas fa-chart-line" style="color: #11998e; margin-right: 4px; font-size: 11px;"></i> Utilidades del Día
                     </h3>
                 </div>
                 <div id="quick-capture-profits">
@@ -5604,15 +5605,15 @@ const Reports = {
             </div>
 
             <!-- Sección de Historial de Reportes Archivados -->
-            <div class="module" style="padding: var(--spacing-lg); background: white; border-radius: var(--radius-md); border: 1px solid #e0e0e0; margin-bottom: var(--spacing-md); box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-md); padding-bottom: var(--spacing-md); border-bottom: 2px solid #f0f0f0;">
-                    <div style="display: flex; align-items: center; gap: var(--spacing-sm);">
-                        <div style="width: 4px; height: 24px; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); border-radius: 2px;"></div>
-                        <h3 style="margin: 0; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #333;">
-                            <i class="fas fa-history" style="color: #f093fb; margin-right: 6px;"></i> Historial de Reportes Archivados
+            <div class="module" style="padding: 10px; background: white; border-radius: 6px; border: 1px solid #e0e0e0; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #f0f0f0;">
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <div style="width: 3px; height: 18px; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); border-radius: 2px;"></div>
+                        <h3 style="margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; color: #333;">
+                            <i class="fas fa-history" style="color: #f093fb; margin-right: 4px; font-size: 11px;"></i> Historial de Reportes Archivados
                         </h3>
                     </div>
-                    <button class="btn-secondary btn-sm" onclick="window.Reports.loadArchivedReports()" title="Actualizar historial" style="font-weight: 600; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                    <button class="btn-secondary btn-sm" onclick="window.Reports.loadArchivedReports()" title="Actualizar historial" style="font-weight: 600; padding: 6px 10px; font-size: 11px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
                         <i class="fas fa-sync-alt"></i> Actualizar
                     </button>
                 </div>
@@ -6217,52 +6218,107 @@ const Reports = {
             // Obtener notas
             const notes = document.getElementById('qc-notes')?.value?.trim() || null;
 
-            // Crear objeto de captura (pendiente)
-            const capture = {
-                id: 'pending_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-                branch_id: branchId,
-                branch_name: branchName,
-                seller_id: sellerId,
-                seller_name: sellerName,
-                guide_id: guideId,
-                guide_name: guideName,
-                agency_id: agencyId,
-                agency_name: agencyName,
-                product: product,
-                quantity: quantity,
-                currency: currency,
-                total: total,
-                merchandise_cost: merchandiseCost,
-                notes: notes,
-                is_street: isStreet,
-                payments: payments, // Array de pagos múltiples
-                payment_method: payments.length === 1 ? payments[0].method : 'mixed', // Para compatibilidad
-                date: captureDate, // Fecha manual seleccionada
-                created_at: new Date().toISOString(),
-                created_by: typeof UserManager !== 'undefined' && UserManager.currentUser ? UserManager.currentUser.id : null,
-                isPending: true // Marca para identificar que es pendiente
-            };
+            // Verificar si estamos editando una captura existente
+            if (this.editingPendingCaptureId) {
+                // Actualizar la captura existente
+                const existingIndex = this.pendingCaptures.findIndex(c => c.id === this.editingPendingCaptureId);
+                if (existingIndex !== -1) {
+                    // Actualizar la captura existente
+                    this.pendingCaptures[existingIndex] = {
+                        ...this.pendingCaptures[existingIndex],
+                        branch_id: branchId,
+                        branch_name: branchName,
+                        seller_id: sellerId,
+                        seller_name: sellerName,
+                        guide_id: guideId,
+                        guide_name: guideName,
+                        agency_id: agencyId,
+                        agency_name: agencyName,
+                        product: product,
+                        quantity: quantity,
+                        currency: currency,
+                        total: total,
+                        merchandise_cost: merchandiseCost,
+                        notes: notes,
+                        is_street: isStreet,
+                        payments: payments, // Array de pagos múltiples
+                        payment_method: payments.length === 1 ? payments[0].method : 'mixed', // Para compatibilidad
+                        date: captureDate, // Fecha manual seleccionada
+                        updated_at: new Date().toISOString()
+                    };
+                    // Limpiar el ID de edición
+                    const wasEditing = true;
+                    this.editingPendingCaptureId = null;
+                    
+                    // Limpiar formulario después de actualizar
+                    document.getElementById('quick-capture-form')?.reset();
+                    if (document.getElementById('qc-quantity')) {
+                        document.getElementById('qc-quantity').value = '1';
+                    }
+                    const today = new Date().toISOString().split('T')[0];
+                    if (document.getElementById('qc-date')) {
+                        document.getElementById('qc-date').value = today;
+                    }
+                    this.initializePaymentsSystem();
+                    
+                    // Actualizar lista de pendientes
+                    await this.loadPendingCaptures();
+                    
+                    Utils.showNotification('Captura actualizada en la lista', 'success');
+                    return;
+                } else {
+                    Utils.showNotification('No se encontró la captura a editar', 'error');
+                    this.editingPendingCaptureId = null;
+                    return;
+                }
+            } else {
+                // Crear nueva captura (pendiente)
+                const capture = {
+                    id: 'pending_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+                    branch_id: branchId,
+                    branch_name: branchName,
+                    seller_id: sellerId,
+                    seller_name: sellerName,
+                    guide_id: guideId,
+                    guide_name: guideName,
+                    agency_id: agencyId,
+                    agency_name: agencyName,
+                    product: product,
+                    quantity: quantity,
+                    currency: currency,
+                    total: total,
+                    merchandise_cost: merchandiseCost,
+                    notes: notes,
+                    is_street: isStreet,
+                    payments: payments, // Array de pagos múltiples
+                    payment_method: payments.length === 1 ? payments[0].method : 'mixed', // Para compatibilidad
+                    date: captureDate, // Fecha manual seleccionada
+                    created_at: new Date().toISOString(),
+                    created_by: typeof UserManager !== 'undefined' && UserManager.currentUser ? UserManager.currentUser.id : null,
+                    isPending: true // Marca para identificar que es pendiente
+                };
 
-            // Agregar a la lista pendiente en memoria
-            this.pendingCaptures.push(capture);
+                // Agregar a la lista pendiente en memoria
+                this.pendingCaptures.push(capture);
 
-            // Limpiar formulario
-            document.getElementById('quick-capture-form')?.reset();
-            if (document.getElementById('qc-quantity')) {
-                document.getElementById('qc-quantity').value = '1';
+                // Limpiar formulario
+                document.getElementById('quick-capture-form')?.reset();
+                if (document.getElementById('qc-quantity')) {
+                    document.getElementById('qc-quantity').value = '1';
+                }
+                // Restablecer fecha a hoy
+                const today = new Date().toISOString().split('T')[0];
+                if (document.getElementById('qc-date')) {
+                    document.getElementById('qc-date').value = today;
+                }
+                // Reinicializar sistema de pagos
+                this.initializePaymentsSystem();
+
+                // Actualizar lista de pendientes
+                await this.loadPendingCaptures();
+
+                Utils.showNotification(`Captura agregada a la lista (${this.pendingCaptures.length} pendientes)`, 'success');
             }
-            // Restablecer fecha a hoy
-            const today = new Date().toISOString().split('T')[0];
-            if (document.getElementById('qc-date')) {
-                document.getElementById('qc-date').value = today;
-            }
-            // Reinicializar sistema de pagos
-            this.initializePaymentsSystem();
-
-            // Actualizar lista de pendientes
-            await this.loadPendingCaptures();
-
-            Utils.showNotification(`Captura agregada a la lista (${this.pendingCaptures.length} pendientes)`, 'success');
         } catch (error) {
             console.error('Error agregando captura a lista pendiente:', error);
             Utils.showNotification('Error al agregar la captura: ' + error.message, 'error');
@@ -6277,16 +6333,16 @@ const Reports = {
             
             // Limpiar y agregar una fila inicial
             container.innerHTML = `
-                <div class="payment-row" style="display: grid; grid-template-columns: 1fr 150px 100px; gap: var(--spacing-xs); align-items: center;">
-                    <select class="form-select payment-method" required>
+                <div class="payment-row" style="display: grid; grid-template-columns: 1fr 140px 70px; gap: 6px; align-items: center; padding: 4px; background: white; border-radius: 4px; border: 1px solid #dee2e6;">
+                    <select class="form-select payment-method" required style="border: 1px solid #ced4da; font-size: 11px; padding: 6px;">
                         <option value="">Método...</option>
                         <option value="cash">Efectivo</option>
                         <option value="card">Tarjeta</option>
                         <option value="transfer">Transferencia</option>
                         <option value="other">Otro</option>
                     </select>
-                    <input type="number" class="form-input payment-amount" min="0" step="0.01" placeholder="0.00" required>
-                    <button type="button" class="btn-danger btn-xs remove-payment" style="display: none;" onclick="if(window.Reports && window.Reports.updatePaymentsTotal) window.Reports.updatePaymentsTotal(); this.closest('.payment-row').remove();">
+                    <input type="number" class="form-input payment-amount" min="0" step="0.01" placeholder="0.00" required style="border: 1px solid #ced4da; font-size: 11px; padding: 6px;">
+                    <button type="button" class="btn-danger btn-xs remove-payment" style="display: none; padding: 4px 6px; font-size: 10px;" onclick="if(window.Reports && window.Reports.updatePaymentsTotal) window.Reports.updatePaymentsTotal(); this.closest('.payment-row').remove(); if(window.Reports && window.Reports.updateRemoveButtons) window.Reports.updateRemoveButtons();">
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
@@ -6309,6 +6365,9 @@ const Reports = {
             if (this.updatePaymentsTotal) {
                 this.updatePaymentsTotal();
             }
+            if (this.updateRemoveButtons) {
+                this.updateRemoveButtons();
+            }
         } catch (error) {
             console.error('Error inicializando sistema de pagos:', error);
         }
@@ -6321,17 +6380,17 @@ const Reports = {
             
             const row = document.createElement('div');
             row.className = 'payment-row';
-            row.style.cssText = 'display: grid; grid-template-columns: 1fr 150px 100px; gap: var(--spacing-xs); align-items: center;';
+            row.style.cssText = 'display: grid; grid-template-columns: 1fr 140px 70px; gap: 6px; align-items: center; padding: 4px; background: white; border-radius: 4px; border: 1px solid #dee2e6;';
             row.innerHTML = `
-                <select class="form-select payment-method" required>
+                <select class="form-select payment-method" required style="border: 1px solid #ced4da; font-size: 11px; padding: 6px;">
                     <option value="">Método...</option>
                     <option value="cash">Efectivo</option>
                     <option value="card">Tarjeta</option>
                     <option value="transfer">Transferencia</option>
                     <option value="other">Otro</option>
                 </select>
-                <input type="number" class="form-input payment-amount" min="0" step="0.01" placeholder="0.00" required>
-                <button type="button" class="btn-danger btn-xs remove-payment" onclick="if(window.Reports && window.Reports.updatePaymentsTotal) window.Reports.updatePaymentsTotal(); this.closest('.payment-row').remove();">
+                <input type="number" class="form-input payment-amount" min="0" step="0.01" placeholder="0.00" required style="border: 1px solid #ced4da; font-size: 11px; padding: 6px;">
+                <button type="button" class="btn-danger btn-xs remove-payment" style="padding: 4px 6px; font-size: 10px;" onclick="if(window.Reports && window.Reports.updatePaymentsTotal) window.Reports.updatePaymentsTotal(); this.closest('.payment-row').remove(); if(window.Reports && window.Reports.updateRemoveButtons) window.Reports.updateRemoveButtons();">
                     <i class="fas fa-times"></i>
                 </button>
             `;
@@ -6482,69 +6541,69 @@ const Reports = {
 
             // Renderizar tabla
             let html = `
-                <div style="margin-bottom: var(--spacing-md); padding: var(--spacing-md); background: linear-gradient(135deg, #fff9e6 0%, #fff3cd 100%); border-radius: var(--radius-md); border: 1px solid #ffc107; box-shadow: 0 2px 4px rgba(255,193,7,0.2);">
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--spacing-md);">
-                        <div style="padding: var(--spacing-sm); background: white; border-radius: var(--radius-sm); border-left: 3px solid #ffc107; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                            <div style="font-size: 10px; color: #856404; text-transform: uppercase; margin-bottom: var(--spacing-xs); font-weight: 600; letter-spacing: 0.5px;">Total Pendientes</div>
-                            <div style="font-size: 24px; font-weight: 700; color: #ffc107;">${this.pendingCaptures.length}</div>
+                <div style="margin-bottom: 10px; padding: 10px; background: linear-gradient(135deg, #fff9e6 0%, #fff3cd 100%); border-radius: 6px; border: 1px solid #ffc107; box-shadow: 0 1px 3px rgba(255,193,7,0.15);">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px;">
+                        <div style="padding: 8px; background: white; border-radius: 4px; border-left: 3px solid #ffc107; box-shadow: 0 1px 2px rgba(0,0,0,0.08);">
+                            <div style="font-size: 9px; color: #856404; text-transform: uppercase; margin-bottom: 4px; font-weight: 600; letter-spacing: 0.3px;">Total Pendientes</div>
+                            <div style="font-size: 20px; font-weight: 700; color: #ffc107;">${this.pendingCaptures.length}</div>
                         </div>
-                        <div style="padding: var(--spacing-sm); background: white; border-radius: var(--radius-sm); border-left: 3px solid #ffc107; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                            <div style="font-size: 10px; color: #856404; text-transform: uppercase; margin-bottom: var(--spacing-xs); font-weight: 600; letter-spacing: 0.5px;">Total Cantidad</div>
-                            <div style="font-size: 24px; font-weight: 700; color: #ffc107;">${totalQuantity}</div>
+                        <div style="padding: 8px; background: white; border-radius: 4px; border-left: 3px solid #ffc107; box-shadow: 0 1px 2px rgba(0,0,0,0.08);">
+                            <div style="font-size: 9px; color: #856404; text-transform: uppercase; margin-bottom: 4px; font-weight: 600; letter-spacing: 0.3px;">Total Cantidad</div>
+                            <div style="font-size: 20px; font-weight: 700; color: #ffc107;">${totalQuantity}</div>
                         </div>
-                        <div style="padding: var(--spacing-sm); background: white; border-radius: var(--radius-sm); border-left: 3px solid #ffc107; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                            <div style="font-size: 10px; color: #856404; text-transform: uppercase; margin-bottom: var(--spacing-xs); font-weight: 600; letter-spacing: 0.5px;">Total USD</div>
-                            <div style="font-size: 20px; font-weight: 700; color: #ffc107;">$${totals.USD.toFixed(2)}</div>
+                        <div style="padding: 8px; background: white; border-radius: 4px; border-left: 3px solid #ffc107; box-shadow: 0 1px 2px rgba(0,0,0,0.08);">
+                            <div style="font-size: 9px; color: #856404; text-transform: uppercase; margin-bottom: 4px; font-weight: 600; letter-spacing: 0.3px;">Total USD</div>
+                            <div style="font-size: 16px; font-weight: 700; color: #ffc107;">$${totals.USD.toFixed(2)}</div>
                         </div>
-                        <div style="padding: var(--spacing-sm); background: white; border-radius: var(--radius-sm); border-left: 3px solid #ffc107; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                            <div style="font-size: 10px; color: #856404; text-transform: uppercase; margin-bottom: var(--spacing-xs); font-weight: 600; letter-spacing: 0.5px;">Total MXN</div>
-                            <div style="font-size: 20px; font-weight: 700; color: #ffc107;">$${totals.MXN.toFixed(2)}</div>
+                        <div style="padding: 8px; background: white; border-radius: 4px; border-left: 3px solid #ffc107; box-shadow: 0 1px 2px rgba(0,0,0,0.08);">
+                            <div style="font-size: 9px; color: #856404; text-transform: uppercase; margin-bottom: 4px; font-weight: 600; letter-spacing: 0.3px;">Total MXN</div>
+                            <div style="font-size: 16px; font-weight: 700; color: #ffc107;">$${totals.MXN.toFixed(2)}</div>
                         </div>
-                        <div style="padding: var(--spacing-sm); background: white; border-radius: var(--radius-sm); border-left: 3px solid #ffc107; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                            <div style="font-size: 10px; color: #856404; text-transform: uppercase; margin-bottom: var(--spacing-xs); font-weight: 600; letter-spacing: 0.5px;">Total CAD</div>
-                            <div style="font-size: 20px; font-weight: 700; color: #ffc107;">$${totals.CAD.toFixed(2)}</div>
+                        <div style="padding: 8px; background: white; border-radius: 4px; border-left: 3px solid #ffc107; box-shadow: 0 1px 2px rgba(0,0,0,0.08);">
+                            <div style="font-size: 9px; color: #856404; text-transform: uppercase; margin-bottom: 4px; font-weight: 600; letter-spacing: 0.3px;">Total CAD</div>
+                            <div style="font-size: 16px; font-weight: 700; color: #ffc107;">$${totals.CAD.toFixed(2)}</div>
                         </div>
                     </div>
                 </div>
 
-                <div style="overflow-x: auto; border-radius: var(--radius-sm); border: 1px solid #ffc107;">
-                    <table style="width: 100%; border-collapse: collapse; background: white;">
+                <div style="overflow-x: auto; border-radius: 4px; border: 1px solid #ffc107;">
+                    <table style="width: 100%; border-collapse: collapse; background: white; font-size: 11px;">
                         <thead>
                             <tr style="background: linear-gradient(135deg, #ffc107 0%, #ff9800 100%); color: white;">
-                                <th style="padding: var(--spacing-md) var(--spacing-sm); text-align: left; font-size: 11px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">#</th>
-                                <th style="padding: var(--spacing-md) var(--spacing-sm); text-align: left; font-size: 11px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Sucursal</th>
-                                <th style="padding: var(--spacing-md) var(--spacing-sm); text-align: left; font-size: 11px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Vendedor</th>
-                                <th style="padding: var(--spacing-md) var(--spacing-sm); text-align: left; font-size: 11px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Guía</th>
-                                <th style="padding: var(--spacing-md) var(--spacing-sm); text-align: left; font-size: 11px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Agencia</th>
-                                <th style="padding: var(--spacing-md) var(--spacing-sm); text-align: left; font-size: 11px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Producto</th>
-                                <th style="padding: var(--spacing-md) var(--spacing-sm); text-align: center; font-size: 11px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Cantidad</th>
-                                <th style="padding: var(--spacing-md) var(--spacing-sm); text-align: right; font-size: 11px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Moneda</th>
-                                <th style="padding: var(--spacing-md) var(--spacing-sm); text-align: right; font-size: 11px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Total</th>
-                                <th style="padding: var(--spacing-md) var(--spacing-sm); text-align: right; font-size: 11px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Costo</th>
-                                <th style="padding: var(--spacing-md) var(--spacing-sm); text-align: center; font-size: 11px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Acciones</th>
+                                <th style="padding: 8px 6px; text-align: left; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">#</th>
+                                <th style="padding: 8px 6px; text-align: left; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Sucursal</th>
+                                <th style="padding: 8px 6px; text-align: left; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Vendedor</th>
+                                <th style="padding: 8px 6px; text-align: left; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Guía</th>
+                                <th style="padding: 8px 6px; text-align: left; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Agencia</th>
+                                <th style="padding: 8px 6px; text-align: left; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Producto</th>
+                                <th style="padding: 8px 6px; text-align: center; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Cantidad</th>
+                                <th style="padding: 8px 6px; text-align: right; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Moneda</th>
+                                <th style="padding: 8px 6px; text-align: right; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Total</th>
+                                <th style="padding: 8px 6px; text-align: right; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Costo</th>
+                                <th style="padding: 8px 6px; text-align: center; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Acciones</th>
                             </tr>
                         </thead>
                         <tbody>
                             ${this.pendingCaptures.map((c, index) => {
                                 const isEven = index % 2 === 0;
                                 return `
-                                    <tr style="border-bottom: 1px solid #ffe69c; background: ${isEven ? 'white' : '#fff9e6'}; transition: background 0.2s;">
-                                        <td style="padding: var(--spacing-md) var(--spacing-sm); font-size: 12px; font-weight: 600; color: #856404;">${index + 1}</td>
-                                        <td style="padding: var(--spacing-md) var(--spacing-sm); font-size: 12px; color: #495057;">${c.branch_name || 'N/A'}</td>
-                                        <td style="padding: var(--spacing-md) var(--spacing-sm); font-size: 12px; color: #495057; font-weight: 500;">${c.seller_name || 'N/A'}</td>
-                                        <td style="padding: var(--spacing-md) var(--spacing-sm); font-size: 12px; color: #6c757d;">${c.guide_name || '-'}</td>
-                                        <td style="padding: var(--spacing-md) var(--spacing-sm); font-size: 12px; color: #6c757d;">${c.agency_name || '-'}</td>
-                                        <td style="padding: var(--spacing-md) var(--spacing-sm); font-size: 12px; color: #495057; font-weight: 500;">${c.product}</td>
-                                        <td style="padding: var(--spacing-md) var(--spacing-sm); font-size: 12px; text-align: center; color: #495057;">${c.quantity}</td>
-                                        <td style="padding: var(--spacing-md) var(--spacing-sm); font-size: 12px; text-align: right; color: #495057; font-weight: 500;">${c.currency}</td>
-                                        <td style="padding: var(--spacing-md) var(--spacing-sm); font-size: 12px; text-align: right; font-weight: 600; color: #28a745;">$${c.total.toFixed(2)}</td>
-                                        <td style="padding: var(--spacing-md) var(--spacing-sm); font-size: 12px; text-align: right; color: #dc3545; font-weight: 500;">$${(c.merchandise_cost || 0).toFixed(2)}</td>
-                                        <td style="padding: var(--spacing-md) var(--spacing-sm); text-align: center;">
-                                            <div style="display: flex; gap: var(--spacing-xs); justify-content: center;">
-                                                <button class="btn-primary btn-xs" onclick="window.Reports.editPendingCapture('${c.id}')" title="Editar" style="box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                                    <tr style="border-bottom: 1px solid #ffe69c; background: ${isEven ? 'white' : '#fff9e6'};">
+                                        <td style="padding: 6px; font-size: 11px; font-weight: 600; color: #856404;">${index + 1}</td>
+                                        <td style="padding: 6px; font-size: 11px; color: #495057;">${c.branch_name || 'N/A'}</td>
+                                        <td style="padding: 6px; font-size: 11px; color: #495057; font-weight: 500;">${c.seller_name || 'N/A'}</td>
+                                        <td style="padding: 6px; font-size: 11px; color: #6c757d;">${c.guide_name || '-'}</td>
+                                        <td style="padding: 6px; font-size: 11px; color: #6c757d;">${c.agency_name || '-'}</td>
+                                        <td style="padding: 6px; font-size: 11px; color: #495057; font-weight: 500;">${c.product}</td>
+                                        <td style="padding: 6px; font-size: 11px; text-align: center; color: #495057;">${c.quantity}</td>
+                                        <td style="padding: 6px; font-size: 11px; text-align: right; color: #495057; font-weight: 500;">${c.currency}</td>
+                                        <td style="padding: 6px; font-size: 11px; text-align: right; font-weight: 600; color: #28a745;">$${c.total.toFixed(2)}</td>
+                                        <td style="padding: 6px; font-size: 11px; text-align: right; color: #dc3545; font-weight: 500;">$${(c.merchandise_cost || 0).toFixed(2)}</td>
+                                        <td style="padding: 6px; text-align: center;">
+                                            <div style="display: flex; gap: 4px; justify-content: center;">
+                                                <button class="btn-primary btn-xs" onclick="window.Reports.editPendingCapture('${c.id}')" title="Editar" style="padding: 4px 6px; font-size: 10px;">
                                                     <i class="fas fa-edit"></i>
                                                 </button>
-                                                <button class="btn-danger btn-xs" onclick="window.Reports.deletePendingCapture('${c.id}')" title="Eliminar" style="box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                                                <button class="btn-danger btn-xs" onclick="window.Reports.deletePendingCapture('${c.id}')" title="Eliminar" style="padding: 4px 6px; font-size: 10px;">
                                                     <i class="fas fa-trash"></i>
                                                 </button>
                                             </div>
@@ -6571,6 +6630,9 @@ const Reports = {
                 return;
             }
 
+            // Guardar el ID de la captura que se está editando (NO eliminar de la lista)
+            this.editingPendingCaptureId = captureId;
+
             // Llenar el formulario con los datos de la captura
             const isMasterAdmin = typeof UserManager !== 'undefined' && (
                 UserManager.currentUser?.role === 'master_admin' ||
@@ -6586,9 +6648,17 @@ const Reports = {
             }
             if (document.getElementById('qc-guide')) {
                 document.getElementById('qc-guide').value = capture.guide_id || '';
+                // Si hay agencia, cargar guías filtradas
+                if (capture.agency_id) {
+                    await this.loadGuidesForAgency(capture.agency_id, capture.guide_id);
+                }
             }
             if (document.getElementById('qc-agency')) {
                 document.getElementById('qc-agency').value = capture.agency_id || '';
+                // Disparar evento change para cargar guías si hay agencia
+                if (capture.agency_id) {
+                    document.getElementById('qc-agency').dispatchEvent(new Event('change'));
+                }
             }
             if (document.getElementById('qc-product')) {
                 document.getElementById('qc-product').value = capture.product;
@@ -6596,11 +6666,11 @@ const Reports = {
             if (document.getElementById('qc-quantity')) {
                 document.getElementById('qc-quantity').value = capture.quantity;
             }
+            if (document.getElementById('qc-date')) {
+                document.getElementById('qc-date').value = capture.date || new Date().toISOString().split('T')[0];
+            }
             if (document.getElementById('qc-currency')) {
                 document.getElementById('qc-currency').value = capture.currency;
-            }
-            if (document.getElementById('qc-total')) {
-                document.getElementById('qc-total').value = capture.total;
             }
             if (document.getElementById('qc-cost')) {
                 document.getElementById('qc-cost').value = capture.merchandise_cost || '';
@@ -6617,15 +6687,60 @@ const Reports = {
                 document.getElementById('qc-payment-method').value = capture.payment_method || '';
             }
 
-            // Eliminar la captura de la lista pendiente
-            this.pendingCaptures = this.pendingCaptures.filter(c => c.id !== captureId);
-            await this.loadPendingCaptures();
+            // Cargar pagos múltiples si existen
+            if (capture.payments && Array.isArray(capture.payments) && capture.payments.length > 0) {
+                // Limpiar pagos actuales
+                const container = document.getElementById('qc-payments-container');
+                if (container) {
+                    container.innerHTML = '';
+                    // Agregar cada pago
+                    capture.payments.forEach((payment, index) => {
+                        const row = document.createElement('div');
+                        row.className = 'payment-row';
+                        row.style.cssText = 'display: grid; grid-template-columns: 1fr 140px 70px; gap: 6px; align-items: center; padding: 4px; background: white; border-radius: 4px; border: 1px solid #dee2e6;';
+                        row.innerHTML = `
+                            <select class="form-select payment-method" required style="border: 1px solid #ced4da; font-size: 11px; padding: 6px;">
+                                <option value="">Método...</option>
+                                <option value="cash" ${payment.method === 'cash' ? 'selected' : ''}>Efectivo</option>
+                                <option value="card" ${payment.method === 'card' ? 'selected' : ''}>Tarjeta</option>
+                                <option value="transfer" ${payment.method === 'transfer' ? 'selected' : ''}>Transferencia</option>
+                                <option value="other" ${payment.method === 'other' ? 'selected' : ''}>Otro</option>
+                            </select>
+                            <input type="number" class="form-input payment-amount" min="0" step="0.01" placeholder="0.00" value="${payment.amount || 0}" required style="border: 1px solid #ced4da; font-size: 11px; padding: 6px;">
+                            <button type="button" class="btn-danger btn-xs remove-payment" style="padding: 4px 6px; font-size: 10px;" onclick="if(window.Reports && window.Reports.updatePaymentsTotal) window.Reports.updatePaymentsTotal(); this.closest('.payment-row').remove(); if(window.Reports && window.Reports.updateRemoveButtons) window.Reports.updateRemoveButtons();">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        `;
+                        container.appendChild(row);
+                    });
+                    // Agregar event listeners
+                    container.querySelectorAll('.payment-amount').forEach(input => {
+                        input.addEventListener('input', () => {
+                            if (this.updatePaymentsTotal) {
+                                this.updatePaymentsTotal();
+                            }
+                        });
+                    });
+                    if (this.updatePaymentsTotal) {
+                        this.updatePaymentsTotal();
+                    }
+                    if (this.updateRemoveButtons) {
+                        this.updateRemoveButtons();
+                    }
+                }
+            } else {
+                // Si no hay pagos, reinicializar el sistema
+                this.initializePaymentsSystem();
+            }
+
+            // NO eliminar la captura de la lista - solo marcarla como en edición
+            // La captura se actualizará cuando se guarde con "Agregar a Lista"
 
             // Scroll al formulario
             document.getElementById('quick-capture-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
             document.getElementById('qc-product')?.focus();
 
-            Utils.showNotification('Captura cargada para edición', 'info');
+            Utils.showNotification('Captura cargada para edición. Modifica los datos y haz clic en "Agregar a Lista" para actualizar.', 'info');
         } catch (error) {
             console.error('Error editando captura pendiente:', error);
             Utils.showNotification('Error al editar la captura: ' + error.message, 'error');
@@ -6757,47 +6872,47 @@ const Reports = {
 
             // Renderizar tabla
             let html = `
-                <div style="margin-bottom: var(--spacing-lg); padding: var(--spacing-lg); background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-radius: var(--radius-md); border: 1px solid #dee2e6; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--spacing-md);">
-                        <div style="padding: var(--spacing-sm); background: white; border-radius: var(--radius-sm); border-left: 3px solid #667eea; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                            <div style="font-size: 10px; color: #6c757d; text-transform: uppercase; margin-bottom: var(--spacing-xs); font-weight: 600; letter-spacing: 0.5px;">Total Capturas</div>
-                            <div style="font-size: 24px; font-weight: 700; color: #667eea;">${captures.length}</div>
+                <div style="margin-bottom: 10px; padding: 10px; background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-radius: 6px; border: 1px solid #dee2e6; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px;">
+                        <div style="padding: 8px; background: white; border-radius: 4px; border-left: 3px solid #667eea; box-shadow: 0 1px 2px rgba(0,0,0,0.08);">
+                            <div style="font-size: 9px; color: #6c757d; text-transform: uppercase; margin-bottom: 4px; font-weight: 600; letter-spacing: 0.3px;">Total Capturas</div>
+                            <div style="font-size: 20px; font-weight: 700; color: #667eea;">${captures.length}</div>
                         </div>
-                        <div style="padding: var(--spacing-sm); background: white; border-radius: var(--radius-sm); border-left: 3px solid #11998e; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                            <div style="font-size: 10px; color: #6c757d; text-transform: uppercase; margin-bottom: var(--spacing-xs); font-weight: 600; letter-spacing: 0.5px;">Total Cantidad</div>
-                            <div style="font-size: 24px; font-weight: 700; color: #11998e;">${totalQuantity}</div>
+                        <div style="padding: 8px; background: white; border-radius: 4px; border-left: 3px solid #11998e; box-shadow: 0 1px 2px rgba(0,0,0,0.08);">
+                            <div style="font-size: 9px; color: #6c757d; text-transform: uppercase; margin-bottom: 4px; font-weight: 600; letter-spacing: 0.3px;">Total Cantidad</div>
+                            <div style="font-size: 20px; font-weight: 700; color: #11998e;">${totalQuantity}</div>
                         </div>
-                        <div style="padding: var(--spacing-sm); background: white; border-radius: var(--radius-sm); border-left: 3px solid #f093fb; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                            <div style="font-size: 10px; color: #6c757d; text-transform: uppercase; margin-bottom: var(--spacing-xs); font-weight: 600; letter-spacing: 0.5px;">Total USD</div>
-                            <div style="font-size: 20px; font-weight: 700; color: #f093fb;">$${totals.USD.toFixed(2)}</div>
+                        <div style="padding: 8px; background: white; border-radius: 4px; border-left: 3px solid #f093fb; box-shadow: 0 1px 2px rgba(0,0,0,0.08);">
+                            <div style="font-size: 9px; color: #6c757d; text-transform: uppercase; margin-bottom: 4px; font-weight: 600; letter-spacing: 0.3px;">Total USD</div>
+                            <div style="font-size: 16px; font-weight: 700; color: #f093fb;">$${totals.USD.toFixed(2)}</div>
                         </div>
-                        <div style="padding: var(--spacing-sm); background: white; border-radius: var(--radius-sm); border-left: 3px solid #4facfe; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                            <div style="font-size: 10px; color: #6c757d; text-transform: uppercase; margin-bottom: var(--spacing-xs); font-weight: 600; letter-spacing: 0.5px;">Total MXN</div>
-                            <div style="font-size: 20px; font-weight: 700; color: #4facfe;">$${totals.MXN.toFixed(2)}</div>
+                        <div style="padding: 8px; background: white; border-radius: 4px; border-left: 3px solid #4facfe; box-shadow: 0 1px 2px rgba(0,0,0,0.08);">
+                            <div style="font-size: 9px; color: #6c757d; text-transform: uppercase; margin-bottom: 4px; font-weight: 600; letter-spacing: 0.3px;">Total MXN</div>
+                            <div style="font-size: 16px; font-weight: 700; color: #4facfe;">$${totals.MXN.toFixed(2)}</div>
                         </div>
-                        <div style="padding: var(--spacing-sm); background: white; border-radius: var(--radius-sm); border-left: 3px solid #fa709a; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                            <div style="font-size: 10px; color: #6c757d; text-transform: uppercase; margin-bottom: var(--spacing-xs); font-weight: 600; letter-spacing: 0.5px;">Total CAD</div>
-                            <div style="font-size: 20px; font-weight: 700; color: #fa709a;">$${totals.CAD.toFixed(2)}</div>
+                        <div style="padding: 8px; background: white; border-radius: 4px; border-left: 3px solid #fa709a; box-shadow: 0 1px 2px rgba(0,0,0,0.08);">
+                            <div style="font-size: 9px; color: #6c757d; text-transform: uppercase; margin-bottom: 4px; font-weight: 600; letter-spacing: 0.3px;">Total CAD</div>
+                            <div style="font-size: 16px; font-weight: 700; color: #fa709a;">$${totals.CAD.toFixed(2)}</div>
                         </div>
                     </div>
                 </div>
 
-                <div style="overflow-x: auto; border-radius: var(--radius-sm); border: 1px solid #e0e0e0;">
-                    <table style="width: 100%; border-collapse: collapse; background: white;">
+                <div style="overflow-x: auto; border-radius: 4px; border: 1px solid #e0e0e0;">
+                    <table style="width: 100%; border-collapse: collapse; background: white; font-size: 11px;">
                         <thead>
                             <tr style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
-                                <th style="padding: var(--spacing-md) var(--spacing-sm); text-align: left; font-size: 11px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Hora</th>
-                                <th style="padding: var(--spacing-md) var(--spacing-sm); text-align: left; font-size: 11px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Sucursal</th>
-                                <th style="padding: var(--spacing-md) var(--spacing-sm); text-align: left; font-size: 11px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Vendedor</th>
-                                <th style="padding: var(--spacing-md) var(--spacing-sm); text-align: left; font-size: 11px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Guía</th>
-                                <th style="padding: var(--spacing-md) var(--spacing-sm); text-align: left; font-size: 11px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Agencia</th>
-                                <th style="padding: var(--spacing-md) var(--spacing-sm); text-align: left; font-size: 11px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Producto</th>
-                                <th style="padding: var(--spacing-md) var(--spacing-sm); text-align: center; font-size: 11px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Cantidad</th>
-                                <th style="padding: var(--spacing-md) var(--spacing-sm); text-align: right; font-size: 11px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Moneda</th>
-                                <th style="padding: var(--spacing-md) var(--spacing-sm); text-align: right; font-size: 11px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Total</th>
-                                <th style="padding: var(--spacing-md) var(--spacing-sm); text-align: right; font-size: 11px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Costo</th>
-                                <th style="padding: var(--spacing-md) var(--spacing-sm); text-align: left; font-size: 11px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Notas</th>
-                                <th style="padding: var(--spacing-md) var(--spacing-sm); text-align: center; font-size: 11px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Acciones</th>
+                                <th style="padding: 8px 6px; text-align: left; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Hora</th>
+                                <th style="padding: 8px 6px; text-align: left; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Sucursal</th>
+                                <th style="padding: 8px 6px; text-align: left; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Vendedor</th>
+                                <th style="padding: 8px 6px; text-align: left; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Guía</th>
+                                <th style="padding: 8px 6px; text-align: left; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Agencia</th>
+                                <th style="padding: 8px 6px; text-align: left; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Producto</th>
+                                <th style="padding: 8px 6px; text-align: center; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Cantidad</th>
+                                <th style="padding: 8px 6px; text-align: right; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Moneda</th>
+                                <th style="padding: 8px 6px; text-align: right; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Total</th>
+                                <th style="padding: 8px 6px; text-align: right; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Costo</th>
+                                <th style="padding: 8px 6px; text-align: left; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Notas</th>
+                                <th style="padding: 8px 6px; text-align: center; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Acciones</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -6805,24 +6920,24 @@ const Reports = {
                                 const time = new Date(c.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
                                 const isEven = index % 2 === 0;
                                 return `
-                                    <tr style="border-bottom: 1px solid #f0f0f0; background: ${isEven ? 'white' : '#f8f9fa'}; transition: background 0.2s;">
-                                        <td style="padding: var(--spacing-md) var(--spacing-sm); font-size: 12px; color: #495057;">${time}</td>
-                                        <td style="padding: var(--spacing-md) var(--spacing-sm); font-size: 12px; color: #495057;">${c.branch_name || 'N/A'}</td>
-                                        <td style="padding: var(--spacing-md) var(--spacing-sm); font-size: 12px; color: #495057; font-weight: 500;">${c.seller_name || 'N/A'}</td>
-                                        <td style="padding: var(--spacing-md) var(--spacing-sm); font-size: 12px; color: #6c757d;">${c.guide_name || '-'}</td>
-                                        <td style="padding: var(--spacing-md) var(--spacing-sm); font-size: 12px; color: #6c757d;">${c.agency_name || '-'}</td>
-                                        <td style="padding: var(--spacing-md) var(--spacing-sm); font-size: 12px; color: #495057; font-weight: 500;">${c.product}</td>
-                                        <td style="padding: var(--spacing-md) var(--spacing-sm); font-size: 12px; text-align: center; color: #495057;">${c.quantity}</td>
-                                        <td style="padding: var(--spacing-md) var(--spacing-sm); font-size: 12px; text-align: right; color: #495057; font-weight: 500;">${c.currency}</td>
-                                        <td style="padding: var(--spacing-md) var(--spacing-sm); font-size: 12px; text-align: right; font-weight: 600; color: #28a745;">$${((c.total || 0) || (c.payments && Array.isArray(c.payments) && c.payments.length > 0 ? c.payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0) : 0)).toFixed(2)}</td>
-                                        <td style="padding: var(--spacing-md) var(--spacing-sm); font-size: 12px; text-align: right; color: #dc3545; font-weight: 500;">$${(c.merchandise_cost || 0).toFixed(2)}</td>
-                                        <td style="padding: var(--spacing-md) var(--spacing-sm); font-size: 11px; color: #6c757d; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${c.notes || ''}">${c.notes || '-'}</td>
-                                        <td style="padding: var(--spacing-md) var(--spacing-sm); text-align: center;">
-                                            <div style="display: flex; gap: var(--spacing-xs); justify-content: center;">
-                                                <button class="btn-primary btn-xs" onclick="window.Reports.editQuickCaptureSale('${c.id}')" title="Editar" style="box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                                    <tr style="border-bottom: 1px solid #f0f0f0; background: ${isEven ? 'white' : '#f8f9fa'};">
+                                        <td style="padding: 6px; font-size: 11px; color: #495057;">${time}</td>
+                                        <td style="padding: 6px; font-size: 11px; color: #495057;">${c.branch_name || 'N/A'}</td>
+                                        <td style="padding: 6px; font-size: 11px; color: #495057; font-weight: 500;">${c.seller_name || 'N/A'}</td>
+                                        <td style="padding: 6px; font-size: 11px; color: #6c757d;">${c.guide_name || '-'}</td>
+                                        <td style="padding: 6px; font-size: 11px; color: #6c757d;">${c.agency_name || '-'}</td>
+                                        <td style="padding: 6px; font-size: 11px; color: #495057; font-weight: 500;">${c.product}</td>
+                                        <td style="padding: 6px; font-size: 11px; text-align: center; color: #495057;">${c.quantity}</td>
+                                        <td style="padding: 6px; font-size: 11px; text-align: right; color: #495057; font-weight: 500;">${c.currency}</td>
+                                        <td style="padding: 6px; font-size: 11px; text-align: right; font-weight: 600; color: #28a745;">$${((c.total || 0) || (c.payments && Array.isArray(c.payments) && c.payments.length > 0 ? c.payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0) : 0)).toFixed(2)}</td>
+                                        <td style="padding: 6px; font-size: 11px; text-align: right; color: #dc3545; font-weight: 500;">$${(c.merchandise_cost || 0).toFixed(2)}</td>
+                                        <td style="padding: 6px; font-size: 10px; color: #6c757d; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${c.notes || ''}">${c.notes || '-'}</td>
+                                        <td style="padding: 6px; text-align: center;">
+                                            <div style="display: flex; gap: 4px; justify-content: center;">
+                                                <button class="btn-primary btn-xs" onclick="window.Reports.editQuickCaptureSale('${c.id}')" title="Editar" style="padding: 4px 6px; font-size: 10px;">
                                                     <i class="fas fa-edit"></i>
                                                 </button>
-                                                <button class="btn-danger btn-xs" onclick="window.Reports.deleteQuickCaptureSale('${c.id}')" title="Eliminar" style="box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                                                <button class="btn-danger btn-xs" onclick="window.Reports.deleteQuickCaptureSale('${c.id}')" title="Eliminar" style="padding: 4px 6px; font-size: 10px;">
                                                     <i class="fas fa-trash"></i>
                                                 </button>
                                             </div>
@@ -6892,21 +7007,21 @@ const Reports = {
             });
 
             let html = `
-                <div style="display: grid; gap: var(--spacing-md);">
+                <div style="display: grid; gap: 8px;">
                     ${Object.values(arrivalsByAgency).map(group => `
-                        <div style="padding: var(--spacing-md); background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-radius: var(--radius-sm); border-left: 4px solid #fa709a; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-sm); padding-bottom: var(--spacing-xs); border-bottom: 1px solid #dee2e6;">
-                                <strong style="font-size: 14px; color: #495057; font-weight: 600;">${group.agency?.name || 'Agencia Desconocida'}</strong>
-                                <span style="font-size: 12px; color: #6c757d; font-weight: 500; padding: 4px 12px; background: white; border-radius: 12px; border: 1px solid #dee2e6;">${group.totalPassengers} pasajeros</span>
+                        <div style="padding: 10px; background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-radius: 4px; border-left: 3px solid #fa709a; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid #dee2e6;">
+                                <strong style="font-size: 12px; color: #495057; font-weight: 600;">${group.agency?.name || 'Agencia Desconocida'}</strong>
+                                <span style="font-size: 10px; color: #6c757d; font-weight: 500; padding: 3px 10px; background: white; border-radius: 10px; border: 1px solid #dee2e6;">${group.totalPassengers} pasajeros</span>
                             </div>
-                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--spacing-xs); font-size: 11px; color: var(--color-text-secondary);">
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 6px; font-size: 10px; color: #6c757d;">
                                 ${group.arrivals.map(a => {
                                     const branch = branches.find(b => b.id === a.branch_id);
                                     return `
-                                        <div>
-                                            <i class="fas fa-building"></i> ${branch?.name || 'N/A'}: 
-                                            <strong>${a.passengers || 0}</strong> pasajeros
-                                            ${a.time ? `<span style="margin-left: var(--spacing-xs);">(${a.time})</span>` : ''}
+                                        <div style="padding: 4px 6px; background: white; border-radius: 3px;">
+                                            <i class="fas fa-building" style="font-size: 9px; margin-right: 4px;"></i> ${branch?.name || 'N/A'}: 
+                                            <strong style="color: #495057;">${a.passengers || 0}</strong> pasajeros
+                                            ${a.time ? `<span style="margin-left: 4px; font-size: 9px;">(${a.time})</span>` : ''}
                                         </div>
                                     `;
                                 }).join('')}
