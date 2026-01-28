@@ -5416,7 +5416,7 @@ const Reports = {
                         <div style="width: 3px; height: 18px; background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); border-radius: 2px;"></div>
                         <h3 style="margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; color: #333;">
                             <i class="fas fa-list" style="color: #11998e; margin-right: 4px; font-size: 11px;"></i> Capturas del Día
-                            <span style="color: #6c757d; font-size: 10px; font-weight: 400; margin-left: 4px;">(${today})</span>
+                            <span id="captures-date-display" style="color: #6c757d; font-size: 10px; font-weight: 400; margin-left: 4px;">(${today})</span>
                         </h3>
                     </div>
                     <div style="display: flex; gap: 4px; flex-wrap: wrap;">
@@ -6852,11 +6852,20 @@ const Reports = {
             const dateInput = document.getElementById('qc-date');
             const selectedDate = dateInput?.value || new Date().toISOString().split('T')[0];
             
+            // Obtener sucursal actual para filtrar
+            const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
+            const isMasterAdmin = typeof UserManager !== 'undefined' && (
+                UserManager.currentUser?.role === 'master_admin' ||
+                UserManager.currentUser?.is_master_admin ||
+                UserManager.currentUser?.isMasterAdmin ||
+                UserManager.currentEmployee?.role === 'master_admin'
+            );
+            
             // Obtener todas las capturas y filtrar por la fecha seleccionada
             let captures = await DB.getAll('temp_quick_captures') || [];
             console.log(`📊 Total capturas en BD: ${captures.length}, filtrando por fecha: ${selectedDate}`);
             captures = captures.filter(c => {
-                // Normalizar fechas para comparación (usar original_report_date si existe, sino date)
+                // Normalizar fechas para comparación estricta (usar original_report_date si existe, sino date)
                 const captureDate = c.original_report_date || c.date;
                 if (!captureDate) {
                     console.warn('⚠️ Captura sin fecha:', c.id);
@@ -6867,8 +6876,18 @@ const Reports = {
                 const matches = normalizedCaptureDate === normalizedSelectedDate;
                 if (!matches) {
                     console.log(`   Fecha no coincide: ${normalizedCaptureDate} !== ${normalizedSelectedDate}`);
+                    return false;
                 }
-                return matches;
+                
+                // Filtrar por sucursal si no es master admin
+                if (!isMasterAdmin && currentBranchId) {
+                    if (!c.branch_id || String(c.branch_id) !== String(currentBranchId)) {
+                        console.log(`   Sucursal no coincide: ${c.branch_id} !== ${currentBranchId}`);
+                        return false; // Excluir capturas de otras sucursales
+                    }
+                }
+                
+                return true;
             });
             console.log(`✅ Capturas filtradas: ${captures.length} para fecha ${selectedDate}`);
             
@@ -6990,6 +7009,12 @@ const Reports = {
 
             listContainer.innerHTML = html;
             
+            // Actualizar fecha en el título
+            const dateDisplay = document.getElementById('captures-date-display');
+            if (dateDisplay) {
+                dateDisplay.textContent = `(${Utils.formatDate(selectedDate, 'YYYY-MM-DD')})`;
+            }
+            
             // Cargar llegadas, comisiones y utilidades
             await this.loadQuickCaptureArrivals();
             await this.loadQuickCaptureCommissions(captures);
@@ -7014,11 +7039,41 @@ const Reports = {
             const arrivalDateInput = document.getElementById('qc-arrival-date');
             const selectedDate = arrivalDateInput?.value || dateInput?.value || new Date().toISOString().split('T')[0];
             
+            // Obtener sucursal actual para filtrar
+            const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
+            const isMasterAdmin = typeof UserManager !== 'undefined' && (
+                UserManager.currentUser?.role === 'master_admin' ||
+                UserManager.currentUser?.is_master_admin ||
+                UserManager.currentUser?.isMasterAdmin ||
+                UserManager.currentEmployee?.role === 'master_admin'
+            );
+            
             const arrivals = await DB.getAll('agency_arrivals') || [];
             const filteredArrivals = arrivals.filter(a => {
-                // Normalizar fechas para comparación
+                // Normalizar fechas para comparación estricta
                 const arrivalDate = a.date ? a.date.split('T')[0] : null;
-                return arrivalDate === selectedDate;
+                if (!arrivalDate || arrivalDate !== selectedDate) {
+                    return false; // Filtro estricto por fecha
+                }
+                
+                // Filtrar por sucursal si no es master admin
+                if (!isMasterAdmin && currentBranchId) {
+                    if (!a.branch_id || String(a.branch_id) !== String(currentBranchId)) {
+                        return false; // Excluir llegadas de otras sucursales
+                    }
+                }
+                
+                // Excluir llegadas demo/mock (verificar si tienen notas que indiquen que son demo)
+                if (a.notes && (a.notes.toLowerCase().includes('demo') || a.notes.toLowerCase().includes('mock') || a.notes.toLowerCase().includes('test'))) {
+                    return false; // Excluir llegadas demo
+                }
+                
+                // Solo incluir llegadas válidas (con pasajeros > 0)
+                if (!a.passengers || a.passengers <= 0) {
+                    return false;
+                }
+                
+                return true;
             });
             
             const agencies = await DB.getAll('catalog_agencies') || [];
