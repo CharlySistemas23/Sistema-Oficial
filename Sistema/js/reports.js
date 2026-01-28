@@ -9161,8 +9161,8 @@ const Reports = {
 
             // ========== COMISIONES ==========
             // Obtener tipo de cambio del día PRIMERO (para convertir comisiones a MXN)
-            // IMPORTANTE: Usar la fecha de las capturas, no la fecha actual
-            const exchangeRates = await DB.query('exchange_rates_daily', 'date', captureDate) || [];
+            // IMPORTANTE: Usar la fecha seleccionada, no la fecha actual
+            const exchangeRates = await DB.query('exchange_rates_daily', 'date', selectedDate) || [];
             const todayRate = exchangeRates[0] || { usd_to_mxn: 20.0, cad_to_mxn: 15.0 };
             // Asegurar que sean números
             const usdRate = parseFloat(todayRate.usd_to_mxn) || 20.0;
