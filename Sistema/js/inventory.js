@@ -941,7 +941,7 @@ const Inventory = {
                     <p style="font-size: 12px; margin-bottom: 4px;"><strong>Metal:</strong> ${item.metal || 'N/A'}</p>
                     <p style="font-size: 12px; margin-bottom: 4px;"><strong>Piedra:</strong> ${stoneInfo}</p>
                     ${item.total_carats ? `<p style="font-size: 12px; margin-bottom: 4px;"><strong>Quilates Totales:</strong> ${item.total_carats}ct</p>` : ''}
-                    <p style="font-size: 12px; margin-bottom: 4px;"><strong>Peso:</strong> ${item.weight_g}g</p>
+                    <p style="font-size: 12px; margin-bottom: 4px;"><strong>Peso:</strong> ${(item.weight_g || item.weight || 0).toFixed(2)}g</p>
                     
                     <!-- Stock Info -->
                     <div class="stock-info-bar" style="margin: 8px 0; padding: 8px; background: var(--color-bg-secondary); border-radius: var(--radius-sm);">
@@ -1526,7 +1526,7 @@ const Inventory = {
                         ${item.clarity ? `<div><strong>Claridad:</strong> ${item.clarity}</div>` : ''}
                         ${item.cut ? `<div><strong>Corte:</strong> ${item.cut}</div>` : ''}
                         <div><strong>Talla/Tamaño:</strong> ${item.size || 'N/A'}</div>
-                        <div><strong>Peso:</strong> ${item.weight_g}g</div>
+                        <div><strong>Peso:</strong> ${(item.weight_g || item.weight || 0).toFixed(2)}g</div>
                         <div><strong>Medidas:</strong> ${item.measures || 'N/A'}</div>
                         <div><strong>Costo:</strong> ${Utils.formatCurrency(item.cost || 0)}</div>
                         ${item.suggested_price ? `<div><strong>Precio Sugerido:</strong> ${Utils.formatCurrency(item.suggested_price)}</div>` : ''}
