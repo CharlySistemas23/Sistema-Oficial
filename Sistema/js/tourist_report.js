@@ -2208,9 +2208,9 @@ const TouristReport = {
                                                 style="padding: 4px 8px; font-size: 11px;">
                                             <i class="fas fa-save"></i> Guardar
                                         </button>
-                                        ${existingArrival ? `
+                                        ${arrival && arrival.id ? `
                                             <button class="btn-danger btn-xs" 
-                                                    onclick="window.TouristReport.deleteArrival('${existingArrival.id}')"
+                                                    onclick="window.TouristReport.deleteArrival('${arrival.id}')"
                                                     style="padding: 4px 8px; font-size: 11px;"
                                                     title="Eliminar llegada">
                                                 <i class="fas fa-trash"></i>
