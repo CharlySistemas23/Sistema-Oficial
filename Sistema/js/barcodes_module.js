@@ -59,6 +59,63 @@ const BarcodesModule = {
                 this.loadTab(tab);
             });
         });
+        
+        // Configurar listeners de Socket.IO para actualización en tiempo real
+        this.setupSocketListeners();
+        
+        // Escuchar cambios de sucursal
+        window.addEventListener('branch-changed', () => {
+            if (this.initialized && this.currentTab === 'barcodes') {
+                this.loadBarcodes();
+            }
+        });
+    },
+    
+    setupSocketListeners() {
+        // Escuchar eventos Socket.IO para actualización en tiempo real
+        // Eventos de inventario (para actualizar códigos de barras de productos)
+        if (typeof UserManager !== 'undefined' && UserManager.currentUser?.is_master_admin) {
+            window.addEventListener('inventory-updated-all-branches', async (e) => {
+                const { branchId, action, item } = e.detail;
+                if (this.initialized && this.currentTab === 'barcodes') {
+                    console.log(`📦 Barcodes: Inventario actualizado en sucursal ${branchId} (${action})`);
+                    // Recargar códigos de barras después de un pequeño delay
+                    setTimeout(async () => {
+                        await this.loadBarcodes();
+                    }, 300);
+                }
+            });
+        }
+        
+        window.addEventListener('inventory-updated', async (e) => {
+            if (this.initialized && this.currentTab === 'barcodes') {
+                const { item } = e.detail || {};
+                const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
+                // Solo actualizar si el item es de la sucursal actual
+                if (item && (!currentBranchId || item.branch_id === currentBranchId)) {
+                    console.log(`📦 Barcodes: Inventario actualizado localmente`);
+                    setTimeout(async () => {
+                        await this.loadBarcodes();
+                    }, 300);
+                }
+            }
+        });
+        
+        // Eventos de empleados (para actualizar códigos de barras de empleados)
+        window.addEventListener('employee-updated', async (e) => {
+            if (this.initialized && this.currentTab === 'barcodes') {
+                const { employee } = e.detail || {};
+                const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
+                // Solo actualizar si el empleado es de la sucursal actual
+                if (employee && (!currentBranchId || employee.branch_id === currentBranchId || 
+                    (employee.branch_ids && Array.isArray(employee.branch_ids) && employee.branch_ids.includes(currentBranchId)))) {
+                    console.log(`👤 Barcodes: Empleado actualizado localmente`);
+                    setTimeout(async () => {
+                        await this.loadBarcodes();
+                    }, 300);
+                }
+            }
+        });
     },
 
     async loadTab(tab) {
@@ -235,6 +292,21 @@ const BarcodesModule = {
                 <div class="form-group" style="flex: 1;">
                     <input type="text" id="barcodes-search" class="form-input" placeholder="Buscar por nombre, SKU, código...">
                 </div>
+                ${(() => {
+                    const isMasterAdmin = typeof UserManager !== 'undefined' && (
+                        UserManager.currentUser?.role === 'master_admin' ||
+                        UserManager.currentUser?.is_master_admin ||
+                        UserManager.currentUser?.isMasterAdmin ||
+                        UserManager.currentEmployee?.role === 'master_admin'
+                    );
+                    return isMasterAdmin ? `
+                        <div class="form-group" style="width: 180px;">
+                            <select id="barcodes-branch-filter" class="form-select">
+                                <option value="all">Todas las sucursales</option>
+                            </select>
+                        </div>
+                    ` : '';
+                })()}
                 <div class="form-group" style="width: 150px;">
                     <select id="barcodes-type-filter" class="form-select">
                         <option value="all">Todos</option>
@@ -459,7 +531,7 @@ const BarcodesModule = {
         const guides = await DB.getAll('catalog_guides') || [];
         const agencies = await DB.getAll('catalog_agencies') || [];
 
-        const all = [...items, ...employees, ...sellers, ...guides, ...agencies];
+        const all = [...filteredItems, ...employees, ...sellers, ...guides, ...agencies];
         const withBarcode = all.filter(item => !Utils.isBarcodeEmpty(item.barcode)).length;
         const withoutBarcode = all.length - withBarcode;
 
@@ -475,7 +547,7 @@ const BarcodesModule = {
             scansToday,
             totalScans: history.length,
             byType: {
-                items: items.length,
+                items: filteredItems.length,
                 employees: employees.length,
                 sellers: sellers.length,
                 guides: guides.length,
@@ -522,16 +594,33 @@ const BarcodesModule = {
     async findDuplicateBarcodes() {
         // Obtener sucursal actual y filtrar datos
         const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
-        const isAdmin = typeof UserManager !== 'undefined' && (
-            UserManager.currentUser?.role === 'admin' || 
-            UserManager.currentUser?.permissions?.includes('all')
+        const isMasterAdmin = typeof UserManager !== 'undefined' && (
+            UserManager.currentUser?.role === 'master_admin' ||
+            UserManager.currentUser?.is_master_admin ||
+            UserManager.currentUser?.isMasterAdmin ||
+            UserManager.currentEmployee?.role === 'master_admin'
         );
-        const viewAllBranches = isAdmin;
+        
+        // Obtener filtro de sucursal seleccionado (si existe)
+        const branchFilter = document.getElementById('barcodes-branch-filter');
+        const selectedBranchId = branchFilter?.value === 'all' ? null : branchFilter?.value || null;
+        const filterBranchId = selectedBranchId || (isMasterAdmin ? null : currentBranchId);
+        const viewAllBranches = isMasterAdmin && !selectedBranchId;
         
         const items = await DB.getAll('inventory_items', null, null, { 
             filterByBranch: !viewAllBranches, 
             branchIdField: 'branch_id' 
         }) || [];
+        
+        // Filtrado estricto por sucursal si hay un filtro específico
+        let filteredItems = items;
+        if (filterBranchId) {
+            const normalizedFilterBranchId = String(filterBranchId);
+            filteredItems = items.filter(item => {
+                if (!item.branch_id) return false;
+                return String(item.branch_id) === normalizedFilterBranchId;
+            });
+        }
         
         let employees = await DB.getAll('employees', null, null, { 
             filterByBranch: !viewAllBranches, 
@@ -539,8 +628,8 @@ const BarcodesModule = {
         }) || [];
         
         // Si no es admin, filtrar manualmente también
-        if (!viewAllBranches && currentBranchId) {
-            const normalizedBranchId = String(currentBranchId);
+        if (!viewAllBranches && filterBranchId) {
+            const normalizedBranchId = String(filterBranchId);
             employees = employees.filter(emp => {
                 if (emp.branch_id) {
                     return String(emp.branch_id) === normalizedBranchId;
@@ -548,7 +637,7 @@ const BarcodesModule = {
                 if (emp.branch_ids && Array.isArray(emp.branch_ids)) {
                     return emp.branch_ids.some(id => String(id) === normalizedBranchId);
                 }
-                return true;
+                return false; // Excluir empleados sin branch_id cuando hay filtro
             });
         }
         
@@ -558,7 +647,7 @@ const BarcodesModule = {
         const agencies = await DB.getAll('catalog_agencies') || [];
 
         const all = [
-            ...items.map(i => ({ ...i, type: 'item' })),
+            ...filteredItems.map(i => ({ ...i, type: 'item' })),
             ...employees.map(e => ({ ...e, type: 'employee' })),
             ...sellers.map(s => ({ ...s, type: 'seller' })),
             ...guides.map(g => ({ ...g, type: 'guide' })),
@@ -861,6 +950,23 @@ const BarcodesModule = {
             const search = document.getElementById('barcodes-search')?.value.toLowerCase() || '';
             const typeFilter = document.getElementById('barcodes-type-filter')?.value || 'all';
             const statusFilter = document.getElementById('barcodes-status-filter')?.value || 'all';
+            
+            // Obtener filtro de sucursal
+            const branchFilter = document.getElementById('barcodes-branch-filter');
+            const selectedBranchId = branchFilter?.value === 'all' ? null : branchFilter?.value || null;
+            
+            // Obtener sucursal actual y permisos
+            const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
+            const isMasterAdmin = typeof UserManager !== 'undefined' && (
+                UserManager.currentUser?.role === 'master_admin' ||
+                UserManager.currentUser?.is_master_admin ||
+                UserManager.currentUser?.isMasterAdmin ||
+                UserManager.currentEmployee?.role === 'master_admin'
+            );
+            
+            // Determinar qué sucursal usar para filtrar
+            const filterBranchId = selectedBranchId || (isMasterAdmin ? null : currentBranchId);
+            const viewAllBranches = isMasterAdmin && !selectedBranchId;
 
             let items = [];
             let employees = [];
@@ -868,9 +974,22 @@ const BarcodesModule = {
             let guides = [];
             let agencies = [];
 
-            // Cargar productos
+            // Cargar productos con filtrado por sucursal
             if (typeFilter === 'all' || typeFilter === 'items') {
-                items = await DB.getAll('inventory_items') || [];
+                items = await DB.getAll('inventory_items', null, null, { 
+                    filterByBranch: !viewAllBranches, 
+                    branchIdField: 'branch_id' 
+                }) || [];
+                
+                // Filtrado estricto por sucursal si hay un filtro específico
+                if (filterBranchId) {
+                    const normalizedFilterBranchId = String(filterBranchId);
+                    items = items.filter(item => {
+                        if (!item.branch_id) return false; // Excluir items sin branch_id cuando hay filtro
+                        return String(item.branch_id) === normalizedFilterBranchId;
+                    });
+                }
+                
                 if (search) {
                     items = items.filter(item => 
                         item.sku?.toLowerCase().includes(search) ||
@@ -885,9 +1004,27 @@ const BarcodesModule = {
                 }
             }
 
-            // Cargar empleados
+            // Cargar empleados con filtrado por sucursal
             if (typeFilter === 'all' || typeFilter === 'employees') {
-                employees = await DB.getAll('employees') || [];
+                employees = await DB.getAll('employees', null, null, { 
+                    filterByBranch: !viewAllBranches, 
+                    branchIdField: 'branch_id' 
+                }) || [];
+                
+                // Filtrado manual adicional para empleados con branch_ids múltiples
+                if (!viewAllBranches && filterBranchId) {
+                    const normalizedBranchId = String(filterBranchId);
+                    employees = employees.filter(emp => {
+                        if (emp.branch_id) {
+                            return String(emp.branch_id) === normalizedBranchId;
+                        }
+                        if (emp.branch_ids && Array.isArray(emp.branch_ids)) {
+                            return emp.branch_ids.some(id => String(id) === normalizedBranchId);
+                        }
+                        return false; // Excluir empleados sin branch_id cuando hay filtro
+                    });
+                }
+                
                 if (search) {
                     employees = employees.filter(emp => 
                         emp.name?.toLowerCase().includes(search) ||
@@ -1119,10 +1256,14 @@ const BarcodesModule = {
                 });
             }
 
+            // Configurar selector de sucursal (solo para master admin)
+            await this.setupBranchFilter();
+            
             // Event listeners para filtros
             document.getElementById('barcodes-search')?.addEventListener('input', Utils.debounce(() => this.loadBarcodes(), 300));
             document.getElementById('barcodes-type-filter')?.addEventListener('change', () => this.loadBarcodes());
             document.getElementById('barcodes-status-filter')?.addEventListener('change', () => this.loadBarcodes());
+            document.getElementById('barcodes-branch-filter')?.addEventListener('change', () => this.loadBarcodes());
             
             // Event listeners para botones de acción
             document.getElementById('barcodes-batch-print')?.addEventListener('click', () => this.handleBatchPrint());
