@@ -66,23 +66,23 @@ const Reports = {
     
     async init() {
         try {
-            // Verificar permiso
-            if (typeof PermissionManager !== 'undefined' && !PermissionManager.hasPermission('reports.view')) {
-                const content = document.getElementById('module-content');
-                if (content) {
-                    content.innerHTML = '<div style="padding: var(--spacing-lg); text-align: center; color: var(--color-text-secondary);">No tienes permiso para ver reportes</div>';
-                }
-                return;
+        // Verificar permiso
+        if (typeof PermissionManager !== 'undefined' && !PermissionManager.hasPermission('reports.view')) {
+            const content = document.getElementById('module-content');
+            if (content) {
+                content.innerHTML = '<div style="padding: var(--spacing-lg); text-align: center; color: var(--color-text-secondary);">No tienes permiso para ver reportes</div>';
             }
+            return;
+        }
 
-            if (this.initialized) {
-                const activeTab = document.querySelector('#reports-tabs .tab-btn.active')?.dataset.tab || 'reports';
-                await this.loadTab(activeTab);
-                return;
-            }
-            this.setupUI();
-            await this.loadTab('reports');
-            this.initialized = true;
+        if (this.initialized) {
+            const activeTab = document.querySelector('#reports-tabs .tab-btn.active')?.dataset.tab || 'reports';
+            await this.loadTab(activeTab);
+            return;
+        }
+        this.setupUI();
+        await this.loadTab('reports');
+        this.initialized = true;
         } catch (error) {
             console.error('Error inicializando módulo Reports:', error);
             const content = document.getElementById('module-content');
@@ -96,17 +96,17 @@ const Reports = {
             // No lanzar el error para evitar que rompa otros módulos
         }
         
-            // Escuchar cambios de sucursal para recargar reportes
-            window.addEventListener('branch-changed', async () => {
+        // Escuchar cambios de sucursal para recargar reportes
+        window.addEventListener('branch-changed', async () => {
                 try {
-                    if (this.initialized) {
-                        const activeTab = document.querySelector('#reports-tabs .tab-btn.active')?.dataset.tab || 'reports';
-                        await this.loadTab(activeTab);
+            if (this.initialized) {
+                const activeTab = document.querySelector('#reports-tabs .tab-btn.active')?.dataset.tab || 'reports';
+                await this.loadTab(activeTab);
                     }
                 } catch (error) {
                     console.error('Error recargando reportes por cambio de sucursal:', error);
-                }
-            });
+            }
+        });
         
         // Escuchar eventos para actualización en tiempo real
         if (typeof Utils !== 'undefined' && Utils.EventBus) {
@@ -5255,7 +5255,7 @@ const Reports = {
                     <div style="width: 3px; height: 18px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 2px;"></div>
                     <h3 style="margin: 0; font-size: 12px; font-weight: 600; color: #333; text-transform: uppercase; letter-spacing: 0.3px;">
                         <i class="fas fa-plus-circle" style="color: #667eea; margin-right: 4px; font-size: 11px;"></i> Nueva Captura
-                    </h3>
+                </h3>
                 </div>
                 <form id="quick-capture-form" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px;">
                     ${isMasterAdmin ? `
@@ -5377,7 +5377,7 @@ const Reports = {
                             </button>
                             <button type="button" class="btn-success" onclick="window.Reports.saveAllPendingCaptures()" style="padding: 10px; font-weight: 600; font-size: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);" id="save-all-pending-btn" disabled>
                                 <i class="fas fa-save"></i> Guardar Todo (<span id="pending-count-header">0</span>)
-                            </button>
+                        </button>
                         </div>
                     </div>
                 </form>
@@ -5417,7 +5417,7 @@ const Reports = {
                         <h3 style="margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; color: #333;">
                             <i class="fas fa-list" style="color: #11998e; margin-right: 4px; font-size: 11px;"></i> Capturas del Día
                             <span id="captures-date-display" style="color: #6c757d; font-size: 10px; font-weight: 400; margin-left: 4px;">(${today})</span>
-                        </h3>
+                    </h3>
                     </div>
                     <div style="display: flex; gap: 4px; flex-wrap: wrap;">
                         <button class="btn-success btn-sm" onclick="window.Reports.archiveQuickCaptureReport()" title="Guardar reporte permanentemente en historial" style="font-weight: 600; padding: 6px 10px; font-size: 11px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
@@ -5448,8 +5448,8 @@ const Reports = {
                         <div style="width: 3px; height: 18px; background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); border-radius: 2px;"></div>
                         <h3 style="margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; color: #333;">
                             <i class="fas fa-plane-arrival" style="color: #fa709a; margin-right: 4px; font-size: 11px;"></i> Llegadas del Día
-                        </h3>
-                    </div>
+                    </h3>
+                </div>
                     <i id="arrivals-form-toggle-icon" class="fas fa-chevron-down" style="transition: transform 0.3s; color: #6c757d; font-size: 11px;"></i>
                 </div>
                 <div id="quick-capture-arrivals-form-container" style="display: none; margin-bottom: 10px; padding: 10px; background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-radius: 4px; border: 1px solid #dee2e6; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
@@ -5533,7 +5533,7 @@ const Reports = {
                     <div style="width: 3px; height: 18px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 2px;"></div>
                     <h3 style="margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; color: #333;">
                         <i class="fas fa-percent" style="color: #667eea; margin-right: 4px; font-size: 11px;"></i> Comisiones Calculadas
-                    </h3>
+                </h3>
                 </div>
                 <div id="quick-capture-commissions">
                     <div style="text-align: center; padding: var(--spacing-lg); color: var(--color-text-secondary);">
@@ -5548,7 +5548,7 @@ const Reports = {
                     <div style="width: 3px; height: 18px; background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); border-radius: 2px;"></div>
                     <h3 style="margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; color: #333;">
                         <i class="fas fa-chart-line" style="color: #11998e; margin-right: 4px; font-size: 11px;"></i> Utilidades del Día
-                    </h3>
+                </h3>
                 </div>
                 <div id="quick-capture-profits">
                     <div style="text-align: center; padding: var(--spacing-lg); color: var(--color-text-secondary);">
@@ -5564,7 +5564,7 @@ const Reports = {
                         <div style="width: 3px; height: 18px; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); border-radius: 2px;"></div>
                         <h3 style="margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; color: #333;">
                             <i class="fas fa-history" style="color: #f093fb; margin-right: 4px; font-size: 11px;"></i> Historial de Reportes Archivados
-                        </h3>
+                    </h3>
                     </div>
                     <button class="btn-secondary btn-sm" onclick="window.Reports.loadArchivedReports()" title="Actualizar historial" style="font-weight: 600; padding: 6px 10px; font-size: 11px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
                         <i class="fas fa-sync-alt"></i> Actualizar
@@ -5614,138 +5614,138 @@ const Reports = {
                 });
             }
             
-            // Cargar catálogos
-            await this.loadQuickCaptureCatalogs();
-            
-            // Cargar catálogos para formulario de llegadas
-            await this.loadQuickArrivalsCatalogs();
-            
-            // Cargar tipo de cambio en tiempo real
-            await this.loadExchangeRates();
-            
-            // Cargar historial de reportes archivados
-            await this.loadArchivedReports();
-            
-            // Event listener del formulario de capturas
-            const form = document.getElementById('quick-capture-form');
-            if (form) {
-                form.addEventListener('submit', async (e) => {
-                    e.preventDefault();
+        // Cargar catálogos
+        await this.loadQuickCaptureCatalogs();
+        
+        // Cargar catálogos para formulario de llegadas
+        await this.loadQuickArrivalsCatalogs();
+        
+        // Cargar tipo de cambio en tiempo real
+        await this.loadExchangeRates();
+        
+        // Cargar historial de reportes archivados
+        await this.loadArchivedReports();
+        
+        // Event listener del formulario de capturas
+        const form = document.getElementById('quick-capture-form');
+        if (form) {
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
                     await this.addToPendingList();
-                });
-            }
+            });
+        }
 
-            // Event listener del formulario de llegadas
-            const arrivalsForm = document.getElementById('quick-arrivals-form');
-            if (arrivalsForm) {
-                arrivalsForm.addEventListener('submit', async (e) => {
-                    e.preventDefault();
-                    await this.saveQuickArrival();
-                });
-                
-                // Calcular costo cuando cambian los campos
-                const paxInput = document.getElementById('qc-arrival-pax');
-                const unitsInput = document.getElementById('qc-arrival-units');
-                const agencySelect = document.getElementById('qc-arrival-agency');
-                const unitTypeSelect = document.getElementById('qc-arrival-unit-type');
-                const branchSelect = document.getElementById('qc-arrival-branch');
-                
-                const calculateArrivalCost = async () => {
+        // Event listener del formulario de llegadas
+        const arrivalsForm = document.getElementById('quick-arrivals-form');
+        if (arrivalsForm) {
+            arrivalsForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                await this.saveQuickArrival();
+            });
+            
+            // Calcular costo cuando cambian los campos
+            const paxInput = document.getElementById('qc-arrival-pax');
+            const unitsInput = document.getElementById('qc-arrival-units');
+            const agencySelect = document.getElementById('qc-arrival-agency');
+            const unitTypeSelect = document.getElementById('qc-arrival-unit-type');
+            const branchSelect = document.getElementById('qc-arrival-branch');
+            
+            const calculateArrivalCost = async () => {
                     try {
-                        const pax = parseInt(paxInput?.value || 0);
-                        const units = parseInt(unitsInput?.value || 0);
-                        const agencyId = agencySelect?.value;
-                        const unitType = unitTypeSelect?.value || null;
-                        
-                        if (pax > 0 && units > 0 && agencyId) {
-                            const isMasterAdmin = typeof UserManager !== 'undefined' && (
-                                UserManager.currentUser?.role === 'master_admin' ||
-                                UserManager.currentUser?.is_master_admin ||
-                                UserManager.currentUser?.isMasterAdmin
-                            );
-                            const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
-                            const branchId = isMasterAdmin && branchSelect?.value 
-                                ? branchSelect.value 
-                                : currentBranchId;
-                            
-                            if (branchId) {
+                const pax = parseInt(paxInput?.value || 0);
+                const units = parseInt(unitsInput?.value || 0);
+                const agencyId = agencySelect?.value;
+                const unitType = unitTypeSelect?.value || null;
+                
+                if (pax > 0 && units > 0 && agencyId) {
+                    const isMasterAdmin = typeof UserManager !== 'undefined' && (
+                        UserManager.currentUser?.role === 'master_admin' ||
+                        UserManager.currentUser?.is_master_admin ||
+                        UserManager.currentUser?.isMasterAdmin
+                    );
+                    const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
+                    const branchId = isMasterAdmin && branchSelect?.value 
+                        ? branchSelect.value 
+                        : currentBranchId;
+                    
+                    if (branchId) {
                                 // Obtener fecha del formulario de llegadas o del formulario principal
                                 const arrivalDateInput = document.getElementById('qc-arrival-date');
                                 const mainDateInput = document.getElementById('qc-date');
                                 const arrivalDate = arrivalDateInput?.value || mainDateInput?.value || new Date().toISOString().split('T')[0];
                                 
-                                if (typeof ArrivalRules !== 'undefined' && ArrivalRules.calculateArrivalFee) {
+                        if (typeof ArrivalRules !== 'undefined' && ArrivalRules.calculateArrivalFee) {
                                     const calculation = await ArrivalRules.calculateArrivalFee(agencyId, branchId, pax, unitType, arrivalDate);
-                                    const costInput = document.getElementById('qc-arrival-cost');
-                                    const costHelp = document.getElementById('qc-arrival-cost-help');
-                                    const overrideContainer = document.getElementById('qc-arrival-override-container');
-                                    const overrideAmountInput = document.getElementById('qc-arrival-override-amount');
-                                    const overrideReasonInput = document.getElementById('qc-arrival-override-reason');
-                                    
-                                    if (costInput) {
-                                        if (calculation.overrideRequired && !calculation.calculatedFee) {
-                                            costInput.value = 'Requiere Override';
-                                            costInput.style.color = 'var(--color-warning, #ffc107)';
-                                            if (costHelp) {
-                                                costHelp.textContent = 'No hay regla configurada, ingresa el monto manualmente';
-                                                costHelp.style.color = 'var(--color-warning, #ffc107)';
-                                            }
-                                            // Mostrar campos de override
-                                            if (overrideContainer) {
-                                                overrideContainer.style.display = 'block';
-                                            }
-                                            // Hacer los campos requeridos
-                                            if (overrideAmountInput) {
-                                                overrideAmountInput.required = true;
-                                                overrideAmountInput.value = '';
-                                            }
-                                            if (overrideReasonInput) {
-                                                overrideReasonInput.required = true;
-                                                overrideReasonInput.value = '';
-                                            }
-                                        } else {
-                                            costInput.value = (calculation.calculatedFee || 0).toFixed(2);
-                                            costInput.style.color = '';
-                                            if (costHelp) {
-                                                costHelp.textContent = 'Se calcula automáticamente según las reglas configuradas';
-                                                costHelp.style.color = 'var(--color-text-secondary)';
-                                            }
-                                            // Ocultar campos de override
-                                            if (overrideContainer) {
-                                                overrideContainer.style.display = 'none';
-                                            }
-                                            // Hacer los campos opcionales
-                                            if (overrideAmountInput) {
-                                                overrideAmountInput.required = false;
-                                                overrideAmountInput.value = '';
-                                            }
-                                            if (overrideReasonInput) {
-                                                overrideReasonInput.required = false;
-                                                overrideReasonInput.value = '';
-                                            }
-                                        }
+                            const costInput = document.getElementById('qc-arrival-cost');
+                            const costHelp = document.getElementById('qc-arrival-cost-help');
+                            const overrideContainer = document.getElementById('qc-arrival-override-container');
+                            const overrideAmountInput = document.getElementById('qc-arrival-override-amount');
+                            const overrideReasonInput = document.getElementById('qc-arrival-override-reason');
+                            
+                            if (costInput) {
+                                if (calculation.overrideRequired && !calculation.calculatedFee) {
+                                    costInput.value = 'Requiere Override';
+                                    costInput.style.color = 'var(--color-warning, #ffc107)';
+                                    if (costHelp) {
+                                        costHelp.textContent = 'No hay regla configurada, ingresa el monto manualmente';
+                                        costHelp.style.color = 'var(--color-warning, #ffc107)';
+                                    }
+                                    // Mostrar campos de override
+                                    if (overrideContainer) {
+                                        overrideContainer.style.display = 'block';
+                                    }
+                                    // Hacer los campos requeridos
+                                    if (overrideAmountInput) {
+                                        overrideAmountInput.required = true;
+                                        overrideAmountInput.value = '';
+                                    }
+                                    if (overrideReasonInput) {
+                                        overrideReasonInput.required = true;
+                                        overrideReasonInput.value = '';
+                                    }
+                                } else {
+                                    costInput.value = (calculation.calculatedFee || 0).toFixed(2);
+                                    costInput.style.color = '';
+                                    if (costHelp) {
+                                        costHelp.textContent = 'Se calcula automáticamente según las reglas configuradas';
+                                        costHelp.style.color = 'var(--color-text-secondary)';
+                                    }
+                                    // Ocultar campos de override
+                                    if (overrideContainer) {
+                                        overrideContainer.style.display = 'none';
+                                    }
+                                    // Hacer los campos opcionales
+                                    if (overrideAmountInput) {
+                                        overrideAmountInput.required = false;
+                                        overrideAmountInput.value = '';
+                                    }
+                                    if (overrideReasonInput) {
+                                        overrideReasonInput.required = false;
+                                        overrideReasonInput.value = '';
                                     }
                                 }
                             }
                         }
+                    }
+                        }
                     } catch (error) {
                         console.error('Error calculando costo de llegada:', error);
-                    }
-                };
-                
-                if (paxInput) paxInput.addEventListener('input', calculateArrivalCost);
-                if (unitsInput) unitsInput.addEventListener('input', calculateArrivalCost);
-                if (agencySelect) agencySelect.addEventListener('change', calculateArrivalCost);
-                if (unitTypeSelect) unitTypeSelect.addEventListener('change', calculateArrivalCost);
-                if (branchSelect) branchSelect.addEventListener('change', calculateArrivalCost);
-            }
+                }
+            };
+            
+            if (paxInput) paxInput.addEventListener('input', calculateArrivalCost);
+            if (unitsInput) unitsInput.addEventListener('input', calculateArrivalCost);
+            if (agencySelect) agencySelect.addEventListener('change', calculateArrivalCost);
+            if (unitTypeSelect) unitTypeSelect.addEventListener('change', calculateArrivalCost);
+            if (branchSelect) branchSelect.addEventListener('change', calculateArrivalCost);
+        }
 
-            // Cuando cambia la agencia, actualizar guías
-            const agencySelect = document.getElementById('qc-agency');
-            if (agencySelect) {
-                agencySelect.addEventListener('change', async () => {
+        // Cuando cambia la agencia, actualizar guías
+        const agencySelect = document.getElementById('qc-agency');
+        if (agencySelect) {
+            agencySelect.addEventListener('change', async () => {
                     try {
-                        await this.loadGuidesForAgency(agencySelect.value);
+                await this.loadGuidesForAgency(agencySelect.value);
                     } catch (error) {
                         console.error('Error cargando guías:', error);
                     }
@@ -6269,40 +6269,40 @@ const Reports = {
                 }
             } else {
                 // Crear nueva captura (pendiente)
-                const capture = {
+            const capture = {
                     id: 'pending_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-                    branch_id: branchId,
-                    branch_name: branchName,
-                    seller_id: sellerId,
-                    seller_name: sellerName,
-                    guide_id: guideId,
-                    guide_name: guideName,
-                    agency_id: agencyId,
-                    agency_name: agencyName,
-                    product: product,
-                    quantity: quantity,
-                    currency: currency,
-                    total: total,
+                branch_id: branchId,
+                branch_name: branchName,
+                seller_id: sellerId,
+                seller_name: sellerName,
+                guide_id: guideId,
+                guide_name: guideName,
+                agency_id: agencyId,
+                agency_name: agencyName,
+                product: product,
+                quantity: quantity,
+                currency: currency,
+                total: total,
                     merchandise_cost: merchandiseCost,
                     notes: notes,
                     is_street: isStreet,
                     payments: payments, // Array de pagos múltiples
                     payment_method: payments.length === 1 ? payments[0].method : 'mixed', // Para compatibilidad
                     date: captureDate, // Fecha manual seleccionada
-                    created_at: new Date().toISOString(),
+                created_at: new Date().toISOString(),
                     created_by: typeof UserManager !== 'undefined' && UserManager.currentUser ? UserManager.currentUser.id : null,
                     isPending: true // Marca para identificar que es pendiente
-                };
+            };
 
                 // Agregar a la lista pendiente en memoria
                 this.pendingCaptures.push(capture);
 
                 // Limpiar formulario (pero mantener la fecha)
                 const currentDate = document.getElementById('qc-date')?.value || new Date().toISOString().split('T')[0];
-                document.getElementById('quick-capture-form')?.reset();
-                if (document.getElementById('qc-quantity')) {
-                    document.getElementById('qc-quantity').value = '1';
-                }
+            document.getElementById('quick-capture-form')?.reset();
+            if (document.getElementById('qc-quantity')) {
+                document.getElementById('qc-quantity').value = '1';
+            }
                 // Restaurar la fecha después de resetear (NO resetear a hoy)
                 if (document.getElementById('qc-date')) {
                     document.getElementById('qc-date').value = currentDate;
@@ -7426,15 +7426,15 @@ const Reports = {
                         
                         // Si no hay regla especial (Sebastian), usar reglas normales
                         if (sellerCommission === 0) {
-                            const sellerRule = commissionRules.find(r => 
-                                r.entity_type === 'seller' && r.entity_id === capture.seller_id
-                            ) || commissionRules.find(r => 
-                                r.entity_type === 'seller' && r.entity_id === null
-                            );
-                            if (sellerRule) {
-                                const discountPct = sellerRule.discount_pct || 0;
-                                const multiplier = sellerRule.multiplier || 1;
-                                const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
+                    const sellerRule = commissionRules.find(r => 
+                        r.entity_type === 'seller' && r.entity_id === capture.seller_id
+                    ) || commissionRules.find(r => 
+                        r.entity_type === 'seller' && r.entity_id === null
+                    );
+                    if (sellerRule) {
+                        const discountPct = sellerRule.discount_pct || 0;
+                        const multiplier = sellerRule.multiplier || 1;
+                        const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
                                 sellerCommission = afterDiscount * (multiplier / 100);
                             }
                         }
@@ -7446,20 +7446,20 @@ const Reports = {
                     }
                     
                     // COMISIÓN DEL GUÍA
-                    if (capture.guide_id && captureTotalMXN > 0) {
+                if (capture.guide_id && captureTotalMXN > 0) {
                         let guideCommission = commissionsByRules.guideCommission;
                         
                         // Si no hay regla especial (agencia o Gloria), usar reglas normales
                         if (guideCommission === 0) {
-                            const guideRule = commissionRules.find(r => 
-                                r.entity_type === 'guide' && r.entity_id === capture.guide_id
-                            ) || commissionRules.find(r => 
-                                r.entity_type === 'guide' && r.entity_id === null
-                            );
-                            if (guideRule) {
-                                const discountPct = guideRule.discount_pct || 0;
-                                const multiplier = guideRule.multiplier || 1;
-                                const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
+                    const guideRule = commissionRules.find(r => 
+                        r.entity_type === 'guide' && r.entity_id === capture.guide_id
+                    ) || commissionRules.find(r => 
+                        r.entity_type === 'guide' && r.entity_id === null
+                    );
+                    if (guideRule) {
+                        const discountPct = guideRule.discount_pct || 0;
+                        const multiplier = guideRule.multiplier || 1;
+                        const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
                                 guideCommission = afterDiscount * (multiplier / 100);
                             }
                         }
@@ -8046,15 +8046,15 @@ const Reports = {
                         
                         // Si no hay regla especial (Sebastian), usar reglas normales de vendedor
                         if (commission === 0) {
-                            const sellerRule = commissionRules.find(r => 
-                                r.entity_type === 'seller' && r.entity_id === capture.seller_id
-                            ) || commissionRules.find(r => 
-                                r.entity_type === 'seller' && r.entity_id === null
-                            );
+                    const sellerRule = commissionRules.find(r => 
+                        r.entity_type === 'seller' && r.entity_id === capture.seller_id
+                    ) || commissionRules.find(r => 
+                        r.entity_type === 'seller' && r.entity_id === null
+                    );
 
-                            if (sellerRule) {
-                                const discountPct = sellerRule.discount_pct || 0;
-                                const multiplier = sellerRule.multiplier || 1;
+                    if (sellerRule) {
+                        const discountPct = sellerRule.discount_pct || 0;
+                        const multiplier = sellerRule.multiplier || 1;
                                 const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
                                 commission = afterDiscount * (multiplier / 100);
                             }
@@ -8073,7 +8073,7 @@ const Reports = {
                         } else if (capture.currency === 'CAD') {
                             sellerCommissions[capture.seller_id].commissions[capture.currency] += commission / cadRate;
                         } else {
-                            sellerCommissions[capture.seller_id].commissions[capture.currency] += commission;
+                        sellerCommissions[capture.seller_id].commissions[capture.currency] += commission;
                         }
                     }
                 }
@@ -8106,15 +8106,15 @@ const Reports = {
                     
                     // Si no hay regla especial (agencia o Gloria), usar reglas normales de guía
                     if (commission === 0) {
-                        const guideRule = commissionRules.find(r => 
-                            r.entity_type === 'guide' && r.entity_id === capture.guide_id
-                        ) || commissionRules.find(r => 
-                            r.entity_type === 'guide' && r.entity_id === null
-                        );
+                    const guideRule = commissionRules.find(r => 
+                        r.entity_type === 'guide' && r.entity_id === capture.guide_id
+                    ) || commissionRules.find(r => 
+                        r.entity_type === 'guide' && r.entity_id === null
+                    );
 
-                        if (guideRule) {
-                            const discountPct = guideRule.discount_pct || 0;
-                            const multiplier = guideRule.multiplier || 1;
+                    if (guideRule) {
+                        const discountPct = guideRule.discount_pct || 0;
+                        const multiplier = guideRule.multiplier || 1;
                             const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
                             commission = afterDiscount * (multiplier / 100);
                         }
@@ -8132,7 +8132,7 @@ const Reports = {
                         } else if (capture.currency === 'CAD') {
                             guideCommissions[capture.guide_id].commissions[capture.currency] += commission / cadRate;
                         } else {
-                            guideCommissions[capture.guide_id].commissions[capture.currency] += commission;
+                        guideCommissions[capture.guide_id].commissions[capture.currency] += commission;
                         }
                     }
                 }
@@ -8781,17 +8781,17 @@ const Reports = {
             return new Promise((resolve) => {
                 document.getElementById('archive-confirm-btn').onclick = async () => {
                     confirmModal.remove();
-                    for (const capture of captures) {
-                        await DB.delete('temp_quick_captures', capture.id);
-                    }
-                    Utils.showNotification(`Reporte archivado correctamente. ${captures.length} capturas eliminadas del día.`, 'success');
-                    await this.loadQuickCaptureData();
+                for (const capture of captures) {
+                    await DB.delete('temp_quick_captures', capture.id);
+                }
+                Utils.showNotification(`Reporte archivado correctamente. ${captures.length} capturas eliminadas del día.`, 'success');
+                await this.loadQuickCaptureData();
                     resolve();
                 };
                 
                 document.getElementById('archive-keep-btn').onclick = async () => {
                     confirmModal.remove();
-                    Utils.showNotification('Reporte archivado correctamente. Las capturas temporales se mantienen.', 'success');
+                Utils.showNotification('Reporte archivado correctamente. Las capturas temporales se mantienen.', 'success');
                     resolve();
                 };
                 
@@ -9064,7 +9064,7 @@ const Reports = {
             doc.rect(margin, y, pageWidth - (margin * 2), 8, 'F');
             doc.setDrawColor(200, 200, 200);
             doc.rect(margin, y, pageWidth - (margin * 2), 8);
-            
+
             // Líneas verticales para separar columnas (opcional, para mejor organización)
             doc.setDrawColor(180, 180, 180);
             doc.line(captCol2X - 2, y, captCol2X - 2, y + 8);
@@ -9229,16 +9229,16 @@ const Reports = {
                         
                         // Si no hay regla especial (Sebastian), usar reglas normales de vendedor
                         if (commission === 0) {
-                            const sellerRule = commissionRules.find(r => 
-                                r.entity_type === 'seller' && r.entity_id === capture.seller_id
-                            ) || commissionRules.find(r => 
-                                r.entity_type === 'seller' && r.entity_id === null
-                            );
-                            if (sellerRule) {
-                                const discountPct = sellerRule.discount_pct || 0;
-                                const multiplier = sellerRule.multiplier || 1;
-                                // Calcular comisión sobre el total convertido a MXN
-                                const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
+                    const sellerRule = commissionRules.find(r => 
+                        r.entity_type === 'seller' && r.entity_id === capture.seller_id
+                    ) || commissionRules.find(r => 
+                        r.entity_type === 'seller' && r.entity_id === null
+                    );
+                    if (sellerRule) {
+                        const discountPct = sellerRule.discount_pct || 0;
+                        const multiplier = sellerRule.multiplier || 1;
+                        // Calcular comisión sobre el total convertido a MXN
+                        const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
                                 commission = afterDiscount * (multiplier / 100);
                             }
                         }
@@ -9287,16 +9287,16 @@ const Reports = {
                     
                     // Si no hay regla especial (agencia o Gloria), usar reglas normales de guía
                     if (commission === 0) {
-                        const guideRule = commissionRules.find(r => 
-                            r.entity_type === 'guide' && r.entity_id === capture.guide_id
-                        ) || commissionRules.find(r => 
-                            r.entity_type === 'guide' && r.entity_id === null
-                        );
-                        if (guideRule) {
-                            const discountPct = guideRule.discount_pct || 0;
-                            const multiplier = guideRule.multiplier || 1;
-                            // Calcular comisión sobre el total convertido a MXN
-                            const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
+                    const guideRule = commissionRules.find(r => 
+                        r.entity_type === 'guide' && r.entity_id === capture.guide_id
+                    ) || commissionRules.find(r => 
+                        r.entity_type === 'guide' && r.entity_id === null
+                    );
+                    if (guideRule) {
+                        const discountPct = guideRule.discount_pct || 0;
+                        const multiplier = guideRule.multiplier || 1;
+                        // Calcular comisión sobre el total convertido a MXN
+                        const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
                             commission = afterDiscount * (multiplier / 100);
                         }
                     }
@@ -9706,7 +9706,7 @@ const Reports = {
             doc.rect(margin, y, pageWidth - (margin * 2), utilSectionHeight, 'F');
             doc.setDrawColor(200, 200, 200);
             doc.rect(margin, y, pageWidth - (margin * 2), utilSectionHeight);
-            
+
             // Línea divisoria vertical para mejor organización
             doc.setDrawColor(180, 180, 180);
             doc.line(valueX - 10, y, valueX - 10, y + utilSectionHeight);
@@ -9887,14 +9887,14 @@ const Reports = {
                         
                         // Si no hay regla especial (Sebastian), usar reglas normales
                         if (sellerCommission === 0) {
-                            const sellerRule = commissionRules.find(r => 
-                                r.entity_type === 'seller' && r.entity_id === capture.seller_id
+                    const sellerRule = commissionRules.find(r => 
+                        r.entity_type === 'seller' && r.entity_id === capture.seller_id
                             ) || commissionRules.find(r => 
                                 r.entity_type === 'seller' && r.entity_id === null
                             );
-                            if (sellerRule) {
-                                const discountPct = sellerRule.discount_pct || 0;
-                                const multiplier = sellerRule.multiplier || 1;
+                    if (sellerRule) {
+                        const discountPct = sellerRule.discount_pct || 0;
+                        const multiplier = sellerRule.multiplier || 1;
                                 const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
                                 sellerCommission = afterDiscount * (multiplier / 100);
                             }
@@ -9934,14 +9934,14 @@ const Reports = {
                         
                         // Si no hay regla especial (agencia o Gloria), usar reglas normales
                         if (guideCommission === 0) {
-                            const guideRule = commissionRules.find(r => 
-                                r.entity_type === 'guide' && r.entity_id === capture.guide_id
+                    const guideRule = commissionRules.find(r => 
+                        r.entity_type === 'guide' && r.entity_id === capture.guide_id
                             ) || commissionRules.find(r => 
                                 r.entity_type === 'guide' && r.entity_id === null
                             );
-                            if (guideRule) {
-                                const discountPct = guideRule.discount_pct || 0;
-                                const multiplier = guideRule.multiplier || 1;
+                    if (guideRule) {
+                        const discountPct = guideRule.discount_pct || 0;
+                        const multiplier = guideRule.multiplier || 1;
                                 const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
                                 guideCommission = afterDiscount * (multiplier / 100);
                             }
@@ -10159,28 +10159,70 @@ const Reports = {
                 archived_by: typeof UserManager !== 'undefined' && UserManager.currentUser ? UserManager.currentUser.id : null
             };
 
+            // Verificar si el store existe antes de guardar
+            if (!DB.db || !DB.db.objectStoreNames.contains('archived_quick_captures')) {
+                console.error('Store archived_quick_captures no existe en la base de datos');
+                Utils.showNotification('Error: El store de reportes archivados no está disponible. Verifica la base de datos.', 'error');
+                this.isExporting = false;
+                return;
+            }
+
+            // Verificar si ya existe un reporte archivado para esta fecha
+            let existingReport = null;
+            try {
+                const existingReports = await DB.query('archived_quick_captures', 'date', today) || [];
+                // Buscar el más reciente para esta fecha
+                existingReport = existingReports
+                    .filter(r => r.report_type === 'quick_capture')
+                    .sort((a, b) => new Date(b.archived_at || 0) - new Date(a.archived_at || 0))[0];
+            } catch (e) {
+                console.warn('No se pudo verificar reportes existentes:', e);
+            }
+
+            // Si existe un reporte para esta fecha, actualizarlo; si no, crear uno nuevo
+            if (existingReport) {
+                // Actualizar reporte existente
+                archivedReport.id = existingReport.id; // Mantener el mismo ID
+                archivedReport.archived_at = new Date().toISOString(); // Actualizar timestamp
+                console.log(`Actualizando reporte archivado existente: ${existingReport.id}`);
+            } else {
+                console.log(`Creando nuevo reporte archivado para fecha: ${today}`);
+            }
+
             // Guardar en IndexedDB (store permanente para historial)
+            try {
             await DB.put('archived_quick_captures', archivedReport);
+                console.log(`✅ Reporte archivado guardado correctamente: ${archivedReport.id}`);
+            } catch (dbError) {
+                console.error('Error guardando en IndexedDB:', dbError);
+                throw new Error(`No se pudo guardar el reporte archivado: ${dbError.message}`);
+            }
 
             // Opcional: Intentar guardar en backend si hay API disponible
             if (typeof API !== 'undefined' && API.saveArchivedReport) {
                 try {
                     await API.saveArchivedReport(archivedReport);
+                    console.log('✅ Reporte archivado también guardado en backend');
                 } catch (e) {
-                    console.warn('No se pudo guardar en backend, solo guardado local:', e);
+                    console.warn('⚠️ No se pudo guardar en backend, solo guardado local:', e);
                 }
             }
 
-            const confirm = await Utils.confirm(
-                `¿Deseas limpiar las capturas temporales del día después de archivar?\n\nSe guardaron ${captures.length} capturas en el historial.`,
-                'Archivar Reporte'
-            );
+            // Mostrar modal personalizado para confirmar limpieza
+            const shouldClean = await this.showArchiveConfirmModal(captures.length, existingReport !== null);
 
-            if (confirm) {
+            if (shouldClean) {
+                // Eliminar capturas temporales del día
+                let deletedCount = 0;
                 for (const capture of captures) {
+                    try {
                     await DB.delete('temp_quick_captures', capture.id);
+                        deletedCount++;
+                    } catch (e) {
+                        console.warn(`No se pudo eliminar captura ${capture.id}:`, e);
                 }
-                Utils.showNotification(`Reporte archivado correctamente. ${captures.length} capturas eliminadas del día.`, 'success');
+                }
+                Utils.showNotification(`Reporte archivado correctamente. ${deletedCount} capturas eliminadas del día.`, 'success');
                 await this.loadQuickCaptureData();
             } else {
                 Utils.showNotification('Reporte archivado correctamente. Las capturas temporales se mantienen.', 'success');
@@ -10188,15 +10230,93 @@ const Reports = {
 
             // Recargar historial
             await this.loadArchivedReports();
+            
+            console.log('✅ Proceso de archivado completado exitosamente');
         } catch (error) {
-            console.error('Error archivando reporte:', error);
-            Utils.showNotification('Error al archivar el reporte: ' + error.message, 'error');
+            console.error('❌ Error archivando reporte:', error);
+            console.error('Stack trace:', error.stack);
+            Utils.showNotification('Error al archivar el reporte: ' + (error.message || 'Error desconocido'), 'error');
         } finally {
             // Siempre resetear el flag, incluso si hay error
-            if (this.isExporting) {
-                this.isExporting = false;
-            }
+            this.isExporting = false;
         }
+    },
+
+    async showArchiveConfirmModal(captureCount, isUpdate) {
+        return new Promise((resolve) => {
+            // Crear modal de confirmación personalizado (bien posicionado)
+            const confirmModal = document.createElement('div');
+            confirmModal.className = 'modal-overlay';
+            confirmModal.id = 'archive-confirm-modal';
+            confirmModal.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 10000;';
+            
+            const updateText = isUpdate ? ' (actualizado)' : '';
+            confirmModal.innerHTML = `
+                <div class="modal-content" style="max-width: 500px; width: 90%; background: white; border-radius: 8px; padding: 0; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+                    <div class="modal-header" style="padding: 16px; border-bottom: 1px solid #e0e0e0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px 8px 0 0;">
+                        <h3 style="margin: 0; font-size: 16px; font-weight: 600; color: white;">
+                            <i class="fas fa-archive" style="margin-right: 8px;"></i>Archivar Reporte${updateText}
+                        </h3>
+                    </div>
+                    <div class="modal-body" style="padding: 20px;">
+                        <p style="margin: 0 0 12px 0; font-size: 14px; line-height: 1.5; color: #333;">
+                            Se guardaron <strong>${captureCount}</strong> capturas en el historial.
+                        </p>
+                        <p style="margin: 0; font-size: 13px; line-height: 1.5; color: #666;">
+                            ¿Deseas limpiar las capturas temporales del día después de archivar?
+                        </p>
+                    </div>
+                    <div class="modal-footer" style="padding: 16px; border-top: 1px solid #e0e0e0; display: flex; gap: 10px; justify-content: flex-end;">
+                        <button class="btn-secondary" id="archive-keep-btn" style="min-width: 120px; padding: 10px;">
+                            <i class="fas fa-save" style="margin-right: 6px;"></i>Mantener
+                        </button>
+                        <button class="btn-success" id="archive-clean-btn" style="min-width: 120px; padding: 10px;">
+                            <i class="fas fa-trash" style="margin-right: 6px;"></i>Limpiar y Archivar
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(confirmModal);
+            
+            // Event listeners
+            const keepBtn = document.getElementById('archive-keep-btn');
+            const cleanBtn = document.getElementById('archive-clean-btn');
+            
+            const cleanup = () => {
+                if (confirmModal && confirmModal.parentNode) {
+                    confirmModal.parentNode.removeChild(confirmModal);
+                }
+            };
+            
+            keepBtn.onclick = () => {
+                cleanup();
+                resolve(false);
+            };
+            
+            cleanBtn.onclick = () => {
+                cleanup();
+                resolve(true);
+            };
+            
+            // Cerrar al hacer clic fuera del modal
+            confirmModal.onclick = (e) => {
+                if (e.target === confirmModal) {
+                    cleanup();
+                    resolve(false);
+                }
+            };
+            
+            // Cerrar con ESC
+            const escHandler = (e) => {
+                if (e.key === 'Escape') {
+                    cleanup();
+                    document.removeEventListener('keydown', escHandler);
+                    resolve(false);
+                }
+            };
+            document.addEventListener('keydown', escHandler);
+        });
     },
 
     async clearQuickCapture() {
@@ -10807,14 +10927,14 @@ const Reports = {
         return new Promise((resolve) => {
             document.getElementById('delete-archived-confirm-btn').onclick = async () => {
                 confirmModal.remove();
-                try {
-                    await DB.delete('archived_quick_captures', reportId);
-                    Utils.showNotification('Reporte archivado eliminado', 'success');
-                    await this.loadArchivedReports();
-                } catch (error) {
-                    console.error('Error eliminando reporte archivado:', error);
-                    Utils.showNotification('Error al eliminar: ' + error.message, 'error');
-                }
+        try {
+            await DB.delete('archived_quick_captures', reportId);
+            Utils.showNotification('Reporte archivado eliminado', 'success');
+            await this.loadArchivedReports();
+        } catch (error) {
+            console.error('Error eliminando reporte archivado:', error);
+            Utils.showNotification('Error al eliminar: ' + error.message, 'error');
+        }
                 resolve();
             };
             
