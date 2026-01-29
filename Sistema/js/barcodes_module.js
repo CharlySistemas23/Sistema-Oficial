@@ -206,6 +206,10 @@ const BarcodesModule = {
                     break;
                 case 'barcodes':
                     content.innerHTML = await this.getBarcodesTab();
+                    // Configurar filtro de sucursal antes de cargar códigos
+                    await this.setupBranchFilter();
+                    // Configurar event listeners después de crear el HTML
+                    this.setupBarcodeEventListeners();
                     await this.loadBarcodes();
                     break;
                 case 'scan-history':
@@ -578,8 +582,14 @@ const BarcodesModule = {
             // Si NO es master_admin, ocultar el dropdown y forzar filtro a su sucursal
             if (!isMasterAdmin) {
                 branchFilter.style.display = 'none';
+                // CRÍTICO: Establecer el valor aunque esté oculto para que el filtrado funcione
                 if (currentBranchId) {
                     branchFilter.value = currentBranchId;
+                    console.log(`📍 Barcodes: Filtro oculto establecido a sucursal actual: ${currentBranchId}`);
+                } else {
+                    // Si no hay sucursal actual, establecer a 'all' para evitar errores
+                    branchFilter.value = 'all';
+                    console.warn('⚠️ Barcodes: No hay sucursal actual, estableciendo filtro a "all"');
                 }
             } else {
                 // Master admin puede ver todas las sucursales
@@ -1107,8 +1117,21 @@ const BarcodesModule = {
             );
             
             // Determinar qué sucursal usar para filtrar
-            const filterBranchId = selectedBranchId || (isMasterAdmin ? null : currentBranchId);
+            // CRÍTICO: Si hay un filtro seleccionado, usarlo. Si no, y no es master admin, usar sucursal actual
+            let filterBranchId = null;
+            if (selectedBranchId) {
+                // Hay un filtro específico seleccionado
+                filterBranchId = selectedBranchId;
+            } else if (!isMasterAdmin) {
+                // No es master admin y no hay filtro = usar sucursal actual
+                filterBranchId = currentBranchId;
+            } else {
+                // Master admin sin filtro = ver todas (null)
+                filterBranchId = null;
+            }
             const viewAllBranches = isMasterAdmin && !selectedBranchId;
+            
+            console.log(`📍 Barcodes: Filtro de sucursal - selectedBranchId: ${selectedBranchId}, currentBranchId: ${currentBranchId}, filterBranchId: ${filterBranchId}, isMasterAdmin: ${isMasterAdmin}`);
 
             let items = [];
             let employees = [];
@@ -1123,6 +1146,7 @@ const BarcodesModule = {
                 
                 // Filtrado ESTRICTO por sucursal
                 if (filterBranchId) {
+                    // Hay un filtro específico de sucursal - filtrar estrictamente
                     const normalizedFilterBranchId = String(filterBranchId);
                     const beforeFilter = items.length;
                     items = items.filter(item => {
@@ -1133,22 +1157,11 @@ const BarcodesModule = {
                         return String(item.branch_id) === normalizedFilterBranchId;
                     });
                     console.log(`📍 Barcodes: Filtrado estricto productos: ${beforeFilter} → ${items.length} (sucursal: ${filterBranchId})`);
-                } else if (!viewAllBranches && currentBranchId) {
-                    // Si no es master admin y hay sucursal actual, filtrar por ella
-                    const normalizedCurrentBranchId = String(currentBranchId);
-                    const beforeFilter = items.length;
-                    items = items.filter(item => {
-                        if (!item.branch_id) {
-                            return false;
-                        }
-                        return String(item.branch_id) === normalizedCurrentBranchId;
-                    });
-                    console.log(`📍 Barcodes: Filtrado por sucursal actual: ${beforeFilter} → ${items.length} (sucursal: ${currentBranchId})`);
                 } else if (viewAllBranches) {
                     // Master admin viendo todas las sucursales - mostrar todos (incluyendo sin branch_id)
                     console.log(`📍 Barcodes: Mostrando todos los productos (master admin)`);
                 } else {
-                    // Sin sucursal asignada = no mostrar nada
+                    // Sin sucursal asignada o usuario normal sin branch_id = no mostrar nada
                     items = [];
                     console.log(`📍 Barcodes: Sin sucursal asignada: 0 productos`);
                 }
