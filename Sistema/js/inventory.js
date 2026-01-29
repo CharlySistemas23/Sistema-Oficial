@@ -2201,11 +2201,22 @@ const Inventory = {
     },
 
     async saveItem(itemId) {
-        const form = document.getElementById('inventory-form');
-        if (!form || !form.checkValidity()) {
-            form.reportValidity();
-            return;
-        }
+        try {
+            const form = document.getElementById('inventory-form');
+            if (!form) {
+                console.error('❌ Formulario no encontrado');
+                Utils.showNotification('Error: Formulario no encontrado', 'error');
+                return;
+            }
+            
+            // Validar formulario
+            if (!form.checkValidity()) {
+                console.warn('⚠️ Formulario inválido, mostrando errores de validación');
+                form.reportValidity();
+                return;
+            }
+            
+            console.log(`💾 Guardando pieza ${itemId ? '(edición)' : '(nueva)'}...`);
 
         const rawBranchId = typeof BranchManager !== 'undefined'
             ? BranchManager.getCurrentBranchId()
@@ -2383,7 +2394,7 @@ const Inventory = {
                 
                 // Merge: combinar datos del backend con campos adicionales locales
                 // El backend solo devuelve campos del esquema, pero necesitamos preservar campos adicionales
-                const mergedItem = {
+                mergedItem = {
                     ...item, // Datos del backend (campos del esquema)
                     // Preservar campos adicionales que no están en el backend
                     stone: document.getElementById('inv-stone')?.value || item.stone || '',
@@ -2492,6 +2503,8 @@ const Inventory = {
                         // Guardar en IndexedDB con TODOS los campos
                         await DB.put('inventory_items', item, { autoBranchId: false });
                         console.log('✅ Item guardado en IndexedDB (modo offline)');
+                        // Definir mergedItem para consistencia
+                        mergedItem = item;
                     } catch (error) {
                         throw error;
                     }
@@ -2628,36 +2641,41 @@ const Inventory = {
 
         // IMPORTANTE: Siempre agregar a cola de sincronización para asegurar sincronización bidireccional
         // Incluso si se guardó con API, agregar a la cola para que se sincronice con otros clientes
+        const itemToSync = savedWithAPI ? mergedItem : item;
         if (typeof SyncManager !== 'undefined') {
             try {
                 // Si ya se guardó con API, marcar como sincronizado pero mantener en cola para otros clientes
                 if (savedWithAPI) {
                     // El item ya está en el servidor, pero otros clientes necesitan recibirlo
                     // El socket.io ya lo emite, pero por si acaso, mantener en cola
-                    await SyncManager.addToQueue('inventory_item', mergedItem.id);
+                    await SyncManager.addToQueue('inventory_item', itemToSync.id);
                 } else {
                     // Si no se guardó con API, agregar a cola para sincronización
-                    await SyncManager.addToQueue('inventory_item', mergedItem.id);
+                    await SyncManager.addToQueue('inventory_item', itemToSync.id);
                 }
             } catch (syncError) {
                 console.error('Error agregando inventory_item a cola:', syncError);
             }
         }
 
-        // Emitir evento de actualización de inventario
-        if (typeof Utils !== 'undefined' && Utils.EventBus) {
-            Utils.EventBus.emit('inventory-updated', { item, isNew: !itemId });
-        }
+            // Emitir evento de actualización de inventario
+            if (typeof Utils !== 'undefined' && Utils.EventBus) {
+                Utils.EventBus.emit('inventory-updated', { item, isNew: !itemId });
+            }
 
-        Utils.showNotification(itemId ? 'Pieza actualizada' : 'Pieza agregada', 'success');
-        UI.closeModal();
-        
-        // Esperar un momento para asegurar que el item se guardó correctamente
-        await new Promise(resolve => setTimeout(resolve, 200));
-        
-        // Forzar recarga completa
-        await this.loadInventory();
-        
+            Utils.showNotification(itemId ? 'Pieza actualizada' : 'Pieza agregada', 'success');
+            UI.closeModal();
+            
+            // Esperar un momento para asegurar que el item se guardó correctamente
+            await new Promise(resolve => setTimeout(resolve, 200));
+            
+            // Forzar recarga completa
+            await this.loadInventory();
+        } catch (error) {
+            console.error('❌ Error guardando pieza:', error);
+            Utils.showNotification(`Error al guardar pieza: ${error.message || 'Error desconocido'}`, 'error');
+            // No cerrar el modal si hay error para que el usuario pueda corregir
+        }
     },
 
     async editItem(itemId) {
