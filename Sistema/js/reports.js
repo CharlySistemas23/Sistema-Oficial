@@ -5305,50 +5305,58 @@ const Reports = {
                         </select>
                         <small style="color: var(--color-text-secondary); font-size: 9px;">Nota: La moneda ahora se especifica por cada pago individual</small>
                     </div>
-                    <div class="form-group" style="grid-column: 1 / -1; padding: 6px; background: #f8f9fa; border-radius: 3px; border: 1px solid #dee2e6; margin-top: 4px;">
-                        <label style="font-weight: 600; margin-bottom: 4px; display: block; font-size: 10px;">Pagos <span style="color: var(--color-danger);">*</span></label>
-                        <div id="qc-payments-container" style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 4px;">
-                            <div class="payment-row" style="display: grid; grid-template-columns: 1fr 80px 110px 50px; gap: 4px; align-items: center; padding: 3px; background: white; border-radius: 3px; border: 1px solid #dee2e6;">
-                                <select class="form-select payment-method" required style="border: 1px solid #ced4da; font-size: 10px; padding: 4px;">
-                                    <option value="">Método...</option>
-                                    <option value="cash">Efectivo</option>
-                                    <option value="card">Tarjeta</option>
-                                    <option value="transfer">Transferencia</option>
-                                    <option value="other">Otro</option>
-                                </select>
-                                <select class="form-select payment-currency" required style="border: 1px solid #ced4da; font-size: 10px; padding: 4px;">
-                            <option value="MXN">MXN</option>
-                                    <option value="USD">USD</option>
-                            <option value="CAD">CAD</option>
-                        </select>
-                                <input type="number" class="form-input payment-amount" min="0" step="0.01" placeholder="0.00" required style="border: 1px solid #ced4da; font-size: 10px; padding: 4px;">
-                                <button type="button" class="btn-danger btn-xs remove-payment" style="display: none; padding: 3px 5px; font-size: 9px;" onclick="this.closest('.payment-row').remove(); window.Reports.updatePaymentsTotal();">
-                                    <i class="fas fa-times"></i>
+                    <!-- Sección de Pagos y Campos Adicionales en Grid -->
+                    <div class="form-group" style="grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px;">
+                        <!-- Columna Izquierda: Pagos (reducida) -->
+                        <div style="padding: 6px; background: #f8f9fa; border-radius: 3px; border: 1px solid #dee2e6;">
+                            <label style="font-weight: 600; margin-bottom: 4px; display: block; font-size: 10px;">Pagos <span style="color: var(--color-danger);">*</span></label>
+                            <div id="qc-payments-container" style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 4px;">
+                                <div class="payment-row" style="display: grid; grid-template-columns: 1fr 70px 90px 40px; gap: 3px; align-items: center; padding: 3px; background: white; border-radius: 3px; border: 1px solid #dee2e6;">
+                                    <select class="form-select payment-method" required style="border: 1px solid #ced4da; font-size: 10px; padding: 4px;">
+                                        <option value="">Método...</option>
+                                        <option value="cash">Efectivo</option>
+                                        <option value="card">Tarjeta</option>
+                                        <option value="transfer">Transferencia</option>
+                                        <option value="other">Otro</option>
+                                    </select>
+                                    <select class="form-select payment-currency" required style="border: 1px solid #ced4da; font-size: 10px; padding: 4px;">
+                                        <option value="MXN">MXN</option>
+                                        <option value="USD">USD</option>
+                                        <option value="CAD">CAD</option>
+                                    </select>
+                                    <input type="number" class="form-input payment-amount" min="0" step="0.01" placeholder="0.00" required style="border: 1px solid #ced4da; font-size: 10px; padding: 4px;">
+                                    <button type="button" class="btn-danger btn-xs remove-payment" style="display: none; padding: 3px 5px; font-size: 9px;" onclick="this.closest('.payment-row').remove(); window.Reports.updatePaymentsTotal();">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 4px; border-top: 1px solid #dee2e6;">
+                                <button type="button" class="btn-secondary btn-xs" onclick="window.Reports.addPaymentRow()" style="font-weight: 600; padding: 4px 8px; font-size: 10px;">
+                                    <i class="fas fa-plus"></i> Agregar
                                 </button>
-                    </div>
-                    </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 4px; border-top: 1px solid #dee2e6;">
-                            <button type="button" class="btn-secondary btn-xs" onclick="window.Reports.addPaymentRow()" style="font-weight: 600; padding: 4px 8px; font-size: 10px;">
-                                <i class="fas fa-plus"></i> Agregar
-                            </button>
-                            <div style="font-weight: 700; font-size: 11px; color: #495057; padding: 3px 6px; background: white; border-radius: 3px; border: 1px solid #28a745;">
-                                Total: <span id="qc-payments-total" style="color: #28a745;">$0.00</span>
-                    </div>
+                                <div style="font-weight: 700; font-size: 11px; color: #495057; padding: 3px 6px; background: white; border-radius: 3px; border: 1px solid #28a745;">
+                                    Total: <span id="qc-payments-total" style="color: #28a745;">$0.00</span>
+                                </div>
+                            </div>
+                            <input type="hidden" id="qc-total" value="0">
+                            <small style="color: #6c757d; font-size: 8px; margin-top: 3px; display: block; line-height: 1.2;">💡 Múltiples pagos con diferentes monedas se convierten automáticamente a MXN</small>
                         </div>
-                        <input type="hidden" id="qc-total" value="0">
-                        <small style="color: #6c757d; font-size: 8px; margin-top: 3px; display: block; line-height: 1.2;">💡 Múltiples pagos con diferentes monedas se convierten automáticamente a MXN</small>
-                    </div>
-                    <div class="form-group" style="margin: 0;">
-                        <label style="font-size: 10px; margin-bottom: 3px; display: block;">Costo (MXN)</label>
-                        <input type="number" id="qc-cost" class="form-input" min="0" step="0.01" placeholder="0.00" style="font-size: 11px; padding: 5px;">
-                    </div>
-                    <div class="form-group" style="margin: 0;">
-                        <label style="font-size: 10px; margin-bottom: 3px; display: block;">Notas</label>
-                        <input type="text" id="qc-notes" class="form-input" placeholder="Opcional" style="font-size: 11px; padding: 5px;">
-                    </div>
-                    <div class="form-group" style="margin: 0; display: flex; align-items: center; gap: 4px; padding-top: 8px;">
-                        <input type="checkbox" id="qc-is-street" style="width: auto; margin: 0;">
-                        <label style="font-size: 10px; margin: 0; cursor: pointer;">Es venta de calle</label>
+                        
+                        <!-- Columna Derecha: Costo, Notas y Venta de Calle -->
+                        <div style="display: flex; flex-direction: column; gap: 6px;">
+                            <div class="form-group" style="margin: 0;">
+                                <label style="font-size: 10px; margin-bottom: 3px; display: block;">Costo (MXN)</label>
+                                <input type="number" id="qc-cost" class="form-input" min="0" step="0.01" placeholder="0.00" style="font-size: 11px; padding: 5px;">
+                            </div>
+                            <div class="form-group" style="margin: 0;">
+                                <label style="font-size: 10px; margin-bottom: 3px; display: block;">Notas</label>
+                                <input type="text" id="qc-notes" class="form-input" placeholder="Opcional" style="font-size: 11px; padding: 5px;">
+                            </div>
+                            <div class="form-group" style="margin: 0; display: flex; align-items: center; gap: 4px; padding-top: 4px;">
+                                <input type="checkbox" id="qc-is-street" style="width: auto; margin: 0;">
+                                <label style="font-size: 10px; margin: 0; cursor: pointer;">Es venta de calle</label>
+                            </div>
+                        </div>
                     </div>
                     <div class="form-group" id="qc-payment-method-group" style="display: none; margin: 0;">
                         <label style="font-size: 10px; margin-bottom: 3px; display: block;">Método (Calle) <span style="color: var(--color-danger);">*</span></label>
