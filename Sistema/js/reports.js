@@ -5250,14 +5250,14 @@ const Reports = {
             </div>
 
             <!-- Formulario de Captura -->
-            <div class="module" style="padding: 12px; background: white; border-radius: 6px; border: 1px solid #e0e0e0; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06);">
-                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #f0f0f0;">
-                    <div style="width: 3px; height: 18px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 2px;"></div>
-                    <h3 style="margin: 0; font-size: 12px; font-weight: 600; color: #333; text-transform: uppercase; letter-spacing: 0.3px;">
-                        <i class="fas fa-plus-circle" style="color: #667eea; margin-right: 4px; font-size: 11px;"></i> Nueva Captura
+            <div class="module" style="padding: 8px; background: white; border-radius: 4px; border: 1px solid #e0e0e0; margin-bottom: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.04);">
+                <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid #f0f0f0;">
+                    <div style="width: 2px; height: 14px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 1px;"></div>
+                    <h3 style="margin: 0; font-size: 11px; font-weight: 600; color: #333; text-transform: uppercase; letter-spacing: 0.2px;">
+                        <i class="fas fa-plus-circle" style="color: #667eea; margin-right: 3px; font-size: 10px;"></i> Nueva Captura
                 </h3>
                 </div>
-                <form id="quick-capture-form" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px;">
+                <form id="quick-capture-form" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 6px;">
                     ${isMasterAdmin ? `
                     <div class="form-group">
                         <label>Sucursal <span style="color: var(--color-danger);">*</span></label>
@@ -5266,36 +5266,35 @@ const Reports = {
                         </select>
                     </div>
                     ` : ''}
-                    <div class="form-group">
-                        <label>Vendedor <span style="color: var(--color-danger);">*</span></label>
-                        <select id="qc-seller" class="form-select" required>
+                    <div class="form-group" style="margin: 0;">
+                        <label style="font-size: 10px; margin-bottom: 3px; display: block;">Vendedor <span style="color: var(--color-danger);">*</span></label>
+                        <select id="qc-seller" class="form-select" required style="font-size: 11px; padding: 5px;">
                             <option value="">Seleccionar...</option>
                         </select>
                     </div>
-                    <div class="form-group">
-                        <label>Guía</label>
-                        <select id="qc-guide" class="form-select">
+                    <div class="form-group" style="margin: 0;">
+                        <label style="font-size: 10px; margin-bottom: 3px; display: block;">Guía</label>
+                        <select id="qc-guide" class="form-select" style="font-size: 11px; padding: 5px;">
                             <option value="">Ninguno</option>
                         </select>
                     </div>
-                    <div class="form-group">
-                        <label>Agencia</label>
-                        <select id="qc-agency" class="form-select">
+                    <div class="form-group" style="margin: 0;">
+                        <label style="font-size: 10px; margin-bottom: 3px; display: block;">Agencia</label>
+                        <select id="qc-agency" class="form-select" style="font-size: 11px; padding: 5px;">
                             <option value="">Ninguna</option>
                         </select>
                     </div>
-                    <div class="form-group">
-                        <label>Producto <span style="color: var(--color-danger);">*</span></label>
-                        <input type="text" id="qc-product" class="form-input" placeholder="Nombre del producto" required>
+                    <div class="form-group" style="margin: 0;">
+                        <label style="font-size: 10px; margin-bottom: 3px; display: block;">Producto <span style="color: var(--color-danger);">*</span></label>
+                        <input type="text" id="qc-product" class="form-input" placeholder="Nombre del producto" required style="font-size: 11px; padding: 5px;">
                     </div>
-                    <div class="form-group">
-                        <label>Cantidad <span style="color: var(--color-danger);">*</span></label>
-                        <input type="number" id="qc-quantity" class="form-input" min="1" step="1" value="1" required>
+                    <div class="form-group" style="margin: 0;">
+                        <label style="font-size: 10px; margin-bottom: 3px; display: block;">Cantidad <span style="color: var(--color-danger);">*</span></label>
+                        <input type="number" id="qc-quantity" class="form-input" min="1" step="1" value="1" required style="font-size: 11px; padding: 5px;">
                     </div>
-                    <div class="form-group">
-                        <label>Fecha <span style="color: var(--color-danger);">*</span></label>
-                        <input type="date" id="qc-date" class="form-input" value="${today}" required>
-                        <small style="color: var(--color-text-secondary); font-size: 9px;">Fecha de la captura (por defecto: hoy)</small>
+                    <div class="form-group" style="margin: 0;">
+                        <label style="font-size: 10px; margin-bottom: 3px; display: block;">Fecha <span style="color: var(--color-danger);">*</span></label>
+                        <input type="date" id="qc-date" class="form-input" value="${today}" required style="font-size: 11px; padding: 5px;">
                     </div>
                     <div class="form-group" style="display: none;">
                         <label>Tipo de Moneda <span style="color: var(--color-danger);">*</span></label>
@@ -5306,83 +5305,77 @@ const Reports = {
                         </select>
                         <small style="color: var(--color-text-secondary); font-size: 9px;">Nota: La moneda ahora se especifica por cada pago individual</small>
                     </div>
-                    <div class="form-group" style="grid-column: 1 / -1; padding: 8px; background: #f8f9fa; border-radius: 4px; border: 1px solid #dee2e6;">
-                        <label style="font-weight: 600; margin-bottom: 6px; display: block; font-size: 11px;">Pagos <span style="color: var(--color-danger);">*</span></label>
-                        <div id="qc-payments-container" style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 6px;">
-                            <div class="payment-row" style="display: grid; grid-template-columns: 1fr 100px 140px 70px; gap: 6px; align-items: center; padding: 4px; background: white; border-radius: 4px; border: 1px solid #dee2e6;">
-                                <select class="form-select payment-method" required style="border: 1px solid #ced4da; font-size: 11px; padding: 6px;">
+                    <div class="form-group" style="grid-column: 1 / -1; padding: 6px; background: #f8f9fa; border-radius: 3px; border: 1px solid #dee2e6; margin-top: 4px;">
+                        <label style="font-weight: 600; margin-bottom: 4px; display: block; font-size: 10px;">Pagos <span style="color: var(--color-danger);">*</span></label>
+                        <div id="qc-payments-container" style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 4px;">
+                            <div class="payment-row" style="display: grid; grid-template-columns: 1fr 80px 110px 50px; gap: 4px; align-items: center; padding: 3px; background: white; border-radius: 3px; border: 1px solid #dee2e6;">
+                                <select class="form-select payment-method" required style="border: 1px solid #ced4da; font-size: 10px; padding: 4px;">
                                     <option value="">Método...</option>
                                     <option value="cash">Efectivo</option>
                                     <option value="card">Tarjeta</option>
                                     <option value="transfer">Transferencia</option>
                                     <option value="other">Otro</option>
                                 </select>
-                                <select class="form-select payment-currency" required style="border: 1px solid #ced4da; font-size: 11px; padding: 6px;">
+                                <select class="form-select payment-currency" required style="border: 1px solid #ced4da; font-size: 10px; padding: 4px;">
                                     <option value="MXN">MXN</option>
                                     <option value="USD">USD</option>
                                     <option value="CAD">CAD</option>
                                 </select>
-                                <input type="number" class="form-input payment-amount" min="0" step="0.01" placeholder="0.00" required style="border: 1px solid #ced4da; font-size: 11px; padding: 6px;">
-                                <button type="button" class="btn-danger btn-xs remove-payment" style="display: none; padding: 4px 6px; font-size: 10px;" onclick="this.closest('.payment-row').remove(); window.Reports.updatePaymentsTotal();">
+                                <input type="number" class="form-input payment-amount" min="0" step="0.01" placeholder="0.00" required style="border: 1px solid #ced4da; font-size: 10px; padding: 4px;">
+                                <button type="button" class="btn-danger btn-xs remove-payment" style="display: none; padding: 3px 5px; font-size: 9px;" onclick="this.closest('.payment-row').remove(); window.Reports.updatePaymentsTotal();">
                                     <i class="fas fa-times"></i>
                                 </button>
                             </div>
                         </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 6px; border-top: 1px solid #dee2e6;">
-                            <button type="button" class="btn-secondary btn-xs" onclick="window.Reports.addPaymentRow()" style="font-weight: 600; padding: 6px 10px; font-size: 11px;">
-                                <i class="fas fa-plus"></i> Agregar Pago
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 4px; border-top: 1px solid #dee2e6;">
+                            <button type="button" class="btn-secondary btn-xs" onclick="window.Reports.addPaymentRow()" style="font-weight: 600; padding: 4px 8px; font-size: 10px;">
+                                <i class="fas fa-plus"></i> Agregar
                             </button>
-                            <div style="font-weight: 700; font-size: 12px; color: #495057; padding: 4px 8px; background: white; border-radius: 4px; border: 2px solid #28a745;">
-                                Total (MXN): <span id="qc-payments-total" style="color: #28a745;">$0.00</span>
+                            <div style="font-weight: 700; font-size: 11px; color: #495057; padding: 3px 6px; background: white; border-radius: 3px; border: 1px solid #28a745;">
+                                Total: <span id="qc-payments-total" style="color: #28a745;">$0.00</span>
                             </div>
                         </div>
                         <input type="hidden" id="qc-total" value="0">
-                        <small style="color: #6c757d; font-size: 9px; margin-top: 4px; display: block;">💡 Puedes agregar múltiples pagos con diferentes monedas (ej: $1000 MXN efectivo + $50 USD tarjeta). Cada pago se convierte automáticamente a MXN.</small>
+                        <small style="color: #6c757d; font-size: 8px; margin-top: 3px; display: block; line-height: 1.2;">💡 Múltiples pagos con diferentes monedas se convierten automáticamente a MXN</small>
                     </div>
-                    <div class="form-group">
-                        <label>Costo de Mercancía (MXN)</label>
-                        <input type="number" id="qc-cost" class="form-input" min="0" step="0.01" placeholder="0.00">
-                        <small style="color: var(--color-text-secondary); font-size: 9px;">Opcional: Si no se ingresa, se buscará en inventario</small>
+                    <div class="form-group" style="margin: 0;">
+                        <label style="font-size: 10px; margin-bottom: 3px; display: block;">Costo (MXN)</label>
+                        <input type="number" id="qc-cost" class="form-input" min="0" step="0.01" placeholder="0.00" style="font-size: 11px; padding: 5px;">
                     </div>
-                    <div class="form-group">
-                        <label>Notas</label>
-                        <input type="text" id="qc-notes" class="form-input" placeholder="Notas adicionales (opcional)">
-                        <small style="color: var(--color-text-secondary); font-size: 9px;">Información adicional sobre la captura</small>
+                    <div class="form-group" style="margin: 0;">
+                        <label style="font-size: 10px; margin-bottom: 3px; display: block;">Notas</label>
+                        <input type="text" id="qc-notes" class="form-input" placeholder="Opcional" style="font-size: 11px; padding: 5px;">
                     </div>
-                    <div class="form-group">
-                        <label style="display: flex; align-items: center; gap: var(--spacing-xs);">
-                            <input type="checkbox" id="qc-is-street" style="width: auto; margin: 0;">
-                            <span>Es venta de calle</span>
-                        </label>
-                        <small style="color: var(--color-text-secondary); font-size: 9px;">Marcar si es venta directa en calle (sin guía ni agencia)</small>
+                    <div class="form-group" style="margin: 0; display: flex; align-items: center; gap: 4px; padding-top: 8px;">
+                        <input type="checkbox" id="qc-is-street" style="width: auto; margin: 0;">
+                        <label style="font-size: 10px; margin: 0; cursor: pointer;">Es venta de calle</label>
                     </div>
-                    <div class="form-group" id="qc-payment-method-group" style="display: none;">
-                        <label>Método de Pago (Calle) <span style="color: var(--color-danger);">*</span></label>
-                        <select id="qc-payment-method" class="form-select">
+                    <div class="form-group" id="qc-payment-method-group" style="display: none; margin: 0;">
+                        <label style="font-size: 10px; margin-bottom: 3px; display: block;">Método (Calle) <span style="color: var(--color-danger);">*</span></label>
+                        <select id="qc-payment-method" class="form-select" style="font-size: 11px; padding: 5px;">
                             <option value="">Seleccionar...</option>
                             <option value="card">Tarjeta</option>
                             <option value="cash">Efectivo</option>
                         </select>
-                        <small style="color: var(--color-text-secondary); font-size: 9px;">Tarjeta: (monto - 4.5%) * 12% | Efectivo: monto * 14%</small>
                     </div>
-                    <div class="form-group" style="grid-column: 1 / -1;">
-                        <div style="display: flex; gap: 8px; align-items: stretch; margin-bottom: 10px;">
-                            <div style="flex: 1; padding: 8px 10px; background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-radius: 4px; border: 1px solid #dee2e6;">
-                                <div style="font-size: 9px; color: #6c757d; margin-bottom: 4px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Tipo de Cambio Actual</div>
-                                <div id="qc-exchange-rates-display" style="font-size: 11px; font-weight: 500; color: #495057;">
+                    <div class="form-group" style="grid-column: 1 / -1; margin-top: 4px;">
+                        <div style="display: flex; gap: 6px; align-items: center; margin-bottom: 6px; padding: 5px 8px; background: #f8f9fa; border-radius: 3px; border: 1px solid #dee2e6;">
+                            <div style="flex: 1;">
+                                <div style="font-size: 8px; color: #6c757d; margin-bottom: 2px; text-transform: uppercase; font-weight: 600;">Tipo de Cambio</div>
+                                <div id="qc-exchange-rates-display" style="font-size: 10px; font-weight: 500; color: #495057;">
                                     <i class="fas fa-spinner fa-spin"></i> Obteniendo...
                                 </div>
                             </div>
-                            <button type="button" class="btn-secondary" onclick="window.Reports.refreshExchangeRates()" title="Actualizar Tipo de Cambio" style="padding: 8px 12px; align-self: center; font-size: 11px;">
+                            <button type="button" class="btn-secondary btn-xs" onclick="window.Reports.refreshExchangeRates()" title="Actualizar" style="padding: 4px 6px; font-size: 9px;">
                                 <i class="fas fa-sync-alt"></i>
                             </button>
                         </div>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding-top: 10px; border-top: 1px solid #f0f0f0;">
-                            <button type="submit" class="btn-primary" style="padding: 10px; font-weight: 600; font-size: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                                <i class="fas fa-plus-circle"></i> Agregar a Lista
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                            <button type="submit" class="btn-primary btn-sm" style="padding: 6px 8px; font-weight: 600; font-size: 11px;">
+                                <i class="fas fa-plus-circle"></i> Agregar
                             </button>
-                            <button type="button" class="btn-success" onclick="window.Reports.saveAllPendingCaptures()" style="padding: 10px; font-weight: 600; font-size: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);" id="save-all-pending-btn" disabled>
-                                <i class="fas fa-save"></i> Guardar Todo (<span id="pending-count-header">0</span>)
+                            <button type="button" class="btn-success btn-sm" onclick="window.Reports.saveAllPendingCaptures()" style="padding: 6px 8px; font-weight: 600; font-size: 11px;" id="save-all-pending-btn" disabled>
+                                <i class="fas fa-save"></i> Guardar (<span id="pending-count-header">0</span>)
                         </button>
                         </div>
                     </div>
@@ -6370,21 +6363,21 @@ const Reports = {
             
             // Limpiar y agregar una fila inicial
             container.innerHTML = `
-                <div class="payment-row" style="display: grid; grid-template-columns: 1fr 100px 140px 70px; gap: 6px; align-items: center; padding: 4px; background: white; border-radius: 4px; border: 1px solid #dee2e6;">
-                    <select class="form-select payment-method" required style="border: 1px solid #ced4da; font-size: 11px; padding: 6px;">
+                <div class="payment-row" style="display: grid; grid-template-columns: 1fr 80px 110px 50px; gap: 4px; align-items: center; padding: 3px; background: white; border-radius: 3px; border: 1px solid #dee2e6;">
+                    <select class="form-select payment-method" required style="border: 1px solid #ced4da; font-size: 10px; padding: 4px;">
                         <option value="">Método...</option>
                         <option value="cash">Efectivo</option>
                         <option value="card">Tarjeta</option>
                         <option value="transfer">Transferencia</option>
                         <option value="other">Otro</option>
                     </select>
-                    <select class="form-select payment-currency" required style="border: 1px solid #ced4da; font-size: 11px; padding: 6px;">
+                    <select class="form-select payment-currency" required style="border: 1px solid #ced4da; font-size: 10px; padding: 4px;">
                         <option value="MXN">MXN</option>
                         <option value="USD">USD</option>
                         <option value="CAD">CAD</option>
                     </select>
-                    <input type="number" class="form-input payment-amount" min="0" step="0.01" placeholder="0.00" required style="border: 1px solid #ced4da; font-size: 11px; padding: 6px;">
-                    <button type="button" class="btn-danger btn-xs remove-payment" style="display: none; padding: 4px 6px; font-size: 10px;" onclick="if(window.Reports && window.Reports.updatePaymentsTotal) window.Reports.updatePaymentsTotal(); this.closest('.payment-row').remove(); if(window.Reports && window.Reports.updateRemoveButtons) window.Reports.updateRemoveButtons();">
+                    <input type="number" class="form-input payment-amount" min="0" step="0.01" placeholder="0.00" required style="border: 1px solid #ced4da; font-size: 10px; padding: 4px;">
+                    <button type="button" class="btn-danger btn-xs remove-payment" style="display: none; padding: 3px 5px; font-size: 9px;" onclick="if(window.Reports && window.Reports.updatePaymentsTotal) window.Reports.updatePaymentsTotal(); this.closest('.payment-row').remove(); if(window.Reports && window.Reports.updateRemoveButtons) window.Reports.updateRemoveButtons();">
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
@@ -6436,22 +6429,22 @@ const Reports = {
             
             const row = document.createElement('div');
             row.className = 'payment-row';
-            row.style.cssText = 'display: grid; grid-template-columns: 1fr 100px 140px 70px; gap: 6px; align-items: center; padding: 4px; background: white; border-radius: 4px; border: 1px solid #dee2e6;';
+            row.style.cssText = 'display: grid; grid-template-columns: 1fr 80px 110px 50px; gap: 4px; align-items: center; padding: 3px; background: white; border-radius: 3px; border: 1px solid #dee2e6;';
             row.innerHTML = `
-                <select class="form-select payment-method" required style="border: 1px solid #ced4da; font-size: 11px; padding: 6px;">
+                <select class="form-select payment-method" required style="border: 1px solid #ced4da; font-size: 10px; padding: 4px;">
                     <option value="">Método...</option>
                     <option value="cash">Efectivo</option>
                     <option value="card">Tarjeta</option>
                     <option value="transfer">Transferencia</option>
                     <option value="other">Otro</option>
                 </select>
-                <select class="form-select payment-currency" required style="border: 1px solid #ced4da; font-size: 11px; padding: 6px;">
+                <select class="form-select payment-currency" required style="border: 1px solid #ced4da; font-size: 10px; padding: 4px;">
                     <option value="MXN">MXN</option>
                     <option value="USD">USD</option>
                     <option value="CAD">CAD</option>
                 </select>
-                <input type="number" class="form-input payment-amount" min="0" step="0.01" placeholder="0.00" required style="border: 1px solid #ced4da; font-size: 11px; padding: 6px;">
-                <button type="button" class="btn-danger btn-xs remove-payment" style="padding: 4px 6px; font-size: 10px;" onclick="if(window.Reports && window.Reports.updatePaymentsTotal) window.Reports.updatePaymentsTotal(); this.closest('.payment-row').remove(); if(window.Reports && window.Reports.updateRemoveButtons) window.Reports.updateRemoveButtons();">
+                <input type="number" class="form-input payment-amount" min="0" step="0.01" placeholder="0.00" required style="border: 1px solid #ced4da; font-size: 10px; padding: 4px;">
+                <button type="button" class="btn-danger btn-xs remove-payment" style="padding: 3px 5px; font-size: 9px;" onclick="if(window.Reports && window.Reports.updatePaymentsTotal) window.Reports.updatePaymentsTotal(); this.closest('.payment-row').remove(); if(window.Reports && window.Reports.updateRemoveButtons) window.Reports.updateRemoveButtons();">
                     <i class="fas fa-times"></i>
                 </button>
             `;
@@ -6839,22 +6832,22 @@ const Reports = {
                     capture.payments.forEach((payment, index) => {
                         const row = document.createElement('div');
                         row.className = 'payment-row';
-                        row.style.cssText = 'display: grid; grid-template-columns: 1fr 100px 140px 70px; gap: 6px; align-items: center; padding: 4px; background: white; border-radius: 4px; border: 1px solid #dee2e6;';
+                        row.style.cssText = 'display: grid; grid-template-columns: 1fr 80px 110px 50px; gap: 4px; align-items: center; padding: 3px; background: white; border-radius: 3px; border: 1px solid #dee2e6;';
                         row.innerHTML = `
-                            <select class="form-select payment-method" required style="border: 1px solid #ced4da; font-size: 11px; padding: 6px;">
+                            <select class="form-select payment-method" required style="border: 1px solid #ced4da; font-size: 10px; padding: 4px;">
                                 <option value="">Método...</option>
                                 <option value="cash" ${payment.method === 'cash' ? 'selected' : ''}>Efectivo</option>
                                 <option value="card" ${payment.method === 'card' ? 'selected' : ''}>Tarjeta</option>
                                 <option value="transfer" ${payment.method === 'transfer' ? 'selected' : ''}>Transferencia</option>
                                 <option value="other" ${payment.method === 'other' ? 'selected' : ''}>Otro</option>
                             </select>
-                            <select class="form-select payment-currency" required style="border: 1px solid #ced4da; font-size: 11px; padding: 6px;">
+                            <select class="form-select payment-currency" required style="border: 1px solid #ced4da; font-size: 10px; padding: 4px;">
                                 <option value="MXN" ${(payment.currency || capture.currency || 'MXN') === 'MXN' ? 'selected' : ''}>MXN</option>
                                 <option value="USD" ${(payment.currency || capture.currency || 'MXN') === 'USD' ? 'selected' : ''}>USD</option>
                                 <option value="CAD" ${(payment.currency || capture.currency || 'MXN') === 'CAD' ? 'selected' : ''}>CAD</option>
                             </select>
-                            <input type="number" class="form-input payment-amount" min="0" step="0.01" placeholder="0.00" value="${payment.amount || 0}" required style="border: 1px solid #ced4da; font-size: 11px; padding: 6px;">
-                            <button type="button" class="btn-danger btn-xs remove-payment" style="padding: 4px 6px; font-size: 10px;" onclick="if(window.Reports && window.Reports.updatePaymentsTotal) window.Reports.updatePaymentsTotal(); this.closest('.payment-row').remove(); if(window.Reports && window.Reports.updateRemoveButtons) window.Reports.updateRemoveButtons();">
+                            <input type="number" class="form-input payment-amount" min="0" step="0.01" placeholder="0.00" value="${payment.amount || 0}" required style="border: 1px solid #ced4da; font-size: 10px; padding: 4px;">
+                            <button type="button" class="btn-danger btn-xs remove-payment" style="padding: 3px 5px; font-size: 9px;" onclick="if(window.Reports && window.Reports.updatePaymentsTotal) window.Reports.updatePaymentsTotal(); this.closest('.payment-row').remove(); if(window.Reports && window.Reports.updateRemoveButtons) window.Reports.updateRemoveButtons();">
                                 <i class="fas fa-times"></i>
                             </button>
                         `;
