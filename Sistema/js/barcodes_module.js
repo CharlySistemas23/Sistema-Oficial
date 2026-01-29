@@ -496,16 +496,33 @@ const BarcodesModule = {
     async getBarcodeStats() {
         // Obtener sucursal actual y filtrar datos
         const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
-        const isAdmin = typeof UserManager !== 'undefined' && (
-            UserManager.currentUser?.role === 'admin' || 
-            UserManager.currentUser?.permissions?.includes('all')
+        const isMasterAdmin = typeof UserManager !== 'undefined' && (
+            UserManager.currentUser?.role === 'master_admin' ||
+            UserManager.currentUser?.is_master_admin ||
+            UserManager.currentUser?.isMasterAdmin ||
+            UserManager.currentEmployee?.role === 'master_admin'
         );
-        const viewAllBranches = isAdmin;
+        
+        // Obtener filtro de sucursal seleccionado (si existe)
+        const branchFilter = document.getElementById('barcodes-branch-filter');
+        const selectedBranchId = branchFilter?.value === 'all' ? null : branchFilter?.value || null;
+        const filterBranchId = selectedBranchId || (isMasterAdmin ? null : currentBranchId);
+        const viewAllBranches = isMasterAdmin && !selectedBranchId;
         
         const items = await DB.getAll('inventory_items', null, null, { 
             filterByBranch: !viewAllBranches, 
             branchIdField: 'branch_id' 
         }) || [];
+        
+        // Filtrado estricto por sucursal si hay un filtro específico
+        let filteredItems = items;
+        if (filterBranchId) {
+            const normalizedFilterBranchId = String(filterBranchId);
+            filteredItems = items.filter(item => {
+                if (!item.branch_id) return false;
+                return String(item.branch_id) === normalizedFilterBranchId;
+            });
+        }
         
         let employees = await DB.getAll('employees', null, null, { 
             filterByBranch: !viewAllBranches, 
@@ -513,8 +530,8 @@ const BarcodesModule = {
         }) || [];
         
         // Si no es admin, filtrar manualmente también (por si tienen branch_ids múltiples)
-        if (!viewAllBranches && currentBranchId) {
-            const normalizedBranchId = String(currentBranchId);
+        if (!viewAllBranches && filterBranchId) {
+            const normalizedBranchId = String(filterBranchId);
             employees = employees.filter(emp => {
                 if (emp.branch_id) {
                     return String(emp.branch_id) === normalizedBranchId;
@@ -522,7 +539,7 @@ const BarcodesModule = {
                 if (emp.branch_ids && Array.isArray(emp.branch_ids)) {
                     return emp.branch_ids.some(id => String(id) === normalizedBranchId);
                 }
-                return true;
+                return false; // Excluir empleados sin branch_id cuando hay filtro
             });
         }
         
