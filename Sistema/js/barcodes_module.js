@@ -1118,18 +1118,39 @@ const BarcodesModule = {
 
             // Cargar productos con filtrado por sucursal
             if (typeFilter === 'all' || typeFilter === 'items') {
-                items = await DB.getAll('inventory_items', null, null, { 
-                    filterByBranch: !viewAllBranches, 
-                    branchIdField: 'branch_id' 
-                }) || [];
+                // Obtener todos los items primero (sin filtro automático para tener control total)
+                items = await DB.getAll('inventory_items') || [];
                 
-                // Filtrado estricto por sucursal si hay un filtro específico
+                // Filtrado ESTRICTO por sucursal
                 if (filterBranchId) {
                     const normalizedFilterBranchId = String(filterBranchId);
+                    const beforeFilter = items.length;
                     items = items.filter(item => {
-                        if (!item.branch_id) return false; // Excluir items sin branch_id cuando hay filtro
+                        // CRÍTICO: Excluir items sin branch_id cuando hay filtro específico
+                        if (!item.branch_id) {
+                            return false;
+                        }
                         return String(item.branch_id) === normalizedFilterBranchId;
                     });
+                    console.log(`📍 Barcodes: Filtrado estricto productos: ${beforeFilter} → ${items.length} (sucursal: ${filterBranchId})`);
+                } else if (!viewAllBranches && currentBranchId) {
+                    // Si no es master admin y hay sucursal actual, filtrar por ella
+                    const normalizedCurrentBranchId = String(currentBranchId);
+                    const beforeFilter = items.length;
+                    items = items.filter(item => {
+                        if (!item.branch_id) {
+                            return false;
+                        }
+                        return String(item.branch_id) === normalizedCurrentBranchId;
+                    });
+                    console.log(`📍 Barcodes: Filtrado por sucursal actual: ${beforeFilter} → ${items.length} (sucursal: ${currentBranchId})`);
+                } else if (viewAllBranches) {
+                    // Master admin viendo todas las sucursales - mostrar todos (incluyendo sin branch_id)
+                    console.log(`📍 Barcodes: Mostrando todos los productos (master admin)`);
+                } else {
+                    // Sin sucursal asignada = no mostrar nada
+                    items = [];
+                    console.log(`📍 Barcodes: Sin sucursal asignada: 0 productos`);
                 }
                 
                 if (search) {
@@ -1148,23 +1169,47 @@ const BarcodesModule = {
 
             // Cargar empleados con filtrado por sucursal
             if (typeFilter === 'all' || typeFilter === 'employees') {
-                employees = await DB.getAll('employees', null, null, { 
-                    filterByBranch: !viewAllBranches, 
-                    branchIdField: 'branch_id' 
-                }) || [];
+                // Obtener todos los empleados primero
+                employees = await DB.getAll('employees') || [];
                 
-                // Filtrado manual adicional para empleados con branch_ids múltiples
-                if (!viewAllBranches && filterBranchId) {
+                // Filtrado ESTRICTO por sucursal
+                if (filterBranchId) {
                     const normalizedBranchId = String(filterBranchId);
+                    const beforeFilter = employees.length;
                     employees = employees.filter(emp => {
+                        // Si tiene branch_id único, comparar directamente
                         if (emp.branch_id) {
                             return String(emp.branch_id) === normalizedBranchId;
                         }
+                        // Si tiene branch_ids múltiples, verificar si incluye el filtro
                         if (emp.branch_ids && Array.isArray(emp.branch_ids)) {
                             return emp.branch_ids.some(id => String(id) === normalizedBranchId);
                         }
-                        return false; // Excluir empleados sin branch_id cuando hay filtro
+                        // Excluir empleados sin branch_id cuando hay filtro específico
+                        return false;
                     });
+                    console.log(`📍 Barcodes: Filtrado estricto empleados: ${beforeFilter} → ${employees.length} (sucursal: ${filterBranchId})`);
+                } else if (!viewAllBranches && currentBranchId) {
+                    // Si no es master admin y hay sucursal actual, filtrar por ella
+                    const normalizedCurrentBranchId = String(currentBranchId);
+                    const beforeFilter = employees.length;
+                    employees = employees.filter(emp => {
+                        if (emp.branch_id) {
+                            return String(emp.branch_id) === normalizedCurrentBranchId;
+                        }
+                        if (emp.branch_ids && Array.isArray(emp.branch_ids)) {
+                            return emp.branch_ids.some(id => String(id) === normalizedCurrentBranchId);
+                        }
+                        return false;
+                    });
+                    console.log(`📍 Barcodes: Filtrado empleados por sucursal actual: ${beforeFilter} → ${employees.length} (sucursal: ${currentBranchId})`);
+                } else if (viewAllBranches) {
+                    // Master admin viendo todas las sucursales
+                    console.log(`📍 Barcodes: Mostrando todos los empleados (master admin)`);
+                } else {
+                    // Sin sucursal asignada = no mostrar nada
+                    employees = [];
+                    console.log(`📍 Barcodes: Sin sucursal asignada: 0 empleados`);
                 }
                 
                 if (search) {
