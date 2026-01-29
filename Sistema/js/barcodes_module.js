@@ -493,6 +493,65 @@ const BarcodesModule = {
         `;
     },
 
+    async setupBranchFilter() {
+        const branchFilter = document.getElementById('barcodes-branch-filter');
+        if (!branchFilter) return;
+        
+        try {
+            const isMasterAdmin = typeof UserManager !== 'undefined' && (
+                UserManager.currentUser?.role === 'master_admin' ||
+                UserManager.currentUser?.is_master_admin ||
+                UserManager.currentUser?.isMasterAdmin ||
+                UserManager.currentEmployee?.role === 'master_admin'
+            );
+            
+            const currentBranchId = typeof BranchManager !== 'undefined' 
+                ? BranchManager.getCurrentBranchId() 
+                : localStorage.getItem('current_branch_id');
+            
+            // Si NO es master_admin, ocultar el dropdown y forzar filtro a su sucursal
+            if (!isMasterAdmin) {
+                branchFilter.style.display = 'none';
+                if (currentBranchId) {
+                    branchFilter.value = currentBranchId;
+                }
+            } else {
+                // Master admin puede ver todas las sucursales
+                branchFilter.style.display = '';
+                
+                let branches = await DB.getAll('catalog_branches') || [];
+                
+                // Eliminar duplicados
+                const seenNames = new Set();
+                const seenIds = new Set();
+                branches = branches.filter(b => {
+                    if (!b || !b.id || !b.name) return false;
+                    if (b.name === 'Sucursal Principal' && seenNames.has('Sucursal Principal')) {
+                        return false;
+                    }
+                    if (seenIds.has(b.id)) {
+                        return false;
+                    }
+                    seenNames.add(b.name);
+                    seenIds.add(b.id);
+                    return true;
+                });
+                
+                branchFilter.innerHTML = '<option value="all">Todas las sucursales</option>' + 
+                    branches.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
+                
+                // Establecer valor por defecto según sucursal actual
+                if (currentBranchId) {
+                    branchFilter.value = currentBranchId;
+                } else {
+                    branchFilter.value = 'all';
+                }
+            }
+        } catch (error) {
+            console.error('Error configurando filtro de sucursal:', error);
+        }
+    },
+
     async getBarcodeStats() {
         // Obtener sucursal actual y filtrar datos
         const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
