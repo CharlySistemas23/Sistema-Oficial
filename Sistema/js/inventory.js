@@ -133,6 +133,24 @@ const Inventory = {
                         </button>
                     </div>
                     
+                    <!-- Búsqueda rápida por código de barras -->
+                    <div style="display: flex; gap: var(--spacing-sm); margin-bottom: var(--spacing-md); padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-md); align-items: center; flex-wrap: wrap;">
+                        <div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 200px;">
+                            <label style="font-size: 11px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 4px; display: block;">
+                                <i class="fas fa-barcode"></i> Escanear Código de Barras
+                            </label>
+                            <div style="display: flex; gap: var(--spacing-xs);">
+                                <input type="text" id="inventory-barcode-scan" class="form-input" placeholder="Escanear o escribir código de barras..." style="flex: 1;" autocomplete="off">
+                                <button type="button" class="btn-primary btn-sm" id="inventory-scan-btn" title="Activar escáner">
+                                    <i class="fas fa-camera"></i> Escanear
+                                </button>
+                            </div>
+                            <small style="color: var(--color-text-secondary); font-size: 10px; display: block; margin-top: 4px;">
+                                Escanea un código de barras para buscar y editar la pieza rápidamente
+                            </small>
+                        </div>
+                    </div>
+                    
                     <!-- Filtros -->
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--spacing-sm); margin-bottom: var(--spacing-md);">
                         <div class="form-group" style="margin-bottom: 0;">
@@ -194,6 +212,9 @@ const Inventory = {
         document.getElementById('inventory-add-btn')?.addEventListener('click', () => this.showAddForm());
         document.getElementById('inventory-import-btn')?.addEventListener('click', () => this.importCSV());
         document.getElementById('inventory-export-btn')?.addEventListener('click', () => this.exportInventory());
+        
+        // Escaneo de código de barras
+        this.setupBarcodeScanning();
         
         // Nuevos botones de acciones en lote
         document.getElementById('inventory-delete-selected-btn')?.addEventListener('click', () => this.deleteSelectedItems());
@@ -3262,6 +3283,197 @@ const Inventory = {
         } finally {
             // Siempre resetear el flag, incluso si hay error
             this.isExporting = false;
+        }
+    },
+    
+    // ==================== ESCANEO DE CÓDIGOS DE BARRAS ====================
+    
+    /**
+     * Configurar escaneo de códigos de barras para búsqueda rápida
+     */
+    setupBarcodeScanning() {
+        const barcodeInput = document.getElementById('inventory-barcode-scan');
+        const scanBtn = document.getElementById('inventory-scan-btn');
+        
+        if (!barcodeInput) return;
+        
+        // Detectar cuando se escribe o escanea un código
+        let scanTimeout = null;
+        barcodeInput.addEventListener('input', (e) => {
+            const barcode = e.target.value.trim();
+            
+            // Limpiar timeout anterior
+            if (scanTimeout) {
+                clearTimeout(scanTimeout);
+            }
+            
+            // Si el código tiene al menos 3 caracteres, buscar después de un breve delay
+            // Esto permite que el escáner complete la entrada antes de buscar
+            if (barcode.length >= 3) {
+                scanTimeout = setTimeout(() => {
+                    this.searchByBarcode(barcode);
+                }, 300); // Esperar 300ms para que el escáner complete
+            }
+        });
+        
+        // Permitir búsqueda con Enter
+        barcodeInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const barcode = barcodeInput.value.trim();
+                if (barcode) {
+                    this.searchByBarcode(barcode);
+                }
+            }
+        });
+        
+        // Botón de escaneo (activar cámara si está disponible)
+        if (scanBtn) {
+            scanBtn.addEventListener('click', () => {
+                this.startBarcodeScan();
+            });
+        }
+        
+        // Auto-focus en el campo de escaneo cuando se presiona Ctrl+B o Cmd+B
+        document.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
+                e.preventDefault();
+                barcodeInput.focus();
+                barcodeInput.select();
+            }
+        });
+        
+        // Configurar handler para BarcodeManager si está disponible
+        if (typeof BarcodeManager !== 'undefined' && BarcodeManager.handleBarcodeScan) {
+            // Guardar handler original
+            const originalHandler = BarcodeManager.handleBarcodeScan;
+            
+            // Configurar nuestro handler
+            BarcodeManager.handleBarcodeScan = async (barcode) => {
+                // Si estamos en el módulo de inventario, usar nuestro handler
+                const activeModule = document.querySelector('.module.active') || 
+                                   document.querySelector('[data-module="inventory"]');
+                if (activeModule || window.location.hash.includes('inventory')) {
+                    await this.searchByBarcode(barcode);
+                } else {
+                    // Si no estamos en inventario, usar el handler original
+                    if (originalHandler) {
+                        await originalHandler(barcode);
+                    }
+                }
+            };
+        }
+    },
+    
+    /**
+     * Iniciar escaneo de código de barras con cámara
+     */
+    async startBarcodeScan() {
+        // Verificar si hay soporte para cámara
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            try {
+                Utils.showNotification('Activando cámara para escaneo...', 'info');
+                
+                // Intentar acceder a la cámara
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: 'environment' } // Cámara trasera
+                });
+                
+                // Si hay un módulo de escaneo disponible, usarlo
+                if (typeof BarcodeManager !== 'undefined' && BarcodeManager.startCameraScan) {
+                    await BarcodeManager.startCameraScan((barcode) => {
+                        document.getElementById('inventory-barcode-scan').value = barcode;
+                        this.searchByBarcode(barcode);
+                    });
+                } else {
+                    // Fallback: mostrar mensaje
+                    Utils.showNotification('Usa un escáner de códigos de barras físico o escribe el código manualmente', 'info');
+                    stream.getTracks().forEach(track => track.stop()); // Detener cámara
+                    document.getElementById('inventory-barcode-scan').focus();
+                }
+            } catch (error) {
+                console.warn('No se pudo acceder a la cámara:', error);
+                Utils.showNotification('No se pudo acceder a la cámara. Usa un escáner físico o escribe el código manualmente', 'warning');
+                document.getElementById('inventory-barcode-scan').focus();
+            }
+        } else {
+            // No hay soporte para cámara, usar escáner físico o entrada manual
+            Utils.showNotification('Usa un escáner de códigos de barras físico o escribe el código manualmente', 'info');
+            document.getElementById('inventory-barcode-scan').focus();
+        }
+    },
+    
+    /**
+     * Buscar pieza por código de barras y abrir modal de edición
+     */
+    async searchByBarcode(barcode) {
+        if (!barcode || barcode.length < 3) {
+            return;
+        }
+        
+        try {
+            console.log(`🔍 Buscando pieza por código de barras: ${barcode}`);
+            
+            // Buscar en IndexedDB primero
+            let item = null;
+            const allItems = await DB.getAll('inventory_items') || [];
+            
+            // Buscar por código de barras exacto
+            item = allItems.find(i => i.barcode && i.barcode.trim() === barcode.trim());
+            
+            // Si no se encuentra, buscar por SKU
+            if (!item) {
+                item = allItems.find(i => i.sku && i.sku.trim() === barcode.trim());
+            }
+            
+            // Si aún no se encuentra, buscar en el servidor
+            if (!item && typeof API !== 'undefined' && API.baseURL && API.token && API.getInventoryItems) {
+                try {
+                    const items = await API.getInventoryItems({ barcode: barcode });
+                    if (items && items.length > 0) {
+                        item = items[0];
+                        // Guardar en IndexedDB para caché
+                        await DB.put('inventory_items', item, { autoBranchId: false });
+                    }
+                } catch (apiError) {
+                    console.warn('Error buscando en servidor:', apiError);
+                }
+            }
+            
+            if (item) {
+                console.log(`✅ Pieza encontrada: ${item.name} (SKU: ${item.sku})`);
+                
+                // Limpiar el campo de búsqueda
+                const barcodeInput = document.getElementById('inventory-barcode-scan');
+                if (barcodeInput) {
+                    barcodeInput.value = '';
+                }
+                
+                // Registrar escaneo si hay BarcodeManager
+                if (typeof BarcodeManager !== 'undefined' && BarcodeManager.recordScan) {
+                    await BarcodeManager.recordScan(barcode, 'inventory_search', item.name, 'item');
+                }
+                
+                // Abrir modal de edición directamente
+                await this.editItem(item.id);
+                
+                Utils.showNotification(`Pieza encontrada: ${item.name}`, 'success');
+            } else {
+                console.log(`❌ Pieza no encontrada con código: ${barcode}`);
+                Utils.showNotification(`No se encontró ninguna pieza con el código: ${barcode}`, 'warning');
+                
+                // Limpiar el campo después de un momento
+                setTimeout(() => {
+                    const barcodeInput = document.getElementById('inventory-barcode-scan');
+                    if (barcodeInput) {
+                        barcodeInput.value = '';
+                        barcodeInput.focus();
+                    }
+                }, 2000);
+            }
+        } catch (error) {
+            console.error('Error buscando por código de barras:', error);
+            Utils.showNotification('Error al buscar la pieza: ' + error.message, 'error');
         }
     }
 };
