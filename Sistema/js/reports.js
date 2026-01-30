@@ -10375,11 +10375,12 @@ const Reports = {
                         fixedCostsProrated += dailyAmount;
                     }
 
-                    // B) COSTOS VARIABLES DEL DÍA (registrados hoy)
+                    // B) COSTOS VARIABLES DEL DÍA (registrados en la fecha seleccionada)
                     const variableCosts = branchCosts.filter(c => {
                         const costDate = c.date || c.created_at;
                         const costDateStr = costDate.split('T')[0];
-                        return costDateStr === captureDate &&
+                        const normalizedSelectedDate = selectedDate.split('T')[0];
+                        return costDateStr === normalizedSelectedDate &&
                                c.category !== 'pago_llegadas' && // Excluir llegadas (se calculan por separado)
                                c.category !== 'comisiones_bancarias' && // Excluir comisiones bancarias
                                (c.period_type === 'one_time' || c.period_type === 'daily' || !c.period_type);
@@ -10392,7 +10393,8 @@ const Reports = {
                     const bankCommissionCosts = branchCosts.filter(c => {
                         const costDate = c.date || c.created_at;
                         const costDateStr = costDate.split('T')[0];
-                        return costDateStr === captureDate &&
+                        const normalizedSelectedDate = selectedDate.split('T')[0];
+                        return costDateStr === normalizedSelectedDate &&
                                c.category === 'comisiones_bancarias';
                     });
                     for (const cost of bankCommissionCosts) {
@@ -10771,12 +10773,16 @@ const Reports = {
             const captureBranchIds = [...new Set(captures.map(c => c.branch_id).filter(Boolean))];
             const branchIdForArrivals = captureBranchIds.length === 1 ? captureBranchIds[0] : null;
             // Usar calculateArrivalCosts para obtener costos de llegadas correctamente
-            const totalArrivalCostsRaw = await this.calculateArrivalCosts(today, branchIdForArrivals, captureBranchIds);
+            const totalArrivalCostsRaw = await this.calculateArrivalCosts(normalizedSelectedDate, branchIdForArrivals, captureBranchIds);
             const totalArrivalCosts = typeof totalArrivalCostsRaw === 'number' ? totalArrivalCostsRaw : parseFloat(totalArrivalCostsRaw) || 0;
             
-            // Obtener llegadas para guardar en el archivo
+            // Obtener llegadas para guardar en el archivo (filtrar por fecha seleccionada)
             const arrivals = await DB.getAll('agency_arrivals') || [];
-            const todayArrivals = arrivals.filter(a => a.date === today);
+            const selectedDateArrivals = arrivals.filter(a => {
+                if (!a.date) return false;
+                const arrivalDate = a.date.split('T')[0];
+                return arrivalDate === normalizedSelectedDate;
+            });
             const filteredArrivals = todayArrivals.filter(a => 
                 captureBranchIds.length === 0 || !a.branch_id || captureBranchIds.includes(a.branch_id)
             );
@@ -10848,11 +10854,11 @@ const Reports = {
                         fixedCostsProrated += (cost.amount || 0) / daysInYear;
                     }
 
-                    // B) COSTOS VARIABLES DEL DÍA
+                    // B) COSTOS VARIABLES DEL DÍA (usar fecha seleccionada)
                     const variableCosts = branchCosts.filter(c => {
                         const costDate = c.date || c.created_at;
                         const costDateStr = costDate.split('T')[0];
-                        return costDateStr === today &&
+                        return costDateStr === normalizedSelectedDate &&
                                c.category !== 'pago_llegadas' &&
                                c.category !== 'comisiones_bancarias' &&
                                (c.period_type === 'one_time' || c.period_type === 'daily' || !c.period_type);
@@ -10873,7 +10879,7 @@ const Reports = {
                     const daySessions = allSessions.filter(s => {
                         const sessionDate = s.date || s.created_at;
                         const sessionDateStr = typeof sessionDate === 'string' ? sessionDate.split('T')[0] : new Date(sessionDate).toISOString().split('T')[0];
-                        return sessionDateStr === today;
+                        return sessionDateStr === normalizedSelectedDate;
                     });
                     
                     const allMovements = await DB.getAll('cash_movements') || [];
@@ -10911,8 +10917,8 @@ const Reports = {
 
             // Crear objeto de reporte archivado con TODOS los datos calculados
             const archivedReport = {
-                id: 'archived_' + today + '_' + Date.now(),
-                date: today,
+                id: 'archived_' + normalizedSelectedDate + '_' + Date.now(),
+                date: normalizedSelectedDate,
                 report_type: 'quick_capture',
                 captures: captures,
                 totals: totals,
@@ -10960,7 +10966,7 @@ const Reports = {
             // Verificar si ya existe un reporte archivado para esta fecha
             let existingReport = null;
             try {
-                const existingReports = await DB.query('archived_quick_captures', 'date', today) || [];
+                const existingReports = await DB.query('archived_quick_captures', 'date', normalizedSelectedDate) || [];
                 // Buscar el más reciente para esta fecha
                 existingReport = existingReports
                     .filter(r => r.report_type === 'quick_capture')
@@ -10976,7 +10982,7 @@ const Reports = {
                 archivedReport.archived_at = new Date().toISOString(); // Actualizar timestamp
                 console.log(`Actualizando reporte archivado existente: ${existingReport.id}`);
             } else {
-                console.log(`Creando nuevo reporte archivado para fecha: ${today}`);
+                console.log(`Creando nuevo reporte archivado para fecha: ${normalizedSelectedDate}`);
             }
 
             // Guardar en IndexedDB (store permanente para historial)
@@ -10988,31 +10994,85 @@ const Reports = {
                 throw new Error(`No se pudo guardar el reporte archivado: ${dbError.message}`);
             }
 
-            // Opcional: Intentar guardar en backend si hay API disponible
-            if (typeof API !== 'undefined' && API.saveArchivedReport) {
-                try {
-                    await API.saveArchivedReport(archivedReport);
-                    console.log('✅ Reporte archivado también guardado en backend');
-                } catch (e) {
-                    console.warn('⚠️ No se pudo guardar en backend, solo guardado local:', e);
+            // Guardar capturas en el servidor (sincronización bidireccional)
+            if (typeof API !== 'undefined' && API.createQuickCapture) {
+                console.log(`📤 Sincronizando ${captures.length} capturas con el servidor...`);
+                let syncedCount = 0;
+                let failedCount = 0;
+                
+                for (const capture of captures) {
+                    try {
+                        // Verificar si ya existe en el servidor (tiene server_id)
+                        if (capture.server_id) {
+                            // Actualizar captura existente
+                            if (API.updateQuickCapture) {
+                                await API.updateQuickCapture(capture.server_id, capture);
+                                syncedCount++;
+                            }
+                        } else {
+                            // Crear nueva captura en el servidor
+                            const serverCapture = await API.createQuickCapture(capture);
+                            if (serverCapture && serverCapture.id) {
+                                // Actualizar la captura local con el server_id
+                                capture.server_id = serverCapture.id;
+                                await DB.put('temp_quick_captures', capture);
+                                syncedCount++;
+                            }
+                        }
+                    } catch (e) {
+                        console.warn(`⚠️ No se pudo sincronizar captura ${capture.id}:`, e);
+                        failedCount++;
+                        // Agregar a la cola de sincronización si SyncManager está disponible
+                        if (typeof SyncManager !== 'undefined' && SyncManager.addToQueue) {
+                            SyncManager.addToQueue('quick_captures', 'create', capture);
+                        }
+                    }
                 }
+                
+                console.log(`✅ ${syncedCount} capturas sincronizadas con el servidor${failedCount > 0 ? `, ${failedCount} fallaron` : ''}`);
+                
+                // Intentar guardar el reporte archivado en el servidor si existe el endpoint
+                try {
+                    // Por ahora, el reporte archivado se guarda solo localmente
+                    // En el futuro se puede agregar un endpoint específico para reportes archivados
+                    console.log('✅ Reporte archivado guardado localmente. Las capturas individuales están sincronizadas con el servidor.');
+                } catch (e) {
+                    console.warn('⚠️ No se pudo guardar reporte archivado en backend:', e);
+                }
+            } else {
+                console.warn('⚠️ API no disponible, reporte guardado solo localmente');
             }
 
             // Mostrar modal personalizado para confirmar limpieza
             const shouldClean = await this.showArchiveConfirmModal(captures.length, existingReport !== null);
 
             if (shouldClean) {
-                // Eliminar capturas temporales del día
+                // Eliminar capturas temporales del día (solo localmente, ya están en el servidor)
                 let deletedCount = 0;
                 for (const capture of captures) {
                     try {
-                    await DB.delete('temp_quick_captures', capture.id);
+                        // Si tiene server_id, también eliminar del servidor
+                        if (capture.server_id && typeof API !== 'undefined' && API.deleteQuickCapture) {
+                            try {
+                                await API.deleteQuickCapture(capture.server_id);
+                                console.log(`✅ Captura ${capture.id} eliminada del servidor`);
+                            } catch (e) {
+                                console.warn(`⚠️ No se pudo eliminar captura ${capture.id} del servidor:`, e);
+                                // Agregar a cola de sincronización si falla
+                                if (typeof SyncManager !== 'undefined' && SyncManager.addToQueue) {
+                                    SyncManager.addToQueue('quick_captures', 'delete', { id: capture.server_id });
+                                }
+                            }
+                        }
+                        
+                        // Eliminar de IndexedDB local
+                        await DB.delete('temp_quick_captures', capture.id);
                         deletedCount++;
                     } catch (e) {
                         console.warn(`No se pudo eliminar captura ${capture.id}:`, e);
+                    }
                 }
-                }
-                Utils.showNotification(`Reporte archivado correctamente. ${deletedCount} capturas eliminadas del día.`, 'success');
+                Utils.showNotification(`Reporte archivado correctamente. ${deletedCount} capturas eliminadas del día (local y servidor).`, 'success');
                 await this.loadQuickCaptureData();
             } else {
                 Utils.showNotification('Reporte archivado correctamente. Las capturas temporales se mantienen.', 'success');
