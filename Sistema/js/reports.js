@@ -9084,9 +9084,16 @@ const Reports = {
         
         this.isExporting = true;
         try {
-            const today = new Date().toISOString().split('T')[0];
+            // Obtener la fecha seleccionada del formulario
+            const dateInput = document.getElementById('qc-date');
+            const selectedDate = dateInput?.value || new Date().toISOString().split('T')[0];
+            const normalizedSelectedDate = selectedDate.split('T')[0];
+            
             let captures = await DB.getAll('temp_quick_captures') || [];
-            captures = captures.filter(c => c.date === today);
+            captures = captures.filter(c => {
+                const captureDate = c.date || c.original_report_date || '';
+                return captureDate.split('T')[0] === normalizedSelectedDate;
+            });
 
             if (captures.length === 0) {
                 Utils.showNotification('No hay capturas para exportar', 'warning');
@@ -9136,17 +9143,24 @@ const Reports = {
 
     async archiveQuickCaptureReport() {
         try {
-            const today = new Date().toISOString().split('T')[0];
+            // Obtener la fecha seleccionada del formulario
+            const dateInput = document.getElementById('qc-date');
+            const selectedDate = dateInput?.value || new Date().toISOString().split('T')[0];
+            const normalizedSelectedDate = selectedDate.split('T')[0];
+            
             let captures = await DB.getAll('temp_quick_captures') || [];
-            captures = captures.filter(c => c.date === today);
+            captures = captures.filter(c => {
+                const captureDate = c.date || c.original_report_date || '';
+                return captureDate.split('T')[0] === normalizedSelectedDate;
+            });
 
             if (captures.length === 0) {
-                Utils.showNotification('No hay capturas para archivar', 'warning');
+                Utils.showNotification(`No hay capturas para archivar para la fecha ${normalizedSelectedDate}`, 'warning');
                 return;
             }
 
             // Calcular todos los datos del reporte
-            const exchangeRates = await DB.query('exchange_rates_daily', 'date', today) || [];
+            const exchangeRates = await DB.query('exchange_rates_daily', 'date', normalizedSelectedDate) || [];
             const todayRate = exchangeRates[0] || { usd_to_mxn: 20.0, cad_to_mxn: 15.0 };
             const usdRate = todayRate.usd_to_mxn || 20.0;
             const cadRate = todayRate.cad_to_mxn || 15.0;
@@ -9376,9 +9390,16 @@ const Reports = {
         if (!confirm) return;
 
         try {
-            const today = new Date().toISOString().split('T')[0];
+            // Obtener la fecha seleccionada del formulario
+            const dateInput = document.getElementById('qc-date');
+            const selectedDate = dateInput?.value || new Date().toISOString().split('T')[0];
+            const normalizedSelectedDate = selectedDate.split('T')[0];
+            
             let captures = await DB.getAll('temp_quick_captures') || [];
-            captures = captures.filter(c => c.date === today);
+            captures = captures.filter(c => {
+                const captureDate = c.date || c.original_report_date || '';
+                return captureDate.split('T')[0] === normalizedSelectedDate;
+            });
 
             for (const capture of captures) {
                 await DB.delete('temp_quick_captures', capture.id);
@@ -10598,17 +10619,24 @@ const Reports = {
 
     async archiveQuickCaptureReport() {
         try {
-            const today = new Date().toISOString().split('T')[0];
+            // Obtener la fecha seleccionada del formulario
+            const dateInput = document.getElementById('qc-date');
+            const selectedDate = dateInput?.value || new Date().toISOString().split('T')[0];
+            const normalizedSelectedDate = selectedDate.split('T')[0];
+            
             let captures = await DB.getAll('temp_quick_captures') || [];
-            captures = captures.filter(c => c.date === today);
+            captures = captures.filter(c => {
+                const captureDate = c.date || c.original_report_date || '';
+                return captureDate.split('T')[0] === normalizedSelectedDate;
+            });
 
             if (captures.length === 0) {
-                Utils.showNotification('No hay capturas para archivar', 'warning');
+                Utils.showNotification(`No hay capturas para archivar para la fecha ${normalizedSelectedDate}`, 'warning');
                 return;
             }
 
             // Calcular todos los datos del reporte
-            const exchangeRates = await DB.query('exchange_rates_daily', 'date', today) || [];
+            const exchangeRates = await DB.query('exchange_rates_daily', 'date', normalizedSelectedDate) || [];
             const todayRate = exchangeRates[0] || { usd_to_mxn: 20.0, cad_to_mxn: 15.0 };
             const usdRate = todayRate.usd_to_mxn || 20.0;
             const cadRate = todayRate.cad_to_mxn || 15.0;
@@ -10783,7 +10811,7 @@ const Reports = {
                 const arrivalDate = a.date.split('T')[0];
                 return arrivalDate === normalizedSelectedDate;
             });
-            const filteredArrivals = todayArrivals.filter(a => 
+            const filteredArrivals = selectedDateArrivals.filter(a => 
                 captureBranchIds.length === 0 || !a.branch_id || captureBranchIds.includes(a.branch_id)
             );
 
@@ -10793,7 +10821,7 @@ const Reports = {
             let bankCommissions = 0;
             try {
                 const allCosts = await DB.getAll('cost_entries') || [];
-                const targetDate = new Date(today);
+                const targetDate = new Date(normalizedSelectedDate);
                 
                 // Determinar si debemos incluir costos globales
                 const isMasterAdmin = typeof UserManager !== 'undefined' && (
@@ -11177,9 +11205,16 @@ const Reports = {
         if (!confirm) return;
 
         try {
-            const today = new Date().toISOString().split('T')[0];
+            // Obtener la fecha seleccionada del formulario
+            const dateInput = document.getElementById('qc-date');
+            const selectedDate = dateInput?.value || new Date().toISOString().split('T')[0];
+            const normalizedSelectedDate = selectedDate.split('T')[0];
+            
             let captures = await DB.getAll('temp_quick_captures') || [];
-            captures = captures.filter(c => c.date === today);
+            captures = captures.filter(c => {
+                const captureDate = c.date || c.original_report_date || '';
+                return captureDate.split('T')[0] === normalizedSelectedDate;
+            });
 
             for (const capture of captures) {
                 await DB.delete('temp_quick_captures', capture.id);
