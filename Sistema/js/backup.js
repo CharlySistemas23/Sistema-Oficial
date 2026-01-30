@@ -385,7 +385,10 @@ const BackupManager = {
             try {
                 // Verificar que el store existe antes de intentar acceder
                 if (!DB.db || !DB.db.objectStoreNames.contains(store)) {
-                    console.warn(`Store ${store} no existe, saltando...`);
+                    // No mostrar warning para stores opcionales como arrival_rules
+                    if (store !== 'arrival_rules') {
+                        console.warn(`Store ${store} no existe, saltando...`);
+                    }
                     exportData.stores[store] = [];
                     continue;
                 }
