@@ -9469,11 +9469,11 @@ const Reports = {
             const agencies = await DB.getAll('catalog_agencies') || [];
             const branches = await DB.getAll('catalog_branches') || [];
 
-            // Crear PDF
-            const doc = new jsPDF('p', 'mm', 'a4');
-            const pageWidth = doc.internal.pageSize.getWidth();
-            const pageHeight = doc.internal.pageSize.getHeight();
-            const margin = 15;
+            // Crear PDF en formato HORIZONTAL (landscape) A4 para mejor legibilidad
+            const doc = new jsPDF('l', 'mm', 'a4'); // 'l' = landscape (horizontal)
+            const pageWidth = doc.internal.pageSize.getWidth(); // ~297mm en horizontal
+            const pageHeight = doc.internal.pageSize.getHeight(); // ~210mm en horizontal
+            const margin = 12; // Margen reducido para aprovechar mejor el espacio horizontal
             let y = margin;
 
             // ========== HEADER ==========
@@ -9507,10 +9507,43 @@ const Reports = {
             y = 45;
 
             // ========== RESUMEN ==========
+            // IMPORTANTE: Calcular totales desde los PAGOS ORIGINALES, no desde c.total que ya está convertido
             const totals = { USD: 0, MXN: 0, CAD: 0 };
             let totalQuantity = 0;
+            
+            // Obtener tipo de cambio del día para mostrar en el reporte
+            const exchangeRatesForDisplay = await this.getExchangeRatesForDate(selectedDate);
+            const usdRateForDisplay = exchangeRatesForDisplay?.usd || 18.0;
+            const cadRateForDisplay = exchangeRatesForDisplay?.cad || 13.0;
+            
             captures.forEach(c => {
-                totals[c.currency] = (totals[c.currency] || 0) + c.total;
+                // Calcular desde pagos individuales si existen (valores originales)
+                if (c.payments && Array.isArray(c.payments) && c.payments.length > 0) {
+                    c.payments.forEach(payment => {
+                        const amount = parseFloat(payment.amount) || 0;
+                        const currency = payment.currency || c.currency || 'MXN';
+                        totals[currency] = (totals[currency] || 0) + amount;
+                    });
+                } else {
+                    // Fallback: Si no hay pagos, intentar obtener el valor original
+                    // Si c.currency es USD o CAD, necesitamos el valor original, no el convertido
+                    // Por ahora, usar c.total pero dividir por el tipo de cambio si es necesario
+                    // NOTA: Esto es un fallback, idealmente todas las capturas deberían tener payments
+                    const currency = c.currency || 'MXN';
+                    if (currency === 'USD') {
+                        // Si el total está en MXN, dividir por el tipo de cambio para obtener USD original
+                        // Pero si ya está en USD, usar directamente
+                        // Asumimos que c.total puede estar en MXN si fue convertido
+                        // Intentar obtener desde un campo original_amount si existe
+                        const originalAmount = c.original_amount || (parseFloat(c.total) || 0) / usdRateForDisplay;
+                        totals.USD = (totals.USD || 0) + originalAmount;
+                    } else if (currency === 'CAD') {
+                        const originalAmount = c.original_amount || (parseFloat(c.total) || 0) / cadRateForDisplay;
+                        totals.CAD = (totals.CAD || 0) + originalAmount;
+                    } else {
+                        totals.MXN = (totals.MXN || 0) + (parseFloat(c.total) || 0);
+                    }
+                }
                 totalQuantity += c.quantity || 1;
             });
 
@@ -9522,9 +9555,9 @@ const Reports = {
             }).join(', ');
 
             doc.setFillColor(240, 248, 255);
-            doc.rect(margin, y, pageWidth - (margin * 2), 30, 'F');
+            doc.rect(margin, y, pageWidth - (margin * 2), 45, 'F'); // Aumentado de 30 a 45 para más espacio
             doc.setDrawColor(200, 200, 200);
-            doc.rect(margin, y, pageWidth - (margin * 2), 30);
+            doc.rect(margin, y, pageWidth - (margin * 2), 45);
 
             doc.setTextColor(0, 0, 0);
             doc.setFontSize(12);
@@ -9539,9 +9572,33 @@ const Reports = {
             doc.setFontSize(10);
             doc.text(`Total Capturas: ${captures.length}`, margin + 5, y + 22);
             doc.text(`Total Cantidad: ${totalQuantity}`, margin + 60, y + 22);
-            doc.text(`Total USD: $${totals.USD.toFixed(2)}`, margin + 5, y + 28);
-            doc.text(`Total MXN: $${totals.MXN.toFixed(2)}`, margin + 60, y + 28);
-            doc.text(`Total CAD: $${totals.CAD.toFixed(2)}`, margin + 115, y + 28);
+            
+            // Mostrar totales en ambas monedas con tipo de cambio
+            doc.setFont('helvetica', 'bold');
+            doc.text('Tipo de Cambio del Día:', margin + 120, y + 15);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9);
+            doc.text(`USD: $${usdRateForDisplay.toFixed(2)} MXN`, margin + 120, y + 20);
+            doc.text(`CAD: $${cadRateForDisplay.toFixed(2)} MXN`, margin + 120, y + 25);
+            
+            doc.setFontSize(10);
+            // Mostrar USD con conversión
+            const summaryTotalUSDOriginal = totals.USD || 0;
+            const summaryTotalUSDInMXN = summaryTotalUSDOriginal * usdRateForDisplay;
+            doc.text(`Total USD: $${summaryTotalUSDOriginal.toFixed(2)} = $${summaryTotalUSDInMXN.toFixed(2)} MXN`, margin + 5, y + 28);
+            
+            // Mostrar CAD con conversión
+            const summaryTotalCADOriginal = totals.CAD || 0;
+            const summaryTotalCADInMXN = summaryTotalCADOriginal * cadRateForDisplay;
+            doc.text(`Total CAD: $${summaryTotalCADOriginal.toFixed(2)} = $${summaryTotalCADInMXN.toFixed(2)} MXN`, margin + 5, y + 33);
+            
+            // Mostrar MXN
+            doc.text(`Total MXN: $${totals.MXN.toFixed(2)}`, margin + 5, y + 38);
+            
+            // Total general en MXN
+            const totalGeneralMXN = summaryTotalUSDInMXN + totals.MXN + summaryTotalCADInMXN;
+            doc.setFont('helvetica', 'bold');
+            doc.text(`TOTAL GENERAL: $${totalGeneralMXN.toFixed(2)} MXN`, margin + 120, y + 33);
 
             y += 38;
 
@@ -9609,17 +9666,18 @@ const Reports = {
             doc.text('CAPTURAS REALIZADAS', margin, y);
             y += 8;
 
-            // Definir anchos de columnas para la tabla de capturas (mejor organizadas)
+            // Definir anchos de columnas para la tabla de capturas (formato horizontal - más espacio)
             // IMPORTANTE: Definir ANTES de usar para evitar errores de inicialización
-            const captCol1X = margin + 2;      // Hora (10mm)
-            const captCol2X = margin + 15;     // Sucursal (18mm)
-            const captCol3X = margin + 35;     // Vendedor (18mm)
-            const captCol4X = margin + 55;     // Guía (15mm)
-            const captCol5X = margin + 72;     // Producto (20mm)
-            const captCol6X = margin + 94;     // Notas (25mm)
-            const captCol7X = pageWidth - margin - 50; // Cantidad (12mm)
-            const captCol8X = pageWidth - margin - 35; // Moneda (8mm)
-            const captCol9X = pageWidth - margin - 2;  // Total (alineado derecha)
+            const captCol1X = margin + 2;      // Hora (12mm)
+            const captCol2X = margin + 16;     // Sucursal (20mm)
+            const captCol3X = margin + 38;     // Vendedor (20mm)
+            const captCol4X = margin + 60;     // Guía (18mm)
+            const captCol5X = margin + 80;      // Producto (25mm)
+            const captCol6X = margin + 107;    // Notas (20mm)
+            const captCol7X = margin + 129;    // Cantidad (12mm)
+            const captCol8X = margin + 143;    // Moneda Original (25mm)
+            const captCol9X = margin + 170;    // Total MXN (30mm)
+            const captCol10X = pageWidth - margin - 2; // Total Original (alineado derecha)
 
             // Encabezados de tabla (mejor organizados)
             doc.setFillColor(245, 245, 245);
@@ -9627,7 +9685,7 @@ const Reports = {
             doc.setDrawColor(200, 200, 200);
             doc.rect(margin, y, pageWidth - (margin * 2), 8);
 
-            // Líneas verticales para separar columnas (opcional, para mejor organización)
+            // Líneas verticales para separar columnas (formato horizontal - más columnas)
             doc.setDrawColor(180, 180, 180);
             doc.line(captCol2X - 2, y, captCol2X - 2, y + 8);
             doc.line(captCol3X - 2, y, captCol3X - 2, y + 8);
@@ -9636,6 +9694,7 @@ const Reports = {
             doc.line(captCol6X - 2, y, captCol6X - 2, y + 8);
             doc.line(captCol7X - 2, y, captCol7X - 2, y + 8);
             doc.line(captCol8X - 2, y, captCol8X - 2, y + 8);
+            doc.line(captCol9X - 2, y, captCol9X - 2, y + 8);
 
             doc.setFontSize(7);
             doc.setFont('helvetica', 'bold');
@@ -9646,8 +9705,9 @@ const Reports = {
             doc.text('Producto', captCol5X, y + 5.5);
             doc.text('Notas', captCol6X, y + 5.5);
             doc.text('Cant.', captCol7X, y + 5.5, { align: 'right' });
-            doc.text('Mon.', captCol8X, y + 5.5, { align: 'center' });
-            doc.text('Total', captCol9X, y + 5.5, { align: 'right' });
+            doc.text('Moneda Original', captCol8X, y + 5.5, { align: 'center' });
+            doc.text('Total MXN', captCol9X, y + 5.5, { align: 'right' });
+            doc.text('Total Original', captCol10X, y + 5.5, { align: 'right' });
 
             y += 8;
 
@@ -9673,6 +9733,7 @@ const Reports = {
                     doc.line(captCol6X - 2, y, captCol6X - 2, y + 8);
                     doc.line(captCol7X - 2, y, captCol7X - 2, y + 8);
                     doc.line(captCol8X - 2, y, captCol8X - 2, y + 8);
+                    doc.line(captCol9X - 2, y, captCol9X - 2, y + 8);
                     
                     doc.setFontSize(7);
                     doc.setFont('helvetica', 'bold');
@@ -9683,17 +9744,54 @@ const Reports = {
                     doc.text('Producto', captCol5X, y + 5.5);
                     doc.text('Notas', captCol6X, y + 5.5);
                     doc.text('Cant.', captCol7X, y + 5.5, { align: 'right' });
-                    doc.text('Mon.', captCol8X, y + 5.5, { align: 'center' });
-                    doc.text('Total', captCol9X, y + 5.5, { align: 'right' });
+                    doc.text('Moneda Original', captCol8X, y + 5.5, { align: 'center' });
+                    doc.text('Total MXN', captCol9X, y + 5.5, { align: 'right' });
+                    doc.text('Total Original', captCol10X, y + 5.5, { align: 'right' });
                     y += 8;
                 }
 
                 const time = new Date(c.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
                 
+                // Calcular valores originales y convertidos
+                let originalAmount = 0;
+                let totalMXN = parseFloat(c.total) || 0;
+                const currency = c.currency || 'MXN';
+                
+                // Si hay pagos individuales, calcular desde ellos
+                if (c.payments && Array.isArray(c.payments) && c.payments.length > 0) {
+                    let totalOriginal = 0;
+                    let totalMXNFromPayments = 0;
+                    c.payments.forEach(payment => {
+                        const amount = parseFloat(payment.amount) || 0;
+                        const payCurrency = payment.currency || currency;
+                        totalOriginal += amount;
+                        
+                        // Convertir a MXN
+                        if (payCurrency === 'USD') {
+                            totalMXNFromPayments += amount * usdRateForDisplay;
+                        } else if (payCurrency === 'CAD') {
+                            totalMXNFromPayments += amount * cadRateForDisplay;
+                        } else {
+                            totalMXNFromPayments += amount;
+                        }
+                    });
+                    originalAmount = totalOriginal;
+                    totalMXN = totalMXNFromPayments;
+                } else {
+                    // Fallback: Si no hay pagos, usar el total y calcular el original
+                    if (currency === 'USD') {
+                        originalAmount = totalMXN / usdRateForDisplay;
+                    } else if (currency === 'CAD') {
+                        originalAmount = totalMXN / cadRateForDisplay;
+                    } else {
+                        originalAmount = totalMXN;
+                    }
+                }
+                
                 doc.setDrawColor(220, 220, 220);
                 doc.rect(margin, y, pageWidth - (margin * 2), 7);
                 
-                // Líneas verticales para filas (opcional, para mejor organización)
+                // Líneas verticales para filas
                 doc.setDrawColor(200, 200, 200);
                 doc.line(captCol2X - 2, y, captCol2X - 2, y + 7);
                 doc.line(captCol3X - 2, y, captCol3X - 2, y + 7);
@@ -9702,22 +9800,37 @@ const Reports = {
                 doc.line(captCol6X - 2, y, captCol6X - 2, y + 7);
                 doc.line(captCol7X - 2, y, captCol7X - 2, y + 7);
                 doc.line(captCol8X - 2, y, captCol8X - 2, y + 7);
+                doc.line(captCol9X - 2, y, captCol9X - 2, y + 7);
                 
                 doc.setFontSize(7);
                 doc.setFont('helvetica', 'normal');
                 doc.text(time, captCol1X, y + 5);
-                doc.text((c.branch_name || 'N/A').substring(0, 10), captCol2X, y + 5);
-                doc.text((c.seller_name || 'N/A').substring(0, 10), captCol3X, y + 5);
-                doc.text((c.guide_name || '-').substring(0, 8), captCol4X, y + 5);
-                doc.text((c.product || '').substring(0, 12), captCol5X, y + 5);
+                doc.text((c.branch_name || 'N/A').substring(0, 15), captCol2X, y + 5);
+                doc.text((c.seller_name || 'N/A').substring(0, 15), captCol3X, y + 5);
+                doc.text((c.guide_name || '-').substring(0, 12), captCol4X, y + 5);
+                doc.text((c.product || '').substring(0, 18), captCol5X, y + 5);
                 // Notas (truncar si es muy largo)
-                const notesText = (c.notes || '-').substring(0, 18);
+                const notesText = (c.notes || '-').substring(0, 15);
                 doc.text(notesText, captCol6X, y + 5);
                 doc.text(c.quantity.toString(), captCol7X, y + 5, { align: 'right' });
-                doc.text(c.currency, captCol8X, y + 5, { align: 'center' });
+                
+                // Mostrar moneda original con monto
+                const currencyDisplay = currency !== 'MXN' 
+                    ? `${currency} $${originalAmount.toFixed(2)}` 
+                    : `${currency} $${originalAmount.toFixed(2)}`;
+                doc.text(currencyDisplay, captCol8X, y + 5, { align: 'center' });
+                
+                // Mostrar total en MXN
                 doc.setFont('helvetica', 'bold');
-                doc.text(`$${c.total.toFixed(2)}`, captCol9X, y + 5, { align: 'right' });
+                doc.text(`$${totalMXN.toFixed(2)}`, captCol9X, y + 5, { align: 'right' });
+                
+                // Mostrar total original
                 doc.setFont('helvetica', 'normal');
+                if (currency !== 'MXN') {
+                    doc.text(`$${originalAmount.toFixed(2)} ${currency}`, captCol10X, y + 5, { align: 'right' });
+                } else {
+                    doc.text(`$${originalAmount.toFixed(2)}`, captCol10X, y + 5, { align: 'right' });
+                }
                 
                 y += 7;
             });
@@ -10045,13 +10158,15 @@ const Reports = {
             }
 
             // ========== UTILIDADES (MARGEN BRUTO Y NETO) ==========
-            // El tipo de cambio ya se obtuvo arriba, reutilizarlo
+            // IMPORTANTE: Usar los tipos de cambio del display (usdRateForDisplay, cadRateForDisplay)
+            // que ya se obtuvieron arriba, no los de la BD
             // Convertir totales a MXN - Asegurar que todos sean números
             const totalsUSD = parseFloat(totals.USD) || 0;
             const totalsMXN = parseFloat(totals.MXN) || 0;
             const totalsCAD = parseFloat(totals.CAD) || 0;
-            const usdRateNum = parseFloat(usdRate) || 20.0;
-            const cadRateNum = parseFloat(cadRate) || 15.0;
+            // Usar los tipos de cambio del display (prioridad) o los de la BD como fallback
+            const usdRateNum = parseFloat(usdRateForDisplay) || parseFloat(usdRate) || 20.0;
+            const cadRateNum = parseFloat(cadRateForDisplay) || parseFloat(cadRate) || 15.0;
             const totalSalesMXN = totalsUSD * usdRateNum + totalsMXN + totalsCAD * cadRateNum;
 
             // Calcular comisiones totales (ya están en MXN según el cálculo anterior)
@@ -10273,15 +10388,35 @@ const Reports = {
             doc.setDrawColor(180, 180, 180);
             doc.line(valueX - 10, y, valueX - 10, y + utilSectionHeight);
 
-            // Línea 1: Ingresos (bien alineada)
+            // Línea 1: Ingresos (bien alineada) - Mostrar en ambas monedas con conversión
             doc.setFontSize(10);
             doc.setFont('helvetica', 'bold');
             doc.text('Ingresos:', labelX, y + 8);
-            doc.text(`$${totalSalesMXNNum.toFixed(2)}`, valueX, y + 8, { align: 'right' });
+            doc.text(`$${totalSalesMXNNum.toFixed(2)} MXN`, valueX, y + 8, { align: 'right' });
             doc.setFont('helvetica', 'normal');
-            doc.setFontSize(7);
-            const currencyDetails = `USD: $${(parseFloat(totals.USD) || 0).toFixed(2)} (x${(parseFloat(usdRate) || 0).toFixed(2)}) | MXN: $${(parseFloat(totals.MXN) || 0).toFixed(2)} | CAD: $${(parseFloat(totals.CAD) || 0).toFixed(2)} (x${(parseFloat(cadRate) || 0).toFixed(2)})`;
-            doc.text(currencyDetails, labelX + 5, y + 12.5, { maxWidth: valueX - labelX - 15 });
+            doc.setFontSize(8);
+            // Mostrar desglose detallado con conversiones usando los tipos de cambio del día
+            const utilTotalUSDOriginal = totals.USD || 0;
+            const utilTotalCADOriginal = totals.CAD || 0;
+            const utilTotalMXNOriginal = totals.MXN || 0;
+            const utilTotalUSDInMXN = utilTotalUSDOriginal * usdRateForDisplay;
+            const utilTotalCADInMXN = utilTotalCADOriginal * cadRateForDisplay;
+            
+            let currencyDetails = '';
+            if (utilTotalUSDOriginal > 0) {
+                currencyDetails += `USD: $${utilTotalUSDOriginal.toFixed(2)} (x${usdRateForDisplay.toFixed(2)}) = $${utilTotalUSDInMXN.toFixed(2)} MXN`;
+            }
+            if (utilTotalMXNOriginal > 0) {
+                if (currencyDetails) currencyDetails += ' | ';
+                currencyDetails += `MXN: $${utilTotalMXNOriginal.toFixed(2)}`;
+            }
+            if (utilTotalCADOriginal > 0) {
+                if (currencyDetails) currencyDetails += ' | ';
+                currencyDetails += `CAD: $${utilTotalCADOriginal.toFixed(2)} (x${cadRateForDisplay.toFixed(2)}) = $${utilTotalCADInMXN.toFixed(2)} MXN`;
+            }
+            if (currencyDetails) {
+                doc.text(currencyDetails, labelX + 5, y + 12.5, { maxWidth: valueX - labelX - 15 });
+            }
 
             // Línea 2: COGS (bien alineada)
             doc.setFontSize(10);
