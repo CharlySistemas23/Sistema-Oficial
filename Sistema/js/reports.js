@@ -9715,9 +9715,13 @@ const Reports = {
             doc.text('Producto', captCol5X, y + 5.5);
             doc.text('Notas', captCol6X, y + 5.5);
             doc.text('Cant.', captCol7X, y + 5.5, { align: 'right' });
-            doc.text('Moneda Original', captCol8X, y + 5.5, { align: 'center' });
-            doc.text('Total MXN', captCol9X, y + 5.5, { align: 'right' });
-            doc.text('Total Original', captCol10X, y + 5.5, { align: 'right' });
+            // Calcular anchos de columnas para alineación correcta
+            const captCol8Width = captCol9X - captCol8X - 2;
+            const captCol9Width = captCol10X - captCol9X - 2;
+            const captCol10Width = captCol10EndX - captCol10X - 2;
+            doc.text('Moneda Original', captCol8X + (captCol8Width / 2), y + 5.5, { align: 'center', maxWidth: captCol8Width });
+            doc.text('Total MXN', captCol9X + captCol9Width, y + 5.5, { align: 'right', maxWidth: captCol9Width });
+            doc.text('Total Original', captCol10X + captCol10Width, y + 5.5, { align: 'right', maxWidth: captCol10Width });
 
             y += 8;
 
@@ -9745,6 +9749,11 @@ const Reports = {
                     doc.line(captCol8X - 1, y, captCol8X - 1, y + 8);
                     doc.line(captCol9X - 1, y, captCol9X - 1, y + 8);
                     
+                    // Calcular anchos de columnas para alineación correcta (mismo que arriba)
+                    const captCol8Width = captCol9X - captCol8X - 2;
+                    const captCol9Width = captCol10X - captCol9X - 2;
+                    const captCol10Width = captCol10EndX - captCol10X - 2;
+                    
                     doc.setFontSize(7);
                     doc.setFont('helvetica', 'bold');
                     doc.text('Hora', captCol1X, y + 5.5);
@@ -9754,9 +9763,9 @@ const Reports = {
                     doc.text('Producto', captCol5X, y + 5.5);
                     doc.text('Notas', captCol6X, y + 5.5);
                     doc.text('Cant.', captCol7X, y + 5.5, { align: 'right' });
-                    doc.text('Moneda Original', captCol8X, y + 5.5, { align: 'center' });
-                    doc.text('Total MXN', captCol9X, y + 5.5, { align: 'right' });
-                    doc.text('Total Original', captCol10X, y + 5.5, { align: 'right' });
+                    doc.text('Moneda Original', captCol8X + (captCol8Width / 2), y + 5.5, { align: 'center', maxWidth: captCol8Width });
+                    doc.text('Total MXN', captCol9X + captCol9Width, y + 5.5, { align: 'right', maxWidth: captCol9Width });
+                    doc.text('Total Original', captCol10X + captCol10Width, y + 5.5, { align: 'right', maxWidth: captCol10Width });
                     y += 8;
                 }
 
@@ -10061,10 +10070,10 @@ const Reports = {
                     doc.setFontSize(8);
                     doc.setFont('helvetica', 'bold');
                     doc.text('Vendedor', col1X, y + 4);
-                    doc.text('Total MXN', col2X, y + 4, { align: 'right' });
-                    doc.text('USD', col3X, y + 4, { align: 'right' });
-                    doc.text('MXN', col4X, y + 4, { align: 'right' });
-                    doc.text('CAD', col5X, y + 4, { align: 'right' });
+                    doc.text('Total MXN', col2X + col2Width, y + 4, { align: 'right', maxWidth: col2Width });
+                    doc.text('USD', col3X + col3Width, y + 4, { align: 'right', maxWidth: col3Width });
+                    doc.text('MXN', col4X + col4Width, y + 4, { align: 'right', maxWidth: col4Width });
+                    doc.text('CAD', col5X + col5Width, y + 4, { align: 'right', maxWidth: col5Width });
                     y += 6;
 
                     doc.setFont('helvetica', 'normal');
