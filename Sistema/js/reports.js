@@ -7806,9 +7806,13 @@ const Reports = {
                 }
             });
 
-            // 3. El total en MXN ya está calculado desde los pagos individuales en cada captura
-            // (se calculó al agregar a la lista pendiente o al guardar)
-            // Solo verificamos que coincida con la conversión manual para debugging
+            // 3. Calcular el total en MXN desde las capturas (ya convertido en cada captura)
+            // Sumar todos los totales de las capturas que ya están en MXN
+            const totalSalesMXN = captures.reduce((sum, c) => {
+                return sum + (parseFloat(c.total) || 0);
+            }, 0);
+            
+            // También calcular desde conversión manual para verificación
             const totalSalesMXNCalculated = totals.USD * usdRate + totals.MXN + totals.CAD * cadRate;
             console.log(`💱 Total calculado desde conversión: $${totalSalesMXNCalculated.toFixed(2)} MXN`);
             console.log(`💱 Total desde capturas (ya convertido): $${totalSalesMXN.toFixed(2)} MXN`);
@@ -11705,7 +11709,19 @@ const Reports = {
                 filters.branch_id = currentBranchId;
             }
             
-            const serverCaptures = await API.getQuickCaptures(filters);
+            let serverCaptures;
+            try {
+                serverCaptures = await API.getQuickCaptures(filters);
+            } catch (error) {
+                // Si la tabla no existe en el backend, es normal (modo offline o backend no actualizado)
+                if (error.message && error.message.includes('quick_captures') && error.message.includes('does not exist')) {
+                    console.log('ℹ️ La tabla quick_captures no existe en el servidor. Continuando en modo local.');
+                    return;
+                }
+                // Otros errores: mostrar warning pero continuar
+                console.warn('⚠️ Error sincronizando capturas desde servidor (continuando en modo local):', error.message);
+                return;
+            }
             
             if (!serverCaptures || !Array.isArray(serverCaptures)) {
                 console.log('⚠️ No se recibieron capturas del servidor o formato inválido');
