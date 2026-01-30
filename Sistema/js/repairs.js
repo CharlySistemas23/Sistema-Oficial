@@ -684,14 +684,17 @@ const Repairs = {
         }
 
         // Update inventory status if item selected
-        let branchId = null;
+        // NOTA: branchId ya fue declarado arriba (línea 555), no redeclarar
         let inventoryItemUpdated = false;
         if (repair.item_id) {
             const item = await DB.get('inventory_items', repair.item_id);
             if (item) {
                 const oldStatus = item.status;
                 item.status = 'reparacion';
-                branchId = item.branch_id; // Obtener branch_id del item
+                // Actualizar branchId si el item tiene uno (puede ser diferente al obtenido arriba)
+                if (item.branch_id) {
+                    branchId = item.branch_id;
+                }
                 await DB.put('inventory_items', item);
                 inventoryItemUpdated = true;
                 
@@ -707,7 +710,7 @@ const Repairs = {
             }
         }
 
-        // Si no hay item, obtener branch_id de la sucursal actual
+        // Si no hay item o el item no tiene branch_id, obtener branch_id de la sucursal actual
         if (!branchId) {
             branchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
         }
