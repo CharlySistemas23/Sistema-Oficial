@@ -11272,15 +11272,23 @@ const Reports = {
                         </thead>
                         <tbody>
                             ${archivedReports.map(report => {
-                                const date = new Date(report.date);
-                                const dateStr = date.toLocaleDateString('es-MX', { year: 'numeric', month: '2-digit', day: '2-digit' });
-                                const archivedDate = report.archived_at ? new Date(report.archived_at).toLocaleString('es-MX', { 
-                                    year: 'numeric', 
-                                    month: '2-digit', 
-                                    day: '2-digit',
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                }) : '';
+                                // Formatear fecha sin desfase de zona horaria
+                                const normalizedDate = report.date.split('T')[0];
+                                const dateStr = this.formatDateWithoutTimezone(normalizedDate);
+                                
+                                // Formatear fecha de archivado (puede tener hora, así que usar Date)
+                                let archivedDate = '';
+                                if (report.archived_at) {
+                                    const archived = new Date(report.archived_at);
+                                    const year = archived.getFullYear();
+                                    const month = String(archived.getMonth() + 1).padStart(2, '0');
+                                    const day = String(archived.getDate()).padStart(2, '0');
+                                    const hour = String(archived.getHours()).padStart(2, '0');
+                                    const minute = String(archived.getMinutes()).padStart(2, '0');
+                                    const ampm = archived.getHours() >= 12 ? 'p.m.' : 'a.m.';
+                                    const hour12 = archived.getHours() % 12 || 12;
+                                    archivedDate = `${day}/${month}/${year}, ${hour12}:${minute} ${ampm}`;
+                                }
                                 
                                 const grossProfit = report.gross_profit || 0;
                                 const netProfit = report.net_profit || 0;
@@ -11830,6 +11838,25 @@ const Reports = {
         });
     },
 
+    // Función helper para formatear fechas sin desfase de zona horaria
+    formatDateWithoutTimezone(dateStr) {
+        if (!dateStr) return '';
+        // Si ya es una cadena YYYY-MM-DD, formatearla directamente
+        if (typeof dateStr === 'string' && /^\d{4}-\d{2}-\d{2}/.test(dateStr)) {
+            const [year, month, day] = dateStr.split('T')[0].split('-');
+            return `${day}/${month}/${year}`;
+        }
+        // Si es un objeto Date, extraer componentes sin conversión de zona horaria
+        if (dateStr instanceof Date) {
+            const year = dateStr.getFullYear();
+            const month = String(dateStr.getMonth() + 1).padStart(2, '0');
+            const day = String(dateStr.getDate()).padStart(2, '0');
+            return `${day}/${month}/${year}`;
+        }
+        // Fallback
+        return dateStr;
+    },
+
     async restoreArchivedReport(reportId) {
         try {
             const report = await DB.get('archived_quick_captures', reportId);
@@ -11842,6 +11869,10 @@ const Reports = {
                 Utils.showNotification('Este reporte no tiene capturas para restaurar', 'warning');
                 return;
             }
+
+            // Normalizar la fecha sin desfase de zona horaria
+            const normalizedReportDate = report.date.split('T')[0];
+            const formattedDate = this.formatDateWithoutTimezone(normalizedReportDate);
 
             // Crear modal de confirmación
             const confirmModal = document.createElement('div');
@@ -11856,10 +11887,10 @@ const Reports = {
                     </div>
                     <div class="modal-body" style="padding: var(--spacing-md);">
                         <p style="margin: 0 0 var(--spacing-sm) 0; font-size: 14px; line-height: 1.5;">
-                            Se restaurarán <strong>${report.captures.length}</strong> capturas del reporte del <strong>${new Date(report.date).toLocaleDateString('es-MX')}</strong>.
+                            Se restaurarán <strong>${report.captures.length}</strong> capturas del reporte del <strong>${formattedDate}</strong>.
                         </p>
                         <p style="margin: 0; font-size: 13px; line-height: 1.5; color: var(--color-text-secondary);">
-                            Las capturas se restaurarán con la fecha del reporte (<strong>${new Date(report.date).toLocaleDateString('es-MX')}</strong>) y podrás editarlas.
+                            Las capturas se restaurarán con la fecha del reporte (<strong>${formattedDate}</strong>) y podrás editarlas.
                         </p>
                         <p style="margin: var(--spacing-sm) 0 0 0; font-size: 12px; line-height: 1.5; color: var(--color-warning);">
                             <i class="fas fa-exclamation-triangle"></i> La fecha del formulario se cambiará automáticamente para mostrar el reporte restaurado.
@@ -11882,8 +11913,10 @@ const Reports = {
                     confirmModal.remove();
                     
                     try {
-                        // Verificar si ya hay capturas restauradas de este reporte para evitar duplicados
+                        // Normalizar la fecha sin desfase de zona horaria
                         const normalizedReportDate = report.date.split('T')[0];
+                        
+                        // Verificar si ya hay capturas restauradas de este reporte para evitar duplicados
                         const existingCaptures = await DB.getAll('temp_quick_captures') || [];
                         const alreadyRestored = existingCaptures.filter(c => 
                             c.restored_from === reportId || 
@@ -11961,6 +11994,15 @@ const Reports = {
                         }
                         
                         if (restoredCount > 0) {
+                            // Cambiar a la pestaña de captura rápida PRIMERO
+                            const quickCaptureTab = document.querySelector('[data-tab="quick-capture"]');
+                            if (quickCaptureTab) {
+                                quickCaptureTab.click();
+                            }
+                            
+                            // Esperar un momento para que se cargue la pestaña
+                            await new Promise(resolve => setTimeout(resolve, 300));
+                            
                             // Cambiar la fecha del formulario DESPUÉS de restaurar
                             const dateInput = document.getElementById('qc-date');
                             const arrivalDateInput = document.getElementById('qc-arrival-date');
@@ -11977,13 +12019,7 @@ const Reports = {
                                 arrivalDateInput.value = normalizedReportDate;
                             }
                             
-                            // Cambiar a la pestaña de captura rápida
-                            const quickCaptureTab = document.querySelector('[data-tab="quick-capture"]');
-                            if (quickCaptureTab) {
-                                quickCaptureTab.click();
-                            }
-                            
-                            // Esperar un momento para que se actualice el DOM
+                            // Esperar un momento más para que se actualice el DOM
                             await new Promise(resolve => setTimeout(resolve, 200));
                             
                             // Recargar datos con la nueva fecha (llamar directamente a las funciones)
@@ -11999,7 +12035,8 @@ const Reports = {
                                 dateInput.dispatchEvent(new Event('change', { bubbles: true }));
                             }
                             
-                            Utils.showNotification(`${restoredCount} capturas restauradas correctamente para la fecha ${new Date(normalizedReportDate).toLocaleDateString('es-MX')}. Puedes editarlas ahora.`, 'success');
+                            const formattedDate = this.formatDateWithoutTimezone(normalizedReportDate);
+                            Utils.showNotification(`${restoredCount} capturas restauradas correctamente para la fecha ${formattedDate}. Puedes editarlas ahora.`, 'success');
                         } else {
                             Utils.showNotification('No se pudieron restaurar las capturas', 'error');
                         }
