@@ -9571,36 +9571,42 @@ const Reports = {
 
             doc.setFontSize(10);
             doc.text(`Total Capturas: ${captures.length}`, margin + 5, y + 22);
-            doc.text(`Total Cantidad: ${totalQuantity}`, margin + 60, y + 22);
+            doc.text(`Total Cantidad: ${totalQuantity}`, margin + 80, y + 22);
             
-            // Mostrar totales en ambas monedas con tipo de cambio
-            doc.setFont('helvetica', 'bold');
-            doc.text('Tipo de Cambio del Día:', margin + 120, y + 15);
-            doc.setFont('helvetica', 'normal');
-            doc.setFontSize(9);
-            doc.text(`USD: $${usdRateForDisplay.toFixed(2)} MXN`, margin + 120, y + 20);
-            doc.text(`CAD: $${cadRateForDisplay.toFixed(2)} MXN`, margin + 120, y + 25);
+            // Mostrar totales en ambas monedas con tipo de cambio (mejor organizado)
+            const summaryCol1X = margin + 5;
+            const summaryCol2X = margin + 140; // Columna derecha para tipo de cambio y total general
             
             doc.setFontSize(10);
             // Mostrar USD con conversión
             const summaryTotalUSDOriginal = totals.USD || 0;
             const summaryTotalUSDInMXN = summaryTotalUSDOriginal * usdRateForDisplay;
-            doc.text(`Total USD: $${summaryTotalUSDOriginal.toFixed(2)} = $${summaryTotalUSDInMXN.toFixed(2)} MXN`, margin + 5, y + 28);
+            doc.text(`Total USD: $${summaryTotalUSDOriginal.toFixed(2)} = $${summaryTotalUSDInMXN.toFixed(2)} MXN`, summaryCol1X, y + 28);
             
             // Mostrar CAD con conversión
             const summaryTotalCADOriginal = totals.CAD || 0;
             const summaryTotalCADInMXN = summaryTotalCADOriginal * cadRateForDisplay;
-            doc.text(`Total CAD: $${summaryTotalCADOriginal.toFixed(2)} = $${summaryTotalCADInMXN.toFixed(2)} MXN`, margin + 5, y + 33);
+            doc.text(`Total CAD: $${summaryTotalCADOriginal.toFixed(2)} = $${summaryTotalCADInMXN.toFixed(2)} MXN`, summaryCol1X, y + 33);
             
             // Mostrar MXN
-            doc.text(`Total MXN: $${totals.MXN.toFixed(2)}`, margin + 5, y + 38);
+            doc.text(`Total MXN: $${totals.MXN.toFixed(2)}`, summaryCol1X, y + 38);
+            
+            // Tipo de cambio del día (columna derecha)
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(9);
+            doc.text('Tipo de Cambio:', summaryCol2X, y + 22);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(8);
+            doc.text(`USD: $${usdRateForDisplay.toFixed(2)} MXN`, summaryCol2X, y + 27);
+            doc.text(`CAD: $${cadRateForDisplay.toFixed(2)} MXN`, summaryCol2X, y + 32);
             
             // Total general en MXN
             const totalGeneralMXN = summaryTotalUSDInMXN + totals.MXN + summaryTotalCADInMXN;
             doc.setFont('helvetica', 'bold');
-            doc.text(`TOTAL GENERAL: $${totalGeneralMXN.toFixed(2)} MXN`, margin + 120, y + 33);
+            doc.setFontSize(10);
+            doc.text(`TOTAL GENERAL: $${totalGeneralMXN.toFixed(2)} MXN`, summaryCol2X, y + 38);
 
-            y += 38;
+            y += 50; // Aumentado para acomodar el nuevo tamaño del resumen
 
             // ========== LLEGADAS DEL DÍA ==========
             if (todayArrivals.length > 0) {
@@ -9666,18 +9672,20 @@ const Reports = {
             doc.text('CAPTURAS REALIZADAS', margin, y);
             y += 8;
 
-            // Definir anchos de columnas para la tabla de capturas (formato horizontal - más espacio)
+            // Definir anchos de columnas para la tabla de capturas (formato horizontal A4 - bien distribuidas)
+            // A4 horizontal: 297mm ancho, 210mm alto
+            // Margen: 12mm, espacio útil: 273mm
             // IMPORTANTE: Definir ANTES de usar para evitar errores de inicialización
-            const captCol1X = margin + 2;      // Hora (12mm)
-            const captCol2X = margin + 16;     // Sucursal (20mm)
-            const captCol3X = margin + 38;     // Vendedor (20mm)
-            const captCol4X = margin + 60;     // Guía (18mm)
-            const captCol5X = margin + 80;      // Producto (25mm)
-            const captCol6X = margin + 107;    // Notas (20mm)
-            const captCol7X = margin + 129;    // Cantidad (12mm)
-            const captCol8X = margin + 143;    // Moneda Original (25mm)
-            const captCol9X = margin + 170;    // Total MXN (30mm)
-            const captCol10X = pageWidth - margin - 2; // Total Original (alineado derecha)
+            const captCol1X = margin + 2;           // Hora (14mm)
+            const captCol2X = margin + 18;          // Sucursal (18mm)
+            const captCol3X = margin + 38;          // Vendedor (20mm)
+            const captCol4X = margin + 60;          // Guía (18mm)
+            const captCol5X = margin + 80;          // Producto (30mm)
+            const captCol6X = margin + 112;         // Notas (18mm)
+            const captCol7X = margin + 132;         // Cantidad (12mm)
+            const captCol8X = margin + 146;         // Moneda Original (35mm)
+            const captCol9X = margin + 183;         // Total MXN (35mm)
+            const captCol10X = pageWidth - margin - 2; // Total Original (resto del espacio, ~30mm)
 
             // Encabezados de tabla (mejor organizados)
             doc.setFillColor(245, 245, 245);
@@ -9685,16 +9693,16 @@ const Reports = {
             doc.setDrawColor(200, 200, 200);
             doc.rect(margin, y, pageWidth - (margin * 2), 8);
 
-            // Líneas verticales para separar columnas (formato horizontal - más columnas)
+            // Líneas verticales para separar columnas (bien alineadas con las nuevas posiciones)
             doc.setDrawColor(180, 180, 180);
-            doc.line(captCol2X - 2, y, captCol2X - 2, y + 8);
-            doc.line(captCol3X - 2, y, captCol3X - 2, y + 8);
-            doc.line(captCol4X - 2, y, captCol4X - 2, y + 8);
-            doc.line(captCol5X - 2, y, captCol5X - 2, y + 8);
-            doc.line(captCol6X - 2, y, captCol6X - 2, y + 8);
-            doc.line(captCol7X - 2, y, captCol7X - 2, y + 8);
-            doc.line(captCol8X - 2, y, captCol8X - 2, y + 8);
-            doc.line(captCol9X - 2, y, captCol9X - 2, y + 8);
+            doc.line(captCol2X - 1, y, captCol2X - 1, y + 8);
+            doc.line(captCol3X - 1, y, captCol3X - 1, y + 8);
+            doc.line(captCol4X - 1, y, captCol4X - 1, y + 8);
+            doc.line(captCol5X - 1, y, captCol5X - 1, y + 8);
+            doc.line(captCol6X - 1, y, captCol6X - 1, y + 8);
+            doc.line(captCol7X - 1, y, captCol7X - 1, y + 8);
+            doc.line(captCol8X - 1, y, captCol8X - 1, y + 8);
+            doc.line(captCol9X - 1, y, captCol9X - 1, y + 8);
 
             doc.setFontSize(7);
             doc.setFont('helvetica', 'bold');
@@ -9724,16 +9732,16 @@ const Reports = {
                     doc.setDrawColor(200, 200, 200);
                     doc.rect(margin, y, pageWidth - (margin * 2), 8);
                     
-                    // Líneas verticales
+                    // Líneas verticales (bien alineadas)
                     doc.setDrawColor(180, 180, 180);
-                    doc.line(captCol2X - 2, y, captCol2X - 2, y + 8);
-                    doc.line(captCol3X - 2, y, captCol3X - 2, y + 8);
-                    doc.line(captCol4X - 2, y, captCol4X - 2, y + 8);
-                    doc.line(captCol5X - 2, y, captCol5X - 2, y + 8);
-                    doc.line(captCol6X - 2, y, captCol6X - 2, y + 8);
-                    doc.line(captCol7X - 2, y, captCol7X - 2, y + 8);
-                    doc.line(captCol8X - 2, y, captCol8X - 2, y + 8);
-                    doc.line(captCol9X - 2, y, captCol9X - 2, y + 8);
+                    doc.line(captCol2X - 1, y, captCol2X - 1, y + 8);
+                    doc.line(captCol3X - 1, y, captCol3X - 1, y + 8);
+                    doc.line(captCol4X - 1, y, captCol4X - 1, y + 8);
+                    doc.line(captCol5X - 1, y, captCol5X - 1, y + 8);
+                    doc.line(captCol6X - 1, y, captCol6X - 1, y + 8);
+                    doc.line(captCol7X - 1, y, captCol7X - 1, y + 8);
+                    doc.line(captCol8X - 1, y, captCol8X - 1, y + 8);
+                    doc.line(captCol9X - 1, y, captCol9X - 1, y + 8);
                     
                     doc.setFontSize(7);
                     doc.setFont('helvetica', 'bold');
@@ -9791,40 +9799,42 @@ const Reports = {
                 doc.setDrawColor(220, 220, 220);
                 doc.rect(margin, y, pageWidth - (margin * 2), 7);
                 
-                // Líneas verticales para filas
+                // Líneas verticales para filas (bien alineadas)
                 doc.setDrawColor(200, 200, 200);
-                doc.line(captCol2X - 2, y, captCol2X - 2, y + 7);
-                doc.line(captCol3X - 2, y, captCol3X - 2, y + 7);
-                doc.line(captCol4X - 2, y, captCol4X - 2, y + 7);
-                doc.line(captCol5X - 2, y, captCol5X - 2, y + 7);
-                doc.line(captCol6X - 2, y, captCol6X - 2, y + 7);
-                doc.line(captCol7X - 2, y, captCol7X - 2, y + 7);
-                doc.line(captCol8X - 2, y, captCol8X - 2, y + 7);
-                doc.line(captCol9X - 2, y, captCol9X - 2, y + 7);
+                doc.line(captCol2X - 1, y, captCol2X - 1, y + 7);
+                doc.line(captCol3X - 1, y, captCol3X - 1, y + 7);
+                doc.line(captCol4X - 1, y, captCol4X - 1, y + 7);
+                doc.line(captCol5X - 1, y, captCol5X - 1, y + 7);
+                doc.line(captCol6X - 1, y, captCol6X - 1, y + 7);
+                doc.line(captCol7X - 1, y, captCol7X - 1, y + 7);
+                doc.line(captCol8X - 1, y, captCol8X - 1, y + 7);
+                doc.line(captCol9X - 1, y, captCol9X - 1, y + 7);
                 
                 doc.setFontSize(7);
                 doc.setFont('helvetica', 'normal');
                 doc.text(time, captCol1X, y + 5);
-                doc.text((c.branch_name || 'N/A').substring(0, 15), captCol2X, y + 5);
-                doc.text((c.seller_name || 'N/A').substring(0, 15), captCol3X, y + 5);
+                doc.text((c.branch_name || 'N/A').substring(0, 12), captCol2X, y + 5);
+                doc.text((c.seller_name || 'N/A').substring(0, 14), captCol3X, y + 5);
                 doc.text((c.guide_name || '-').substring(0, 12), captCol4X, y + 5);
-                doc.text((c.product || '').substring(0, 18), captCol5X, y + 5);
+                doc.text((c.product || '').substring(0, 20), captCol5X, y + 5);
                 // Notas (truncar si es muy largo)
-                const notesText = (c.notes || '-').substring(0, 15);
+                const notesText = (c.notes || '-').substring(0, 12);
                 doc.text(notesText, captCol6X, y + 5);
                 doc.text(c.quantity.toString(), captCol7X, y + 5, { align: 'right' });
                 
-                // Mostrar moneda original con monto
+                // Mostrar moneda original con monto (bien centrado en su columna)
                 const currencyDisplay = currency !== 'MXN' 
                     ? `${currency} $${originalAmount.toFixed(2)}` 
-                    : `${currency} $${originalAmount.toFixed(2)}`;
-                doc.text(currencyDisplay, captCol8X, y + 5, { align: 'center' });
+                    : `MXN $${originalAmount.toFixed(2)}`;
+                const currencyColWidth = captCol9X - captCol8X - 2;
+                doc.text(currencyDisplay, captCol8X + (currencyColWidth / 2), y + 5, { align: 'center' });
                 
-                // Mostrar total en MXN
+                // Mostrar total en MXN (alineado a la derecha de su columna)
                 doc.setFont('helvetica', 'bold');
-                doc.text(`$${totalMXN.toFixed(2)}`, captCol9X, y + 5, { align: 'right' });
+                const mxnColWidth = captCol10X - captCol9X - 2;
+                doc.text(`$${totalMXN.toFixed(2)}`, captCol9X + mxnColWidth, y + 5, { align: 'right' });
                 
-                // Mostrar total original
+                // Mostrar total original (alineado a la derecha)
                 doc.setFont('helvetica', 'normal');
                 if (currency !== 'MXN') {
                     doc.text(`$${originalAmount.toFixed(2)} ${currency}`, captCol10X, y + 5, { align: 'right' });
@@ -10020,18 +10030,25 @@ const Reports = {
                     doc.setDrawColor(200, 200, 200);
                     doc.rect(margin, y, pageWidth - (margin * 2), 6);
 
-                    // Definir anchos de columnas
-                    const col1X = margin + 2; // Vendedor
-                    const col2X = pageWidth - margin - 80; // Total
-                    const col3X = pageWidth - margin - 60; // USD
-                    const col4X = pageWidth - margin - 40; // MXN
-                    const col5X = pageWidth - margin - 20; // CAD
+                    // Definir anchos de columnas (bien distribuidas en formato horizontal)
+                    const col1X = margin + 2; // Vendedor (80mm)
+                    const col2X = margin + 85; // Total MXN (35mm)
+                    const col3X = margin + 125; // USD (30mm)
+                    const col4X = margin + 160; // MXN (30mm)
+                    const col5X = pageWidth - margin - 2; // CAD (resto, ~30mm, alineado derecha)
                     const nameMaxWidth = col2X - col1X - 5; // Ancho máximo para nombre
 
+                    // Líneas verticales para separar columnas
+                    doc.setDrawColor(180, 180, 180);
+                    doc.line(col2X - 1, y, col2X - 1, y + 6);
+                    doc.line(col3X - 1, y, col3X - 1, y + 6);
+                    doc.line(col4X - 1, y, col4X - 1, y + 6);
+                    doc.line(col5X - 1, y, col5X - 1, y + 6);
+                    
                     doc.setFontSize(8);
                     doc.setFont('helvetica', 'bold');
                     doc.text('Vendedor', col1X, y + 4);
-                    doc.text('Total', col2X, y + 4, { align: 'right' });
+                    doc.text('Total MXN', col2X, y + 4, { align: 'right' });
                     doc.text('USD', col3X, y + 4, { align: 'right' });
                     doc.text('MXN', col4X, y + 4, { align: 'right' });
                     doc.text('CAD', col5X, y + 4, { align: 'right' });
@@ -10058,6 +10075,14 @@ const Reports = {
                         }
                         doc.setDrawColor(220, 220, 220);
                         doc.rect(margin, y, pageWidth - (margin * 2), 6);
+                        
+                        // Líneas verticales para filas
+                        doc.setDrawColor(200, 200, 200);
+                        doc.line(col2X - 1, y, col2X - 1, y + 6);
+                        doc.line(col3X - 1, y, col3X - 1, y + 6);
+                        doc.line(col4X - 1, y, col4X - 1, y + 6);
+                        doc.line(col5X - 1, y, col5X - 1, y + 6);
+                        
                         doc.text((s.seller?.name || 'N/A').substring(0, 25), col1X, y + 4);
                         doc.text(`$${(parseFloat(s.total) || 0).toFixed(2)}`, col2X, y + 4, { align: 'right' });
                         doc.text(s.commissions?.USD ? `$${(parseFloat(s.commissions.USD) || 0).toFixed(2)}` : '-', col3X, y + 4, { align: 'right' });
@@ -10097,12 +10122,12 @@ const Reports = {
                     doc.setDrawColor(200, 200, 200);
                     doc.rect(margin, y, pageWidth - (margin * 2), 6);
 
-                    // Definir anchos de columnas (mismo que vendedores)
-                    const col1X = margin + 2; // Guía
-                    const col2X = pageWidth - margin - 85; // Total
-                    const col3X = pageWidth - margin - 65; // USD
-                    const col4X = pageWidth - margin - 45; // MXN
-                    const col5X = pageWidth - margin - 25; // CAD
+                    // Definir anchos de columnas (mismo que vendedores, bien distribuidas)
+                    const col1X = margin + 2; // Guía (80mm)
+                    const col2X = margin + 85; // Total MXN (35mm)
+                    const col3X = margin + 125; // USD (30mm)
+                    const col4X = margin + 160; // MXN (30mm)
+                    const col5X = pageWidth - margin - 2; // CAD (resto, ~30mm, alineado derecha)
 
                     doc.setFontSize(8);
                     doc.setFont('helvetica', 'bold');
@@ -10134,6 +10159,14 @@ const Reports = {
                         }
                         doc.setDrawColor(220, 220, 220);
                         doc.rect(margin, y, pageWidth - (margin * 2), 6);
+                        
+                        // Líneas verticales para filas
+                        doc.setDrawColor(200, 200, 200);
+                        doc.line(col2X - 1, y, col2X - 1, y + 6);
+                        doc.line(col3X - 1, y, col3X - 1, y + 6);
+                        doc.line(col4X - 1, y, col4X - 1, y + 6);
+                        doc.line(col5X - 1, y, col5X - 1, y + 6);
+                        
                         doc.text((g.guide?.name || 'N/A').substring(0, 25), col1X, y + 4);
                         doc.text(`$${(parseFloat(g.total) || 0).toFixed(2)}`, col2X, y + 4, { align: 'right' });
                         doc.text(g.commissions?.USD ? `$${(parseFloat(g.commissions.USD) || 0).toFixed(2)}` : '-', col3X, y + 4, { align: 'right' });
