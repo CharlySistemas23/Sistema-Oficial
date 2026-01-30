@@ -10042,6 +10042,12 @@ const Reports = {
                     const col5X = margin + 179; // CAD (30mm)
                     const col5EndX = pageWidth - margin - 2; // Fin de la última columna
                     const nameMaxWidth = col2X - col1X - 5; // Ancho máximo para nombre
+                    
+                    // Calcular anchos de columnas una sola vez (fuera del forEach)
+                    const col2Width = col3X - col2X - 2;
+                    const col3Width = col4X - col3X - 2;
+                    const col4Width = col5X - col4X - 2;
+                    const col5Width = col5EndX - col5X - 2;
 
                     // Líneas verticales para separar columnas
                     doc.setDrawColor(180, 180, 180);
@@ -10082,10 +10088,7 @@ const Reports = {
                             doc.setFontSize(8);
                             doc.setFont('helvetica', 'bold');
                             doc.text('Vendedor', col1X, y + 4);
-                            const col2Width = col3X - col2X - 2;
-                            const col3Width = col4X - col3X - 2;
-                            const col4Width = col5X - col4X - 2;
-                            const col5Width = col5EndX - col5X - 2;
+                            // Usar las variables ya declaradas fuera del forEach
                             doc.text('Total MXN', col2X + col2Width, y + 4, { align: 'right', maxWidth: col2Width });
                             doc.text('USD', col3X + col3Width, y + 4, { align: 'right', maxWidth: col3Width });
                             doc.text('MXN', col4X + col4Width, y + 4, { align: 'right', maxWidth: col4Width });
@@ -10102,11 +10105,7 @@ const Reports = {
                         doc.line(col4X - 1, y, col4X - 1, y + 6);
                         doc.line(col5X - 1, y, col5X - 1, y + 6);
                         
-                        const col2Width = col3X - col2X - 2;
-                        const col3Width = col4X - col3X - 2;
-                        const col4Width = col5X - col4X - 2;
-                        const col5Width = col5EndX - col5X - 2;
-                        
+                        // Usar las variables ya declaradas fuera del forEach
                         doc.text((s.seller?.name || 'N/A').substring(0, 25), col1X, y + 4, { maxWidth: col2X - col1X - 5 });
                         doc.text(`$${(parseFloat(s.total) || 0).toFixed(2)}`, col2X + col2Width, y + 4, { align: 'right', maxWidth: col2Width });
                         doc.text(s.commissions?.USD ? `$${(parseFloat(s.commissions.USD) || 0).toFixed(2)}` : '-', col3X + col3Width, y + 4, { align: 'right', maxWidth: col3Width });
@@ -10123,7 +10122,7 @@ const Reports = {
                     const totalSellerComm = sellerEntries.reduce((sum, s) => sum + (parseFloat(s.total) || 0), 0);
                     doc.setFillColor(240, 240, 240);
                     doc.rect(margin, y, pageWidth - (margin * 2), 6, 'F');
-                    const col2Width = col3X - col2X - 2;
+                    // Usar la variable ya declarada fuera del forEach
                     doc.setFont('helvetica', 'bold');
                     doc.text('TOTAL VENDEDORES', col1X, y + 4);
                     doc.text(`$${(parseFloat(totalSellerComm) || 0).toFixed(2)}`, col2X + col2Width, y + 4, { align: 'right', maxWidth: col2Width });
@@ -10154,6 +10153,12 @@ const Reports = {
                     const col4X = margin + 146; // MXN (30mm)
                     const col5X = margin + 179; // CAD (30mm)
                     const col5EndX = pageWidth - margin - 2; // Fin de la última columna
+                    
+                    // Calcular anchos de columnas una sola vez (fuera del forEach)
+                    const col2WidthGuide = col3X - col2X - 2;
+                    const col3WidthGuide = col4X - col3X - 2;
+                    const col4WidthGuide = col5X - col4X - 2;
+                    const col5WidthGuide = col5EndX - col5X - 2;
 
                     // Líneas verticales para separar columnas
                     doc.setDrawColor(180, 180, 180);
@@ -10166,14 +10171,11 @@ const Reports = {
                     doc.setFontSize(8);
                     doc.setFont('helvetica', 'bold');
                     doc.text('Guía', col1X, y + 4);
-                    const col2Width = col3X - col2X - 2;
-                    const col3Width = col4X - col3X - 2;
-                    const col4Width = col5X - col4X - 2;
-                    const col5Width = col5EndX - col5X - 2;
-                    doc.text('Total MXN', col2X + col2Width, y + 4, { align: 'right', maxWidth: col2Width });
-                    doc.text('USD', col3X + col3Width, y + 4, { align: 'right', maxWidth: col3Width });
-                    doc.text('MXN', col4X + col4Width, y + 4, { align: 'right', maxWidth: col4Width });
-                    doc.text('CAD', col5X + col5Width, y + 4, { align: 'right', maxWidth: col5Width });
+                    // Usar las variables ya declaradas fuera del forEach
+                    doc.text('Total MXN', col2X + col2WidthGuide, y + 4, { align: 'right', maxWidth: col2WidthGuide });
+                    doc.text('USD', col3X + col3WidthGuide, y + 4, { align: 'right', maxWidth: col3WidthGuide });
+                    doc.text('MXN', col4X + col4WidthGuide, y + 4, { align: 'right', maxWidth: col4WidthGuide });
+                    doc.text('CAD', col5X + col5WidthGuide, y + 4, { align: 'right', maxWidth: col5WidthGuide });
                     y += 6;
 
                     doc.setFont('helvetica', 'normal');
@@ -10186,13 +10188,22 @@ const Reports = {
                             doc.rect(margin, y, pageWidth - (margin * 2), 6, 'F');
                             doc.setDrawColor(200, 200, 200);
                             doc.rect(margin, y, pageWidth - (margin * 2), 6);
+                            // Líneas verticales para separar columnas
+                            doc.setDrawColor(180, 180, 180);
+                            doc.line(col2X - 1, y, col2X - 1, y + 6);
+                            doc.line(col3X - 1, y, col3X - 1, y + 6);
+                            doc.line(col4X - 1, y, col4X - 1, y + 6);
+                            doc.line(col5X - 1, y, col5X - 1, y + 6);
+                            doc.line(col5EndX - 1, y, col5EndX - 1, y + 6);
+                            
                             doc.setFontSize(8);
                             doc.setFont('helvetica', 'bold');
                             doc.text('Guía', col1X, y + 4);
-                            doc.text('Total', col2X, y + 4, { align: 'right' });
-                            doc.text('USD', col3X, y + 4, { align: 'right' });
-                            doc.text('MXN', col4X, y + 4, { align: 'right' });
-                            doc.text('CAD', col5X, y + 4, { align: 'right' });
+                            // Usar las variables ya declaradas fuera del forEach
+                            doc.text('Total MXN', col2X + col2WidthGuide, y + 4, { align: 'right', maxWidth: col2WidthGuide });
+                            doc.text('USD', col3X + col3WidthGuide, y + 4, { align: 'right', maxWidth: col3WidthGuide });
+                            doc.text('MXN', col4X + col4WidthGuide, y + 4, { align: 'right', maxWidth: col4WidthGuide });
+                            doc.text('CAD', col5X + col5WidthGuide, y + 4, { align: 'right', maxWidth: col5WidthGuide });
                             y += 6;
                         }
                         doc.setDrawColor(220, 220, 220);
@@ -10205,16 +10216,12 @@ const Reports = {
                         doc.line(col4X - 1, y, col4X - 1, y + 6);
                         doc.line(col5X - 1, y, col5X - 1, y + 6);
                         
-                        const col2Width = col3X - col2X - 2;
-                        const col3Width = col4X - col3X - 2;
-                        const col4Width = col5X - col4X - 2;
-                        const col5Width = col5EndX - col5X - 2;
-                        
+                        // Usar las variables ya declaradas fuera del forEach
                         doc.text((g.guide?.name || 'N/A').substring(0, 25), col1X, y + 4, { maxWidth: col2X - col1X - 5 });
-                        doc.text(`$${(parseFloat(g.total) || 0).toFixed(2)}`, col2X + col2Width, y + 4, { align: 'right', maxWidth: col2Width });
-                        doc.text(g.commissions?.USD ? `$${(parseFloat(g.commissions.USD) || 0).toFixed(2)}` : '-', col3X + col3Width, y + 4, { align: 'right', maxWidth: col3Width });
-                        doc.text(g.commissions?.MXN ? `$${(parseFloat(g.commissions.MXN) || 0).toFixed(2)}` : '-', col4X + col4Width, y + 4, { align: 'right', maxWidth: col4Width });
-                        doc.text(g.commissions?.CAD ? `$${(parseFloat(g.commissions.CAD) || 0).toFixed(2)}` : '-', col5X + col5Width, y + 4, { align: 'right', maxWidth: col5Width });
+                        doc.text(`$${(parseFloat(g.total) || 0).toFixed(2)}`, col2X + col2WidthGuide, y + 4, { align: 'right', maxWidth: col2WidthGuide });
+                        doc.text(g.commissions?.USD ? `$${(parseFloat(g.commissions.USD) || 0).toFixed(2)}` : '-', col3X + col3WidthGuide, y + 4, { align: 'right', maxWidth: col3WidthGuide });
+                        doc.text(g.commissions?.MXN ? `$${(parseFloat(g.commissions.MXN) || 0).toFixed(2)}` : '-', col4X + col4WidthGuide, y + 4, { align: 'right', maxWidth: col4WidthGuide });
+                        doc.text(g.commissions?.CAD ? `$${(parseFloat(g.commissions.CAD) || 0).toFixed(2)}` : '-', col5X + col5WidthGuide, y + 4, { align: 'right', maxWidth: col5WidthGuide });
                         y += 6;
                     });
 
@@ -10226,10 +10233,10 @@ const Reports = {
                     const totalGuideComm = guideEntries.reduce((sum, g) => sum + (parseFloat(g.total) || 0), 0);
                     doc.setFillColor(240, 240, 240);
                     doc.rect(margin, y, pageWidth - (margin * 2), 6, 'F');
-                    const col2Width = col3X - col2X - 2;
+                    // Usar la variable ya declarada fuera del forEach
                     doc.setFont('helvetica', 'bold');
                     doc.text('TOTAL GUÍAS', col1X, y + 4);
-                    doc.text(`$${(parseFloat(totalGuideComm) || 0).toFixed(2)}`, col2X + col2Width, y + 4, { align: 'right', maxWidth: col2Width });
+                    doc.text(`$${(parseFloat(totalGuideComm) || 0).toFixed(2)}`, col2X + col2WidthGuide, y + 4, { align: 'right', maxWidth: col2WidthGuide });
                     y += 8;
                 }
             }
