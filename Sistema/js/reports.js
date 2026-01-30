@@ -11938,19 +11938,7 @@ const Reports = {
                             }
                         }
                         
-                        // Cambiar la fecha del formulario ANTES de restaurar
-                        const dateInput = document.getElementById('qc-date');
-                        const arrivalDateInput = document.getElementById('qc-arrival-date');
-                        if (dateInput) {
-                            dateInput.value = normalizedReportDate;
-                            // Disparar evento change para que se recarguen los datos
-                            dateInput.dispatchEvent(new Event('change', { bubbles: true }));
-                        }
-                        if (arrivalDateInput) {
-                            arrivalDateInput.value = normalizedReportDate;
-                        }
-                        
-                        // Restaurar cada captura a temp_quick_captures
+                        // Restaurar cada captura a temp_quick_captures PRIMERO
                         let restoredCount = 0;
                         for (const capture of report.captures) {
                             try {
@@ -11973,7 +11961,21 @@ const Reports = {
                         }
                         
                         if (restoredCount > 0) {
-                            Utils.showNotification(`${restoredCount} capturas restauradas correctamente para la fecha ${new Date(normalizedReportDate).toLocaleDateString('es-MX')}. Puedes editarlas ahora.`, 'success');
+                            // Cambiar la fecha del formulario DESPUÉS de restaurar
+                            const dateInput = document.getElementById('qc-date');
+                            const arrivalDateInput = document.getElementById('qc-arrival-date');
+                            
+                            if (dateInput) {
+                                dateInput.value = normalizedReportDate;
+                                // Actualizar el display de la fecha si existe
+                                const dateDisplay = document.getElementById('captures-date-display');
+                                if (dateDisplay) {
+                                    dateDisplay.textContent = `(${normalizedReportDate})`;
+                                }
+                            }
+                            if (arrivalDateInput) {
+                                arrivalDateInput.value = normalizedReportDate;
+                            }
                             
                             // Cambiar a la pestaña de captura rápida
                             const quickCaptureTab = document.querySelector('[data-tab="quick-capture"]');
@@ -11981,12 +11983,23 @@ const Reports = {
                                 quickCaptureTab.click();
                             }
                             
-                            // Esperar un momento para que se actualice la fecha
-                            await new Promise(resolve => setTimeout(resolve, 100));
+                            // Esperar un momento para que se actualice el DOM
+                            await new Promise(resolve => setTimeout(resolve, 200));
                             
-                            // Recargar datos con la nueva fecha
-                            await this.loadQuickCaptureData();
-                            await this.loadQuickCaptureArrivals();
+                            // Recargar datos con la nueva fecha (llamar directamente a las funciones)
+                            if (typeof this.loadQuickCaptureData === 'function') {
+                                await this.loadQuickCaptureData();
+                            }
+                            if (typeof this.loadQuickCaptureArrivals === 'function') {
+                                await this.loadQuickCaptureArrivals();
+                            }
+                            
+                            // Disparar evento change para asegurar que los listeners se ejecuten
+                            if (dateInput) {
+                                dateInput.dispatchEvent(new Event('change', { bubbles: true }));
+                            }
+                            
+                            Utils.showNotification(`${restoredCount} capturas restauradas correctamente para la fecha ${new Date(normalizedReportDate).toLocaleDateString('es-MX')}. Puedes editarlas ahora.`, 'success');
                         } else {
                             Utils.showNotification('No se pudieron restaurar las capturas', 'error');
                         }
@@ -12006,6 +12019,167 @@ const Reports = {
         } catch (error) {
             console.error('Error restaurando reporte archivado:', error);
             Utils.showNotification('Error al restaurar el reporte: ' + error.message, 'error');
+        }
+    },
+
+    async viewArchivedReport(reportId) {
+        try {
+            const report = await DB.get('archived_quick_captures', reportId);
+            if (!report) {
+                Utils.showNotification('Reporte no encontrado', 'error');
+                return;
+            }
+
+            const date = new Date(report.date);
+            const formattedDate = date.toLocaleDateString('es-MX', { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+            });
+
+            const grossMargin = report.total_sales_mxn > 0 
+                ? ((report.gross_profit || 0) / report.total_sales_mxn * 100).toFixed(2)
+                : '0.00';
+            const netMargin = report.total_sales_mxn > 0 
+                ? ((report.net_profit || 0) / report.total_sales_mxn * 100).toFixed(2)
+                : '0.00';
+
+            let capturesHtml = '';
+            if (report.captures && report.captures.length > 0) {
+                capturesHtml = `
+                    <div style="max-height: 400px; overflow-y: auto; margin-top: var(--spacing-md);">
+                        <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+                            <thead style="position: sticky; top: 0; background: var(--color-bg-secondary); z-index: 10;">
+                                <tr style="border-bottom: 2px solid var(--color-border-light);">
+                                    <th style="padding: var(--spacing-xs); text-align: left; font-weight: 600;">Hora</th>
+                                    <th style="padding: var(--spacing-xs); text-align: left; font-weight: 600;">Vendedor</th>
+                                    <th style="padding: var(--spacing-xs); text-align: left; font-weight: 600;">Producto</th>
+                                    <th style="padding: var(--spacing-xs); text-align: right; font-weight: 600;">Total</th>
+                                    <th style="padding: var(--spacing-xs); text-align: right; font-weight: 600;">Costo</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${report.captures.map((capture, idx) => {
+                                    const captureDate = capture.created_at || capture.date || '';
+                                    const captureTime = captureDate ? new Date(captureDate).toLocaleTimeString('es-MX', { 
+                                        hour: '2-digit', 
+                                        minute: '2-digit' 
+                                    }) : '-';
+                                    return `
+                                        <tr style="border-bottom: 1px solid var(--color-border-light); ${idx % 2 === 0 ? 'background: var(--color-bg-secondary);' : ''}">
+                                            <td style="padding: var(--spacing-xs);">${captureTime}</td>
+                                            <td style="padding: var(--spacing-xs);">${capture.seller_name || capture.seller_id || '-'}</td>
+                                            <td style="padding: var(--spacing-xs);">${capture.product || '-'}</td>
+                                            <td style="padding: var(--spacing-xs); text-align: right; font-weight: 600;">${Utils.formatCurrency(capture.total || 0)}</td>
+                                            <td style="padding: var(--spacing-xs); text-align: right;">${Utils.formatCurrency(capture.merchandise_cost || 0)}</td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            }
+
+            const modal = document.createElement('div');
+            modal.className = 'modal-overlay';
+            modal.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 10000; overflow-y: auto; padding: 20px;';
+            
+            modal.innerHTML = `
+                <div class="modal-content" style="max-width: 800px; width: 100%; background: white; border-radius: 8px; padding: 0; box-shadow: 0 4px 20px rgba(0,0,0,0.3); margin: auto; position: relative;">
+                    <div class="modal-header" style="padding: 16px; border-bottom: 1px solid #e0e0e0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px 8px 0 0;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <h3 style="margin: 0; font-size: 18px; font-weight: 600; color: white;">
+                                <i class="fas fa-file-alt" style="margin-right: 8px;"></i>Reporte Archivado - ${formattedDate}
+                            </h3>
+                            <button id="close-view-modal-btn" style="background: transparent; border: none; color: white; font-size: 20px; cursor: pointer; padding: 0; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="modal-body" style="padding: 20px; max-height: calc(100vh - 200px); overflow-y: auto;">
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--spacing-md); margin-bottom: var(--spacing-lg);">
+                            <div style="padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md);">
+                                <div style="font-size: 11px; color: var(--color-text-secondary); margin-bottom: 4px;">TOTAL CAPTURAS</div>
+                                <div style="font-size: 20px; font-weight: 700; color: var(--color-primary);">${report.captures?.length || 0}</div>
+                            </div>
+                            <div style="padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md);">
+                                <div style="font-size: 11px; color: var(--color-text-secondary); margin-bottom: 4px;">VENTAS (MXN)</div>
+                                <div style="font-size: 20px; font-weight: 700; color: var(--color-primary);">${Utils.formatCurrency(report.total_sales_mxn || 0)}</div>
+                            </div>
+                            <div style="padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md);">
+                                <div style="font-size: 11px; color: var(--color-text-secondary); margin-bottom: 4px;">UTILIDAD BRUTA</div>
+                                <div style="font-size: 20px; font-weight: 700; color: var(--color-success);">${Utils.formatCurrency(report.gross_profit || 0)}</div>
+                                <div style="font-size: 11px; color: var(--color-text-secondary); margin-top: 4px;">${grossMargin}%</div>
+                            </div>
+                            <div style="padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md);">
+                                <div style="font-size: 11px; color: var(--color-text-secondary); margin-bottom: 4px;">UTILIDAD NETA</div>
+                                <div style="font-size: 20px; font-weight: 700; color: var(--color-primary);">${Utils.formatCurrency(report.net_profit || 0)}</div>
+                                <div style="font-size: 11px; color: var(--color-text-secondary); margin-top: 4px;">${netMargin}%</div>
+                            </div>
+                        </div>
+                        
+                        <div style="margin-bottom: var(--spacing-lg);">
+                            <h4 style="margin: 0 0 var(--spacing-sm) 0; font-size: 14px; font-weight: 600; text-transform: uppercase;">Desglose Financiero</h4>
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--spacing-sm);">
+                                <div style="padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm);">
+                                    <div style="font-size: 10px; color: var(--color-text-secondary);">Costo Mercancía (COGS)</div>
+                                    <div style="font-size: 14px; font-weight: 600;">${Utils.formatCurrency(report.total_cogs || 0)}</div>
+                                </div>
+                                <div style="padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm);">
+                                    <div style="font-size: 10px; color: var(--color-text-secondary);">Comisiones</div>
+                                    <div style="font-size: 14px; font-weight: 600;">${Utils.formatCurrency(report.total_commissions || 0)}</div>
+                                </div>
+                                <div style="padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm);">
+                                    <div style="font-size: 10px; color: var(--color-text-secondary);">Costos de Llegadas</div>
+                                    <div style="font-size: 14px; font-weight: 600;">${Utils.formatCurrency(report.total_arrival_costs || 0)}</div>
+                                </div>
+                                <div style="padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm);">
+                                    <div style="font-size: 10px; color: var(--color-text-secondary);">Costos Operativos</div>
+                                    <div style="font-size: 14px; font-weight: 600;">${Utils.formatCurrency(report.total_operating_costs || 0)}</div>
+                                </div>
+                                <div style="padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm);">
+                                    <div style="font-size: 10px; color: var(--color-text-secondary);">Comisiones Bancarias</div>
+                                    <div style="font-size: 14px; font-weight: 600;">${Utils.formatCurrency(report.bank_commissions || 0)}</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        ${capturesHtml ? `
+                            <div>
+                                <h4 style="margin: 0 0 var(--spacing-sm) 0; font-size: 14px; font-weight: 600; text-transform: uppercase;">Capturas (${report.captures?.length || 0})</h4>
+                                ${capturesHtml}
+                            </div>
+                        ` : ''}
+                    </div>
+                    <div class="modal-footer" style="padding: 16px; border-top: 1px solid #e0e0e0; display: flex; gap: 10px; justify-content: flex-end;">
+                        <button class="btn-primary" id="close-view-modal-footer-btn" style="min-width: 100px;">
+                            <i class="fas fa-times"></i> Cerrar
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+            
+            // Cerrar modal
+            const closeModal = () => {
+                modal.remove();
+            };
+            
+            document.getElementById('close-view-modal-btn').onclick = closeModal;
+            document.getElementById('close-view-modal-footer-btn').onclick = closeModal;
+            
+            // Cerrar al hacer clic fuera del modal
+            modal.onclick = (e) => {
+                if (e.target === modal) {
+                    closeModal();
+                }
+            };
+        } catch (error) {
+            console.error('Error mostrando reporte archivado:', error);
+            Utils.showNotification('Error al mostrar el reporte: ' + error.message, 'error');
         }
     },
 
