@@ -5972,19 +5972,47 @@ const Reports = {
             console.log(`   Agencia seleccionada: ${selectedAgency.name} (ID: ${selectedAgency.id})`);
 
             // Filtrar guías por agencia seleccionada
-            // Usar comparación flexible de IDs
+            // Usar comparación flexible de IDs Y nombres de agencia
             const filteredGuides = guides.filter(g => {
                 if (!g.agency_id) {
                     return false; // Guías sin agencia no se muestran cuando hay una agencia seleccionada
                 }
-                const matches = this.compareIds(g.agency_id, agencyId);
-                if (matches) {
-                    console.log(`   ✅ Guía encontrada: ${g.name} (agency_id: ${g.agency_id})`);
+                
+                // Primero intentar comparar por ID
+                let matches = this.compareIds(g.agency_id, agencyId);
+                
+                // Si no coincide por ID, intentar comparar por nombre de agencia
+                if (!matches) {
+                    const guideAgency = agencies.find(a => this.compareIds(a.id, g.agency_id));
+                    if (guideAgency) {
+                        // Normalizar nombres para comparación flexible
+                        const selectedName = String(selectedAgency.name || '').trim().toUpperCase();
+                        const guideAgencyName = String(guideAgency.name || '').trim().toUpperCase();
+                        matches = selectedName === guideAgencyName || 
+                                 selectedName.includes(guideAgencyName) || 
+                                 guideAgencyName.includes(selectedName);
+                        
+                        if (matches) {
+                            console.log(`   ✅ Guía encontrada por nombre: ${g.name} (agency: ${guideAgency.name}, agency_id: ${g.agency_id})`);
+                        }
+                    }
+                } else {
+                    console.log(`   ✅ Guía encontrada por ID: ${g.name} (agency_id: ${g.agency_id})`);
                 }
+                
                 return matches;
             });
 
             console.log(`   Guías filtradas: ${filteredGuides.length}`);
+            
+            // Si no se encontraron guías, mostrar todas las guías con sus agencias para debug
+            if (filteredGuides.length === 0) {
+                console.log(`   🔍 Debug: Todas las guías y sus agencias:`);
+                guides.forEach(g => {
+                    const guideAgency = agencies.find(a => this.compareIds(a.id, g.agency_id));
+                    console.log(`      - ${g.name}: agency_id=${g.agency_id}, agency_name=${guideAgency?.name || 'N/A'}`);
+                });
+            }
 
             if (filteredGuides.length > 0) {
                 guideSelect.innerHTML = '<option value="">Ninguno</option>' +
@@ -6024,7 +6052,7 @@ const Reports = {
     // Función auxiliar para filtrar y ordenar agencias permitidas
     filterAllowedAgencies(allAgencies) {
         // Lista de agencias permitidas (en mayúsculas para comparación)
-        const allowedAgencies = ['TRAVELEX', 'VERANOS', 'TANITOURS', 'DISCOVERY', 'TB', 'TTF', 'TROPICAL ADVENTURE'];
+        const allowedAgencies = ['TRAVELEX', 'VERANOS', 'TANITOURS', 'DISCOVERY', 'TB', 'TTF', 'TTD', 'TROPICAL ADVENTURE'];
         
         // Filtrar: solo agencias permitidas y eliminar duplicados (mantener la primera de cada nombre)
         const seenAgencyNames = new Set();
