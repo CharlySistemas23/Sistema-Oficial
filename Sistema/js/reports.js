@@ -11859,10 +11859,10 @@ const Reports = {
                             Se restaurarán <strong>${report.captures.length}</strong> capturas del reporte del <strong>${new Date(report.date).toLocaleDateString('es-MX')}</strong>.
                         </p>
                         <p style="margin: 0; font-size: 13px; line-height: 1.5; color: var(--color-text-secondary);">
-                            Las capturas se agregarán a las capturas temporales del día actual y podrás editarlas.
+                            Las capturas se restaurarán con la fecha del reporte (<strong>${new Date(report.date).toLocaleDateString('es-MX')}</strong>) y podrás editarlas.
                         </p>
                         <p style="margin: var(--spacing-sm) 0 0 0; font-size: 12px; line-height: 1.5; color: var(--color-warning);">
-                            <i class="fas fa-exclamation-triangle"></i> Si ya tienes capturas del día, estas se agregarán a las existentes.
+                            <i class="fas fa-exclamation-triangle"></i> La fecha del formulario se cambiará automáticamente para mostrar el reporte restaurado.
                         </p>
                     </div>
                     <div class="modal-footer" style="padding: var(--spacing-md); border-top: 1px solid var(--color-border-light); display: flex; gap: var(--spacing-sm); justify-content: flex-end;">
@@ -11882,6 +11882,74 @@ const Reports = {
                     confirmModal.remove();
                     
                     try {
+                        // Verificar si ya hay capturas restauradas de este reporte para evitar duplicados
+                        const normalizedReportDate = report.date.split('T')[0];
+                        const existingCaptures = await DB.getAll('temp_quick_captures') || [];
+                        const alreadyRestored = existingCaptures.filter(c => 
+                            c.restored_from === reportId || 
+                            (c.date && c.date.split('T')[0] === normalizedReportDate && c.restored_from)
+                        );
+                        
+                        if (alreadyRestored.length > 0) {
+                            // Crear modal de confirmación para reemplazar
+                            const replaceModal = document.createElement('div');
+                            replaceModal.className = 'modal-overlay';
+                            replaceModal.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 10001;';
+                            replaceModal.innerHTML = `
+                                <div class="modal-content" style="max-width: 500px; width: 90%; background: white; border-radius: 8px; padding: 0; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+                                    <div class="modal-header" style="padding: 16px; border-bottom: 1px solid #e0e0e0;">
+                                        <h3 style="margin: 0; font-size: 16px; font-weight: 600;">Capturas ya restauradas</h3>
+                                    </div>
+                                    <div class="modal-body" style="padding: 20px;">
+                                        <p style="margin: 0; font-size: 14px; line-height: 1.5; color: #333;">
+                                            Ya existen <strong>${alreadyRestored.length}</strong> capturas restauradas de este reporte. ¿Deseas reemplazarlas?
+                                        </p>
+                                    </div>
+                                    <div class="modal-footer" style="padding: 16px; border-top: 1px solid #e0e0e0; display: flex; gap: 10px; justify-content: flex-end;">
+                                        <button class="btn-secondary" id="replace-cancel-btn" style="min-width: 100px;">Cancelar</button>
+                                        <button class="btn-success" id="replace-confirm-btn" style="min-width: 100px;">Reemplazar</button>
+                                    </div>
+                                </div>
+                            `;
+                            document.body.appendChild(replaceModal);
+                            
+                            const shouldReplace = await new Promise((resolve) => {
+                                document.getElementById('replace-confirm-btn').onclick = () => {
+                                    replaceModal.remove();
+                                    resolve(true);
+                                };
+                                document.getElementById('replace-cancel-btn').onclick = () => {
+                                    replaceModal.remove();
+                                    resolve(false);
+                                };
+                            });
+                            
+                            if (!shouldReplace) {
+                                return;
+                            }
+                            
+                            // Eliminar capturas ya restauradas de este reporte
+                            for (const existing of alreadyRestored) {
+                                try {
+                                    await DB.delete('temp_quick_captures', existing.id);
+                                } catch (error) {
+                                    console.warn('Error eliminando captura duplicada:', error);
+                                }
+                            }
+                        }
+                        
+                        // Cambiar la fecha del formulario ANTES de restaurar
+                        const dateInput = document.getElementById('qc-date');
+                        const arrivalDateInput = document.getElementById('qc-arrival-date');
+                        if (dateInput) {
+                            dateInput.value = normalizedReportDate;
+                            // Disparar evento change para que se recarguen los datos
+                            dateInput.dispatchEvent(new Event('change', { bubbles: true }));
+                        }
+                        if (arrivalDateInput) {
+                            arrivalDateInput.value = normalizedReportDate;
+                        }
+                        
                         // Restaurar cada captura a temp_quick_captures
                         let restoredCount = 0;
                         for (const capture of report.captures) {
@@ -11890,11 +11958,11 @@ const Reports = {
                                 // IMPORTANTE: Mantener la fecha original del reporte archivado
                                 const restoredCapture = {
                                     ...capture,
-                                    id: 'qc_restored_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-                                    date: report.date, // Mantener la fecha original del reporte archivado
+                                    id: 'qc_restored_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9) + '_' + restoredCount,
+                                    date: normalizedReportDate, // Mantener la fecha original del reporte archivado
                                     restored_from: reportId,
                                     restored_at: new Date().toISOString(),
-                                    original_report_date: report.date // Guardar la fecha original para referencia
+                                    original_report_date: normalizedReportDate // Guardar la fecha original para referencia
                                 };
                                 
                                 await DB.put('temp_quick_captures', restoredCapture);
@@ -11905,7 +11973,7 @@ const Reports = {
                         }
                         
                         if (restoredCount > 0) {
-                            Utils.showNotification(`${restoredCount} capturas restauradas correctamente. Puedes editarlas ahora.`, 'success');
+                            Utils.showNotification(`${restoredCount} capturas restauradas correctamente para la fecha ${new Date(normalizedReportDate).toLocaleDateString('es-MX')}. Puedes editarlas ahora.`, 'success');
                             
                             // Cambiar a la pestaña de captura rápida
                             const quickCaptureTab = document.querySelector('[data-tab="quick-capture"]');
@@ -11913,8 +11981,12 @@ const Reports = {
                                 quickCaptureTab.click();
                             }
                             
-                            // Recargar datos
+                            // Esperar un momento para que se actualice la fecha
+                            await new Promise(resolve => setTimeout(resolve, 100));
+                            
+                            // Recargar datos con la nueva fecha
                             await this.loadQuickCaptureData();
+                            await this.loadQuickCaptureArrivals();
                         } else {
                             Utils.showNotification('No se pudieron restaurar las capturas', 'error');
                         }
