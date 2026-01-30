@@ -5802,6 +5802,10 @@ const Reports = {
                         <div><strong>USD:</strong> $${rates.usd.toFixed(2)} MXN</div>
                         <div><strong>CAD:</strong> $${rates.cad.toFixed(2)} MXN</div>
                     `;
+                    // Actualizar total de pagos cuando cambian los tipos de cambio
+                    if (this.updatePaymentsTotal) {
+                        await this.updatePaymentsTotal();
+                    }
                 }
             } else {
                 // Fallback: obtener desde configuración
@@ -5814,6 +5818,10 @@ const Reports = {
                         <div><strong>USD:</strong> $${(todayRate.usd_to_mxn || 20.0).toFixed(2)} MXN</div>
                         <div><strong>CAD:</strong> $${(todayRate.cad_to_mxn || 15.0).toFixed(2)} MXN</div>
                     `;
+                    // Actualizar total de pagos cuando cambian los tipos de cambio
+                    if (this.updatePaymentsTotal) {
+                        await this.updatePaymentsTotal();
+                    }
                 }
             }
         } catch (error) {
@@ -6536,8 +6544,45 @@ const Reports = {
         });
     },
 
+    // Obtener tipos de cambio del display (prioridad) o de la base de datos
+    getExchangeRatesFromDisplay() {
+        try {
+            const display = document.getElementById('qc-exchange-rates-display');
+            if (!display) return null;
+            
+            const text = display.textContent || display.innerText || '';
+            
+            // Buscar USD: $XX.XX MXN
+            const usdMatch = text.match(/USD[:\s]*\$?([\d,]+\.?\d*)\s*MXN/i);
+            // Buscar CAD: $XX.XX MXN
+            const cadMatch = text.match(/CAD[:\s]*\$?([\d,]+\.?\d*)\s*MXN/i);
+            
+            if (usdMatch && cadMatch) {
+                const usd = parseFloat(usdMatch[1].replace(/,/g, '')) || null;
+                const cad = parseFloat(cadMatch[1].replace(/,/g, '')) || null;
+                
+                if (usd && cad) {
+                    console.log(`✅ Tipos de cambio obtenidos del display: USD=${usd}, CAD=${cad}`);
+                    return { usd, cad };
+                }
+            }
+            
+            return null;
+        } catch (error) {
+            console.warn('Error extrayendo tipos de cambio del display:', error);
+            return null;
+        }
+    },
+
     async getExchangeRatesForDate(dateStr = null) {
         try {
+            // PRIMERO: Intentar obtener del display (tiene prioridad)
+            const displayRates = this.getExchangeRatesFromDisplay();
+            if (displayRates && displayRates.usd && displayRates.cad) {
+                return displayRates;
+            }
+            
+            // SEGUNDO: Si no hay en el display, obtener de la base de datos
             const date = dateStr || document.getElementById('qc-date')?.value || new Date().toISOString().split('T')[0];
             const exchangeRates = await DB.query('exchange_rates_daily', 'date', date) || [];
             const todayRate = exchangeRates[0] || { usd_to_mxn: 18.0, cad_to_mxn: 13.0 };
@@ -6556,7 +6601,7 @@ const Reports = {
             const container = document.getElementById('qc-payments-container');
             if (!container) return;
             
-            // Obtener tipos de cambio
+            // Obtener tipos de cambio (prioriza el display)
             const exchangeRates = await this.getExchangeRatesForDate();
             const usdRate = exchangeRates?.usd || 18.0;
             const cadRate = exchangeRates?.cad || 13.0;
@@ -6572,13 +6617,14 @@ const Reports = {
                     const amount = parseFloat(amountInput.value) || 0;
                     const currency = currencySelect.value || 'MXN';
                     
-                    // Convertir a MXN según la moneda
+                    // Convertir a MXN según la moneda usando los tipos de cambio del display
                     let amountMXN = amount;
                     if (currency === 'USD') {
                         amountMXN = amount * usdRate;
                     } else if (currency === 'CAD') {
                         amountMXN = amount * cadRate;
                     }
+                    // Si es MXN, ya está en MXN
                     
                     totalMXN += amountMXN;
                 }
@@ -6600,6 +6646,117 @@ const Reports = {
         } catch (error) {
             console.error('Error actualizando total de pagos:', error);
         }
+    },
+
+    initializePaymentsSystem() {
+        const container = document.getElementById('qc-payments-container');
+        if (!container) return;
+        
+        // Configurar listeners para todas las filas de pago existentes
+        const setupRowListeners = (row) => {
+            const amountInput = row.querySelector('.payment-amount');
+            const currencySelect = row.querySelector('.payment-currency');
+            
+            if (amountInput) {
+                // Remover listeners anteriores si existen
+                const newAmountInput = amountInput.cloneNode(true);
+                amountInput.parentNode.replaceChild(newAmountInput, amountInput);
+                
+                // Agregar nuevo listener
+                newAmountInput.addEventListener('input', () => {
+                    this.updatePaymentsTotal();
+                });
+                newAmountInput.addEventListener('change', () => {
+                    this.updatePaymentsTotal();
+                });
+            }
+            
+            if (currencySelect) {
+                // Remover listeners anteriores si existen
+                const newCurrencySelect = currencySelect.cloneNode(true);
+                currencySelect.parentNode.replaceChild(newCurrencySelect, currencySelect);
+                
+                // Agregar nuevo listener
+                newCurrencySelect.addEventListener('change', () => {
+                    this.updatePaymentsTotal();
+                });
+            }
+        };
+        
+        // Configurar listeners para todas las filas existentes
+        container.querySelectorAll('.payment-row').forEach(setupRowListeners);
+        
+        // Inicializar total
+        this.updatePaymentsTotal();
+    },
+
+    addPaymentRow() {
+        const container = document.getElementById('qc-payments-container');
+        if (!container) return;
+        
+        // Crear nueva fila de pago
+        const newRow = document.createElement('div');
+        newRow.className = 'payment-row';
+        newRow.style.cssText = 'display: grid; grid-template-columns: 1fr 70px 90px 40px; gap: 3px; align-items: center; padding: 3px; background: white; border-radius: 3px; border: 1px solid #dee2e6;';
+        newRow.innerHTML = `
+            <select class="form-select payment-method" required style="border: 1px solid #ced4da; font-size: 10px; padding: 4px;">
+                <option value="">Método...</option>
+                <option value="cash">Efectivo</option>
+                <option value="card">Tarjeta</option>
+                <option value="transfer">Transferencia</option>
+                <option value="other">Otro</option>
+            </select>
+            <select class="form-select payment-currency" required style="border: 1px solid #ced4da; font-size: 10px; padding: 4px;">
+                <option value="MXN">MXN</option>
+                <option value="USD">USD</option>
+                <option value="CAD">CAD</option>
+            </select>
+            <input type="number" class="form-input payment-amount" min="0" step="0.01" placeholder="0.00" required style="border: 1px solid #ced4da; font-size: 10px; padding: 4px;">
+            <button type="button" class="btn-danger btn-xs remove-payment" style="padding: 3px 5px; font-size: 9px;" onclick="this.closest('.payment-row').remove(); window.Reports.updatePaymentsTotal();">
+                <i class="fas fa-times"></i>
+            </button>
+        `;
+        
+        container.appendChild(newRow);
+        
+        // Configurar listeners para la nueva fila
+        const amountInput = newRow.querySelector('.payment-amount');
+        const currencySelect = newRow.querySelector('.payment-currency');
+        
+        if (amountInput) {
+            amountInput.addEventListener('input', () => {
+                this.updatePaymentsTotal();
+            });
+            amountInput.addEventListener('change', () => {
+                this.updatePaymentsTotal();
+            });
+        }
+        
+        if (currencySelect) {
+            currencySelect.addEventListener('change', () => {
+                this.updatePaymentsTotal();
+            });
+        }
+        
+        // Actualizar botones de eliminar
+        this.updateRemoveButtons();
+        
+        // Actualizar total
+        this.updatePaymentsTotal();
+    },
+
+    updateRemoveButtons() {
+        const container = document.getElementById('qc-payments-container');
+        if (!container) return;
+        
+        const rows = container.querySelectorAll('.payment-row');
+        rows.forEach((row, index) => {
+            const removeBtn = row.querySelector('.remove-payment');
+            if (removeBtn) {
+                // Mostrar botón de eliminar solo si hay más de una fila
+                removeBtn.style.display = rows.length > 1 ? 'block' : 'none';
+            }
+        });
     },
 
     getPaymentsFromForm() {
@@ -7170,10 +7327,11 @@ const Reports = {
             };
             let totalQuantity = 0;
 
-            // Obtener tipos de cambio para conversión
+            // Obtener tipos de cambio para conversión (prioriza el display)
             const exchangeRates = await this.getExchangeRatesForDate(selectedDate);
             const usdRate = exchangeRates?.usd || 18.0;
             const cadRate = exchangeRates?.cad || 13.0;
+            console.log(`💱 Tipos de cambio usados para ${selectedDate}: USD=${usdRate}, CAD=${cadRate}`);
 
             captures.forEach(c => {
                 // Si hay múltiples pagos con monedas individuales, calcular desde los pagos
@@ -7622,11 +7780,10 @@ const Reports = {
             // Usar la fecha de las capturas (todas deberían tener la misma fecha)
             const captureDate = captures[0]?.date || new Date().toISOString().split('T')[0];
             
-            // 1. Obtener tipo de cambio del día (usar la fecha de las capturas)
-            const exchangeRates = await DB.query('exchange_rates_daily', 'date', captureDate) || [];
-            const todayRate = exchangeRates[0] || { usd_to_mxn: 20.0, cad_to_mxn: 15.0 };
-            const usdRate = todayRate.usd_to_mxn || 20.0;
-            const cadRate = todayRate.cad_to_mxn || 15.0;
+            // 1. Obtener tipo de cambio del día (prioriza el display, luego BD)
+            const exchangeRates = await this.getExchangeRatesForDate(captureDate);
+            const usdRate = exchangeRates?.usd || 18.0;
+            const cadRate = exchangeRates?.cad || 13.0;
 
             console.log(`💱 Tipo de cambio usado para ${captureDate}: USD=${usdRate}, CAD=${cadRate}`);
 
