@@ -9677,15 +9677,16 @@ const Reports = {
             // Margen: 12mm, espacio útil: 273mm
             // IMPORTANTE: Definir ANTES de usar para evitar errores de inicialización
             const captCol1X = margin + 2;           // Hora (14mm)
-            const captCol2X = margin + 18;          // Sucursal (18mm)
-            const captCol3X = margin + 38;          // Vendedor (20mm)
-            const captCol4X = margin + 60;          // Guía (18mm)
-            const captCol5X = margin + 80;          // Producto (30mm)
-            const captCol6X = margin + 112;         // Notas (18mm)
-            const captCol7X = margin + 132;         // Cantidad (12mm)
-            const captCol8X = margin + 146;         // Moneda Original (35mm)
-            const captCol9X = margin + 183;         // Total MXN (35mm)
-            const captCol10X = pageWidth - margin - 2; // Total Original (resto del espacio, ~30mm)
+            const captCol2X = margin + 16;          // Sucursal (18mm)
+            const captCol3X = margin + 36;          // Vendedor (20mm)
+            const captCol4X = margin + 58;          // Guía (18mm)
+            const captCol5X = margin + 78;          // Producto (30mm)
+            const captCol6X = margin + 110;         // Notas (18mm)
+            const captCol7X = margin + 130;         // Cantidad (12mm)
+            const captCol8X = margin + 144;         // Moneda Original (32mm)
+            const captCol9X = margin + 178;         // Total MXN (32mm)
+            const captCol10X = margin + 212;        // Total Original (32mm)
+            const captCol10EndX = pageWidth - margin - 2; // Fin de la última columna
 
             // Encabezados de tabla (mejor organizados)
             doc.setFillColor(245, 245, 245);
@@ -9703,6 +9704,7 @@ const Reports = {
             doc.line(captCol7X - 1, y, captCol7X - 1, y + 8);
             doc.line(captCol8X - 1, y, captCol8X - 1, y + 8);
             doc.line(captCol9X - 1, y, captCol9X - 1, y + 8);
+            doc.line(captCol10X - 1, y, captCol10X - 1, y + 8);
 
             doc.setFontSize(7);
             doc.setFont('helvetica', 'bold');
@@ -9809,6 +9811,7 @@ const Reports = {
                 doc.line(captCol7X - 1, y, captCol7X - 1, y + 7);
                 doc.line(captCol8X - 1, y, captCol8X - 1, y + 7);
                 doc.line(captCol9X - 1, y, captCol9X - 1, y + 7);
+                doc.line(captCol10X - 1, y, captCol10X - 1, y + 7);
                 
                 doc.setFontSize(7);
                 doc.setFont('helvetica', 'normal');
@@ -9827,19 +9830,20 @@ const Reports = {
                     ? `${currency} $${originalAmount.toFixed(2)}` 
                     : `MXN $${originalAmount.toFixed(2)}`;
                 const currencyColWidth = captCol9X - captCol8X - 2;
-                doc.text(currencyDisplay, captCol8X + (currencyColWidth / 2), y + 5, { align: 'center' });
+                doc.text(currencyDisplay, captCol8X + (currencyColWidth / 2), y + 5, { align: 'center', maxWidth: currencyColWidth });
                 
                 // Mostrar total en MXN (alineado a la derecha de su columna)
                 doc.setFont('helvetica', 'bold');
                 const mxnColWidth = captCol10X - captCol9X - 2;
-                doc.text(`$${totalMXN.toFixed(2)}`, captCol9X + mxnColWidth, y + 5, { align: 'right' });
+                doc.text(`$${totalMXN.toFixed(2)}`, captCol9X + mxnColWidth, y + 5, { align: 'right', maxWidth: mxnColWidth });
                 
-                // Mostrar total original (alineado a la derecha)
+                // Mostrar total original (alineado a la derecha de su columna)
                 doc.setFont('helvetica', 'normal');
+                const originalColWidth = captCol10EndX - captCol10X - 2;
                 if (currency !== 'MXN') {
-                    doc.text(`$${originalAmount.toFixed(2)} ${currency}`, captCol10X, y + 5, { align: 'right' });
+                    doc.text(`$${originalAmount.toFixed(2)} ${currency}`, captCol10X + originalColWidth, y + 5, { align: 'right', maxWidth: originalColWidth });
                 } else {
-                    doc.text(`$${originalAmount.toFixed(2)}`, captCol10X, y + 5, { align: 'right' });
+                    doc.text(`$${originalAmount.toFixed(2)}`, captCol10X + originalColWidth, y + 5, { align: 'right', maxWidth: originalColWidth });
                 }
                 
                 y += 7;
@@ -10031,11 +10035,12 @@ const Reports = {
                     doc.rect(margin, y, pageWidth - (margin * 2), 6);
 
                     // Definir anchos de columnas (bien distribuidas en formato horizontal)
-                    const col1X = margin + 2; // Vendedor (80mm)
-                    const col2X = margin + 85; // Total MXN (35mm)
-                    const col3X = margin + 125; // USD (30mm)
-                    const col4X = margin + 160; // MXN (30mm)
-                    const col5X = pageWidth - margin - 2; // CAD (resto, ~30mm, alineado derecha)
+                    const col1X = margin + 2; // Vendedor (70mm)
+                    const col2X = margin + 75; // Total MXN (35mm)
+                    const col3X = margin + 113; // USD (30mm)
+                    const col4X = margin + 146; // MXN (30mm)
+                    const col5X = margin + 179; // CAD (30mm)
+                    const col5EndX = pageWidth - margin - 2; // Fin de la última columna
                     const nameMaxWidth = col2X - col1X - 5; // Ancho máximo para nombre
 
                     // Líneas verticales para separar columnas
@@ -10044,6 +10049,8 @@ const Reports = {
                     doc.line(col3X - 1, y, col3X - 1, y + 6);
                     doc.line(col4X - 1, y, col4X - 1, y + 6);
                     doc.line(col5X - 1, y, col5X - 1, y + 6);
+                    doc.line(col5EndX - 1, y, col5EndX - 1, y + 6);
+                    doc.line(col5EndX - 1, y, col5EndX - 1, y + 6);
                     
                     doc.setFontSize(8);
                     doc.setFont('helvetica', 'bold');
@@ -10064,13 +10071,25 @@ const Reports = {
                             doc.rect(margin, y, pageWidth - (margin * 2), 6, 'F');
                             doc.setDrawColor(200, 200, 200);
                             doc.rect(margin, y, pageWidth - (margin * 2), 6);
+                            // Líneas verticales para separar columnas
+                            doc.setDrawColor(180, 180, 180);
+                            doc.line(col2X - 1, y, col2X - 1, y + 6);
+                            doc.line(col3X - 1, y, col3X - 1, y + 6);
+                            doc.line(col4X - 1, y, col4X - 1, y + 6);
+                            doc.line(col5X - 1, y, col5X - 1, y + 6);
+                            doc.line(col5EndX - 1, y, col5EndX - 1, y + 6);
+                            
                             doc.setFontSize(8);
                             doc.setFont('helvetica', 'bold');
                             doc.text('Vendedor', col1X, y + 4);
-                            doc.text('Total', col2X, y + 4, { align: 'right' });
-                            doc.text('USD', col3X, y + 4, { align: 'right' });
-                            doc.text('MXN', col4X, y + 4, { align: 'right' });
-                            doc.text('CAD', col5X, y + 4, { align: 'right' });
+                            const col2Width = col3X - col2X - 2;
+                            const col3Width = col4X - col3X - 2;
+                            const col4Width = col5X - col4X - 2;
+                            const col5Width = col5EndX - col5X - 2;
+                            doc.text('Total MXN', col2X + col2Width, y + 4, { align: 'right', maxWidth: col2Width });
+                            doc.text('USD', col3X + col3Width, y + 4, { align: 'right', maxWidth: col3Width });
+                            doc.text('MXN', col4X + col4Width, y + 4, { align: 'right', maxWidth: col4Width });
+                            doc.text('CAD', col5X + col5Width, y + 4, { align: 'right', maxWidth: col5Width });
                             y += 6;
                         }
                         doc.setDrawColor(220, 220, 220);
@@ -10083,11 +10102,16 @@ const Reports = {
                         doc.line(col4X - 1, y, col4X - 1, y + 6);
                         doc.line(col5X - 1, y, col5X - 1, y + 6);
                         
-                        doc.text((s.seller?.name || 'N/A').substring(0, 25), col1X, y + 4);
-                        doc.text(`$${(parseFloat(s.total) || 0).toFixed(2)}`, col2X, y + 4, { align: 'right' });
-                        doc.text(s.commissions?.USD ? `$${(parseFloat(s.commissions.USD) || 0).toFixed(2)}` : '-', col3X, y + 4, { align: 'right' });
-                        doc.text(s.commissions?.MXN ? `$${(parseFloat(s.commissions.MXN) || 0).toFixed(2)}` : '-', col4X, y + 4, { align: 'right' });
-                        doc.text(s.commissions?.CAD ? `$${(parseFloat(s.commissions.CAD) || 0).toFixed(2)}` : '-', col5X, y + 4, { align: 'right' });
+                        const col2Width = col3X - col2X - 2;
+                        const col3Width = col4X - col3X - 2;
+                        const col4Width = col5X - col4X - 2;
+                        const col5Width = col5EndX - col5X - 2;
+                        
+                        doc.text((s.seller?.name || 'N/A').substring(0, 25), col1X, y + 4, { maxWidth: col2X - col1X - 5 });
+                        doc.text(`$${(parseFloat(s.total) || 0).toFixed(2)}`, col2X + col2Width, y + 4, { align: 'right', maxWidth: col2Width });
+                        doc.text(s.commissions?.USD ? `$${(parseFloat(s.commissions.USD) || 0).toFixed(2)}` : '-', col3X + col3Width, y + 4, { align: 'right', maxWidth: col3Width });
+                        doc.text(s.commissions?.MXN ? `$${(parseFloat(s.commissions.MXN) || 0).toFixed(2)}` : '-', col4X + col4Width, y + 4, { align: 'right', maxWidth: col4Width });
+                        doc.text(s.commissions?.CAD ? `$${(parseFloat(s.commissions.CAD) || 0).toFixed(2)}` : '-', col5X + col5Width, y + 4, { align: 'right', maxWidth: col5Width });
                         y += 6;
                     });
 
@@ -10099,9 +10123,10 @@ const Reports = {
                     const totalSellerComm = sellerEntries.reduce((sum, s) => sum + (parseFloat(s.total) || 0), 0);
                     doc.setFillColor(240, 240, 240);
                     doc.rect(margin, y, pageWidth - (margin * 2), 6, 'F');
+                    const col2Width = col3X - col2X - 2;
                     doc.setFont('helvetica', 'bold');
                     doc.text('TOTAL VENDEDORES', col1X, y + 4);
-                    doc.text(`$${(parseFloat(totalSellerComm) || 0).toFixed(2)}`, col2X, y + 4, { align: 'right' });
+                    doc.text(`$${(parseFloat(totalSellerComm) || 0).toFixed(2)}`, col2X + col2Width, y + 4, { align: 'right', maxWidth: col2Width });
                     y += 8;
                 }
 
@@ -10123,19 +10148,32 @@ const Reports = {
                     doc.rect(margin, y, pageWidth - (margin * 2), 6);
 
                     // Definir anchos de columnas (mismo que vendedores, bien distribuidas)
-                    const col1X = margin + 2; // Guía (80mm)
-                    const col2X = margin + 85; // Total MXN (35mm)
-                    const col3X = margin + 125; // USD (30mm)
-                    const col4X = margin + 160; // MXN (30mm)
-                    const col5X = pageWidth - margin - 2; // CAD (resto, ~30mm, alineado derecha)
+                    const col1X = margin + 2; // Guía (70mm)
+                    const col2X = margin + 75; // Total MXN (35mm)
+                    const col3X = margin + 113; // USD (30mm)
+                    const col4X = margin + 146; // MXN (30mm)
+                    const col5X = margin + 179; // CAD (30mm)
+                    const col5EndX = pageWidth - margin - 2; // Fin de la última columna
 
+                    // Líneas verticales para separar columnas
+                    doc.setDrawColor(180, 180, 180);
+                    doc.line(col2X - 1, y, col2X - 1, y + 6);
+                    doc.line(col3X - 1, y, col3X - 1, y + 6);
+                    doc.line(col4X - 1, y, col4X - 1, y + 6);
+                    doc.line(col5X - 1, y, col5X - 1, y + 6);
+                    doc.line(col5EndX - 1, y, col5EndX - 1, y + 6);
+                    
                     doc.setFontSize(8);
                     doc.setFont('helvetica', 'bold');
                     doc.text('Guía', col1X, y + 4);
-                    doc.text('Total', col2X, y + 4, { align: 'right' });
-                    doc.text('USD', col3X, y + 4, { align: 'right' });
-                    doc.text('MXN', col4X, y + 4, { align: 'right' });
-                    doc.text('CAD', col5X, y + 4, { align: 'right' });
+                    const col2Width = col3X - col2X - 2;
+                    const col3Width = col4X - col3X - 2;
+                    const col4Width = col5X - col4X - 2;
+                    const col5Width = col5EndX - col5X - 2;
+                    doc.text('Total MXN', col2X + col2Width, y + 4, { align: 'right', maxWidth: col2Width });
+                    doc.text('USD', col3X + col3Width, y + 4, { align: 'right', maxWidth: col3Width });
+                    doc.text('MXN', col4X + col4Width, y + 4, { align: 'right', maxWidth: col4Width });
+                    doc.text('CAD', col5X + col5Width, y + 4, { align: 'right', maxWidth: col5Width });
                     y += 6;
 
                     doc.setFont('helvetica', 'normal');
@@ -10167,11 +10205,16 @@ const Reports = {
                         doc.line(col4X - 1, y, col4X - 1, y + 6);
                         doc.line(col5X - 1, y, col5X - 1, y + 6);
                         
-                        doc.text((g.guide?.name || 'N/A').substring(0, 25), col1X, y + 4);
-                        doc.text(`$${(parseFloat(g.total) || 0).toFixed(2)}`, col2X, y + 4, { align: 'right' });
-                        doc.text(g.commissions?.USD ? `$${(parseFloat(g.commissions.USD) || 0).toFixed(2)}` : '-', col3X, y + 4, { align: 'right' });
-                        doc.text(g.commissions?.MXN ? `$${(parseFloat(g.commissions.MXN) || 0).toFixed(2)}` : '-', col4X, y + 4, { align: 'right' });
-                        doc.text(g.commissions?.CAD ? `$${(parseFloat(g.commissions.CAD) || 0).toFixed(2)}` : '-', col5X, y + 4, { align: 'right' });
+                        const col2Width = col3X - col2X - 2;
+                        const col3Width = col4X - col3X - 2;
+                        const col4Width = col5X - col4X - 2;
+                        const col5Width = col5EndX - col5X - 2;
+                        
+                        doc.text((g.guide?.name || 'N/A').substring(0, 25), col1X, y + 4, { maxWidth: col2X - col1X - 5 });
+                        doc.text(`$${(parseFloat(g.total) || 0).toFixed(2)}`, col2X + col2Width, y + 4, { align: 'right', maxWidth: col2Width });
+                        doc.text(g.commissions?.USD ? `$${(parseFloat(g.commissions.USD) || 0).toFixed(2)}` : '-', col3X + col3Width, y + 4, { align: 'right', maxWidth: col3Width });
+                        doc.text(g.commissions?.MXN ? `$${(parseFloat(g.commissions.MXN) || 0).toFixed(2)}` : '-', col4X + col4Width, y + 4, { align: 'right', maxWidth: col4Width });
+                        doc.text(g.commissions?.CAD ? `$${(parseFloat(g.commissions.CAD) || 0).toFixed(2)}` : '-', col5X + col5Width, y + 4, { align: 'right', maxWidth: col5Width });
                         y += 6;
                     });
 
@@ -10183,9 +10226,10 @@ const Reports = {
                     const totalGuideComm = guideEntries.reduce((sum, g) => sum + (parseFloat(g.total) || 0), 0);
                     doc.setFillColor(240, 240, 240);
                     doc.rect(margin, y, pageWidth - (margin * 2), 6, 'F');
+                    const col2Width = col3X - col2X - 2;
                     doc.setFont('helvetica', 'bold');
                     doc.text('TOTAL GUÍAS', col1X, y + 4);
-                    doc.text(`$${(parseFloat(totalGuideComm) || 0).toFixed(2)}`, col2X, y + 4, { align: 'right' });
+                    doc.text(`$${(parseFloat(totalGuideComm) || 0).toFixed(2)}`, col2X + col2Width, y + 4, { align: 'right', maxWidth: col2Width });
                     y += 8;
                 }
             }
