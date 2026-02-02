@@ -2632,34 +2632,6 @@ const Inventory = {
             }
         }
 
-        // Registrar costo de adquisición en Costs si es un nuevo item o cambió el costo
-        if (typeof Costs !== 'undefined' && item.cost > 0) {
-            const oldCost = existingItem?.cost || 0;
-            // Solo registrar si es nuevo item o si el costo aumentó (adquisición nueva)
-            if (!itemId || (itemId && item.cost > oldCost && oldCost > 0)) {
-                const costAmount = itemId ? (item.cost - oldCost) : item.cost;
-                if (costAmount > 0) {
-                    try {
-                        await Costs.registerCost({
-                            amount: costAmount,
-                            category: 'adquisicion',
-                            type: 'variable',
-                            description: itemId 
-                                ? `Actualización de costo - ${item.name}` 
-                                : `Adquisición de producto - ${item.name}`,
-                            date: new Date().toISOString().split('T')[0],
-                            // Solo enviar branch_id si es UUID; si no, omitir para evitar error en backend
-                            branch_id: branchId || undefined,
-                            notes: `Item: ${item.sku || item.name}, Costo anterior: ${Utils.formatCurrency(oldCost)}, Costo nuevo: ${Utils.formatCurrency(item.cost)}`
-                        });
-                    } catch (error) {
-                        console.error('Error registrando costo de adquisición:', error);
-                        // No bloquear el guardado del item si falla el registro de costo
-                    }
-                }
-            }
-        }
-
         // IMPORTANTE: Siempre agregar a cola de sincronización para asegurar sincronización bidireccional
         // Incluso si se guardó con API, agregar a la cola para que se sincronice con otros clientes
         const itemToSync = savedWithAPI ? mergedItem : item;
