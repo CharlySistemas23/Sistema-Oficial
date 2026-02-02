@@ -66,23 +66,23 @@ const Reports = {
     
     async init() {
         try {
-        // Verificar permiso
-        if (typeof PermissionManager !== 'undefined' && !PermissionManager.hasPermission('reports.view')) {
-            const content = document.getElementById('module-content');
-            if (content) {
-                content.innerHTML = '<div style="padding: var(--spacing-lg); text-align: center; color: var(--color-text-secondary);">No tienes permiso para ver reportes</div>';
+            // Verificar permiso
+            if (typeof PermissionManager !== 'undefined' && !PermissionManager.hasPermission('reports.view')) {
+                const content = document.getElementById('module-content');
+                if (content) {
+                    content.innerHTML = '<div style="padding: var(--spacing-lg); text-align: center; color: var(--color-text-secondary);">No tienes permiso para ver reportes</div>';
+                }
+                return;
             }
-            return;
-        }
 
-        if (this.initialized) {
-            const activeTab = document.querySelector('#reports-tabs .tab-btn.active')?.dataset.tab || 'reports';
-            await this.loadTab(activeTab);
-            return;
-        }
-        this.setupUI();
-        await this.loadTab('reports');
-        this.initialized = true;
+            if (this.initialized) {
+                const activeTab = document.querySelector('#reports-tabs .tab-btn.active')?.dataset.tab || 'reports';
+                await this.loadTab(activeTab);
+                return;
+            }
+            this.setupUI();
+            await this.loadTab('reports');
+            this.initialized = true;
         } catch (error) {
             console.error('Error inicializando módulo Reports:', error);
             const content = document.getElementById('module-content');
@@ -96,17 +96,17 @@ const Reports = {
             // No lanzar el error para evitar que rompa otros módulos
         }
         
-        // Escuchar cambios de sucursal para recargar reportes
-        window.addEventListener('branch-changed', async () => {
+            // Escuchar cambios de sucursal para recargar reportes
+            window.addEventListener('branch-changed', async () => {
                 try {
-            if (this.initialized) {
-                const activeTab = document.querySelector('#reports-tabs .tab-btn.active')?.dataset.tab || 'reports';
-                await this.loadTab(activeTab);
+                    if (this.initialized) {
+                        const activeTab = document.querySelector('#reports-tabs .tab-btn.active')?.dataset.tab || 'reports';
+                        await this.loadTab(activeTab);
                     }
                 } catch (error) {
                     console.error('Error recargando reportes por cambio de sucursal:', error);
-            }
-        });
+                }
+            });
         
         // Escuchar eventos para actualización en tiempo real
         if (typeof Utils !== 'undefined' && Utils.EventBus) {
@@ -5255,7 +5255,7 @@ const Reports = {
                     <div style="width: 2px; height: 14px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 1px;"></div>
                     <h3 style="margin: 0; font-size: 11px; font-weight: 600; color: #333; text-transform: uppercase; letter-spacing: 0.2px;">
                         <i class="fas fa-plus-circle" style="color: #667eea; margin-right: 3px; font-size: 10px;"></i> Nueva Captura
-                </h3>
+                    </h3>
                 </div>
                 <form id="quick-capture-form" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 6px;">
                     ${isMasterAdmin ? `
@@ -5313,12 +5313,12 @@ const Reports = {
                             <div id="qc-payments-container" style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 4px;">
                                 <div class="payment-row" style="display: grid; grid-template-columns: 1fr 70px 90px 40px; gap: 3px; align-items: center; padding: 3px; background: white; border-radius: 3px; border: 1px solid #dee2e6;">
                                     <select class="form-select payment-method" required style="border: 1px solid #ced4da; font-size: 10px; padding: 4px;">
-                                        <option value="">Método...</option>
-                                        <option value="cash">Efectivo</option>
-                                        <option value="card">Tarjeta</option>
-                                        <option value="transfer">Transferencia</option>
-                                        <option value="other">Otro</option>
-                                    </select>
+                                    <option value="">Método...</option>
+                                    <option value="cash">Efectivo</option>
+                                    <option value="card">Tarjeta</option>
+                                    <option value="transfer">Transferencia</option>
+                                    <option value="other">Otro</option>
+                                </select>
                                     <select class="form-select payment-currency" required style="border: 1px solid #ced4da; font-size: 10px; padding: 4px;">
                                         <option value="MXN">MXN</option>
                                         <option value="USD">USD</option>
@@ -5326,36 +5326,36 @@ const Reports = {
                                     </select>
                                     <input type="number" class="form-input payment-amount" min="0" step="0.01" placeholder="0.00" required style="border: 1px solid #ced4da; font-size: 10px; padding: 4px;">
                                     <button type="button" class="btn-danger btn-xs remove-payment" style="display: none; padding: 3px 5px; font-size: 9px;" onclick="this.closest('.payment-row').remove(); window.Reports.updatePaymentsTotal();">
-                                        <i class="fas fa-times"></i>
-                                    </button>
-                                </div>
+                                    <i class="fas fa-times"></i>
+                                </button>
                             </div>
+                        </div>
                             <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 4px; border-top: 1px solid #dee2e6;">
                                 <button type="button" class="btn-secondary btn-xs" onclick="window.Reports.addPaymentRow()" style="font-weight: 600; padding: 4px 8px; font-size: 10px;">
                                     <i class="fas fa-plus"></i> Agregar
-                                </button>
+                            </button>
                                 <div style="font-weight: 700; font-size: 11px; color: #495057; padding: 3px 6px; background: white; border-radius: 3px; border: 1px solid #28a745;">
-                                    Total: <span id="qc-payments-total" style="color: #28a745;">$0.00</span>
-                                </div>
+                                Total: <span id="qc-payments-total" style="color: #28a745;">$0.00</span>
                             </div>
-                            <input type="hidden" id="qc-total" value="0">
-                            <small style="color: #6c757d; font-size: 8px; margin-top: 3px; display: block; line-height: 1.2;">💡 Múltiples pagos con diferentes monedas se convierten automáticamente a MXN</small>
                         </div>
+                        <input type="hidden" id="qc-total" value="0">
+                            <small style="color: #6c757d; font-size: 8px; margin-top: 3px; display: block; line-height: 1.2;">💡 Múltiples pagos con diferentes monedas se convierten automáticamente a MXN</small>
+                    </div>
                         
                         <!-- Columna Derecha: Costo, Notas y Venta de Calle -->
                         <div style="display: flex; flex-direction: column; gap: 6px;">
                             <div class="form-group" style="margin: 0;">
                                 <label style="font-size: 10px; margin-bottom: 3px; display: block;">Costo (MXN)</label>
                                 <input type="number" id="qc-cost" class="form-input" min="0" step="0.01" placeholder="0.00" style="font-size: 11px; padding: 5px;">
-                            </div>
+                    </div>
                             <div class="form-group" style="margin: 0;">
                                 <label style="font-size: 10px; margin-bottom: 3px; display: block;">Notas</label>
                                 <input type="text" id="qc-notes" class="form-input" placeholder="Opcional" style="font-size: 11px; padding: 5px;">
-                            </div>
+                    </div>
                             <div class="form-group" style="margin: 0; display: flex; align-items: center; gap: 4px; padding-top: 4px;">
-                                <input type="checkbox" id="qc-is-street" style="width: auto; margin: 0;">
+                            <input type="checkbox" id="qc-is-street" style="width: auto; margin: 0;">
                                 <label style="font-size: 10px; margin: 0; cursor: pointer;">Es venta de calle</label>
-                            </div>
+                    </div>
                         </div>
                     </div>
                     <div class="form-group" id="qc-payment-method-group" style="display: none; margin: 0;">
@@ -5384,7 +5384,7 @@ const Reports = {
                             </button>
                             <button type="button" class="btn-success btn-sm" onclick="window.Reports.saveAllPendingCaptures()" style="padding: 6px 8px; font-weight: 600; font-size: 11px;" id="save-all-pending-btn" disabled>
                                 <i class="fas fa-save"></i> Guardar (<span id="pending-count-header">0</span>)
-                        </button>
+                            </button>
                         </div>
                     </div>
                 </form>
@@ -5424,7 +5424,7 @@ const Reports = {
                         <h3 style="margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; color: #333;">
                             <i class="fas fa-list" style="color: #11998e; margin-right: 4px; font-size: 11px;"></i> Capturas del Día
                             <span id="captures-date-display" style="color: #6c757d; font-size: 10px; font-weight: 400; margin-left: 4px;">(${today})</span>
-                    </h3>
+                        </h3>
                     </div>
                     <div style="display: flex; gap: 4px; flex-wrap: wrap;">
                         <button class="btn-success btn-sm" onclick="window.Reports.archiveQuickCaptureReport()" title="Guardar reporte permanentemente en historial" style="font-weight: 600; padding: 6px 10px; font-size: 11px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
@@ -5455,8 +5455,8 @@ const Reports = {
                         <div style="width: 3px; height: 18px; background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); border-radius: 2px;"></div>
                         <h3 style="margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; color: #333;">
                             <i class="fas fa-plane-arrival" style="color: #fa709a; margin-right: 4px; font-size: 11px;"></i> Llegadas del Día
-                    </h3>
-                </div>
+                        </h3>
+                    </div>
                     <i id="arrivals-form-toggle-icon" class="fas fa-chevron-down" style="transition: transform 0.3s; color: #6c757d; font-size: 11px;"></i>
                 </div>
                 <div id="quick-capture-arrivals-form-container" style="display: none; margin-bottom: 10px; padding: 10px; background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-radius: 4px; border: 1px solid #dee2e6; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
@@ -5540,7 +5540,7 @@ const Reports = {
                     <div style="width: 3px; height: 18px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 2px;"></div>
                     <h3 style="margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; color: #333;">
                         <i class="fas fa-percent" style="color: #667eea; margin-right: 4px; font-size: 11px;"></i> Comisiones Calculadas
-                </h3>
+                    </h3>
                 </div>
                 <div id="quick-capture-commissions">
                     <div style="text-align: center; padding: var(--spacing-lg); color: var(--color-text-secondary);">
@@ -5555,7 +5555,7 @@ const Reports = {
                     <div style="width: 3px; height: 18px; background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); border-radius: 2px;"></div>
                     <h3 style="margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; color: #333;">
                         <i class="fas fa-chart-line" style="color: #11998e; margin-right: 4px; font-size: 11px;"></i> Utilidades del Día
-                </h3>
+                    </h3>
                 </div>
                 <div id="quick-capture-profits">
                     <div style="text-align: center; padding: var(--spacing-lg); color: var(--color-text-secondary);">
@@ -5571,7 +5571,7 @@ const Reports = {
                         <div style="width: 3px; height: 18px; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); border-radius: 2px;"></div>
                         <h3 style="margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; color: #333;">
                             <i class="fas fa-history" style="color: #f093fb; margin-right: 4px; font-size: 11px;"></i> Historial de Reportes Archivados
-                    </h3>
+                        </h3>
                     </div>
                     <button class="btn-secondary btn-sm" onclick="window.Reports.loadArchivedReports()" title="Actualizar historial" style="font-weight: 600; padding: 6px 10px; font-size: 11px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
                         <i class="fas fa-sync-alt"></i> Actualizar
@@ -5621,138 +5621,138 @@ const Reports = {
                 });
             }
             
-        // Cargar catálogos
-        await this.loadQuickCaptureCatalogs();
-        
-        // Cargar catálogos para formulario de llegadas
-        await this.loadQuickArrivalsCatalogs();
-        
-        // Cargar tipo de cambio en tiempo real
-        await this.loadExchangeRates();
-        
-        // Cargar historial de reportes archivados
-        await this.loadArchivedReports();
-        
-        // Event listener del formulario de capturas
-        const form = document.getElementById('quick-capture-form');
-        if (form) {
-            form.addEventListener('submit', async (e) => {
-                e.preventDefault();
+            // Cargar catálogos
+            await this.loadQuickCaptureCatalogs();
+            
+            // Cargar catálogos para formulario de llegadas
+            await this.loadQuickArrivalsCatalogs();
+            
+            // Cargar tipo de cambio en tiempo real
+            await this.loadExchangeRates();
+            
+            // Cargar historial de reportes archivados
+            await this.loadArchivedReports();
+            
+            // Event listener del formulario de capturas
+            const form = document.getElementById('quick-capture-form');
+            if (form) {
+                form.addEventListener('submit', async (e) => {
+                    e.preventDefault();
                     await this.addToPendingList();
-            });
-        }
+                });
+            }
 
-        // Event listener del formulario de llegadas
-        const arrivalsForm = document.getElementById('quick-arrivals-form');
-        if (arrivalsForm) {
-            arrivalsForm.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                await this.saveQuickArrival();
-            });
-            
-            // Calcular costo cuando cambian los campos
-            const paxInput = document.getElementById('qc-arrival-pax');
-            const unitsInput = document.getElementById('qc-arrival-units');
-            const agencySelect = document.getElementById('qc-arrival-agency');
-            const unitTypeSelect = document.getElementById('qc-arrival-unit-type');
-            const branchSelect = document.getElementById('qc-arrival-branch');
-            
-            const calculateArrivalCost = async () => {
-                    try {
-                const pax = parseInt(paxInput?.value || 0);
-                const units = parseInt(unitsInput?.value || 0);
-                const agencyId = agencySelect?.value;
-                const unitType = unitTypeSelect?.value || null;
+            // Event listener del formulario de llegadas
+            const arrivalsForm = document.getElementById('quick-arrivals-form');
+            if (arrivalsForm) {
+                arrivalsForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    await this.saveQuickArrival();
+                });
                 
-                if (pax > 0 && units > 0 && agencyId) {
-                    const isMasterAdmin = typeof UserManager !== 'undefined' && (
-                        UserManager.currentUser?.role === 'master_admin' ||
-                        UserManager.currentUser?.is_master_admin ||
-                        UserManager.currentUser?.isMasterAdmin
-                    );
-                    const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
-                    const branchId = isMasterAdmin && branchSelect?.value 
-                        ? branchSelect.value 
-                        : currentBranchId;
-                    
-                    if (branchId) {
+                // Calcular costo cuando cambian los campos
+                const paxInput = document.getElementById('qc-arrival-pax');
+                const unitsInput = document.getElementById('qc-arrival-units');
+                const agencySelect = document.getElementById('qc-arrival-agency');
+                const unitTypeSelect = document.getElementById('qc-arrival-unit-type');
+                const branchSelect = document.getElementById('qc-arrival-branch');
+                
+                const calculateArrivalCost = async () => {
+                    try {
+                        const pax = parseInt(paxInput?.value || 0);
+                        const units = parseInt(unitsInput?.value || 0);
+                        const agencyId = agencySelect?.value;
+                        const unitType = unitTypeSelect?.value || null;
+                        
+                        if (pax > 0 && units > 0 && agencyId) {
+                            const isMasterAdmin = typeof UserManager !== 'undefined' && (
+                                UserManager.currentUser?.role === 'master_admin' ||
+                                UserManager.currentUser?.is_master_admin ||
+                                UserManager.currentUser?.isMasterAdmin
+                            );
+                            const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
+                            const branchId = isMasterAdmin && branchSelect?.value 
+                                ? branchSelect.value 
+                                : currentBranchId;
+                            
+                            if (branchId) {
                                 // Obtener fecha del formulario de llegadas o del formulario principal
                                 const arrivalDateInput = document.getElementById('qc-arrival-date');
                                 const mainDateInput = document.getElementById('qc-date');
                                 const arrivalDate = arrivalDateInput?.value || mainDateInput?.value || new Date().toISOString().split('T')[0];
                                 
-                        if (typeof ArrivalRules !== 'undefined' && ArrivalRules.calculateArrivalFee) {
+                                if (typeof ArrivalRules !== 'undefined' && ArrivalRules.calculateArrivalFee) {
                                     const calculation = await ArrivalRules.calculateArrivalFee(agencyId, branchId, pax, unitType, arrivalDate);
-                            const costInput = document.getElementById('qc-arrival-cost');
-                            const costHelp = document.getElementById('qc-arrival-cost-help');
-                            const overrideContainer = document.getElementById('qc-arrival-override-container');
-                            const overrideAmountInput = document.getElementById('qc-arrival-override-amount');
-                            const overrideReasonInput = document.getElementById('qc-arrival-override-reason');
-                            
-                            if (costInput) {
-                                if (calculation.overrideRequired && !calculation.calculatedFee) {
-                                    costInput.value = 'Requiere Override';
-                                    costInput.style.color = 'var(--color-warning, #ffc107)';
-                                    if (costHelp) {
-                                        costHelp.textContent = 'No hay regla configurada, ingresa el monto manualmente';
-                                        costHelp.style.color = 'var(--color-warning, #ffc107)';
-                                    }
-                                    // Mostrar campos de override
-                                    if (overrideContainer) {
-                                        overrideContainer.style.display = 'block';
-                                    }
-                                    // Hacer los campos requeridos
-                                    if (overrideAmountInput) {
-                                        overrideAmountInput.required = true;
-                                        overrideAmountInput.value = '';
-                                    }
-                                    if (overrideReasonInput) {
-                                        overrideReasonInput.required = true;
-                                        overrideReasonInput.value = '';
-                                    }
-                                } else {
-                                    costInput.value = (calculation.calculatedFee || 0).toFixed(2);
-                                    costInput.style.color = '';
-                                    if (costHelp) {
-                                        costHelp.textContent = 'Se calcula automáticamente según las reglas configuradas';
-                                        costHelp.style.color = 'var(--color-text-secondary)';
-                                    }
-                                    // Ocultar campos de override
-                                    if (overrideContainer) {
-                                        overrideContainer.style.display = 'none';
-                                    }
-                                    // Hacer los campos opcionales
-                                    if (overrideAmountInput) {
-                                        overrideAmountInput.required = false;
-                                        overrideAmountInput.value = '';
-                                    }
-                                    if (overrideReasonInput) {
-                                        overrideReasonInput.required = false;
-                                        overrideReasonInput.value = '';
+                                    const costInput = document.getElementById('qc-arrival-cost');
+                                    const costHelp = document.getElementById('qc-arrival-cost-help');
+                                    const overrideContainer = document.getElementById('qc-arrival-override-container');
+                                    const overrideAmountInput = document.getElementById('qc-arrival-override-amount');
+                                    const overrideReasonInput = document.getElementById('qc-arrival-override-reason');
+                                    
+                                    if (costInput) {
+                                        if (calculation.overrideRequired && !calculation.calculatedFee) {
+                                            costInput.value = 'Requiere Override';
+                                            costInput.style.color = 'var(--color-warning, #ffc107)';
+                                            if (costHelp) {
+                                                costHelp.textContent = 'No hay regla configurada, ingresa el monto manualmente';
+                                                costHelp.style.color = 'var(--color-warning, #ffc107)';
+                                            }
+                                            // Mostrar campos de override
+                                            if (overrideContainer) {
+                                                overrideContainer.style.display = 'block';
+                                            }
+                                            // Hacer los campos requeridos
+                                            if (overrideAmountInput) {
+                                                overrideAmountInput.required = true;
+                                                overrideAmountInput.value = '';
+                                            }
+                                            if (overrideReasonInput) {
+                                                overrideReasonInput.required = true;
+                                                overrideReasonInput.value = '';
+                                            }
+                                        } else {
+                                            costInput.value = (calculation.calculatedFee || 0).toFixed(2);
+                                            costInput.style.color = '';
+                                            if (costHelp) {
+                                                costHelp.textContent = 'Se calcula automáticamente según las reglas configuradas';
+                                                costHelp.style.color = 'var(--color-text-secondary)';
+                                            }
+                                            // Ocultar campos de override
+                                            if (overrideContainer) {
+                                                overrideContainer.style.display = 'none';
+                                            }
+                                            // Hacer los campos opcionales
+                                            if (overrideAmountInput) {
+                                                overrideAmountInput.required = false;
+                                                overrideAmountInput.value = '';
+                                            }
+                                            if (overrideReasonInput) {
+                                                overrideReasonInput.required = false;
+                                                overrideReasonInput.value = '';
+                                            }
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
-                        }
                     } catch (error) {
                         console.error('Error calculando costo de llegada:', error);
-                }
-            };
-            
-            if (paxInput) paxInput.addEventListener('input', calculateArrivalCost);
-            if (unitsInput) unitsInput.addEventListener('input', calculateArrivalCost);
-            if (agencySelect) agencySelect.addEventListener('change', calculateArrivalCost);
-            if (unitTypeSelect) unitTypeSelect.addEventListener('change', calculateArrivalCost);
-            if (branchSelect) branchSelect.addEventListener('change', calculateArrivalCost);
-        }
+                    }
+                };
+                
+                if (paxInput) paxInput.addEventListener('input', calculateArrivalCost);
+                if (unitsInput) unitsInput.addEventListener('input', calculateArrivalCost);
+                if (agencySelect) agencySelect.addEventListener('change', calculateArrivalCost);
+                if (unitTypeSelect) unitTypeSelect.addEventListener('change', calculateArrivalCost);
+                if (branchSelect) branchSelect.addEventListener('change', calculateArrivalCost);
+            }
 
-        // Cuando cambia la agencia, actualizar guías
-        const agencySelect = document.getElementById('qc-agency');
-        if (agencySelect) {
-            agencySelect.addEventListener('change', async () => {
+            // Cuando cambia la agencia, actualizar guías
+            const agencySelect = document.getElementById('qc-agency');
+            if (agencySelect) {
+                agencySelect.addEventListener('change', async () => {
                     try {
-                await this.loadGuidesForAgency(agencySelect.value);
+                        await this.loadGuidesForAgency(agencySelect.value);
                     } catch (error) {
                         console.error('Error cargando guías:', error);
                     }
@@ -5776,7 +5776,7 @@ const Reports = {
 
             // Sincronizar capturas desde el servidor (bidireccional)
             await this.syncQuickCapturesFromServer();
-            
+
             // Inicializar lista de capturas pendientes
             await this.loadPendingCaptures();
             
@@ -6000,9 +6000,9 @@ const Reports = {
                                  selectedName.includes(guideAgencyName) || 
                                  guideAgencyName.includes(selectedName);
                         
-                        if (matches) {
+                if (matches) {
                             console.log(`   ✅ Guía encontrada por nombre: ${g.name} (agency: ${guideAgency.name}, agency_id: ${g.agency_id})`);
-                        }
+                }
                     }
                 } else {
                     console.log(`   ✅ Guía encontrada por ID: ${g.name} (agency_id: ${g.agency_id})`);
@@ -6348,18 +6348,18 @@ const Reports = {
                 }
             } else {
                 // Crear nueva captura (pendiente)
-            const capture = {
+                const capture = {
                     id: 'pending_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-                branch_id: branchId,
-                branch_name: branchName,
-                seller_id: sellerId,
-                seller_name: sellerName,
-                guide_id: guideId,
-                guide_name: guideName,
-                agency_id: agencyId,
-                agency_name: agencyName,
-                product: product,
-                quantity: quantity,
+                    branch_id: branchId,
+                    branch_name: branchName,
+                    seller_id: sellerId,
+                    seller_name: sellerName,
+                    guide_id: guideId,
+                    guide_name: guideName,
+                    agency_id: agencyId,
+                    agency_name: agencyName,
+                    product: product,
+                    quantity: quantity,
                 currency: mainCurrency, // Moneda principal (para compatibilidad)
                 total: totalMXN, // Total en MXN (convertido desde todos los pagos)
                     merchandise_cost: merchandiseCost,
@@ -6369,20 +6369,20 @@ const Reports = {
                     payment_method: payments.length === 1 ? payments[0].method : 'mixed', // Para compatibilidad
                     date: captureDate, // Fecha manual seleccionada
                     original_report_date: captureDate, // CRÍTICO: Preservar la fecha asignada (puede ser histórica como 1ro de enero)
-                created_at: new Date().toISOString(),
+                    created_at: new Date().toISOString(),
                     created_by: typeof UserManager !== 'undefined' && UserManager.currentUser ? UserManager.currentUser.id : null,
                     isPending: true // Marca para identificar que es pendiente
-            };
+                };
 
                 // Agregar a la lista pendiente en memoria
                 this.pendingCaptures.push(capture);
 
                 // Limpiar formulario (pero mantener la fecha)
                 const currentDate = document.getElementById('qc-date')?.value || new Date().toISOString().split('T')[0];
-            document.getElementById('quick-capture-form')?.reset();
-            if (document.getElementById('qc-quantity')) {
-                document.getElementById('qc-quantity').value = '1';
-            }
+                document.getElementById('quick-capture-form')?.reset();
+                if (document.getElementById('qc-quantity')) {
+                    document.getElementById('qc-quantity').value = '1';
+                }
                 // Restaurar la fecha después de resetear (NO resetear a hoy)
                 if (document.getElementById('qc-date')) {
                     document.getElementById('qc-date').value = currentDate;
@@ -7168,10 +7168,18 @@ const Reports = {
                     const originalReportDate = capture.original_report_date || capture.date || (document.getElementById('qc-date')?.value || new Date().toISOString().split('T')[0]);
                     const captureDate = originalReportDate; // Usar la fecha original, no la actual
                     
+                    // Asegurar que tenga branch_id (obtener de BranchManager si no lo tiene)
+                    let branchId = capture.branch_id;
+                    if (!branchId) {
+                        branchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
+                        console.log(`⚠️ Captura sin branch_id, asignando: ${branchId}`);
+                    }
+                    
                     // Generar nuevo ID para la captura guardada
                     const savedCapture = {
                         ...capture,
                         id: 'qc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+                        branch_id: branchId, // Asegurar que siempre tenga branch_id
                         date: captureDate, // Fecha del reporte (puede ser histórica)
                         original_report_date: originalReportDate, // CRÍTICO: Fecha original asignada (para persistencia) - NO cambiar
                         created_at: capture.created_at || new Date().toISOString()
@@ -7233,7 +7241,7 @@ const Reports = {
                     // Verificar que se guardó correctamente localmente
                     const verify = await DB.get('temp_quick_captures', savedCapture.id);
                     if (verify && verify.date === savedCapture.date) {
-                        savedCount++;
+                    savedCount++;
                         console.log(`✅ Captura guardada correctamente: ${savedCapture.id}${serverSaved ? ' (sincronizada)' : ' (solo local)'}`);
                     } else {
                         console.error(`❌ Error: La captura no se guardó correctamente o la fecha no coincide`);
@@ -7265,16 +7273,20 @@ const Reports = {
             
             // Obtener sucursal actual para filtrar
             const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
+            // Mejorar detección de master admin
             const isMasterAdmin = typeof UserManager !== 'undefined' && (
                 UserManager.currentUser?.role === 'master_admin' ||
                 UserManager.currentUser?.is_master_admin ||
                 UserManager.currentUser?.isMasterAdmin ||
-                UserManager.currentEmployee?.role === 'master_admin'
+                UserManager.currentEmployee?.role === 'master_admin' ||
+                (typeof PermissionManager !== 'undefined' && PermissionManager.hasPermission('admin.all'))
             );
             
             // Obtener todas las capturas y filtrar por la fecha seleccionada
             let captures = await DB.getAll('temp_quick_captures') || [];
             console.log(`📊 Total capturas en BD: ${captures.length}, filtrando por fecha: ${selectedDate}`);
+            console.log(`🔍 Filtros: isMasterAdmin=${isMasterAdmin}, currentBranchId=${currentBranchId}`);
+            
             captures = captures.filter(c => {
                 // Normalizar fechas para comparación estricta (usar original_report_date si existe, sino date)
                 const captureDate = c.original_report_date || c.date;
@@ -7290,15 +7302,40 @@ const Reports = {
                     return false;
                 }
                 
-                // Filtrar por sucursal si no es master admin
-                if (!isMasterAdmin && currentBranchId) {
-                    if (!c.branch_id || String(c.branch_id) !== String(currentBranchId)) {
-                        console.log(`   Sucursal no coincide: ${c.branch_id} !== ${currentBranchId}`);
-                        return false; // Excluir capturas de otras sucursales
-                    }
+                // Si es master admin, mostrar TODAS las capturas (incluso sin branch_id)
+                if (isMasterAdmin) {
+                    console.log(`   ✅ Master admin: mostrando captura ${c.id} (branch_id: ${c.branch_id || 'sin sucursal'})`);
+                    return true;
                 }
                 
-                return true;
+                // Para usuarios normales: mostrar capturas de su sucursal O sin branch_id (legacy)
+                if (currentBranchId) {
+                    const captureBranchId = c.branch_id ? String(c.branch_id).trim() : null;
+                    const currentBranchIdStr = String(currentBranchId).trim();
+                    
+                    // Incluir si:
+                    // 1. Tiene branch_id y coincide con la sucursal actual
+                    // 2. NO tiene branch_id (capturas legacy que se crearon antes de implementar el filtro)
+                    if (captureBranchId && captureBranchId === currentBranchIdStr) {
+                        console.log(`   ✅ Sucursal coincide: ${captureBranchId} === ${currentBranchIdStr}`);
+                        return true;
+                    } else if (!captureBranchId) {
+                        // Capturas sin branch_id: incluir si el usuario está en una sucursal (legacy)
+                        console.log(`   ✅ Captura sin branch_id (legacy), incluyendo para sucursal ${currentBranchIdStr}`);
+                        return true;
+                    } else {
+                        console.log(`   ❌ Sucursal no coincide: ${captureBranchId} !== ${currentBranchIdStr}`);
+                        return false;
+                    }
+                } else {
+                    // Si no hay sucursal actual, mostrar solo capturas sin branch_id
+                    if (!c.branch_id) {
+                        console.log(`   ✅ Sin sucursal actual: mostrando captura sin branch_id`);
+                        return true;
+                    }
+                    console.log(`   ❌ Sin sucursal actual pero captura tiene branch_id: ${c.branch_id}`);
+                    return false;
+                }
             });
             console.log(`✅ Capturas filtradas: ${captures.length} para fecha ${selectedDate}`);
             
@@ -7343,8 +7380,8 @@ const Reports = {
                     });
                 } else {
                     // Fallback: usar total y currency de la captura (compatibilidad)
-                    let captureTotal = c.total || 0;
-                    captureTotal = parseFloat(captureTotal) || 0;
+                let captureTotal = c.total || 0;
+                captureTotal = parseFloat(captureTotal) || 0;
                     const currency = c.currency || 'MXN';
                     totals[currency] = (totals[currency] || 0) + captureTotal;
                 }
@@ -7799,8 +7836,8 @@ const Reports = {
                     });
                 } else {
                     // Fallback: usar el total y currency de la captura (compatibilidad)
-                    let captureTotal = c.total || 0;
-                    captureTotal = parseFloat(captureTotal) || 0;
+                let captureTotal = c.total || 0;
+                captureTotal = parseFloat(captureTotal) || 0;
                     const currency = c.currency || 'MXN';
                     totals[currency] = (totals[currency] || 0) + captureTotal;
                 }
@@ -7849,12 +7886,12 @@ const Reports = {
                 } else {
                     // Fallback: usar el total y currency de la captura (compatibilidad)
                     let captureTotal = capture.total || 0;
-                    captureTotal = parseFloat(captureTotal) || 0;
-                    
+                captureTotal = parseFloat(captureTotal) || 0;
+                
                 if (capture.currency === 'USD') {
-                        captureTotalMXN = captureTotal * usdRate;
+                    captureTotalMXN = captureTotal * usdRate;
                 } else if (capture.currency === 'CAD') {
-                        captureTotalMXN = captureTotal * cadRate;
+                    captureTotalMXN = captureTotal * cadRate;
                     } else {
                         captureTotalMXN = captureTotal; // MXN
                     }
@@ -7892,15 +7929,15 @@ const Reports = {
                         
                         // Si no hay regla especial (Sebastian), usar reglas normales
                         if (sellerCommission === 0) {
-                    const sellerRule = commissionRules.find(r => 
-                        r.entity_type === 'seller' && r.entity_id === capture.seller_id
-                    ) || commissionRules.find(r => 
-                        r.entity_type === 'seller' && r.entity_id === null
-                    );
-                    if (sellerRule) {
-                        const discountPct = sellerRule.discount_pct || 0;
-                        const multiplier = sellerRule.multiplier || 1;
-                        const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
+                            const sellerRule = commissionRules.find(r => 
+                                r.entity_type === 'seller' && r.entity_id === capture.seller_id
+                            ) || commissionRules.find(r => 
+                                r.entity_type === 'seller' && r.entity_id === null
+                            );
+                            if (sellerRule) {
+                                const discountPct = sellerRule.discount_pct || 0;
+                                const multiplier = sellerRule.multiplier || 1;
+                                const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
                                 sellerCommission = afterDiscount * (multiplier / 100);
                             }
                         }
@@ -7912,20 +7949,20 @@ const Reports = {
                     }
                     
                     // COMISIÓN DEL GUÍA
-                if (capture.guide_id && captureTotalMXN > 0) {
+                    if (capture.guide_id && captureTotalMXN > 0) {
                         let guideCommission = commissionsByRules.guideCommission;
                         
                         // Si no hay regla especial (agencia o Gloria), usar reglas normales
                         if (guideCommission === 0) {
-                    const guideRule = commissionRules.find(r => 
-                        r.entity_type === 'guide' && r.entity_id === capture.guide_id
-                    ) || commissionRules.find(r => 
-                        r.entity_type === 'guide' && r.entity_id === null
-                    );
-                    if (guideRule) {
-                        const discountPct = guideRule.discount_pct || 0;
-                        const multiplier = guideRule.multiplier || 1;
-                        const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
+                            const guideRule = commissionRules.find(r => 
+                                r.entity_type === 'guide' && r.entity_id === capture.guide_id
+                            ) || commissionRules.find(r => 
+                                r.entity_type === 'guide' && r.entity_id === null
+                            );
+                            if (guideRule) {
+                                const discountPct = guideRule.discount_pct || 0;
+                                const multiplier = guideRule.multiplier || 1;
+                                const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
                                 guideCommission = afterDiscount * (multiplier / 100);
                             }
                         }
@@ -8512,15 +8549,15 @@ const Reports = {
                         
                         // Si no hay regla especial (Sebastian), usar reglas normales de vendedor
                         if (commission === 0) {
-                    const sellerRule = commissionRules.find(r => 
-                        r.entity_type === 'seller' && r.entity_id === capture.seller_id
-                    ) || commissionRules.find(r => 
-                        r.entity_type === 'seller' && r.entity_id === null
-                    );
+                            const sellerRule = commissionRules.find(r => 
+                                r.entity_type === 'seller' && r.entity_id === capture.seller_id
+                            ) || commissionRules.find(r => 
+                                r.entity_type === 'seller' && r.entity_id === null
+                            );
 
-                    if (sellerRule) {
-                        const discountPct = sellerRule.discount_pct || 0;
-                        const multiplier = sellerRule.multiplier || 1;
+                            if (sellerRule) {
+                                const discountPct = sellerRule.discount_pct || 0;
+                                const multiplier = sellerRule.multiplier || 1;
                                 const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
                                 commission = afterDiscount * (multiplier / 100);
                             }
@@ -8539,7 +8576,7 @@ const Reports = {
                         } else if (capture.currency === 'CAD') {
                             sellerCommissions[capture.seller_id].commissions[capture.currency] += commission / cadRate;
                         } else {
-                        sellerCommissions[capture.seller_id].commissions[capture.currency] += commission;
+                            sellerCommissions[capture.seller_id].commissions[capture.currency] += commission;
                         }
                     }
                 }
@@ -8572,15 +8609,15 @@ const Reports = {
                     
                     // Si no hay regla especial (agencia o Gloria), usar reglas normales de guía
                     if (commission === 0) {
-                    const guideRule = commissionRules.find(r => 
-                        r.entity_type === 'guide' && r.entity_id === capture.guide_id
-                    ) || commissionRules.find(r => 
-                        r.entity_type === 'guide' && r.entity_id === null
-                    );
+                        const guideRule = commissionRules.find(r => 
+                            r.entity_type === 'guide' && r.entity_id === capture.guide_id
+                        ) || commissionRules.find(r => 
+                            r.entity_type === 'guide' && r.entity_id === null
+                        );
 
-                    if (guideRule) {
-                        const discountPct = guideRule.discount_pct || 0;
-                        const multiplier = guideRule.multiplier || 1;
+                        if (guideRule) {
+                            const discountPct = guideRule.discount_pct || 0;
+                            const multiplier = guideRule.multiplier || 1;
                             const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
                             commission = afterDiscount * (multiplier / 100);
                         }
@@ -8598,7 +8635,7 @@ const Reports = {
                         } else if (capture.currency === 'CAD') {
                             guideCommissions[capture.guide_id].commissions[capture.currency] += commission / cadRate;
                         } else {
-                        guideCommissions[capture.guide_id].commissions[capture.currency] += commission;
+                            guideCommissions[capture.guide_id].commissions[capture.currency] += commission;
                         }
                     }
                 }
@@ -8933,7 +8970,7 @@ const Reports = {
 
                     // CRÍTICO: Preservar la fecha original asignada (NO cambiar)
                     const originalReportDate = capture.original_report_date || capture.date;
-                    
+
                     // Actualizar captura
                     capture.branch_id = branchId;
                     capture.branch_name = branchName;
@@ -9357,17 +9394,17 @@ const Reports = {
             return new Promise((resolve) => {
                 document.getElementById('archive-confirm-btn').onclick = async () => {
                     confirmModal.remove();
-                for (const capture of captures) {
-                    await DB.delete('temp_quick_captures', capture.id);
-                }
-                Utils.showNotification(`Reporte archivado correctamente. ${captures.length} capturas eliminadas del día.`, 'success');
-                await this.loadQuickCaptureData();
+                    for (const capture of captures) {
+                        await DB.delete('temp_quick_captures', capture.id);
+                    }
+                    Utils.showNotification(`Reporte archivado correctamente. ${captures.length} capturas eliminadas del día.`, 'success');
+                    await this.loadQuickCaptureData();
                     resolve();
                 };
                 
                 document.getElementById('archive-keep-btn').onclick = async () => {
                     confirmModal.remove();
-                Utils.showNotification('Reporte archivado correctamente. Las capturas temporales se mantienen.', 'success');
+                    Utils.showNotification('Reporte archivado correctamente. Las capturas temporales se mantienen.', 'success');
                     resolve();
                 };
                 
@@ -9427,9 +9464,9 @@ const Reports = {
         // Si no hay fecha en el formulario, mostrar modal
         if (!dateInput?.value) {
             selectedDate = await this.showDateSelectorModal();
-            if (!selectedDate) {
-                // Usuario canceló
-                return;
+        if (!selectedDate) {
+            // Usuario canceló
+            return;
             }
         }
         
@@ -9449,8 +9486,8 @@ const Reports = {
             let captures = await DB.getAll('temp_quick_captures') || [];
             
             // Filtrar capturas por la fecha seleccionada (normalizar fechas)
-            captures = captures.filter(c => {
-                const captureDateValue = c.original_report_date || c.date;
+                captures = captures.filter(c => {
+                    const captureDateValue = c.original_report_date || c.date;
                 if (!captureDateValue) return false;
                 // Normalizar fecha para comparación
                 const normalizedCaptureDate = captureDateValue.split('T')[0];
@@ -9714,7 +9751,7 @@ const Reports = {
             doc.rect(margin, y, pageWidth - (margin * 2), 8, 'F');
             doc.setDrawColor(200, 200, 200);
             doc.rect(margin, y, pageWidth - (margin * 2), 8);
-
+            
             // Líneas verticales para separar columnas (bien alineadas con las nuevas posiciones)
             doc.setDrawColor(180, 180, 180);
             doc.line(captCol2X - 1, y, captCol2X - 1, y + 8);
@@ -9948,16 +9985,16 @@ const Reports = {
                         
                         // Si no hay regla especial (Sebastian), usar reglas normales de vendedor
                         if (commission === 0) {
-                    const sellerRule = commissionRules.find(r => 
-                        r.entity_type === 'seller' && r.entity_id === capture.seller_id
-                    ) || commissionRules.find(r => 
-                        r.entity_type === 'seller' && r.entity_id === null
-                    );
-                    if (sellerRule) {
-                        const discountPct = sellerRule.discount_pct || 0;
-                        const multiplier = sellerRule.multiplier || 1;
-                        // Calcular comisión sobre el total convertido a MXN
-                        const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
+                            const sellerRule = commissionRules.find(r => 
+                                r.entity_type === 'seller' && r.entity_id === capture.seller_id
+                            ) || commissionRules.find(r => 
+                                r.entity_type === 'seller' && r.entity_id === null
+                            );
+                            if (sellerRule) {
+                                const discountPct = sellerRule.discount_pct || 0;
+                                const multiplier = sellerRule.multiplier || 1;
+                                // Calcular comisión sobre el total convertido a MXN
+                                const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
                                 commission = afterDiscount * (multiplier / 100);
                             }
                         }
@@ -10006,16 +10043,16 @@ const Reports = {
                     
                     // Si no hay regla especial (agencia o Gloria), usar reglas normales de guía
                     if (commission === 0) {
-                    const guideRule = commissionRules.find(r => 
-                        r.entity_type === 'guide' && r.entity_id === capture.guide_id
-                    ) || commissionRules.find(r => 
-                        r.entity_type === 'guide' && r.entity_id === null
-                    );
-                    if (guideRule) {
-                        const discountPct = guideRule.discount_pct || 0;
-                        const multiplier = guideRule.multiplier || 1;
-                        // Calcular comisión sobre el total convertido a MXN
-                        const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
+                        const guideRule = commissionRules.find(r => 
+                            r.entity_type === 'guide' && r.entity_id === capture.guide_id
+                        ) || commissionRules.find(r => 
+                            r.entity_type === 'guide' && r.entity_id === null
+                        );
+                        if (guideRule) {
+                            const discountPct = guideRule.discount_pct || 0;
+                            const multiplier = guideRule.multiplier || 1;
+                            // Calcular comisión sobre el total convertido a MXN
+                            const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
                             commission = afterDiscount * (multiplier / 100);
                         }
                     }
@@ -10087,7 +10124,7 @@ const Reports = {
                     doc.line(col5X - 1, y, col5X - 1, y + 6);
                     doc.line(col5EndX - 1, y, col5EndX - 1, y + 6);
                     doc.line(col5EndX - 1, y, col5EndX - 1, y + 6);
-                    
+
                     doc.setFontSize(8);
                     doc.setFont('helvetica', 'bold');
                     doc.text('Vendedor', col1X, y + 4);
@@ -10197,7 +10234,7 @@ const Reports = {
                     doc.line(col4X - 1, y, col4X - 1, y + 6);
                     doc.line(col5X - 1, y, col5X - 1, y + 6);
                     doc.line(col5EndX - 1, y, col5EndX - 1, y + 6);
-                    
+
                     doc.setFontSize(8);
                     doc.setFont('helvetica', 'bold');
                     doc.text('Guía', col1X, y + 4);
@@ -10499,7 +10536,7 @@ const Reports = {
             doc.rect(margin, y, pageWidth - (margin * 2), utilSectionHeight, 'F');
             doc.setDrawColor(200, 200, 200);
             doc.rect(margin, y, pageWidth - (margin * 2), utilSectionHeight);
-
+            
             // Línea divisoria vertical para mejor organización
             doc.setDrawColor(180, 180, 180);
             doc.line(valueX - 10, y, valueX - 10, y + utilSectionHeight);
@@ -10531,7 +10568,7 @@ const Reports = {
                 currencyDetails += `CAD: $${utilTotalCADOriginal.toFixed(2)} (x${cadRateForDisplay.toFixed(2)}) = $${utilTotalCADInMXN.toFixed(2)} MXN`;
             }
             if (currencyDetails) {
-                doc.text(currencyDetails, labelX + 5, y + 12.5, { maxWidth: valueX - labelX - 15 });
+            doc.text(currencyDetails, labelX + 5, y + 12.5, { maxWidth: valueX - labelX - 15 });
             }
 
             // Línea 2: COGS (bien alineada)
@@ -10707,14 +10744,14 @@ const Reports = {
                         
                         // Si no hay regla especial (Sebastian), usar reglas normales
                         if (sellerCommission === 0) {
-                    const sellerRule = commissionRules.find(r => 
-                        r.entity_type === 'seller' && r.entity_id === capture.seller_id
+                            const sellerRule = commissionRules.find(r => 
+                                r.entity_type === 'seller' && r.entity_id === capture.seller_id
                             ) || commissionRules.find(r => 
                                 r.entity_type === 'seller' && r.entity_id === null
                             );
-                    if (sellerRule) {
-                        const discountPct = sellerRule.discount_pct || 0;
-                        const multiplier = sellerRule.multiplier || 1;
+                            if (sellerRule) {
+                                const discountPct = sellerRule.discount_pct || 0;
+                                const multiplier = sellerRule.multiplier || 1;
                                 const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
                                 sellerCommission = afterDiscount * (multiplier / 100);
                             }
@@ -10754,14 +10791,14 @@ const Reports = {
                         
                         // Si no hay regla especial (agencia o Gloria), usar reglas normales
                         if (guideCommission === 0) {
-                    const guideRule = commissionRules.find(r => 
-                        r.entity_type === 'guide' && r.entity_id === capture.guide_id
+                            const guideRule = commissionRules.find(r => 
+                                r.entity_type === 'guide' && r.entity_id === capture.guide_id
                             ) || commissionRules.find(r => 
                                 r.entity_type === 'guide' && r.entity_id === null
                             );
-                    if (guideRule) {
-                        const discountPct = guideRule.discount_pct || 0;
-                        const multiplier = guideRule.multiplier || 1;
+                            if (guideRule) {
+                                const discountPct = guideRule.discount_pct || 0;
+                                const multiplier = guideRule.multiplier || 1;
                                 const afterDiscount = captureTotalMXN * (1 - (discountPct / 100));
                                 guideCommission = afterDiscount * (multiplier / 100);
                             }
@@ -11047,7 +11084,7 @@ const Reports = {
                                 syncedCount++;
                             }
                         }
-                    } catch (e) {
+                } catch (e) {
                         console.warn(`⚠️ No se pudo sincronizar captura ${capture.id}:`, e);
                         failedCount++;
                         // Agregar a la cola de sincronización si SyncManager está disponible
@@ -11094,11 +11131,11 @@ const Reports = {
                         }
                         
                         // Eliminar de IndexedDB local
-                        await DB.delete('temp_quick_captures', capture.id);
+                    await DB.delete('temp_quick_captures', capture.id);
                         deletedCount++;
                     } catch (e) {
                         console.warn(`No se pudo eliminar captura ${capture.id}:`, e);
-                    }
+                }
                 }
                 Utils.showNotification(`Reporte archivado correctamente. ${deletedCount} capturas eliminadas del día (local y servidor).`, 'success');
                 await this.loadQuickCaptureData();
@@ -11116,8 +11153,8 @@ const Reports = {
             Utils.showNotification('Error al archivar el reporte: ' + (error.message || 'Error desconocido'), 'error');
         } finally {
             // Siempre resetear el flag, incluso si hay error
-            this.isExporting = false;
-        }
+                this.isExporting = false;
+            }
     },
 
     async showArchiveConfirmModal(captureCount, isUpdate) {
@@ -11820,14 +11857,14 @@ const Reports = {
         return new Promise((resolve) => {
             document.getElementById('delete-archived-confirm-btn').onclick = async () => {
                 confirmModal.remove();
-        try {
-            await DB.delete('archived_quick_captures', reportId);
-            Utils.showNotification('Reporte archivado eliminado', 'success');
-            await this.loadArchivedReports();
-        } catch (error) {
-            console.error('Error eliminando reporte archivado:', error);
-            Utils.showNotification('Error al eliminar: ' + error.message, 'error');
-        }
+                try {
+                    await DB.delete('archived_quick_captures', reportId);
+                    Utils.showNotification('Reporte archivado eliminado', 'success');
+                    await this.loadArchivedReports();
+                } catch (error) {
+                    console.error('Error eliminando reporte archivado:', error);
+                    Utils.showNotification('Error al eliminar: ' + error.message, 'error');
+                }
                 resolve();
             };
             
@@ -12024,7 +12061,7 @@ const Reports = {
                             
                             // Recargar datos con la nueva fecha (llamar directamente a las funciones)
                             if (typeof this.loadQuickCaptureData === 'function') {
-                                await this.loadQuickCaptureData();
+                            await this.loadQuickCaptureData();
                             }
                             if (typeof this.loadQuickCaptureArrivals === 'function') {
                                 await this.loadQuickCaptureArrivals();
@@ -12302,18 +12339,23 @@ const Reports = {
             
             // Obtener sucursal actual para filtrar
             const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
+            // Mejorar detección de master admin (igual que en loadQuickCaptureData)
             const isMasterAdmin = typeof UserManager !== 'undefined' && (
                 UserManager.currentUser?.role === 'master_admin' ||
                 UserManager.currentUser?.is_master_admin ||
                 UserManager.currentUser?.isMasterAdmin ||
-                UserManager.currentEmployee?.role === 'master_admin'
+                UserManager.currentEmployee?.role === 'master_admin' ||
+                (typeof PermissionManager !== 'undefined' && PermissionManager.hasPermission('admin.all'))
             );
             
             // Obtener todas las capturas del servidor
+            // Master admin obtiene TODAS las capturas (sin filtro)
+            // Usuarios normales solo obtienen las de su sucursal
             const filters = {};
             if (!isMasterAdmin && currentBranchId) {
                 filters.branch_id = currentBranchId;
             }
+            // Si es master admin, no agregar filtro para obtener todas las capturas
             
             let serverCaptures;
             try {
