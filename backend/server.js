@@ -249,92 +249,118 @@ async function checkAndMigrate() {
     const requiredTables = ['branches', 'quick_captures', 'archived_quick_capture_reports', 'historical_quick_capture_reports'];
     const missingTables = requiredTables.filter(t => !existingTables.includes(t));
     
-    // Si falta alguna tabla importante, ejecutar migración
+    // Si falta alguna tabla importante, crear directamente primero (más confiable)
     if (missingTables.length > 0) {
       console.log(`🔄 Faltan tablas en la base de datos: ${missingTables.join(', ')}`);
-      console.log('🔄 Ejecutando migración automática para crear tablas faltantes...');
-      
-      // Ejecutar migración: PostgreSQL puede ejecutar múltiples statements en una sola query
-      const { readFileSync } = await import('fs');
-      const { join } = await import('path');
-      const schemaPath = join(__dirname, 'database', 'schema.sql');
-      const schemaSQL = readFileSync(schemaPath, 'utf8');
+      console.log('🔄 Creando tablas faltantes directamente...');
       
       try {
-        // Ejecutar todo el schema SQL de una vez
-        // PostgreSQL puede ejecutar múltiples statements separados por punto y coma
-        // El schema.sql usa CREATE TABLE IF NOT EXISTS, así que es seguro ejecutarlo múltiples veces
-        await pool.query(schemaSQL);
-        console.log('✅ Schema SQL ejecutado');
-        
-        // Verificar que las tablas faltantes ahora existen
-        const verifyTables = await pool.query(`
-          SELECT table_name 
-          FROM information_schema.tables 
-          WHERE table_schema = 'public' 
-          AND table_name = ANY($1::text[])
-        `, [missingTables]);
-        
-        const nowExisting = verifyTables.rows.map(r => r.table_name);
-        const stillMissing = missingTables.filter(t => !nowExisting.includes(t));
-        
-        if (stillMissing.length > 0) {
-          console.warn(`⚠️  Algunas tablas aún no se crearon después de ejecutar schema: ${stillMissing.join(', ')}`);
-          console.log('🔄 Intentando crear tablas faltantes directamente...');
-          
-          // Crear tablas faltantes directamente
-          for (const tableName of stillMissing) {
-            try {
-              if (tableName === 'quick_captures') {
-                console.log('🔨 Creando tabla quick_captures...');
-                // Crear tabla primero
-                await pool.query(`
-                  CREATE TABLE IF NOT EXISTS quick_captures (
-                    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-                    branch_id UUID REFERENCES branches(id) ON DELETE SET NULL,
-                    seller_id UUID REFERENCES catalog_sellers(id) ON DELETE SET NULL,
-                    guide_id UUID REFERENCES catalog_guides(id) ON DELETE SET NULL,
-                    agency_id UUID REFERENCES catalog_agencies(id) ON DELETE SET NULL,
-                    product VARCHAR(255) NOT NULL,
-                    quantity INTEGER NOT NULL DEFAULT 1,
-                    currency VARCHAR(3) NOT NULL DEFAULT 'MXN',
-                    total DECIMAL(12, 2) NOT NULL DEFAULT 0,
-                    merchandise_cost DECIMAL(12, 2) DEFAULT 0,
-                    notes TEXT,
-                    is_street BOOLEAN DEFAULT false,
-                    payment_method VARCHAR(50),
-                    payments JSONB,
-                    date DATE NOT NULL,
-                    original_report_date DATE,
-                    created_by UUID REFERENCES users(id) ON DELETE SET NULL,
-                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                    sync_status VARCHAR(50) DEFAULT 'synced'
-                  );
-                `);
-                console.log('✅ Tabla quick_captures creada');
-                
-                // Crear índices por separado para mejor manejo de errores
-                const indexes = [
-                  'CREATE INDEX IF NOT EXISTS idx_quick_captures_date ON quick_captures(date)',
-                  'CREATE INDEX IF NOT EXISTS idx_quick_captures_branch_id ON quick_captures(branch_id)',
-                  'CREATE INDEX IF NOT EXISTS idx_quick_captures_seller_id ON quick_captures(seller_id)',
-                  'CREATE INDEX IF NOT EXISTS idx_quick_captures_guide_id ON quick_captures(guide_id)',
-                  'CREATE INDEX IF NOT EXISTS idx_quick_captures_agency_id ON quick_captures(agency_id)',
-                  'CREATE INDEX IF NOT EXISTS idx_quick_captures_created_at ON quick_captures(created_at)',
-                  'CREATE INDEX IF NOT EXISTS idx_quick_captures_original_report_date ON quick_captures(original_report_date)'
-                ];
-                
-                for (const indexSQL of indexes) {
-                  try {
-                    await pool.query(indexSQL);
-                  } catch (idxError) {
-                    console.warn(`⚠️  Error creando índice (continuando): ${idxError.message}`);
-                  }
+        // Crear tablas faltantes directamente (más confiable que ejecutar todo el schema)
+        for (const tableName of missingTables) {
+          try {
+          if (tableName === 'quick_captures') {
+            console.log('🔨 Creando tabla quick_captures...');
+            
+            // Verificar si la tabla ya existe (por si acaso)
+            const tableExists = await pool.query(`
+              SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_schema = 'public' 
+                AND table_name = 'quick_captures'
+              );
+            `);
+            
+            if (tableExists.rows[0].exists) {
+              console.log('ℹ️  Tabla quick_captures ya existe, saltando creación');
+              continue;
+            }
+            
+            // Crear tabla primero
+            await pool.query(`
+              CREATE TABLE quick_captures (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                branch_id UUID REFERENCES branches(id) ON DELETE SET NULL,
+                seller_id UUID REFERENCES catalog_sellers(id) ON DELETE SET NULL,
+                guide_id UUID REFERENCES catalog_guides(id) ON DELETE SET NULL,
+                agency_id UUID REFERENCES catalog_agencies(id) ON DELETE SET NULL,
+                product VARCHAR(255) NOT NULL,
+                quantity INTEGER NOT NULL DEFAULT 1,
+                currency VARCHAR(3) NOT NULL DEFAULT 'MXN',
+                total DECIMAL(12, 2) NOT NULL DEFAULT 0,
+                merchandise_cost DECIMAL(12, 2) DEFAULT 0,
+                notes TEXT,
+                is_street BOOLEAN DEFAULT false,
+                payment_method VARCHAR(50),
+                payments JSONB,
+                date DATE NOT NULL,
+                original_report_date DATE,
+                created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                sync_status VARCHAR(50) DEFAULT 'synced'
+              );
+            `);
+            console.log('✅ Tabla quick_captures creada');
+            
+            // Crear índices por separado para mejor manejo de errores
+            const indexes = [
+              'CREATE INDEX idx_quick_captures_date ON quick_captures(date)',
+              'CREATE INDEX idx_quick_captures_branch_id ON quick_captures(branch_id)',
+              'CREATE INDEX idx_quick_captures_seller_id ON quick_captures(seller_id)',
+              'CREATE INDEX idx_quick_captures_guide_id ON quick_captures(guide_id)',
+              'CREATE INDEX idx_quick_captures_agency_id ON quick_captures(agency_id)',
+              'CREATE INDEX idx_quick_captures_created_at ON quick_captures(created_at)',
+              'CREATE INDEX idx_quick_captures_original_report_date ON quick_captures(original_report_date)'
+            ];
+            
+            for (const indexSQL of indexes) {
+              try {
+                await pool.query(indexSQL);
+              } catch (idxError) {
+                // Si el índice ya existe, no es un error crítico
+                if (idxError.code === '42P07' || idxError.message.includes('already exists')) {
+                  console.log(`ℹ️  Índice ya existe, saltando: ${indexSQL.substring(0, 50)}...`);
+                } else {
+                  console.warn(`⚠️  Error creando índice: ${idxError.message}`);
                 }
-                
-                console.log('✅ Tabla quick_captures e índices creados correctamente');
-              } else if (tableName === 'archived_quick_capture_reports') {
+              }
+            }
+            
+            // Crear trigger para updated_at
+            try {
+              // Verificar si la función existe
+              const functionExists = await pool.query(`
+                SELECT EXISTS (
+                  SELECT FROM pg_proc 
+                  WHERE proname = 'update_updated_at_column'
+                );
+              `);
+              
+              if (!functionExists.rows[0].exists) {
+                await pool.query(`
+                  CREATE OR REPLACE FUNCTION update_updated_at_column()
+                  RETURNS TRIGGER AS $$
+                  BEGIN
+                      NEW.updated_at = CURRENT_TIMESTAMP;
+                      RETURN NEW;
+                  END;
+                  $$ language 'plpgsql';
+                `);
+                console.log('✅ Función update_updated_at_column creada');
+              }
+              
+              await pool.query(`
+                DROP TRIGGER IF EXISTS update_quick_captures_updated_at ON quick_captures;
+                CREATE TRIGGER update_quick_captures_updated_at BEFORE UPDATE ON quick_captures
+                    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+              `);
+              console.log('✅ Trigger update_quick_captures_updated_at creado');
+            } catch (triggerError) {
+              console.warn(`⚠️  Error creando trigger (no crítico): ${triggerError.message}`);
+            }
+            
+            console.log('✅ Tabla quick_captures, índices y trigger creados correctamente');
+          } else if (tableName === 'archived_quick_capture_reports') {
                 await pool.query(`
                   CREATE TABLE IF NOT EXISTS archived_quick_capture_reports (
                     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -407,40 +433,34 @@ async function checkAndMigrate() {
                 console.log('✅ Tabla historical_quick_capture_reports creada directamente');
               }
             } catch (tableError) {
-              console.warn(`⚠️  Error creando tabla ${tableName}:`, tableError.message);
+              console.error(`❌ Error creando tabla ${tableName}:`, tableError.message);
+              console.error('   Detalles:', tableError);
             }
           }
           
-          // Verificar nuevamente
+          // Verificar nuevamente que las tablas se crearon
           const finalCheck = await pool.query(`
             SELECT table_name 
             FROM information_schema.tables 
             WHERE table_schema = 'public' 
             AND table_name = ANY($1::text[])
-          `, [stillMissing]);
+          `, [missingTables]);
           
           const finalExisting = finalCheck.rows.map(r => r.table_name);
-          const finalMissing = stillMissing.filter(t => !finalExisting.includes(t));
+          const finalMissing = missingTables.filter(t => !finalExisting.includes(t));
           
           if (finalMissing.length > 0) {
             console.error(`❌ No se pudieron crear las siguientes tablas: ${finalMissing.join(', ')}`);
-            console.log('💡 Ejecuta el schema.sql manualmente en Railway Database');
+            console.log('💡 Ejecuta el SQL manualmente en Railway Database');
+            console.log('💡 Revisa los logs anteriores para ver los errores específicos');
           } else {
             console.log(`✅ Todas las tablas requeridas están presentes: ${requiredTables.join(', ')}`);
           }
-        } else {
-          console.log(`✅ Todas las tablas requeridas están presentes: ${requiredTables.join(', ')}`);
-        }
       } catch (error) {
-        // Si hay errores de objetos existentes, no es crítico
-        if (error.code === '42P07' || error.code === '42710' || 
-            error.message.includes('already exists')) {
-          console.log('⚠️  Algunos objetos ya existen, continuando...');
-        } else {
-          console.error('❌ Error en migración:', error.message);
-          // No lanzar error, permitir que el servidor inicie
-          console.log('💡 El servidor continuará, pero algunas tablas pueden no estar disponibles');
-        }
+        console.error('❌ Error crítico en migración:', error.message);
+        console.error('   Stack:', error.stack);
+        // No lanzar error, permitir que el servidor inicie
+        console.log('💡 El servidor continuará, pero algunas tablas pueden no estar disponibles');
       }
       
       // Crear usuario admin manualmente (solo si no existe)
