@@ -1517,13 +1517,45 @@ const App = {
             }
             
             // Si hay reglas existentes pero pocas, limpiarlas primero para recargar con el tabulador actualizado
-            if (existingRules.length > 0 && existingRules.length < 20) {
-                console.log(`⚠️ Reglas incompletas detectadas (${existingRules.length} < 20), recargando todas las reglas del tabulador...`);
+            // También actualizar active_from de reglas existentes si tienen fecha futura
+            if (existingRules.length > 0) {
+                const todayDate = new Date();
+                const todayStr = Utils.formatDate(todayDate, 'YYYY-MM-DD');
+                let updatedCount = 0;
+                
                 for (const rule of existingRules) {
-                    try {
-                        await DB.delete('arrival_rate_rules', rule.id);
-                    } catch (e) {
-                        // Ignorar errores
+                    // Si la regla tiene active_from en el futuro o muy reciente, actualizarla a 2000-01-01
+                    if (rule.active_from && rule.active_from > '2000-01-01') {
+                        rule.active_from = '2000-01-01';
+                        rule.updated_at = new Date().toISOString();
+                        try {
+                            await DB.put('arrival_rate_rules', rule);
+                            updatedCount++;
+                        } catch (e) {
+                            console.warn('Error actualizando regla:', e);
+                        }
+                    }
+                }
+                
+                if (updatedCount > 0) {
+                    console.log(`✅ ${updatedCount} reglas actualizadas con active_from: 2000-01-01`);
+                }
+                
+                // Si hay menos de 20 reglas, recargar todas
+                if (existingRules.length < 20) {
+                    console.log(`⚠️ Reglas incompletas detectadas (${existingRules.length} < 20), recargando todas las reglas del tabulador...`);
+                    for (const rule of existingRules) {
+                        try {
+                            await DB.delete('arrival_rate_rules', rule.id);
+                        } catch (e) {
+                            // Ignorar errores
+                        }
+                    }
+                } else {
+                    // Si ya hay 20+ reglas y se actualizaron, no recargar
+                    if (updatedCount > 0) {
+                        console.log(`✅ Reglas actualizadas, omitiendo recarga completa`);
+                        return;
                     }
                 }
             }
@@ -1555,7 +1587,8 @@ const App = {
             );
 
             const rules = [];
-            const today = Utils.formatDate(new Date(), 'YYYY-MM-DD');
+            // Usar una fecha muy antigua para que las reglas siempre estén activas (a menos que tengan active_until)
+            const today = '2000-01-01'; // Fecha base para que las reglas siempre apliquen
 
             // TANITOURS: 11-15 → $1,300, 16-23 → $1,500, 24-39 → $2,500 (tarifa fija)
             if (tanitoursAgency) {
