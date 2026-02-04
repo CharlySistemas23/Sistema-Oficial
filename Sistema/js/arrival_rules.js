@@ -126,17 +126,20 @@ const ArrivalRules = {
                 // Verificar vigencia
                 const ruleFrom = rule.active_from || '2000-01-01';
                 if (date < ruleFrom) {
-                    console.log(`   ❌ Regla ${rule.id} rechazada: fecha ${date} < active_from ${ruleFrom}`);
+                    // Solo loguear en modo debug (no es un error, es filtrado normal)
+                    // console.log(`   ❌ Regla ${rule.id} rechazada: fecha ${date} < active_from ${ruleFrom}`);
                     return false;
                 }
                 if (rule.active_until && date > rule.active_until) {
-                    console.log(`   ❌ Regla ${rule.id} rechazada: fecha ${date} > active_until ${rule.active_until}`);
+                    // Solo loguear en modo debug (no es un error, es filtrado normal)
+                    // console.log(`   ❌ Regla ${rule.id} rechazada: fecha ${date} > active_until ${rule.active_until}`);
                     return false;
                 }
 
                 // Verificar tienda (si es null, aplica a todas)
                 if (rule.branch_id && !compareIds(rule.branch_id, branchId)) {
-                    console.log(`   ❌ Regla ${rule.id} rechazada: branch_id no coincide (regla: ${rule.branch_id}, buscado: ${branchId})`);
+                    // Solo loguear en modo debug (no es un error, es filtrado normal)
+                    // console.log(`   ❌ Regla ${rule.id} rechazada: branch_id no coincide (regla: ${rule.branch_id}, buscado: ${branchId})`);
                     return false;
                 }
 
@@ -147,13 +150,15 @@ const ArrivalRules = {
                     // La regla es específica para un tipo de unidad
                     // Solo aplica si unitType coincide o si unitType es null/vacío (aplica a todos)
                     if (unitType && unitType !== '' && rule.unit_type !== unitType) {
-                        console.log(`   ❌ Regla ${rule.id} rechazada: unit_type no coincide (regla: ${rule.unit_type}, buscado: ${unitType})`);
+                        // Solo loguear en modo debug (no es un error, es filtrado normal)
+                        // console.log(`   ❌ Regla ${rule.id} rechazada: unit_type no coincide (regla: ${rule.unit_type}, buscado: ${unitType})`);
                         return false;
                     }
                 }
                 // Si rule.unit_type es null/vacío, la regla aplica a todos los tipos (no filtrar)
 
-                console.log(`   ✅ Regla ${rule.id} pasó todos los filtros`);
+                // Solo loguear en modo debug (reduce ruido en consola)
+                // console.log(`   ✅ Regla ${rule.id} pasó todos los filtros`);
                 return true;
             });
             console.log(`✅ [ArrivalRules] Reglas activas después del filtro: ${activeRules.length}`, activeRules.map(r => ({
