@@ -76,36 +76,69 @@ const ArrivalRules = {
             const allRules = await DB.getAll('arrival_rate_rules') || [];
             console.log(`📋 [ArrivalRules] Total de reglas cargadas: ${allRules.length}`);
             
+            // Mostrar todas las reglas con sus agency_id para debug
+            if (allRules.length > 0) {
+                console.log('📋 [ArrivalRules] Reglas cargadas:', allRules.map(r => ({
+                    id: r.id,
+                    agency_id: r.agency_id,
+                    agency_name: r.agency_name || 'N/A',
+                    min: r.min_passengers,
+                    max: r.max_passengers,
+                    branch: r.branch_id,
+                    unit: r.unit_type
+                })));
+            }
+            
             // Función auxiliar para comparar IDs de forma flexible
             const compareIds = (id1, id2) => {
                 if (!id1 || !id2) return false;
-                return String(id1).trim().toLowerCase() === String(id2).trim().toLowerCase();
+                const str1 = String(id1).trim().toLowerCase();
+                const str2 = String(id2).trim().toLowerCase();
+                return str1 === str2;
             };
+            
+            // Obtener todas las agencias para comparación por nombre si el ID no coincide
+            const allAgencies = await DB.getAll('catalog_agencies') || [];
             
             // #region agent log
             fetch('http://127.0.0.1:7242/ingest/d085ffd8-d37f-46dc-af23-0f9fbbe46595',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'arrival_rules.js:24',message:'All rules loaded',data:{totalRules:allRules.length,agencyRules:allRules.filter(r=>compareIds(r.agency_id,agencyId)).map(r=>({id:r.id,min:r.min_passengers,max:r.max_passengers,branch:r.branch_id,unit:r.unit_type}))},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
             // #endregion
             const activeRules = allRules.filter(rule => {
                 // Comparar agency_id de forma flexible
-                if (!compareIds(rule.agency_id, agencyId)) {
-                    // También intentar comparar por nombre de agencia si el ID no coincide
-                    const ruleAgency = rule.agency_name ? rule.agency_name.toUpperCase() : '';
-                    if (ruleAgency && ruleAgency !== agencyName) {
-                        return false;
+                let agencyMatches = compareIds(rule.agency_id, agencyId);
+                
+                // Si no coincide por ID, intentar comparar por nombre de agencia
+                if (!agencyMatches) {
+                    // Obtener la agencia de la regla
+                    const ruleAgency = allAgencies.find(a => compareIds(a.id, rule.agency_id));
+                    if (ruleAgency) {
+                        const ruleAgencyName = ruleAgency.name.toUpperCase();
+                        agencyMatches = ruleAgencyName === agencyName || 
+                                      ruleAgencyName.includes(agencyName) || 
+                                      agencyName.includes(ruleAgencyName);
                     }
-                    // Si no hay nombre de agencia en la regla, solo comparar por ID
-                    if (!ruleAgency) {
-                        return false;
-                    }
+                }
+                
+                if (!agencyMatches) {
+                    return false;
                 }
                 
                 // Verificar vigencia
                 const ruleFrom = rule.active_from || '2000-01-01';
-                if (date < ruleFrom) return false;
-                if (rule.active_until && date > rule.active_until) return false;
+                if (date < ruleFrom) {
+                    console.log(`   ❌ Regla ${rule.id} rechazada: fecha ${date} < active_from ${ruleFrom}`);
+                    return false;
+                }
+                if (rule.active_until && date > rule.active_until) {
+                    console.log(`   ❌ Regla ${rule.id} rechazada: fecha ${date} > active_until ${rule.active_until}`);
+                    return false;
+                }
 
                 // Verificar tienda (si es null, aplica a todas)
-                if (rule.branch_id && !compareIds(rule.branch_id, branchId)) return false;
+                if (rule.branch_id && !compareIds(rule.branch_id, branchId)) {
+                    console.log(`   ❌ Regla ${rule.id} rechazada: branch_id no coincide (regla: ${rule.branch_id}, buscado: ${branchId})`);
+                    return false;
+                }
 
                 // Verificar tipo de unidad
                 // Si la regla tiene unit_type (no es null/vacío), debe coincidir exactamente
@@ -113,10 +146,14 @@ const ArrivalRules = {
                 if (rule.unit_type) {
                     // La regla es específica para un tipo de unidad
                     // Solo aplica si unitType coincide o si unitType es null/vacío (aplica a todos)
-                    if (unitType && unitType !== '' && rule.unit_type !== unitType) return false;
+                    if (unitType && unitType !== '' && rule.unit_type !== unitType) {
+                        console.log(`   ❌ Regla ${rule.id} rechazada: unit_type no coincide (regla: ${rule.unit_type}, buscado: ${unitType})`);
+                        return false;
+                    }
                 }
                 // Si rule.unit_type es null/vacío, la regla aplica a todos los tipos (no filtrar)
 
+                console.log(`   ✅ Regla ${rule.id} pasó todos los filtros`);
                 return true;
             });
             console.log(`✅ [ArrivalRules] Reglas activas después del filtro: ${activeRules.length}`, activeRules.map(r => ({
