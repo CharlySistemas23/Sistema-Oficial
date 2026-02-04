@@ -1527,17 +1527,17 @@ const App = {
                 console.log(`✅ ${rulesWithFutureDate.length} reglas actualizadas con active_from: 2000-01-01`);
             }
             
-            // Solo precargar si no hay reglas o si hay menos de 20 (para asegurar que todas estén cargadas)
-            // Hay aproximadamente 23 reglas en total según el tabulador:
-            // 3 TANITOURS + 1 TRAVELEX + 6 DISCOVERY (2 city_tour + 4 sprinter/van) + 1 VERANOS + 5 TB + 5 TTF + 2 TROPICAL = 23 reglas
-            if (existingRules.length >= 20 && rulesWithFutureDate.length === 0) {
+            // Solo precargar si no hay reglas o si hay menos de 25 (para asegurar que todas estén cargadas)
+            // Hay aproximadamente 25 reglas en total según el tabulador:
+            // 3 TANITOURS + 1 TRAVELEX + 6 DISCOVERY (2 city_tour + 4 sprinter/van) + 1 VERANOS + 5 TB + 5 TTF + 4 TROPICAL (van/sprinter/city_tour 1-14 + truck 15-45) = 25 reglas
+            if (existingRules.length >= 25 && rulesWithFutureDate.length === 0) {
                 console.log(`✅ Arrival rate rules ya existen (${existingRules.length}) y están actualizadas, omitiendo precarga`);
                 return;
             }
             
-            // Si hay menos de 20 reglas, eliminar todas y recargar
-            if (existingRules.length < 20) {
-                console.log(`⚠️ Reglas incompletas detectadas (${existingRules.length} < 20), eliminando y recargando todas las reglas del tabulador...`);
+            // Si hay menos de 25 reglas, eliminar todas y recargar
+            if (existingRules.length < 25) {
+                console.log(`⚠️ Reglas incompletas detectadas (${existingRules.length} < 25), eliminando y recargando todas las reglas del tabulador...`);
                 for (const rule of existingRules) {
                     try {
                         await DB.delete('arrival_rate_rules', rule.id);
@@ -1645,10 +1645,19 @@ const App = {
                 );
             }
 
-            // TROPICAL ADVENTURE: Van (1-14 pasajeros) → $500, Camión (15-45 pasajeros) → $1,200 (tarifa fija)
+            // TROPICAL ADVENTURE: 
+            // - Van/Sprinter/City Tour (1-14 pasajeros) → $500
+            // - Camión (15-45 pasajeros) → $1,200
+            // Nota: Van, Sprinter y City Tour comparten la misma tarifa para 1-14 PAX
             if (tropicalAgency) {
                 rules.push(
+                    // Van 1-14 PAX
                     { id: Utils.generateId(), agency_id: tropicalAgency.id, branch_id: null, min_passengers: 1, max_passengers: 14, unit_type: 'van', rate_per_passenger: 0, fee_type: 'flat', flat_fee: 500, extra_per_passenger: 0, active_from: today, active_until: null, notes: 'TROPICAL ADVENTURE: Van 1-14 PAX', created_at: new Date().toISOString(), updated_at: new Date().toISOString(), sync_status: 'pending' },
+                    // Sprinter 1-14 PAX (misma tarifa que Van)
+                    { id: Utils.generateId(), agency_id: tropicalAgency.id, branch_id: null, min_passengers: 1, max_passengers: 14, unit_type: 'sprinter', rate_per_passenger: 0, fee_type: 'flat', flat_fee: 500, extra_per_passenger: 0, active_from: today, active_until: null, notes: 'TROPICAL ADVENTURE: Sprinter 1-14 PAX', created_at: new Date().toISOString(), updated_at: new Date().toISOString(), sync_status: 'pending' },
+                    // City Tour 1-14 PAX (misma tarifa que Van)
+                    { id: Utils.generateId(), agency_id: tropicalAgency.id, branch_id: null, min_passengers: 1, max_passengers: 14, unit_type: 'city_tour', rate_per_passenger: 0, fee_type: 'flat', flat_fee: 500, extra_per_passenger: 0, active_from: today, active_until: null, notes: 'TROPICAL ADVENTURE: City Tour 1-14 PAX', created_at: new Date().toISOString(), updated_at: new Date().toISOString(), sync_status: 'pending' },
+                    // Camión 15-45 PAX
                     { id: Utils.generateId(), agency_id: tropicalAgency.id, branch_id: null, min_passengers: 15, max_passengers: 45, unit_type: 'truck', rate_per_passenger: 0, fee_type: 'flat', flat_fee: 1200, extra_per_passenger: 0, active_from: today, active_until: null, notes: 'TROPICAL ADVENTURE: Camión 15-45 PAX', created_at: new Date().toISOString(), updated_at: new Date().toISOString(), sync_status: 'pending' }
                 );
             }
