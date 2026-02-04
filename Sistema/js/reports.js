@@ -5823,6 +5823,8 @@ const Reports = {
                 
                 // Auto-detectar agencia cuando se selecciona un guía
                 const guideSelect = document.getElementById('qc-arrival-guide');
+                let isAutoSelectingAgency = false; // Flag para evitar limpiar el guía cuando se auto-selecciona la agencia
+                
                 if (guideSelect) {
                     guideSelect.addEventListener('change', async () => {
                         const selectedGuideId = guideSelect.value;
@@ -5832,14 +5834,44 @@ const Reports = {
                                 const selectedGuide = guides.find(g => g.id === selectedGuideId);
                                 
                                 if (selectedGuide && selectedGuide.agency_id) {
+                                    // Marcar que estamos auto-seleccionando la agencia
+                                    isAutoSelectingAgency = true;
+                                    
                                     // Auto-seleccionar la agencia del guía
                                     if (agencySelect) {
+                                        const previousAgencyId = agencySelect.value;
                                         agencySelect.value = selectedGuide.agency_id;
-                                        // Disparar evento change para que se ejecute el cálculo
-                                        agencySelect.dispatchEvent(new Event('change', { bubbles: true }));
+                                        
+                                        // Solo filtrar guías si la agencia cambió
+                                        if (previousAgencyId !== selectedGuide.agency_id) {
+                                            // Filtrar guías por la agencia (sin limpiar la selección del guía)
+                                            await this.loadGuidesForAgencyInArrivalsForm(selectedGuide.agency_id);
+                                        }
+                                        
+                                        // Asegurar que el guía seleccionado esté en la lista
+                                        // Si no está, agregarlo manualmente
+                                        const guideOption = guideSelect.querySelector(`option[value="${selectedGuideId}"]`);
+                                        if (!guideOption) {
+                                            // El guía no está en la lista filtrada, agregarlo
+                                            const option = document.createElement('option');
+                                            option.value = selectedGuideId;
+                                            option.textContent = selectedGuide.name;
+                                            guideSelect.appendChild(option);
+                                        }
+                                        
+                                        // Restaurar la selección del guía después de filtrar
+                                        guideSelect.value = selectedGuideId;
+                                        
                                         // Esperar un momento para que el cambio se procese y luego recalcular
                                         setTimeout(async () => {
                                             await calculateArrivalCost();
+                                            isAutoSelectingAgency = false;
+                                        }, 100);
+                                    } else {
+                                        // Si la agencia ya estaba seleccionada, solo recalcular
+                                        setTimeout(async () => {
+                                            await calculateArrivalCost();
+                                            isAutoSelectingAgency = false;
                                         }, 100);
                                     }
                                     
@@ -5854,9 +5886,10 @@ const Reports = {
                                     }
                                     // Recargar llegadas sin filtro de guía
                                     await this.loadQuickCaptureArrivals();
-                        }
-                    } catch (error) {
+                                }
+                            } catch (error) {
                                 console.error('Error auto-detectando agencia:', error);
+                                isAutoSelectingAgency = false;
                             }
                         } else {
                             // Limpiar agencia y costo si no hay guía seleccionado
@@ -5873,27 +5906,27 @@ const Reports = {
                     });
                 }
                 
-                // Filtrar guías cuando se selecciona una agencia
+                // Filtrar guías cuando se selecciona una agencia manualmente
                 if (agencySelect) {
                     agencySelect.addEventListener('change', async () => {
-                        const selectedAgencyId = agencySelect.value;
-                        // Filtrar guías por la agencia seleccionada
-                        await this.loadGuidesForAgencyInArrivalsForm(selectedAgencyId);
-                        // Limpiar selección de guía si cambia la agencia
-                        if (guideSelect) {
-                            guideSelect.value = '';
+                        // Solo limpiar el guía si NO estamos auto-seleccionando desde el guía
+                        if (!isAutoSelectingAgency) {
+                            const selectedAgencyId = agencySelect.value;
+                            // Filtrar guías por la agencia seleccionada
+                            await this.loadGuidesForAgencyInArrivalsForm(selectedAgencyId);
+                            // Limpiar selección de guía solo si el usuario cambió la agencia manualmente
+                            if (guideSelect) {
+                                guideSelect.value = '';
+                            }
+                            // Recalcular costo si hay datos
+                            await calculateArrivalCost();
+                            // Recargar llegadas
+                            await this.loadQuickCaptureArrivals();
                         }
-                        // Recalcular costo si hay datos
-                        await calculateArrivalCost();
                     });
                 }
                 
-                // Recargar llegadas cuando cambia la agencia manualmente
-                if (agencySelect) {
-                    agencySelect.addEventListener('change', async () => {
-                        await this.loadQuickCaptureArrivals();
-                    });
-                }
+                // Nota: loadQuickCaptureArrivals ya se llama en el event listener anterior
                 
                 // Asegurar que el cálculo se ejecute cuando cambian pasajeros o tipo de unidad
                 // incluso si la agencia aún no está seleccionada (se auto-detecta del guía)
