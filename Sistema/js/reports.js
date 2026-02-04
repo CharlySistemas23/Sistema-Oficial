@@ -5866,6 +5866,9 @@ const Reports = {
                                             await calculateArrivalCost();
                                         }, 100);
                                     }
+                                    
+                                    // Recargar llegadas filtradas por el guía seleccionado
+                                    await this.loadQuickCaptureArrivals();
                                 } else {
                                     Utils.showNotification('El guía seleccionado no tiene agencia asignada', 'warning');
                                     // Limpiar costo si no hay agencia
@@ -5873,6 +5876,8 @@ const Reports = {
                                     if (costInput) {
                                         costInput.value = '0.00';
                                     }
+                                    // Recargar llegadas sin filtro de guía
+                                    await this.loadQuickCaptureArrivals();
                                 }
                             } catch (error) {
                                 console.error('Error auto-detectando agencia:', error);
@@ -5886,7 +5891,16 @@ const Reports = {
                             if (costInput) {
                                 costInput.value = '0.00';
                             }
+                            // Recargar llegadas sin filtro de guía
+                            await this.loadQuickCaptureArrivals();
                         }
+                    });
+                }
+                
+                // Recargar llegadas cuando cambia la agencia manualmente
+                if (agencySelect) {
+                    agencySelect.addEventListener('change', async () => {
+                        await this.loadQuickCaptureArrivals();
                     });
                 }
                 
@@ -7813,6 +7827,14 @@ const Reports = {
             const arrivalDateInput = document.getElementById('qc-arrival-date');
             const selectedDate = arrivalDateInput?.value || dateInput?.value || new Date().toISOString().split('T')[0];
             
+            // Obtener guía seleccionado en el formulario (si existe)
+            const guideSelect = document.getElementById('qc-arrival-guide');
+            const selectedGuideId = guideSelect?.value || null;
+            
+            // Obtener agencia seleccionada en el formulario (si existe)
+            const agencySelect = document.getElementById('qc-arrival-agency');
+            const selectedAgencyId = agencySelect?.value || null;
+            
             // Obtener sucursal actual para filtrar
             const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
             const isMasterAdmin = typeof UserManager !== 'undefined' && (
@@ -7828,6 +7850,20 @@ const Reports = {
                 const arrivalDate = a.date ? a.date.split('T')[0] : null;
                 if (!arrivalDate || arrivalDate !== selectedDate) {
                     return false; // Filtro estricto por fecha
+                }
+                
+                // Filtrar por guía si hay uno seleccionado en el formulario
+                if (selectedGuideId) {
+                    if (!a.guide_id || String(a.guide_id) !== String(selectedGuideId)) {
+                        return false; // Excluir llegadas de otros guías
+                    }
+                }
+                
+                // Filtrar por agencia si hay una seleccionada en el formulario (y no hay guía seleccionado)
+                if (!selectedGuideId && selectedAgencyId) {
+                    if (!a.agency_id || String(a.agency_id) !== String(selectedAgencyId)) {
+                        return false; // Excluir llegadas de otras agencias
+                    }
                 }
                 
                 // Filtrar por sucursal si no es master admin
@@ -7866,43 +7902,99 @@ const Reports = {
                 return;
             }
 
-            // Agrupar por agencia
+            // Obtener guías para mostrar nombres
+            const guides = await DB.getAll('catalog_guides') || [];
+            
+            // Agrupar por agencia y guía
             const arrivalsByAgency = {};
             filteredArrivals.forEach(arrival => {
                 const agencyId = arrival.agency_id;
+                const guideId = arrival.guide_id;
+                
                 if (!arrivalsByAgency[agencyId]) {
                     arrivalsByAgency[agencyId] = {
                         agency: agencies.find(a => a.id === agencyId),
                         arrivals: [],
-                        totalPassengers: 0
+                        totalPassengers: 0,
+                        guides: {} // Agrupar por guía dentro de cada agencia
                     };
                 }
+                
                 arrivalsByAgency[agencyId].arrivals.push(arrival);
                 arrivalsByAgency[agencyId].totalPassengers += arrival.passengers || 0;
+                
+                // Agrupar por guía
+                if (guideId) {
+                    if (!arrivalsByAgency[agencyId].guides[guideId]) {
+                        const guide = guides.find(g => g.id === guideId);
+                        arrivalsByAgency[agencyId].guides[guideId] = {
+                            guide: guide,
+                            arrivals: [],
+                            totalPassengers: 0
+                        };
+                    }
+                    arrivalsByAgency[agencyId].guides[guideId].arrivals.push(arrival);
+                    arrivalsByAgency[agencyId].guides[guideId].totalPassengers += arrival.passengers || 0;
+                }
             });
 
             let html = `
                 <div style="display: grid; gap: 8px;">
-                    ${Object.values(arrivalsByAgency).map(group => `
+                    ${Object.values(arrivalsByAgency).map(group => {
+                        // Si hay guías agrupados, mostrar por guía; si no, mostrar todas las llegadas
+                        const hasGuides = Object.keys(group.guides || {}).length > 0;
+                        
+                        return `
                         <div style="padding: 10px; background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-radius: 4px; border-left: 3px solid #fa709a; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid #dee2e6;">
                                 <strong style="font-size: 12px; color: #495057; font-weight: 600;">${group.agency?.name || 'Agencia Desconocida'}</strong>
                                 <span style="font-size: 10px; color: #6c757d; font-weight: 500; padding: 3px 10px; background: white; border-radius: 10px; border: 1px solid #dee2e6;">${group.totalPassengers} pasajeros</span>
                             </div>
-                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 6px; font-size: 10px; color: #6c757d;">
-                                ${group.arrivals.map(a => {
-                                    const branch = branches.find(b => b.id === a.branch_id);
-                                    return `
-                                        <div style="padding: 4px 6px; background: white; border-radius: 3px;">
-                                            <i class="fas fa-building" style="font-size: 9px; margin-right: 4px;"></i> ${branch?.name || 'N/A'}: 
-                                            <strong style="color: #495057;">${a.passengers || 0}</strong> pasajeros
-                                            ${a.time ? `<span style="margin-left: 4px; font-size: 9px;">(${a.time})</span>` : ''}
+                            ${hasGuides ? `
+                                <div style="display: grid; gap: 6px;">
+                                    ${Object.values(group.guides).map(guideGroup => `
+                                        <div style="padding: 6px; background: white; border-radius: 3px; border-left: 2px solid #667eea;">
+                                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                                <span style="font-size: 11px; color: #495057; font-weight: 600;">
+                                                    <i class="fas fa-user-tie" style="font-size: 9px; margin-right: 4px; color: #667eea;"></i>
+                                                    ${guideGroup.guide?.name || 'Guía Desconocido'}
+                                                </span>
+                                                <span style="font-size: 10px; color: #6c757d; font-weight: 500;">${guideGroup.totalPassengers} pasajeros</span>
+                                            </div>
+                                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 4px; font-size: 10px; color: #6c757d;">
+                                                ${guideGroup.arrivals.map(a => {
+                                                    const branch = branches.find(b => b.id === a.branch_id);
+                                                    return `
+                                                        <div style="padding: 3px 6px; background: #f8f9fa; border-radius: 2px;">
+                                                            <i class="fas fa-building" style="font-size: 9px; margin-right: 4px;"></i> ${branch?.name || 'N/A'}: 
+                                                            <strong style="color: #495057;">${a.passengers || 0}</strong> pasajeros
+                                                            ${a.unit_type ? `<span style="margin-left: 4px; font-size: 9px; color: #6c757d;">(${a.unit_type})</span>` : ''}
+                                                        </div>
+                                                    `;
+                                                }).join('')}
+                                            </div>
                                         </div>
-                                    `;
-                                }).join('')}
-                            </div>
+                                    `).join('')}
+                                </div>
+                            ` : `
+                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 6px; font-size: 10px; color: #6c757d;">
+                                    ${group.arrivals.map(a => {
+                                        const branch = branches.find(b => b.id === a.branch_id);
+                                        const guide = a.guide_id ? guides.find(g => g.id === a.guide_id) : null;
+                                        return `
+                                            <div style="padding: 4px 6px; background: white; border-radius: 3px;">
+                                                <i class="fas fa-building" style="font-size: 9px; margin-right: 4px;"></i> ${branch?.name || 'N/A'}: 
+                                                <strong style="color: #495057;">${a.passengers || 0}</strong> pasajeros
+                                                ${guide ? `<span style="margin-left: 4px; font-size: 9px; color: #667eea;"><i class="fas fa-user-tie"></i> ${guide.name}</span>` : ''}
+                                                ${a.unit_type ? `<span style="margin-left: 4px; font-size: 9px;">(${a.unit_type})</span>` : ''}
+                                            </div>
+                                        `;
+                                    }).join('')}
+                                </div>
+                            `}
                         </div>
-                    `).join('')}
+                    `;
+                    }).join('')}
                 </div>
             `;
 
@@ -7984,6 +8076,7 @@ const Reports = {
             const branchId = isMasterAdmin 
                 ? document.getElementById('qc-arrival-branch')?.value || currentBranchId
                 : currentBranchId;
+            const guideId = document.getElementById('qc-arrival-guide')?.value || null;
             const agencyId = document.getElementById('qc-arrival-agency')?.value;
             const passengers = parseInt(document.getElementById('qc-arrival-pax')?.value || 0);
             const units = parseInt(document.getElementById('qc-arrival-units')?.value || 0);
@@ -7996,8 +8089,8 @@ const Reports = {
             const arrivalDate = arrivalDateInput?.value || mainDateInput?.value || new Date().toISOString().split('T')[0];
 
             // Validar campos requeridos
-            if (!branchId || !agencyId || !passengers || passengers <= 0 || !units || units <= 0 || !arrivalDate) {
-                Utils.showNotification('Por favor completa todos los campos requeridos (incluyendo la fecha)', 'error');
+            if (!branchId || !guideId || !agencyId || !passengers || passengers <= 0 || !units || units <= 0 || !arrivalDate) {
+                Utils.showNotification('Por favor completa todos los campos requeridos: guía, agencia, pasajeros, unidades y fecha', 'error');
                 return;
             }
 
@@ -8047,6 +8140,7 @@ const Reports = {
                 await ArrivalRules.saveArrival({
                     date: arrivalDate,
                     branch_id: branchId,
+                    guide_id: guideId,
                     agency_id: agencyId,
                     passengers: passengers,
                     units: units,
