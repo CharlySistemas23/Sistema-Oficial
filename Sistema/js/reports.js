@@ -5489,9 +5489,10 @@ const Reports = {
                         </div>
                         <div class="form-group">
                             <label>Agencia <span style="color: var(--color-danger);">*</span></label>
-                            <select id="qc-arrival-agency" class="form-select" required readonly style="background: var(--color-bg-secondary);">
-                                <option value="">Se seleccionará automáticamente al elegir el guía</option>
+                            <select id="qc-arrival-agency" class="form-select" required>
+                                <option value="">Seleccionar agencia...</option>
                             </select>
+                            <small style="color: var(--color-text-secondary); font-size: 9px;">Selecciona la agencia para filtrar los guías disponibles</small>
                         </div>
                         <div class="form-group">
                             <label>Pasajeros (PAX) <span style="color: var(--color-danger);">*</span></label>
@@ -5515,19 +5516,6 @@ const Reports = {
                             <label>Costo de Llegada (MXN)</label>
                             <input type="number" id="qc-arrival-cost" class="form-input" min="0" step="0.01" placeholder="0.00" readonly style="background: var(--color-bg-secondary);">
                             <small id="qc-arrival-cost-help" style="color: var(--color-text-secondary); font-size: 9px;">Se calcula automáticamente</small>
-                        </div>
-                        <div id="qc-arrival-override-container" style="display: none; grid-column: 1 / -1; padding: var(--spacing-md); background: var(--color-warning-bg, #fff3cd); border: 1px solid var(--color-warning, #ffc107); border-radius: var(--radius-sm);">
-                            <div style="margin-bottom: var(--spacing-sm); color: var(--color-warning-text, #856404); font-weight: 600; font-size: 11px;">
-                                <i class="fas fa-exclamation-triangle"></i> Se requiere override manual
-                            </div>
-                            <div class="form-group">
-                                <label>Monto Manual (MXN) <span style="color: var(--color-danger);">*</span></label>
-                                <input type="number" id="qc-arrival-override-amount" class="form-input" min="0" step="0.01" placeholder="0.00">
-                            </div>
-                            <div class="form-group">
-                                <label>Motivo del Override <span style="color: var(--color-danger);">*</span></label>
-                                <textarea id="qc-arrival-override-reason" class="form-textarea" rows="2" placeholder="Explica por qué se requiere override manual..."></textarea>
-                            </div>
                         </div>
                         <div class="form-group" style="grid-column: 1 / -1;">
                             <label>Notas</label>
@@ -5753,51 +5741,18 @@ const Reports = {
                         if (typeof ArrivalRules !== 'undefined' && ArrivalRules.calculateArrivalFee) {
                             try {
                                 const calculation = await ArrivalRules.calculateArrivalFee(agencyId, branchId, pax, unitType, arrivalDate);
-                                const overrideContainer = document.getElementById('qc-arrival-override-container');
-                                const overrideAmountInput = document.getElementById('qc-arrival-override-amount');
-                                const overrideReasonInput = document.getElementById('qc-arrival-override-reason');
                                 
                                 if (costInput) {
-                                    if (calculation.overrideRequired && !calculation.calculatedFee) {
-                                        costInput.value = 'Requiere Override';
-                                        costInput.style.color = 'var(--color-warning, #ffc107)';
-                                        if (costHelp) {
-                                            costHelp.textContent = 'No hay regla configurada, ingresa el monto manualmente';
-                                            costHelp.style.color = 'var(--color-warning, #ffc107)';
-                                        }
-                                        // Mostrar campos de override
-                                        if (overrideContainer) {
-                                            overrideContainer.style.display = 'block';
-                                        }
-                                        // Hacer los campos requeridos
-                                        if (overrideAmountInput) {
-                                            overrideAmountInput.required = true;
-                                            overrideAmountInput.value = '';
-                                        }
-                                        if (overrideReasonInput) {
-                                            overrideReasonInput.required = true;
-                                            overrideReasonInput.value = '';
-                                        }
-                                    } else {
-                                        const calculatedFee = calculation.calculatedFee || 0;
-                                        costInput.value = calculatedFee.toFixed(2);
-                                        costInput.style.color = '';
-                                        if (costHelp) {
+                                    const calculatedFee = calculation.calculatedFee || 0;
+                                    costInput.value = calculatedFee.toFixed(2);
+                                    costInput.style.color = '';
+                                    if (costHelp) {
+                                        if (calculatedFee > 0) {
                                             costHelp.textContent = `Costo calculado automáticamente: $${calculatedFee.toFixed(2)} MXN (${pax} pasajeros${unitType ? ', ' + unitType : ''})`;
                                             costHelp.style.color = 'var(--color-success, #28a745)';
-                                        }
-                                        // Ocultar campos de override
-                                        if (overrideContainer) {
-                                            overrideContainer.style.display = 'none';
-                                        }
-                                        // Hacer los campos opcionales
-                                        if (overrideAmountInput) {
-                                            overrideAmountInput.required = false;
-                                            overrideAmountInput.value = '';
-                                        }
-                                        if (overrideReasonInput) {
-                                            overrideReasonInput.required = false;
-                                            overrideReasonInput.value = '';
+                                        } else {
+                                            costHelp.textContent = 'No hay regla configurada para esta combinación. Verifica las reglas de llegadas.';
+                                            costHelp.style.color = 'var(--color-warning, #ffc107)';
                                         }
                                     }
                                 }
@@ -5894,6 +5849,21 @@ const Reports = {
                             // Recargar llegadas sin filtro de guía
                             await this.loadQuickCaptureArrivals();
                         }
+                    });
+                }
+                
+                // Filtrar guías cuando se selecciona una agencia
+                if (agencySelect) {
+                    agencySelect.addEventListener('change', async () => {
+                        const selectedAgencyId = agencySelect.value;
+                        // Filtrar guías por la agencia seleccionada
+                        await this.loadGuidesForAgencyInArrivalsForm(selectedAgencyId);
+                        // Limpiar selección de guía si cambia la agencia
+                        if (guideSelect) {
+                            guideSelect.value = '';
+                        }
+                        // Recalcular costo si hay datos
+                        await calculateArrivalCost();
                     });
                 }
                 
@@ -6117,31 +6087,23 @@ const Reports = {
                 }
             }
 
-            // Cargar TODOS los guías (para el formulario de llegadas)
-            const guides = await DB.getAll('catalog_guides') || [];
+            // Cargar agencias (solo las 7 agencias permitidas, eliminar duplicados)
             const allAgencies = await DB.getAll('catalog_agencies') || [];
             const agencies = this.filterAllowedAgencies(allAgencies);
             
-            const guideSelect = document.getElementById('qc-arrival-guide');
-            if (guideSelect) {
-                if (guides.length > 0) {
-                    guideSelect.innerHTML = '<option value="">Seleccionar...</option>' +
-                        guides.map(g => {
-                            const agencyName = g.agency_id ? (agencies.find(a => this.compareIds(a.id, g.agency_id))?.name || '') : '';
-                            return `<option value="${g.id}">${g.name}${agencyName ? ' (' + agencyName + ')' : ''}</option>`;
-                        }).join('');
-                } else {
-                    guideSelect.innerHTML = '<option value="">No hay guías disponibles</option>';
-                }
-            }
-
-            // Cargar agencias (solo las 7 agencias permitidas, eliminar duplicados)
-            // NOTA: La agencia se auto-detecta al seleccionar el guía, pero mantenemos el select para referencia
             const agencySelect = document.getElementById('qc-arrival-agency');
             if (agencySelect) {
-                agencySelect.innerHTML = '<option value="">Se seleccionará automáticamente al elegir el guía</option>' +
+                agencySelect.innerHTML = '<option value="">Seleccionar agencia...</option>' +
                     agencies.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
                 console.log(`✅ [Llegadas] ${agencies.length} agencias permitidas cargadas: ${agencies.map(a => a.name).join(', ')}`);
+            }
+
+            // Cargar guías (se filtrarán por agencia cuando se seleccione una)
+            const guides = await DB.getAll('catalog_guides') || [];
+            const guideSelect = document.getElementById('qc-arrival-guide');
+            if (guideSelect) {
+                // Inicialmente mostrar todos los guías
+                await this.loadGuidesForAgencyInArrivalsForm(null);
             }
         } catch (error) {
             console.error('Error cargando catálogos de llegadas:', error);
@@ -6247,6 +6209,92 @@ const Reports = {
         } catch (error) {
             console.error('Error guardando llegada:', error);
             Utils.showNotification('Error al guardar llegada: ' + error.message, 'error');
+        }
+    },
+
+    async loadGuidesForAgencyInArrivalsForm(agencyId) {
+        try {
+            const guides = await DB.getAll('catalog_guides') || [];
+            const agencies = await DB.getAll('catalog_agencies') || [];
+            const guideSelect = document.getElementById('qc-arrival-guide');
+            
+            if (!guideSelect) return;
+
+            console.log(`🔍 [Llegadas] Cargando guías para agencia: ${agencyId || 'TODAS'}`);
+
+            if (!agencyId || agencyId === '') {
+                // Si no hay agencia seleccionada, mostrar TODAS las guías
+                if (guides.length > 0) {
+                    guideSelect.innerHTML = '<option value="">Seleccionar...</option>' +
+                        guides.map(g => {
+                            const agencyName = g.agency_id ? (agencies.find(a => this.compareIds(a.id, g.agency_id))?.name || '') : '';
+                            return `<option value="${g.id}">${g.name}${agencyName ? ' (' + agencyName + ')' : ''}</option>`;
+                        }).join('');
+                } else {
+                    guideSelect.innerHTML = '<option value="">No hay guías disponibles</option>';
+                }
+                return;
+            }
+
+            // Buscar la agencia seleccionada
+            const selectedAgency = agencies.find(a => this.compareIds(a.id, agencyId));
+            if (!selectedAgency) {
+                console.warn(`⚠️ [Llegadas] Agencia con ID ${agencyId} no encontrada`);
+                // Si no se encuentra la agencia, mostrar todas las guías
+                if (guides.length > 0) {
+                    guideSelect.innerHTML = '<option value="">Seleccionar...</option>' +
+                        guides.map(g => {
+                            const agencyName = g.agency_id ? (agencies.find(a => this.compareIds(a.id, g.agency_id))?.name || '') : '';
+                            return `<option value="${g.id}">${g.name}${agencyName ? ' (' + agencyName + ')' : ''}</option>`;
+                        }).join('');
+                } else {
+                    guideSelect.innerHTML = '<option value="">No hay guías disponibles</option>';
+                }
+                return;
+            }
+
+            console.log(`   [Llegadas] Agencia seleccionada: ${selectedAgency.name} (ID: ${selectedAgency.id})`);
+
+            // Filtrar guías por agencia seleccionada
+            const filteredGuides = guides.filter(g => {
+                if (!g.agency_id) {
+                    return false;
+                }
+                
+                // Comparar por ID
+                let matches = this.compareIds(g.agency_id, agencyId);
+                
+                // Si no coincide por ID, intentar comparar por nombre de agencia
+                if (!matches) {
+                    const guideAgency = agencies.find(a => this.compareIds(a.id, g.agency_id));
+                    if (guideAgency) {
+                        const selectedName = String(selectedAgency.name || '').trim().toUpperCase();
+                        const guideAgencyName = String(guideAgency.name || '').trim().toUpperCase();
+                        matches = selectedName === guideAgencyName || 
+                                 selectedName.includes(guideAgencyName) || 
+                                 guideAgencyName.includes(selectedName);
+                    }
+                }
+                
+                return matches;
+            });
+
+            console.log(`   [Llegadas] Guías filtradas: ${filteredGuides.length}`);
+            
+            if (filteredGuides.length > 0) {
+                guideSelect.innerHTML = '<option value="">Seleccionar...</option>' +
+                    filteredGuides.map(g => `<option value="${g.id}">${g.name}</option>`).join('');
+                console.log(`✅ [Llegadas] ${filteredGuides.length} guías cargadas para agencia ${selectedAgency.name}`);
+            } else {
+                console.warn(`⚠️ [Llegadas] No se encontraron guías para la agencia ${selectedAgency.name}`);
+                guideSelect.innerHTML = '<option value="">No hay guías para esta agencia</option>';
+            }
+        } catch (error) {
+            console.error('[Llegadas] Error cargando guías:', error);
+            const guideSelect = document.getElementById('qc-arrival-guide');
+            if (guideSelect) {
+                guideSelect.innerHTML = '<option value="">Error cargando guías</option>';
+            }
         }
     },
 
