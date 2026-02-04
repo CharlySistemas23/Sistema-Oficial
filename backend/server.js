@@ -261,24 +261,157 @@ async function checkAndMigrate() {
       const schemaSQL = readFileSync(schemaPath, 'utf8');
       
       try {
-        // Ejecutar todo el SQL de una vez (PostgreSQL lo maneja correctamente)
+        // Ejecutar todo el schema SQL de una vez
+        // PostgreSQL puede ejecutar múltiples statements separados por punto y coma
         // El schema.sql usa CREATE TABLE IF NOT EXISTS, así que es seguro ejecutarlo múltiples veces
         await pool.query(schemaSQL);
-        console.log('✅ Migración completada - Todas las tablas verificadas/creadas');
+        console.log('✅ Schema SQL ejecutado');
         
         // Verificar que las tablas faltantes ahora existen
         const verifyTables = await pool.query(`
           SELECT table_name 
           FROM information_schema.tables 
           WHERE table_schema = 'public' 
-          AND table_name IN (${missingTables.map((_, i) => `$${i + 1}`).join(', ')})
-        `, missingTables);
+          AND table_name = ANY($1::text[])
+        `, [missingTables]);
         
         const nowExisting = verifyTables.rows.map(r => r.table_name);
         const stillMissing = missingTables.filter(t => !nowExisting.includes(t));
         
         if (stillMissing.length > 0) {
-          console.warn(`⚠️  Algunas tablas aún no se crearon: ${stillMissing.join(', ')}`);
+          console.warn(`⚠️  Algunas tablas aún no se crearon después de ejecutar schema: ${stillMissing.join(', ')}`);
+          console.log('🔄 Intentando crear tablas faltantes directamente...');
+          
+          // Crear tablas faltantes directamente
+          for (const tableName of stillMissing) {
+            try {
+              if (tableName === 'quick_captures') {
+                await pool.query(`
+                  CREATE TABLE IF NOT EXISTS quick_captures (
+                    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                    branch_id UUID REFERENCES branches(id) ON DELETE SET NULL,
+                    seller_id UUID REFERENCES catalog_sellers(id) ON DELETE SET NULL,
+                    guide_id UUID REFERENCES catalog_guides(id) ON DELETE SET NULL,
+                    agency_id UUID REFERENCES catalog_agencies(id) ON DELETE SET NULL,
+                    product VARCHAR(255) NOT NULL,
+                    quantity INTEGER NOT NULL DEFAULT 1,
+                    currency VARCHAR(3) NOT NULL DEFAULT 'MXN',
+                    total DECIMAL(12, 2) NOT NULL DEFAULT 0,
+                    merchandise_cost DECIMAL(12, 2) DEFAULT 0,
+                    notes TEXT,
+                    is_street BOOLEAN DEFAULT false,
+                    payment_method VARCHAR(50),
+                    payments JSONB,
+                    date DATE NOT NULL,
+                    original_report_date DATE,
+                    created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                    sync_status VARCHAR(50) DEFAULT 'synced'
+                  );
+                  CREATE INDEX IF NOT EXISTS idx_quick_captures_date ON quick_captures(date);
+                  CREATE INDEX IF NOT EXISTS idx_quick_captures_branch_id ON quick_captures(branch_id);
+                  CREATE INDEX IF NOT EXISTS idx_quick_captures_seller_id ON quick_captures(seller_id);
+                  CREATE INDEX IF NOT EXISTS idx_quick_captures_guide_id ON quick_captures(guide_id);
+                  CREATE INDEX IF NOT EXISTS idx_quick_captures_agency_id ON quick_captures(agency_id);
+                  CREATE INDEX IF NOT EXISTS idx_quick_captures_created_at ON quick_captures(created_at);
+                  CREATE INDEX IF NOT EXISTS idx_quick_captures_original_report_date ON quick_captures(original_report_date);
+                `);
+                console.log('✅ Tabla quick_captures creada directamente');
+              } else if (tableName === 'archived_quick_capture_reports') {
+                await pool.query(`
+                  CREATE TABLE IF NOT EXISTS archived_quick_capture_reports (
+                    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                    report_date DATE NOT NULL,
+                    period_type VARCHAR(50) DEFAULT 'daily',
+                    branch_id UUID REFERENCES branches(id) ON DELETE SET NULL,
+                    branch_ids UUID[],
+                    total_days INTEGER DEFAULT 1,
+                    total_captures INTEGER DEFAULT 0,
+                    total_quantity INTEGER DEFAULT 0,
+                    total_sales_mxn DECIMAL(12, 2) DEFAULT 0,
+                    total_cogs DECIMAL(12, 2) DEFAULT 0,
+                    total_commissions DECIMAL(12, 2) DEFAULT 0,
+                    total_arrival_costs DECIMAL(12, 2) DEFAULT 0,
+                    total_operating_costs DECIMAL(12, 2) DEFAULT 0,
+                    variable_costs_daily DECIMAL(12, 2) DEFAULT 0,
+                    fixed_costs_prorated DECIMAL(12, 2) DEFAULT 0,
+                    bank_commissions DECIMAL(12, 2) DEFAULT 0,
+                    gross_profit DECIMAL(12, 2) DEFAULT 0,
+                    net_profit DECIMAL(12, 2) DEFAULT 0,
+                    exchange_rates JSONB,
+                    metrics JSONB,
+                    captures JSONB,
+                    arrivals JSONB,
+                    seller_commissions JSONB,
+                    guide_commissions JSONB,
+                    archived_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                    archived_by UUID REFERENCES users(id) ON DELETE SET NULL,
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                  );
+                  CREATE INDEX IF NOT EXISTS idx_archived_qc_reports_date ON archived_quick_capture_reports(report_date);
+                  CREATE INDEX IF NOT EXISTS idx_archived_qc_reports_branch_id ON archived_quick_capture_reports(branch_id);
+                `);
+                console.log('✅ Tabla archived_quick_capture_reports creada directamente');
+              } else if (tableName === 'historical_quick_capture_reports') {
+                await pool.query(`
+                  CREATE TABLE IF NOT EXISTS historical_quick_capture_reports (
+                    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                    period_type VARCHAR(50) NOT NULL,
+                    period_name VARCHAR(255) NOT NULL,
+                    date_from DATE NOT NULL,
+                    date_to DATE NOT NULL,
+                    branch_id UUID REFERENCES branches(id) ON DELETE SET NULL,
+                    branch_ids UUID[],
+                    total_days INTEGER DEFAULT 0,
+                    total_captures INTEGER DEFAULT 0,
+                    total_quantity INTEGER DEFAULT 0,
+                    total_sales_mxn DECIMAL(12, 2) DEFAULT 0,
+                    total_cogs DECIMAL(12, 2) DEFAULT 0,
+                    total_commissions DECIMAL(12, 2) DEFAULT 0,
+                    total_arrival_costs DECIMAL(12, 2) DEFAULT 0,
+                    total_operating_costs DECIMAL(12, 2) DEFAULT 0,
+                    variable_costs_daily DECIMAL(12, 2) DEFAULT 0,
+                    fixed_costs_prorated DECIMAL(12, 2) DEFAULT 0,
+                    bank_commissions DECIMAL(12, 2) DEFAULT 0,
+                    gross_profit DECIMAL(12, 2) DEFAULT 0,
+                    net_profit DECIMAL(12, 2) DEFAULT 0,
+                    exchange_rates JSONB,
+                    metrics JSONB,
+                    daily_summary JSONB,
+                    archived_report_ids UUID[],
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(period_type, date_from, date_to, branch_id)
+                  );
+                  CREATE INDEX IF NOT EXISTS idx_historical_qc_reports_period ON historical_quick_capture_reports(period_type, date_from, date_to);
+                  CREATE INDEX IF NOT EXISTS idx_historical_qc_reports_branch_id ON historical_quick_capture_reports(branch_id);
+                `);
+                console.log('✅ Tabla historical_quick_capture_reports creada directamente');
+              }
+            } catch (tableError) {
+              console.warn(`⚠️  Error creando tabla ${tableName}:`, tableError.message);
+            }
+          }
+          
+          // Verificar nuevamente
+          const finalCheck = await pool.query(`
+            SELECT table_name 
+            FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            AND table_name = ANY($1::text[])
+          `, [stillMissing]);
+          
+          const finalExisting = finalCheck.rows.map(r => r.table_name);
+          const finalMissing = stillMissing.filter(t => !finalExisting.includes(t));
+          
+          if (finalMissing.length > 0) {
+            console.error(`❌ No se pudieron crear las siguientes tablas: ${finalMissing.join(', ')}`);
+            console.log('💡 Ejecuta el schema.sql manualmente en Railway Database');
+          } else {
+            console.log(`✅ Todas las tablas requeridas están presentes: ${requiredTables.join(', ')}`);
+          }
         } else {
           console.log(`✅ Todas las tablas requeridas están presentes: ${requiredTables.join(', ')}`);
         }
@@ -289,69 +422,92 @@ async function checkAndMigrate() {
           console.log('⚠️  Algunos objetos ya existen, continuando...');
         } else {
           console.error('❌ Error en migración:', error.message);
-          throw error;
+          // No lanzar error, permitir que el servidor inicie
+          console.log('💡 El servidor continuará, pero algunas tablas pueden no estar disponibles');
         }
       }
       
-      // Crear usuario admin manualmente
-      console.log('👤 Creando usuario admin maestro...');
-      
-      // Crear sucursal principal
-      await pool.query(`
-        INSERT INTO branches (id, name, code, address, phone, email, active)
-        VALUES (
-          '00000000-0000-0000-0000-000000000001',
-          'Sucursal Principal',
-          'MAIN',
-          'Dirección principal',
-          '1234567890',
-          'admin@opalco.com',
-          true
-        )
-        ON CONFLICT (id) DO NOTHING
-      `);
-      
-      const branchResult = await pool.query(`SELECT id FROM branches WHERE code = 'MAIN' LIMIT 1`);
-      const branchId = branchResult.rows[0].id;
-      
-      // Crear empleado admin (master_admin NO debe tener branch_id para acceder a todas las sucursales)
-      await pool.query(`
-        INSERT INTO employees (id, code, name, role, branch_id, active)
-        VALUES (
-          '00000000-0000-0000-0000-000000000002',
-          'ADMIN',
-          'Administrador Maestro',
-          'master_admin',
-          NULL,
-          true
-        )
-        ON CONFLICT (id) DO UPDATE SET
-          role = 'master_admin',
-          branch_id = NULL
-      `);
-      
-      const employeeResult = await pool.query(`SELECT id FROM employees WHERE code = 'ADMIN' LIMIT 1`);
-      const employeeId = employeeResult.rows[0].id;
-      
-      // Crear usuario admin
-      const bcrypt = await import('bcryptjs');
-      const passwordHash = await bcrypt.default.hash('1234', 10);
-      
-      await pool.query(`
-        INSERT INTO users (id, username, password_hash, employee_id, role, active)
-        VALUES (
-          '00000000-0000-0000-0000-000000000001',
-          'master_admin',
-          $1,
-          $2,
-          'master_admin',
-          true
-        )
-        ON CONFLICT (id) DO NOTHING
-      `, [passwordHash, employeeId]);
-      
-      console.log('✅ Usuario master_admin creado');
-      console.log('📋 Credenciales: username=master_admin, PIN=1234');
+      // Crear usuario admin manualmente (solo si no existe)
+      try {
+        const adminCheck = await pool.query(`SELECT id FROM users WHERE username = 'master_admin' LIMIT 1`);
+        
+        if (adminCheck.rows.length === 0) {
+          console.log('👤 Creando usuario admin maestro...');
+          
+          // Crear sucursal principal si no existe
+          await pool.query(`
+            INSERT INTO branches (id, name, code, address, phone, email, active)
+            VALUES (
+              '00000000-0000-0000-0000-000000000001',
+              'Sucursal Principal',
+              'MAIN',
+              'Dirección principal',
+              '1234567890',
+              'admin@opalco.com',
+              true
+            )
+            ON CONFLICT (id) DO NOTHING
+          `);
+          
+          const branchResult = await pool.query(`SELECT id FROM branches WHERE code = 'MAIN' LIMIT 1`);
+          if (!branchResult.rows || branchResult.rows.length === 0) {
+            console.warn('⚠️  No se pudo encontrar la sucursal MAIN, continuando sin crear usuario admin');
+            console.log('💡 Puedes crear el usuario admin manualmente con: npm run create-admin');
+          } else {
+            const branchId = branchResult.rows[0].id;
+            
+            // Crear empleado admin (master_admin NO debe tener branch_id para acceder a todas las sucursales)
+            await pool.query(`
+              INSERT INTO employees (id, code, name, role, branch_id, active)
+              VALUES (
+                '00000000-0000-0000-0000-000000000002',
+                'ADMIN',
+                'Administrador Maestro',
+                'master_admin',
+                NULL,
+                true
+              )
+              ON CONFLICT (id) DO UPDATE SET
+                role = 'master_admin',
+                branch_id = NULL
+            `);
+            
+            const employeeResult = await pool.query(`SELECT id FROM employees WHERE code = 'ADMIN' LIMIT 1`);
+            if (!employeeResult.rows || employeeResult.rows.length === 0) {
+              console.warn('⚠️  No se pudo encontrar el empleado ADMIN, continuando sin crear usuario admin');
+              console.log('💡 Puedes crear el usuario admin manualmente con: npm run create-admin');
+            } else {
+              const employeeId = employeeResult.rows[0].id;
+              
+              // Crear usuario admin
+              const bcrypt = await import('bcryptjs');
+              const passwordHash = await bcrypt.default.hash('1234', 10);
+              
+              await pool.query(`
+                INSERT INTO users (id, username, password_hash, employee_id, role, active)
+                VALUES (
+                  '00000000-0000-0000-0000-000000000001',
+                  'master_admin',
+                  $1,
+                  $2,
+                  'master_admin',
+                  true
+                )
+                ON CONFLICT (id) DO NOTHING
+              `, [passwordHash, employeeId]);
+              
+              console.log('✅ Usuario master_admin creado');
+              console.log('📋 Credenciales: username=master_admin, PIN=1234');
+            }
+          }
+        } else {
+          console.log('✅ Usuario master_admin ya existe');
+        }
+      } catch (adminError) {
+        console.warn('⚠️  Error creando usuario admin (no crítico):', adminError.message);
+        console.log('💡 Puedes crear el usuario admin manualmente con: npm run create-admin');
+        // No lanzar error, continuar con el servidor
+      }
     } else {
       console.log('✅ Tablas principales presentes en la base de datos');
       
