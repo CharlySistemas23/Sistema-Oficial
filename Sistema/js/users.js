@@ -200,6 +200,18 @@ const UserManager = {
                         UI.updateSyncStatus(isConnected, false);
                     }
                     
+                    // Sincronizar capturas rápidas después del login para que el usuario vea sus capturas en diferentes computadoras
+                    if (typeof Reports !== 'undefined' && Reports.syncQuickCapturesFromServer) {
+                        setTimeout(async () => {
+                            try {
+                                await Reports.syncQuickCapturesFromServer();
+                                console.log('✅ Capturas rápidas sincronizadas después del login');
+                            } catch (syncError) {
+                                console.warn('⚠️ Error sincronizando capturas después del login:', syncError);
+                            }
+                        }, 1000); // Esperar 1 segundo para asegurar que todo esté inicializado
+                    }
+                    
                     console.log('✅ Login exitoso con API');
                     return;
                 } catch (apiError) {
