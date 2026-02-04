@@ -1508,54 +1508,41 @@ const App = {
     async loadArrivalRateRules() {
         try {
             const existingRules = await DB.getAll('arrival_rate_rules') || [];
+            
+            // Verificar si hay reglas con active_from en el futuro
+            const rulesWithFutureDate = existingRules.filter(r => r.active_from && r.active_from > '2000-01-01');
+            
+            if (rulesWithFutureDate.length > 0) {
+                console.log(`⚠️ Detectadas ${rulesWithFutureDate.length} reglas con active_from en el futuro, actualizando todas...`);
+                // Actualizar todas las reglas con fecha futura
+                for (const rule of rulesWithFutureDate) {
+                    rule.active_from = '2000-01-01';
+                    rule.updated_at = new Date().toISOString();
+                    try {
+                        await DB.put('arrival_rate_rules', rule);
+                    } catch (e) {
+                        console.warn('Error actualizando regla:', e);
+                    }
+                }
+                console.log(`✅ ${rulesWithFutureDate.length} reglas actualizadas con active_from: 2000-01-01`);
+            }
+            
             // Solo precargar si no hay reglas o si hay menos de 20 (para asegurar que todas estén cargadas)
             // Hay aproximadamente 23 reglas en total según el tabulador:
             // 3 TANITOURS + 1 TRAVELEX + 6 DISCOVERY (2 city_tour + 4 sprinter/van) + 1 VERANOS + 5 TB + 5 TTF + 2 TROPICAL = 23 reglas
-            if (existingRules.length >= 20) {
-                console.log(`✅ Arrival rate rules ya existen (${existingRules.length}), omitiendo precarga`);
+            if (existingRules.length >= 20 && rulesWithFutureDate.length === 0) {
+                console.log(`✅ Arrival rate rules ya existen (${existingRules.length}) y están actualizadas, omitiendo precarga`);
                 return;
             }
             
-            // Si hay reglas existentes pero pocas, limpiarlas primero para recargar con el tabulador actualizado
-            // También actualizar active_from de reglas existentes si tienen fecha futura
-            if (existingRules.length > 0) {
-                const todayDate = new Date();
-                const todayStr = Utils.formatDate(todayDate, 'YYYY-MM-DD');
-                let updatedCount = 0;
-                
+            // Si hay menos de 20 reglas, eliminar todas y recargar
+            if (existingRules.length < 20) {
+                console.log(`⚠️ Reglas incompletas detectadas (${existingRules.length} < 20), eliminando y recargando todas las reglas del tabulador...`);
                 for (const rule of existingRules) {
-                    // Si la regla tiene active_from en el futuro o muy reciente, actualizarla a 2000-01-01
-                    if (rule.active_from && rule.active_from > '2000-01-01') {
-                        rule.active_from = '2000-01-01';
-                        rule.updated_at = new Date().toISOString();
-                        try {
-                            await DB.put('arrival_rate_rules', rule);
-                            updatedCount++;
-                        } catch (e) {
-                            console.warn('Error actualizando regla:', e);
-                        }
-                    }
-                }
-                
-                if (updatedCount > 0) {
-                    console.log(`✅ ${updatedCount} reglas actualizadas con active_from: 2000-01-01`);
-                }
-                
-                // Si hay menos de 20 reglas, recargar todas
-                if (existingRules.length < 20) {
-                    console.log(`⚠️ Reglas incompletas detectadas (${existingRules.length} < 20), recargando todas las reglas del tabulador...`);
-                    for (const rule of existingRules) {
-                        try {
-                            await DB.delete('arrival_rate_rules', rule.id);
-                        } catch (e) {
-                            // Ignorar errores
-                        }
-                    }
-                } else {
-                    // Si ya hay 20+ reglas y se actualizaron, no recargar
-                    if (updatedCount > 0) {
-                        console.log(`✅ Reglas actualizadas, omitiendo recarga completa`);
-                        return;
+                    try {
+                        await DB.delete('arrival_rate_rules', rule.id);
+                    } catch (e) {
+                        // Ignorar errores
                     }
                 }
             }
