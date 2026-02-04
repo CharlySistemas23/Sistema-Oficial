@@ -286,6 +286,8 @@ async function checkAndMigrate() {
           for (const tableName of stillMissing) {
             try {
               if (tableName === 'quick_captures') {
+                console.log('🔨 Creando tabla quick_captures...');
+                // Crear tabla primero
                 await pool.query(`
                   CREATE TABLE IF NOT EXISTS quick_captures (
                     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -309,15 +311,29 @@ async function checkAndMigrate() {
                     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                     sync_status VARCHAR(50) DEFAULT 'synced'
                   );
-                  CREATE INDEX IF NOT EXISTS idx_quick_captures_date ON quick_captures(date);
-                  CREATE INDEX IF NOT EXISTS idx_quick_captures_branch_id ON quick_captures(branch_id);
-                  CREATE INDEX IF NOT EXISTS idx_quick_captures_seller_id ON quick_captures(seller_id);
-                  CREATE INDEX IF NOT EXISTS idx_quick_captures_guide_id ON quick_captures(guide_id);
-                  CREATE INDEX IF NOT EXISTS idx_quick_captures_agency_id ON quick_captures(agency_id);
-                  CREATE INDEX IF NOT EXISTS idx_quick_captures_created_at ON quick_captures(created_at);
-                  CREATE INDEX IF NOT EXISTS idx_quick_captures_original_report_date ON quick_captures(original_report_date);
                 `);
-                console.log('✅ Tabla quick_captures creada directamente');
+                console.log('✅ Tabla quick_captures creada');
+                
+                // Crear índices por separado para mejor manejo de errores
+                const indexes = [
+                  'CREATE INDEX IF NOT EXISTS idx_quick_captures_date ON quick_captures(date)',
+                  'CREATE INDEX IF NOT EXISTS idx_quick_captures_branch_id ON quick_captures(branch_id)',
+                  'CREATE INDEX IF NOT EXISTS idx_quick_captures_seller_id ON quick_captures(seller_id)',
+                  'CREATE INDEX IF NOT EXISTS idx_quick_captures_guide_id ON quick_captures(guide_id)',
+                  'CREATE INDEX IF NOT EXISTS idx_quick_captures_agency_id ON quick_captures(agency_id)',
+                  'CREATE INDEX IF NOT EXISTS idx_quick_captures_created_at ON quick_captures(created_at)',
+                  'CREATE INDEX IF NOT EXISTS idx_quick_captures_original_report_date ON quick_captures(original_report_date)'
+                ];
+                
+                for (const indexSQL of indexes) {
+                  try {
+                    await pool.query(indexSQL);
+                  } catch (idxError) {
+                    console.warn(`⚠️  Error creando índice (continuando): ${idxError.message}`);
+                  }
+                }
+                
+                console.log('✅ Tabla quick_captures e índices creados correctamente');
               } else if (tableName === 'archived_quick_capture_reports') {
                 await pool.query(`
                   CREATE TABLE IF NOT EXISTS archived_quick_capture_reports (
