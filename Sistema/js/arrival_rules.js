@@ -213,7 +213,7 @@ const ArrivalRules = {
      */
     async saveArrival(arrivalData) {
         try {
-            const { date, branch_id, agency_id, unit_type, passengers, units } = arrivalData;
+            const { date, branch_id, guide_id, agency_id, unit_type, passengers, units } = arrivalData;
             
             // MEJORAR: Buscar llegadas existentes de forma más robusta
             // Buscar TODAS las llegadas del día (no solo por índice de fecha)
@@ -224,7 +224,7 @@ const ArrivalRules = {
             let existingArrival = null;
             
             // Buscar llegada existente con criterios más estrictos
-            // 1. Misma fecha, sucursal, agencia
+            // 1. Misma fecha, sucursal, agencia, guía
             // 2. Mismo unit_type (o ambos null)
             // 3. Preferir la más reciente si hay múltiples
             const matchingArrivals = allArrivals
@@ -233,6 +233,11 @@ const ArrivalRules = {
                     if (aDateStr !== dateStr) return false;
                     if (String(a.branch_id) !== String(branch_id)) return false;
                     if (String(a.agency_id) !== String(agency_id)) return false;
+                    
+                    // Comparar guide_id (ambos null o iguales)
+                    const aGuideId = a.guide_id || null;
+                    const bGuideId = guide_id || null;
+                    if (String(aGuideId) !== String(bGuideId)) return false;
                     
                     // Comparar unit_type (ambos null o iguales)
                     const aUnitType = a.unit_type || null;
@@ -279,6 +284,7 @@ const ArrivalRules = {
                 id: existingArrival?.id || Utils.generateId(),
                 date: dateStr,
                 branch_id: branch_id,
+                guide_id: guide_id || null,
                 agency_id: agency_id,
                 passengers: passengers || arrivalData.passengers || 0,
                 units: units || arrivalData.units || 1,
