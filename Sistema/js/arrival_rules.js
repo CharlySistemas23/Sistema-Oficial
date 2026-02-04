@@ -50,6 +50,15 @@ const ArrivalRules = {
             }
 
             const agencyName = agency.name.toUpperCase();
+            
+            console.log('🔍 [ArrivalRules] Calculando tarifa:', {
+                agencyId,
+                agencyName,
+                branchId,
+                passengers,
+                unitType,
+                date
+            });
 
             // Obtener sucursal actual y filtrar reglas
             const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
@@ -64,15 +73,31 @@ const ArrivalRules = {
             // Obtener reglas activas para esta agencia
             // IMPORTANTE: No filtrar por branch_id aquí, porque necesitamos incluir reglas globales (branch_id: null)
             // El filtro manual abajo manejará correctamente reglas específicas vs globales
-            const allRules = await DB.getAll('arrival_rate_rules', null, null, { 
-                filterByBranch: false, 
-                branchIdField: 'branch_id' 
-            }) || [];
+            const allRules = await DB.getAll('arrival_rate_rules') || [];
+            console.log(`📋 [ArrivalRules] Total de reglas cargadas: ${allRules.length}`);
+            
+            // Función auxiliar para comparar IDs de forma flexible
+            const compareIds = (id1, id2) => {
+                if (!id1 || !id2) return false;
+                return String(id1).trim().toLowerCase() === String(id2).trim().toLowerCase();
+            };
+            
             // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/d085ffd8-d37f-46dc-af23-0f9fbbe46595',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'arrival_rules.js:24',message:'All rules loaded',data:{totalRules:allRules.length,agencyRules:allRules.filter(r=>r.agency_id===agencyId).map(r=>({id:r.id,min:r.min_passengers,max:r.max_passengers,branch:r.branch_id,unit:r.unit_type}))},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+            fetch('http://127.0.0.1:7242/ingest/d085ffd8-d37f-46dc-af23-0f9fbbe46595',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'arrival_rules.js:24',message:'All rules loaded',data:{totalRules:allRules.length,agencyRules:allRules.filter(r=>compareIds(r.agency_id,agencyId)).map(r=>({id:r.id,min:r.min_passengers,max:r.max_passengers,branch:r.branch_id,unit:r.unit_type}))},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
             // #endregion
             const activeRules = allRules.filter(rule => {
-                if (rule.agency_id !== agencyId) return false;
+                // Comparar agency_id de forma flexible
+                if (!compareIds(rule.agency_id, agencyId)) {
+                    // También intentar comparar por nombre de agencia si el ID no coincide
+                    const ruleAgency = rule.agency_name ? rule.agency_name.toUpperCase() : '';
+                    if (ruleAgency && ruleAgency !== agencyName) {
+                        return false;
+                    }
+                    // Si no hay nombre de agencia en la regla, solo comparar por ID
+                    if (!ruleAgency) {
+                        return false;
+                    }
+                }
                 
                 // Verificar vigencia
                 const ruleFrom = rule.active_from || '2000-01-01';
@@ -80,7 +105,7 @@ const ArrivalRules = {
                 if (rule.active_until && date > rule.active_until) return false;
 
                 // Verificar tienda (si es null, aplica a todas)
-                if (rule.branch_id && rule.branch_id !== branchId) return false;
+                if (rule.branch_id && !compareIds(rule.branch_id, branchId)) return false;
 
                 // Verificar tipo de unidad
                 // Si la regla tiene unit_type (no es null/vacío), debe coincidir exactamente
@@ -94,6 +119,17 @@ const ArrivalRules = {
 
                 return true;
             });
+            console.log(`✅ [ArrivalRules] Reglas activas después del filtro: ${activeRules.length}`, activeRules.map(r => ({
+                id: r.id,
+                min: r.min_passengers,
+                max: r.max_passengers,
+                branch: r.branch_id,
+                unit: r.unit_type,
+                fee_type: r.fee_type,
+                flat_fee: r.flat_fee,
+                rate_per_passenger: r.rate_per_passenger
+            })));
+            
             // #region agent log
             fetch('http://127.0.0.1:7242/ingest/d085ffd8-d37f-46dc-af23-0f9fbbe46595',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'arrival_rules.js:40',message:'Active rules after filter',data:{count:activeRules.length,rules:activeRules.map(r=>({id:r.id,min:r.min_passengers,max:r.max_passengers,branch:r.branch_id,unit:r.unit_type,fee_type:r.fee_type,flat_fee:r.flat_fee}))},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
             // #endregion
@@ -139,6 +175,19 @@ const ArrivalRules = {
             }
 
             if (!applicableRule) {
+                console.warn(`⚠️ [ArrivalRules] No se encontró regla aplicable para:`, {
+                    agencyName,
+                    passengers,
+                    unitType,
+                    branchId,
+                    activeRulesCount: activeRules.length,
+                    activeRules: activeRules.map(r => ({
+                        min: r.min_passengers,
+                        max: r.max_passengers,
+                        branch: r.branch_id,
+                        unit: r.unit_type
+                    }))
+                });
                 // #region agent log
                 fetch('http://127.0.0.1:7242/ingest/d085ffd8-d37f-46dc-af23-0f9fbbe46595',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'arrival_rules.js:75',message:'No applicable rule found',data:{agencyName,passengers,unitType,branchId,activeRulesCount:activeRules.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
                 // #endregion
@@ -148,6 +197,15 @@ const ArrivalRules = {
                     message: `No hay regla definida para ${agencyName} con ${passengers} PAX${unitType ? ` (${unitType})` : ''} en esta tienda` 
                 };
             }
+            
+            console.log(`✅ [ArrivalRules] Regla aplicable encontrada:`, {
+                ruleId: applicableRule.id,
+                min: applicableRule.min_passengers,
+                max: applicableRule.max_passengers,
+                fee_type: applicableRule.fee_type,
+                flat_fee: applicableRule.flat_fee,
+                rate_per_passenger: applicableRule.rate_per_passenger
+            });
 
             // Calcular tarifa según el tipo
             let calculatedFee = 0;
