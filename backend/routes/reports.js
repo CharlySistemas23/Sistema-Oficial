@@ -337,7 +337,7 @@ router.post('/quick-captures', requireBranchAccess, async (req, res) => {
 // Obtener capturas rápidas
 router.get('/quick-captures', requireBranchAccess, async (req, res) => {
   try {
-    const { branch_id, date_from, date_to, date } = req.query;
+    const { branch_id, date_from, date_to, date, created_by } = req.query;
     
     let branchFilter = '';
     const params = [];
@@ -350,9 +350,19 @@ router.get('/quick-captures', requireBranchAccess, async (req, res) => {
         paramCount++;
       }
     } else {
-      branchFilter = `WHERE qc.branch_id = $${paramCount}`;
+      // Usuarios normales: obtener capturas de su sucursal O capturas creadas por ellos (independientemente de la sucursal)
+      // Esto permite que un usuario vea sus capturas en diferentes computadoras/sucursales
+      branchFilter = `WHERE (qc.branch_id = $${paramCount}`;
       params.push(req.user.branchId);
       paramCount++;
+      
+      // Si el usuario tiene ID, también incluir sus capturas creadas por él
+      if (req.user.id) {
+        branchFilter += ` OR qc.created_by = $${paramCount}`;
+        params.push(req.user.id);
+        paramCount++;
+      }
+      branchFilter += ')';
     }
 
     // Filtro por fecha específica
