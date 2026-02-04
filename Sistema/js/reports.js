@@ -5666,16 +5666,24 @@ const Reports = {
                         const unitType = unitTypeSelect?.value || null;
                         
                         // Si no hay agencia pero hay guía seleccionado, intentar obtener la agencia del guía
+                        const guideSelect = document.getElementById('qc-arrival-guide');
                         if (!agencyId && guideSelect && guideSelect.value) {
                             try {
                                 const guides = await DB.getAll('catalog_guides') || [];
                                 const selectedGuide = guides.find(g => g.id === guideSelect.value);
                                 if (selectedGuide && selectedGuide.agency_id) {
                                     agencyId = selectedGuide.agency_id;
+                                    console.log('🔍 [Cálculo Costo] Agencia auto-detectada del guía:', {
+                                        guideId: guideSelect.value,
+                                        guideName: selectedGuide.name,
+                                        agencyId: agencyId
+                                    });
                                     // Auto-seleccionar la agencia en el select
                                     if (agencySelect) {
                                         agencySelect.value = agencyId;
                                     }
+                                } else {
+                                    console.warn('⚠️ [Cálculo Costo] El guía seleccionado no tiene agencia asignada');
                                 }
                             } catch (e) {
                                 console.warn('Error obteniendo agencia del guía:', e);
@@ -5714,16 +5722,16 @@ const Reports = {
                         }
                         
                         // Si tenemos todos los datos necesarios, calcular
-                        const isMasterAdmin = typeof UserManager !== 'undefined' && (
-                            UserManager.currentUser?.role === 'master_admin' ||
-                            UserManager.currentUser?.is_master_admin ||
-                            UserManager.currentUser?.isMasterAdmin
-                        );
-                        const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
-                        const branchId = isMasterAdmin && branchSelect?.value 
-                            ? branchSelect.value 
-                            : currentBranchId;
-                        
+                            const isMasterAdmin = typeof UserManager !== 'undefined' && (
+                                UserManager.currentUser?.role === 'master_admin' ||
+                                UserManager.currentUser?.is_master_admin ||
+                                UserManager.currentUser?.isMasterAdmin
+                            );
+                            const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
+                            const branchId = isMasterAdmin && branchSelect?.value 
+                                ? branchSelect.value 
+                                : currentBranchId;
+                            
                         if (!branchId) {
                             if (costInput) costInput.value = '0.00';
                             if (costHelp) {
@@ -5738,38 +5746,51 @@ const Reports = {
                         const mainDateInput = document.getElementById('qc-date');
                         const arrivalDate = arrivalDateInput?.value || mainDateInput?.value || new Date().toISOString().split('T')[0];
                         
-                        if (typeof ArrivalRules !== 'undefined' && ArrivalRules.calculateArrivalFee) {
+                                if (typeof ArrivalRules !== 'undefined' && ArrivalRules.calculateArrivalFee) {
                             try {
+                                console.log('🔍 [Cálculo Costo] Parámetros:', {
+                                    agencyId,
+                                    branchId,
+                                    pax,
+                                    unitType,
+                                    arrivalDate
+                                });
+                                
                                 const calculation = await ArrivalRules.calculateArrivalFee(agencyId, branchId, pax, unitType, arrivalDate);
                                 
-                                if (costInput) {
+                                console.log('💰 [Cálculo Costo] Resultado:', calculation);
+                                    
+                                    if (costInput) {
                                     const calculatedFee = calculation.calculatedFee || 0;
                                     costInput.value = calculatedFee.toFixed(2);
                                     costInput.style.color = '';
-                                    if (costHelp) {
+                                            if (costHelp) {
                                         if (calculatedFee > 0) {
                                             costHelp.textContent = `Costo calculado automáticamente: $${calculatedFee.toFixed(2)} MXN (${pax} pasajeros${unitType ? ', ' + unitType : ''})`;
                                             costHelp.style.color = 'var(--color-success, #28a745)';
                                         } else {
-                                            costHelp.textContent = 'No hay regla configurada para esta combinación. Verifica las reglas de llegadas.';
-                                            costHelp.style.color = 'var(--color-warning, #ffc107)';
+                                            const errorMsg = calculation.message || 'No hay regla configurada para esta combinación. Verifica las reglas de llegadas.';
+                                            costHelp.textContent = errorMsg;
+                                                costHelp.style.color = 'var(--color-warning, #ffc107)';
+                                            console.warn('⚠️ [Cálculo Costo] No se encontró regla:', errorMsg);
                                         }
                                     }
                                 }
                             } catch (error) {
-                                console.error('Error en cálculo de costo:', error);
+                                console.error('❌ [Cálculo Costo] Error:', error);
                                 if (costInput) costInput.value = '0.00';
                                 if (costHelp) {
-                                    costHelp.textContent = 'Error al calcular el costo. Verifica las reglas configuradas.';
+                                    costHelp.textContent = `Error al calcular el costo: ${error.message}`;
                                     costHelp.style.color = 'var(--color-danger, #dc3545)';
                                 }
-                            }
-                        } else {
+                                            }
+                                        } else {
+                            console.error('❌ [Cálculo Costo] ArrivalRules no está disponible');
                             if (costInput) costInput.value = '0.00';
-                            if (costHelp) {
+                                            if (costHelp) {
                                 costHelp.textContent = 'Sistema de cálculo no disponible';
-                                costHelp.style.color = 'var(--color-text-secondary)';
-                            }
+                                                costHelp.style.color = 'var(--color-text-secondary)';
+                                            }
                         }
                     } catch (error) {
                         console.error('Error calculando costo de llegada:', error);
@@ -5833,8 +5854,8 @@ const Reports = {
                                     }
                                     // Recargar llegadas sin filtro de guía
                                     await this.loadQuickCaptureArrivals();
-                                }
-                            } catch (error) {
+                        }
+                    } catch (error) {
                                 console.error('Error auto-detectando agencia:', error);
                             }
                         } else {
@@ -6501,7 +6522,7 @@ const Reports = {
             });
 
             console.log(`   Guías filtradas: ${filteredGuides.length}`);
-            
+
             // Si no se encontraron guías, mostrar todas las guías con sus agencias para debug
             if (filteredGuides.length === 0) {
                 console.log(`   🔍 Debug: Todas las guías y sus agencias:`);
@@ -8201,20 +8222,20 @@ const Reports = {
                                     `).join('')}
                                 </div>
                             ` : `
-                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 6px; font-size: 10px; color: #6c757d;">
-                                    ${group.arrivals.map(a => {
-                                        const branch = branches.find(b => b.id === a.branch_id);
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 6px; font-size: 10px; color: #6c757d;">
+                                ${group.arrivals.map(a => {
+                                    const branch = branches.find(b => b.id === a.branch_id);
                                         const guide = a.guide_id ? guides.find(g => g.id === a.guide_id) : null;
-                                        return `
-                                            <div style="padding: 4px 6px; background: white; border-radius: 3px;">
-                                                <i class="fas fa-building" style="font-size: 9px; margin-right: 4px;"></i> ${branch?.name || 'N/A'}: 
-                                                <strong style="color: #495057;">${a.passengers || 0}</strong> pasajeros
+                                    return `
+                                        <div style="padding: 4px 6px; background: white; border-radius: 3px;">
+                                            <i class="fas fa-building" style="font-size: 9px; margin-right: 4px;"></i> ${branch?.name || 'N/A'}: 
+                                            <strong style="color: #495057;">${a.passengers || 0}</strong> pasajeros
                                                 ${guide ? `<span style="margin-left: 4px; font-size: 9px; color: #667eea;"><i class="fas fa-user-tie"></i> ${guide.name}</span>` : ''}
                                                 ${a.unit_type ? `<span style="margin-left: 4px; font-size: 9px;">(${a.unit_type})</span>` : ''}
-                                            </div>
-                                        `;
-                                    }).join('')}
-                                </div>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
                             `}
                         </div>
                     `;
