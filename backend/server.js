@@ -236,17 +236,23 @@ async function checkAndMigrate() {
       ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
     });
 
-    // Verificar si existe la tabla branches (primera tabla que se crea)
-    const result = await pool.query(`
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_schema = 'public' 
-        AND table_name = 'branches'
-      );
+    // Verificar si existen las tablas principales (branches y quick_captures)
+    const checkTables = await pool.query(`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public' 
+      AND table_name IN ('branches', 'quick_captures', 'archived_quick_capture_reports', 'historical_quick_capture_reports')
+      ORDER BY table_name;
     `);
-
-    if (!result.rows[0].exists) {
-      console.log('🔄 Base de datos vacía, ejecutando migración automática...');
+    
+    const existingTables = checkTables.rows.map(r => r.table_name);
+    const requiredTables = ['branches', 'quick_captures', 'archived_quick_capture_reports', 'historical_quick_capture_reports'];
+    const missingTables = requiredTables.filter(t => !existingTables.includes(t));
+    
+    // Si falta alguna tabla importante, ejecutar migración
+    if (missingTables.length > 0) {
+      console.log(`🔄 Faltan tablas en la base de datos: ${missingTables.join(', ')}`);
+      console.log('🔄 Ejecutando migración automática para crear tablas faltantes...');
       
       // Ejecutar migración: PostgreSQL puede ejecutar múltiples statements en una sola query
       const { readFileSync } = await import('fs');
@@ -256,8 +262,26 @@ async function checkAndMigrate() {
       
       try {
         // Ejecutar todo el SQL de una vez (PostgreSQL lo maneja correctamente)
+        // El schema.sql usa CREATE TABLE IF NOT EXISTS, así que es seguro ejecutarlo múltiples veces
         await pool.query(schemaSQL);
-        console.log('✅ Migración completada');
+        console.log('✅ Migración completada - Todas las tablas verificadas/creadas');
+        
+        // Verificar que las tablas faltantes ahora existen
+        const verifyTables = await pool.query(`
+          SELECT table_name 
+          FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name IN (${missingTables.map((_, i) => `$${i + 1}`).join(', ')})
+        `, missingTables);
+        
+        const nowExisting = verifyTables.rows.map(r => r.table_name);
+        const stillMissing = missingTables.filter(t => !nowExisting.includes(t));
+        
+        if (stillMissing.length > 0) {
+          console.warn(`⚠️  Algunas tablas aún no se crearon: ${stillMissing.join(', ')}`);
+        } else {
+          console.log(`✅ Todas las tablas requeridas están presentes: ${requiredTables.join(', ')}`);
+        }
       } catch (error) {
         // Si hay errores de objetos existentes, no es crítico
         if (error.code === '42P07' || error.code === '42710' || 
@@ -329,7 +353,32 @@ async function checkAndMigrate() {
       console.log('✅ Usuario master_admin creado');
       console.log('📋 Credenciales: username=master_admin, PIN=1234');
     } else {
-      console.log('✅ Base de datos ya migrada');
+      console.log('✅ Tablas principales presentes en la base de datos');
+      
+      // Verificar si faltan tablas específicas (como quick_captures) y crearlas
+      if (missingTables.length > 0) {
+        console.log(`⚠️  Faltan algunas tablas: ${missingTables.join(', ')}`);
+        console.log('🔄 Ejecutando migración parcial para crear tablas faltantes...');
+        
+        const { readFileSync } = await import('fs');
+        const { join } = await import('path');
+        const schemaPath = join(__dirname, 'database', 'schema.sql');
+        const schemaSQL = readFileSync(schemaPath, 'utf8');
+        
+        try {
+          // Ejecutar schema completo (usa IF NOT EXISTS, así que es seguro)
+          await pool.query(schemaSQL);
+          console.log(`✅ Tablas faltantes creadas: ${missingTables.join(', ')}`);
+        } catch (error) {
+          if (error.code === '42P07' || error.code === '42710' || 
+              error.message.includes('already exists')) {
+            console.log('⚠️  Algunos objetos ya existen, continuando...');
+          } else {
+            console.error('❌ Error creando tablas faltantes:', error.message);
+            // No lanzar error, continuar con el servidor
+          }
+        }
+      }
       
       // Verificar si el usuario master_admin existe, si no, crearlo
       const adminCheck = await pool.query(`
