@@ -11417,12 +11417,16 @@ const Reports = {
             });
 
             // Calcular métricas por agencia
+            // Ticket promedio en USD: (Total ventas MXN) / (Pasajeros) / (Tipo cambio USD)
             Object.values(salesByAgency).forEach(agencyData => {
                 const agencyPassengers = filteredArrivals
                     .filter(a => a.agency_id === agencyData.agency_id)
                     .reduce((sum, a) => sum + (a.passengers || 0), 0);
                 
-                const ticketPromedio = agencyData.ventas > 0 ? agencyData.total_ventas_mxn / agencyData.ventas : 0;
+                // Ticket promedio en USD por pasajero
+                const ticketPromedioUSD = (agencyPassengers > 0 && usdRate > 0) 
+                    ? agencyData.total_ventas_mxn / agencyPassengers / usdRate 
+                    : 0;
                 const cierrePercent = agencyPassengers > 0 ? ((agencyData.ventas / agencyPassengers) * 100) : 0;
 
                 metrics.por_agencia.push({
@@ -11431,7 +11435,8 @@ const Reports = {
                     ventas: agencyData.ventas,
                     pasajeros: agencyPassengers,
                     cierre_percent: parseFloat(cierrePercent.toFixed(2)),
-                    ticket_promedio: parseFloat(ticketPromedio.toFixed(2)),
+                    ticket_promedio: parseFloat(ticketPromedioUSD.toFixed(2)), // En USD
+                    ticket_promedio_currency: 'USD',
                     total_ventas_mxn: parseFloat(agencyData.total_ventas_mxn.toFixed(2))
                 });
             });
@@ -11463,13 +11468,17 @@ const Reports = {
             });
 
             // Calcular métricas por guía
+            // Ticket promedio en USD: (Total ventas MXN) / (Pasajeros) / (Tipo cambio USD)
             Object.values(salesByGuide).forEach(guideData => {
                 // Obtener pasajeros directamente del guía (de las llegadas con guide_id)
                 const guidePassengers = filteredArrivals
                     .filter(a => a.guide_id === guideData.guide_id)
                     .reduce((sum, a) => sum + (a.passengers || 0), 0);
 
-                const ticketPromedio = guideData.ventas > 0 ? guideData.total_ventas_mxn / guideData.ventas : 0;
+                // Ticket promedio en USD por pasajero
+                const ticketPromedioUSD = (guidePassengers > 0 && usdRate > 0) 
+                    ? guideData.total_ventas_mxn / guidePassengers / usdRate 
+                    : 0;
                 const cierrePercent = guidePassengers > 0 ? ((guideData.ventas / guidePassengers) * 100) : 0;
 
                 metrics.por_guia.push({
@@ -11480,7 +11489,8 @@ const Reports = {
                     ventas: guideData.ventas,
                     pasajeros: guidePassengers,
                     cierre_percent: parseFloat(cierrePercent.toFixed(2)),
-                    ticket_promedio: parseFloat(ticketPromedio.toFixed(2)),
+                    ticket_promedio: parseFloat(ticketPromedioUSD.toFixed(2)), // En USD
+                    ticket_promedio_currency: 'USD',
                     total_ventas_mxn: parseFloat(guideData.total_ventas_mxn.toFixed(2))
                 });
             });
@@ -11509,14 +11519,20 @@ const Reports = {
             });
 
             // Calcular métricas por vendedor
+            // Ticket promedio en USD por venta: (Total ventas MXN) / (Número de ventas) / (Tipo cambio USD)
+            // Para reportes diarios, el ticket promedio es por venta (no por día)
             Object.values(salesBySeller).forEach(sellerData => {
-                const ticketPromedio = sellerData.ventas > 0 ? sellerData.total_ventas_mxn / sellerData.ventas : 0;
+                // Ticket promedio en USD por venta
+                const ticketPromedioUSD = (sellerData.ventas > 0 && usdRate > 0) 
+                    ? sellerData.total_ventas_mxn / sellerData.ventas / usdRate 
+                    : 0;
 
                 metrics.por_vendedor.push({
                     seller_id: sellerData.seller_id,
                     seller_name: sellerData.seller_name,
                     ventas: sellerData.ventas,
-                    ticket_promedio: parseFloat(ticketPromedio.toFixed(2)),
+                    ticket_promedio: parseFloat(ticketPromedioUSD.toFixed(2)), // En USD por venta
+                    ticket_promedio_currency: 'USD',
                     total_ventas_mxn: parseFloat(sellerData.total_ventas_mxn.toFixed(2))
                 });
             });
