@@ -538,10 +538,11 @@ const Inventory = {
             const viewAllBranches = isMasterAdmin && filterBranchId === null;
 
             // ========== SINCRONIZACIÓN BIDIRECCIONAL ==========
-            // PASO 1: Subir items locales que NO están en el servidor
-            try {
-                if (typeof API !== 'undefined' && API.baseURL && API.token && API.createInventoryItem && API.updateInventoryItem) {
-                    console.log('📤 [Paso 1 Inventory] Buscando items locales que no están en el servidor...');
+            // PASO 1: Subir items locales que NO están en el servidor (en background para no bloquear)
+            const syncPromise = (async () => {
+                try {
+                    if (typeof API !== 'undefined' && API.baseURL && API.token && API.createInventoryItem && API.updateInventoryItem) {
+                        console.log('📤 [Paso 1 Inventory] Buscando items locales que no están en el servidor...');
                     
                     // Obtener todos los items locales
                     const allLocalItems = await DB.getAll('inventory_items') || [];
@@ -583,74 +584,124 @@ const Inventory = {
                             }
                         }
                         
-                        // Subir solo los items únicos
+                        // Subir solo los items únicos (procesar en lotes para mejor rendimiento)
                         let uploadedCount = 0;
-                        for (const [key, localItem] of itemsByKey) {
-                            try {
-                                console.log(`📤 [Paso 1 Inventory] Subiendo item local al servidor: ${localItem.id} (${localItem.sku || localItem.name})`);
-                                
-                                // Verificar si el item ya existe en el servidor por SKU
-                                let serverItem = null;
-                                if (localItem.sku && filterBranchId) {
-                                    try {
-                                        const serverItems = await API.getInventoryItems({ branch_id: filterBranchId, sku: localItem.sku });
-                                        if (serverItems && serverItems.length > 0) {
-                                            serverItem = serverItems[0];
+                        let errorCount = 0;
+                        const itemsArray = Array.from(itemsByKey.entries());
+                        const batchSize = 5; // Procesar 5 items a la vez
+                        
+                        for (let i = 0; i < itemsArray.length; i += batchSize) {
+                            const batch = itemsArray.slice(i, i + batchSize);
+                            
+                            // Procesar lote en paralelo
+                            const batchPromises = batch.map(async ([key, localItem]) => {
+                                try {
+                                    // Limpiar datos antes de enviar (solo campos permitidos)
+                                    const cleanItem = {
+                                        sku: localItem.sku,
+                                        barcode: localItem.barcode,
+                                        name: localItem.name,
+                                        description: localItem.description,
+                                        category: localItem.category,
+                                        metal: localItem.metal,
+                                        stone_type: localItem.stone_type,
+                                        stone_weight: localItem.stone_weight,
+                                        weight: localItem.weight,
+                                        price: localItem.price,
+                                        cost: localItem.cost,
+                                        stock_actual: localItem.stock_actual || 0,
+                                        stock_min: localItem.stock_min || 0,
+                                        stock_max: localItem.stock_max || 0,
+                                        status: localItem.status || 'disponible',
+                                        certificate_number: localItem.certificate_number,
+                                        photos: localItem.photos || [],
+                                        branch_id: localItem.branch_id || filterBranchId
+                                    };
+                                    
+                                    // Verificar si el item ya existe en el servidor por SKU
+                                    let serverItem = null;
+                                    if (cleanItem.sku && filterBranchId) {
+                                        try {
+                                            const serverItems = await API.getInventoryItems({ branch_id: filterBranchId, sku: cleanItem.sku });
+                                            if (serverItems && serverItems.length > 0) {
+                                                serverItem = serverItems[0];
+                                            }
+                                        } catch (e) {
+                                            // Ignorar error, continuar con creación
                                         }
-                                    } catch (e) {
-                                        // Ignorar error, continuar con creación
                                     }
+                                    
+                                    if (serverItem && serverItem.id) {
+                                        // El item ya existe, actualizar
+                                        const updatedItem = await API.updateInventoryItem(serverItem.id, cleanItem);
+                                        if (updatedItem && updatedItem.id) {
+                                            // Actualizar TODOS los items locales con el mismo SKU
+                                            const allLocalItems = await DB.getAll('inventory_items') || [];
+                                            const itemsToUpdate = allLocalItems.filter(i => {
+                                                const iKey = `${i.sku || i.id}_${i.branch_id || 'no-branch'}`;
+                                                return iKey === key;
+                                            });
+                                            
+                                            for (const itemToUpdate of itemsToUpdate) {
+                                                itemToUpdate.server_id = updatedItem.id;
+                                                itemToUpdate.id = updatedItem.id;
+                                                itemToUpdate.sync_status = 'synced';
+                                                await DB.put('inventory_items', itemToUpdate, { autoBranchId: false });
+                                            }
+                                            
+                                            return { success: true, id: updatedItem.id, action: 'updated' };
+                                        }
+                                    } else {
+                                        // El item no existe, crear nuevo
+                                        const createdItem = await API.createInventoryItem(cleanItem);
+                                        if (createdItem && createdItem.id) {
+                                            // Actualizar TODOS los items locales con el mismo SKU
+                                            const allLocalItems = await DB.getAll('inventory_items') || [];
+                                            const itemsToUpdate = allLocalItems.filter(i => {
+                                                const iKey = `${i.sku || i.id}_${i.branch_id || 'no-branch'}`;
+                                                return iKey === key;
+                                            });
+                                            
+                                            for (const itemToUpdate of itemsToUpdate) {
+                                                itemToUpdate.server_id = createdItem.id;
+                                                itemToUpdate.id = createdItem.id;
+                                                itemToUpdate.sync_status = 'synced';
+                                                await DB.put('inventory_items', itemToUpdate, { autoBranchId: false });
+                                            }
+                                            
+                                            return { success: true, id: createdItem.id, action: 'created' };
+                                        }
+                                    }
+                                    return { success: false, error: 'No se pudo crear/actualizar' };
+                                } catch (uploadError) {
+                                    console.error(`❌ [Paso 1 Inventory] Error subiendo item ${localItem.id} (${localItem.sku}):`, uploadError);
+                                    return { success: false, error: uploadError.message };
                                 }
-                                
-                                if (serverItem && serverItem.id) {
-                                    // El item ya existe, actualizar
-                                    const updatedItem = await API.updateInventoryItem(serverItem.id, localItem);
-                                    if (updatedItem && updatedItem.id) {
-                                        // Actualizar TODOS los items locales con el mismo SKU
-                                        const allLocalItems = await DB.getAll('inventory_items') || [];
-                                        const itemsToUpdate = allLocalItems.filter(i => {
-                                            const iKey = `${i.sku || i.id}_${i.branch_id || 'no-branch'}`;
-                                            return iKey === key;
-                                        });
-                                        
-                                        for (const itemToUpdate of itemsToUpdate) {
-                                            itemToUpdate.server_id = updatedItem.id;
-                                            itemToUpdate.id = updatedItem.id; // Actualizar ID local con el del servidor
-                                            itemToUpdate.sync_status = 'synced';
-                                            await DB.put('inventory_items', itemToUpdate, { autoBranchId: false });
-                                        }
-                                        
-                                        uploadedCount++;
-                                        console.log(`✅ [Paso 1 Inventory] Item actualizado en servidor: ${updatedItem.id}`);
-                                    }
+                            });
+                            
+                            // Esperar que termine el lote antes de continuar
+                            const results = await Promise.allSettled(batchPromises);
+                            results.forEach((result, index) => {
+                                if (result.status === 'fulfilled' && result.value.success) {
+                                    uploadedCount++;
+                                    const [key, localItem] = batch[index];
+                                    console.log(`✅ [Paso 1 Inventory] Item ${result.value.action} en servidor: ${result.value.id} (${localItem.sku || localItem.name})`);
                                 } else {
-                                    // El item no existe, crear nuevo
-                                    const createdItem = await API.createInventoryItem(localItem);
-                                    if (createdItem && createdItem.id) {
-                                        // Actualizar TODOS los items locales con el mismo SKU
-                                        const allLocalItems = await DB.getAll('inventory_items') || [];
-                                        const itemsToUpdate = allLocalItems.filter(i => {
-                                            const iKey = `${i.sku || i.id}_${i.branch_id || 'no-branch'}`;
-                                            return iKey === key;
-                                        });
-                                        
-                                        for (const itemToUpdate of itemsToUpdate) {
-                                            itemToUpdate.server_id = createdItem.id;
-                                            itemToUpdate.id = createdItem.id; // Actualizar ID local con el del servidor
-                                            itemToUpdate.sync_status = 'synced';
-                                            await DB.put('inventory_items', itemToUpdate, { autoBranchId: false });
-                                        }
-                                        
-                                        uploadedCount++;
-                                        console.log(`✅ [Paso 1 Inventory] Item creado en servidor: ${createdItem.id}`);
-                                    }
+                                    errorCount++;
                                 }
-                            } catch (uploadError) {
-                                console.error(`❌ [Paso 1 Inventory] Error subiendo item ${localItem.id}:`, uploadError);
+                            });
+                            
+                            // Pequeña pausa entre lotes para no sobrecargar el servidor
+                            if (i + batchSize < itemsArray.length) {
+                                await new Promise(resolve => setTimeout(resolve, 100));
                             }
                         }
                         
-                        console.log(`✅ [Paso 1 Inventory] Sincronización local→servidor completada: ${uploadedCount} items subidos`);
+                        if (errorCount > 0) {
+                            console.warn(`⚠️ [Paso 1 Inventory] ${errorCount} items fallaron al sincronizar`);
+                        }
+                        
+                        console.log(`✅ [Paso 1 Inventory] Sincronización local→servidor completada: ${uploadedCount} items subidos, ${errorCount} errores`);
                     }
                 } else {
                     console.log('⚠️ [Paso 1 Inventory] API no disponible para subir items locales');
@@ -659,6 +710,10 @@ const Inventory = {
                 console.error('❌ [Paso 1 Inventory] Error sincronizando items locales al servidor:', error);
                 // Continuar aunque falle este paso
             }
+            })();
+            
+            // No esperar la sincronización, continuar con la carga
+            syncPromise.catch(err => console.error('Error en sincronización en background:', err));
 
             // PASO 2: Descargar items del servidor
             let allItemsRaw = [];
