@@ -12061,9 +12061,16 @@ const Reports = {
                 // Guardar el reporte archivado en el servidor
                 try {
                     if (typeof API !== 'undefined' && API.saveArchivedReport) {
-                        console.log('📤 Guardando reporte archivado en servidor...');
                         const branchId = captureBranchIds.length === 1 ? captureBranchIds[0] : null;
-                        const serverReport = await API.saveArchivedReport({
+                        const currentUserId = typeof UserManager !== 'undefined' && UserManager.currentUser ? UserManager.currentUser.id : null;
+                        
+                        console.log('📤 Guardando reporte archivado en servidor...');
+                        console.log(`   Fecha: ${normalizedSelectedDate}`);
+                        console.log(`   Sucursal: ${branchId}`);
+                        console.log(`   Usuario: ${currentUserId}`);
+                        console.log(`   Capturas: ${captures.length}`);
+                        
+                        const reportData = {
                             report_date: normalizedSelectedDate,
                             branch_id: branchId,
                             total_captures: captures.length,
@@ -12102,13 +12109,33 @@ const Reports = {
                             })),
                             arrivals: filteredArrivals,
                             metrics: metrics
-                        });
-                        console.log('✅ Reporte archivado guardado en servidor:', serverReport.id);
+                        };
+                        
+                        const serverReport = await API.saveArchivedReport(reportData);
+                        
+                        if (serverReport && serverReport.id) {
+                            console.log('✅ Reporte archivado guardado en servidor:', serverReport.id);
+                            console.log(`   Fecha del reporte: ${serverReport.report_date || serverReport.date}`);
+                            console.log(`   Archivado por: ${serverReport.archived_by || 'N/A'}`);
+                            
+                            // Actualizar el reporte local con el ID del servidor
+                            archivedReport.server_id = serverReport.id;
+                            archivedReport.archived_by = serverReport.archived_by;
+                            await DB.put('archived_quick_captures', archivedReport);
+                        } else {
+                            console.warn('⚠️ El servidor no devolvió un ID para el reporte archivado');
+                        }
                     } else {
-                        console.log('⚠️ API.saveArchivedReport no disponible, reporte guardado solo localmente');
+                        console.warn('⚠️ API.saveArchivedReport no disponible, reporte guardado solo localmente');
+                        if (!API || !API.baseURL) console.warn('   - API.baseURL no configurado');
+                        if (!API || !API.token) console.warn('   - API.token no disponible');
+                        if (!API || !API.saveArchivedReport) console.warn('   - API.saveArchivedReport no disponible');
                     }
                 } catch (e) {
-                    console.warn('⚠️ No se pudo guardar reporte archivado en backend:', e);
+                    console.error('❌ Error guardando reporte archivado en backend:', e);
+                    console.error('   Mensaje:', e.message);
+                    console.error('   Stack:', e.stack);
+                    Utils.showNotification(`Error al guardar reporte en servidor: ${e.message}. El reporte se guardó localmente.`, 'warning');
                     // No bloquear el proceso si falla el guardado en servidor
                 }
             } else {
@@ -12282,7 +12309,8 @@ const Reports = {
                 if (typeof API !== 'undefined' && API.baseURL && API.token && API.getArchivedReports) {
                     console.log('📥 Sincronizando reportes archivados desde el servidor...');
                     
-                    // Obtener sucursal actual para filtrar
+                    // Obtener información del usuario actual
+                    const currentUserId = typeof UserManager !== 'undefined' && UserManager.currentUser ? UserManager.currentUser.id : null;
                     const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
                     const isMasterAdmin = typeof UserManager !== 'undefined' && (
                         UserManager.currentUser?.role === 'master_admin' ||
@@ -12292,25 +12320,38 @@ const Reports = {
                         (typeof PermissionManager !== 'undefined' && PermissionManager.hasPermission('admin.all'))
                     );
                     
-                    // Para master admin, obtener todos los reportes; para otros, filtrar por sucursal o usuario
-                    const filters = {};
-                    if (!isMasterAdmin && currentBranchId) {
-                        filters.branch_id = currentBranchId;
-                    }
+                    console.log(`🔍 [Sincronización] Usuario: ${currentUserId}, Sucursal: ${currentBranchId}, Master Admin: ${isMasterAdmin}`);
                     
+                    // NO filtrar en el frontend - dejar que el backend haga el filtrado correcto
+                    // El backend filtrará por: sucursal actual O reportes creados por el usuario actual
+                    const filters = {};
+                    // Solo pasar branch_id si es master admin y quiere filtrar específicamente
+                    // Para usuarios normales, el backend usará req.user.branchId y req.user.id automáticamente
+                    
+                    console.log(`📤 [Sincronización] Solicitando reportes con filtros:`, filters);
                     const serverReports = await API.getArchivedReports(filters);
                     
                     if (serverReports && Array.isArray(serverReports)) {
                         console.log(`✅ ${serverReports.length} reportes archivados recibidos del servidor`);
                         
+                        if (serverReports.length > 0) {
+                            console.log(`📋 [Sincronización] Fechas de reportes recibidos:`, 
+                                serverReports.map(r => r.report_date || r.date).join(', '));
+                        }
+                        
                         // Guardar/actualizar cada reporte en IndexedDB local
+                        let savedCount = 0;
                         for (const serverReport of serverReports) {
                             try {
+                                // Usar el ID del servidor como clave principal para evitar duplicados
+                                const reportId = serverReport.id || serverReport.report_date || `archived_${serverReport.report_date}`;
+                                
                                 // Convertir el reporte del servidor al formato local
                                 const localReport = {
-                                    id: serverReport.id || serverReport.report_date || `archived_${serverReport.report_date}`,
+                                    id: reportId,
                                     date: serverReport.report_date || serverReport.date,
                                     branch_id: serverReport.branch_id,
+                                    archived_by: serverReport.archived_by, // Guardar quién archivó el reporte
                                     total_captures: serverReport.total_captures || 0,
                                     total_quantity: serverReport.total_quantity || 0,
                                     total_sales_mxn: serverReport.total_sales_mxn || 0,
@@ -12337,18 +12378,26 @@ const Reports = {
                                 
                                 // Guardar en IndexedDB local
                                 await DB.put('archived_quick_captures', localReport);
+                                savedCount++;
+                                console.log(`💾 [Sincronización] Reporte guardado: ${reportId} (Fecha: ${localReport.date})`);
                             } catch (error) {
                                 console.warn(`⚠️ Error guardando reporte archivado ${serverReport.id}:`, error);
                             }
                         }
                         
-                        console.log('✅ Sincronización de reportes archivados completada');
+                        console.log(`✅ Sincronización de reportes archivados completada: ${savedCount} reportes guardados`);
+                    } else {
+                        console.warn('⚠️ No se recibieron reportes del servidor o el formato es incorrecto');
                     }
                 } else {
                     console.log('⚠️ API no disponible, usando solo reportes locales');
+                    if (!API || !API.baseURL) console.log('   - API.baseURL no configurado');
+                    if (!API || !API.token) console.log('   - API.token no disponible');
+                    if (!API || !API.getArchivedReports) console.log('   - API.getArchivedReports no disponible');
                 }
             } catch (error) {
-                console.warn('⚠️ Error sincronizando reportes archivados desde el servidor:', error);
+                console.error('❌ Error sincronizando reportes archivados desde el servidor:', error);
+                console.error('   Detalles:', error.message);
                 // Continuar con reportes locales aunque falle la sincronización
             }
 
