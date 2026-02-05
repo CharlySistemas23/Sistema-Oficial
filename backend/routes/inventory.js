@@ -209,7 +209,7 @@ router.post('/', requireBranchAccess, async (req, res) => {
         style, finish_type, theme, branch_id, certificate_number, certificate_details, supplier, supplier_code,
         notes, photos
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39)
       RETURNING *`,
       [
         sku, barcode, name, description || name, category, subcategory || null, collection || null, metal, material || null, purity || null, plating || null,
@@ -345,7 +345,7 @@ router.put('/:id', requireBranchAccess, async (req, res) => {
       'notes',
       'name', 'description', 'category', 'metal', 'stone_type', 'stone_weight',
       'weight', 'price', 'cost', 'stock_actual', 'stock_min', 'stock_max',
-      'status', 'certificate_number', 'photos', 'barcode'
+      'status', 'certificate_number', 'photos', 'barcode', 'sku'
     ];
 
     allowedFields.forEach(field => {
@@ -396,6 +396,27 @@ router.put('/:id', requireBranchAccess, async (req, res) => {
       constraint: error.constraint,
       stack: error.stack
     });
+    
+    // Manejar errores específicos
+    if (error.code === '23505') { // Unique violation
+      const skuValue = updateData?.sku || 'desconocido';
+      const barcodeValue = updateData?.barcode || 'desconocido';
+      
+      let errorMessage = 'El SKU o código de barras ya existe';
+      if (error.constraint === 'inventory_items_sku_key') {
+        errorMessage = `El SKU "${skuValue}" ya existe`;
+      } else if (error.constraint === 'inventory_items_barcode_key') {
+        errorMessage = `El código de barras "${barcodeValue}" ya existe. Si estás actualizando, verifica que no esté duplicado.`;
+      }
+      
+      return res.status(400).json({ 
+        error: errorMessage,
+        code: 'DUPLICATE_KEY',
+        duplicateField: error.constraint === 'inventory_items_sku_key' ? 'sku' : 'barcode',
+        constraint: error.constraint
+      });
+    }
+    
     res.status(500).json({ 
       error: 'Error al actualizar item',
       details: error.message,
