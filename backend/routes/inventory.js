@@ -270,6 +270,7 @@ router.post('/', requireBranchAccess, async (req, res) => {
 
 // Actualizar item
 router.put('/:id', requireBranchAccess, async (req, res) => {
+  let existingItem = null; // Declarar fuera del try para que esté disponible en el catch
   try {
     const { id } = req.params;
     const updateData = req.body;
@@ -284,7 +285,7 @@ router.put('/:id', requireBranchAccess, async (req, res) => {
       return res.status(404).json({ error: 'Item no encontrado' });
     }
 
-    const existingItem = existingResult.rows[0];
+    existingItem = existingResult.rows[0];
 
     // Verificar acceso
     if (!req.user.isMasterAdmin && existingItem.branch_id && existingItem.branch_id !== req.user.branchId) {
@@ -399,8 +400,8 @@ router.put('/:id', requireBranchAccess, async (req, res) => {
     
     // Manejar errores específicos
     if (error.code === '23505') { // Unique violation
-      const skuValue = updateData?.sku || 'desconocido';
-      const barcodeValue = updateData?.barcode || 'desconocido';
+      const skuValue = req.body?.sku || existingItem?.sku || 'desconocido';
+      const barcodeValue = req.body?.barcode || existingItem?.barcode || 'desconocido';
       
       let errorMessage = 'El SKU o código de barras ya existe';
       if (error.constraint === 'inventory_items_sku_key') {
