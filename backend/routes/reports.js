@@ -1143,6 +1143,35 @@ router.post('/historical-quick-captures', requireBranchAccess, async (req, res) 
       metrics: report.metrics ? (typeof report.metrics === 'string' ? JSON.parse(report.metrics) : report.metrics) : null
     };
 
+    // Emitir eventos Socket.IO para sincronización en tiempo real
+    try {
+      const io = getIO(req);
+      if (io) {
+        const eventName = 'historical_report_created';
+        
+        // 1. Emitir a la sucursal del reporte
+        if (finalBranchId) {
+          io.to(`branch:${finalBranchId}`).emit(eventName, { report: parsedReport });
+          console.log(`📡 [Socket.IO] Evento ${eventName} emitido a branch:${finalBranchId}`);
+        }
+        
+        // 2. Emitir al master admin (ve todos los reportes de todas las sucursales)
+        io.to('master_admin').emit(eventName, { report: parsedReport });
+        console.log(`📡 [Socket.IO] Evento ${eventName} emitido a master_admin`);
+        
+        // 3. Emitir al usuario que creó el reporte (para ver en otras computadoras)
+        if (req.user.id) {
+          io.to(`user:${req.user.id}`).emit(eventName, { report: parsedReport });
+          console.log(`📡 [Socket.IO] Evento ${eventName} emitido a user:${req.user.id}`);
+        }
+      } else {
+        console.warn('⚠️ Socket.IO no disponible para emitir eventos de reporte histórico');
+      }
+    } catch (socketError) {
+      console.warn('⚠️ Error emitiendo evento Socket.IO para reporte histórico:', socketError);
+      // No bloquear la respuesta si falla la emisión del evento
+    }
+
     res.status(201).json(parsedReport);
   } catch (error) {
     console.error('Error generando reporte histórico:', error);
@@ -1288,7 +1317,38 @@ router.delete('/historical-quick-captures/:id', requireBranchAccess, async (req,
       return res.status(403).json({ error: 'No tienes acceso a este reporte' });
     }
 
+    const reportToDelete = checkResult.rows[0];
+    
     await query('DELETE FROM historical_quick_capture_reports WHERE id = $1', [id]);
+
+    // Emitir eventos Socket.IO para sincronización en tiempo real
+    try {
+      const io = getIO(req);
+      if (io) {
+        const eventName = 'historical_report_deleted';
+        
+        // 1. Emitir a la sucursal del reporte
+        if (reportToDelete.branch_id) {
+          io.to(`branch:${reportToDelete.branch_id}`).emit(eventName, { report_id: id });
+          console.log(`📡 [Socket.IO] Evento ${eventName} emitido a branch:${reportToDelete.branch_id}`);
+        }
+        
+        // 2. Emitir al master admin (ve todos los reportes de todas las sucursales)
+        io.to('master_admin').emit(eventName, { report_id: id });
+        console.log(`📡 [Socket.IO] Evento ${eventName} emitido a master_admin`);
+        
+        // 3. Emitir al usuario que creó el reporte (para ver en otras computadoras)
+        if (reportToDelete.created_by) {
+          io.to(`user:${reportToDelete.created_by}`).emit(eventName, { report_id: id });
+          console.log(`📡 [Socket.IO] Evento ${eventName} emitido a user:${reportToDelete.created_by}`);
+        }
+      } else {
+        console.warn('⚠️ Socket.IO no disponible para emitir eventos de reporte histórico');
+      }
+    } catch (socketError) {
+      console.warn('⚠️ Error emitiendo evento Socket.IO para reporte histórico:', socketError);
+      // No bloquear la respuesta si falla la emisión del evento
+    }
 
     res.json({ message: 'Reporte histórico eliminado correctamente' });
   } catch (error) {
