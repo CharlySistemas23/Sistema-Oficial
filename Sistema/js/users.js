@@ -212,6 +212,18 @@ const UserManager = {
                         }, 1000); // Esperar 1 segundo para asegurar que todo esté inicializado
                     }
                     
+                    // Sincronizar reportes archivados después del login para que el usuario vea sus reportes en diferentes computadoras
+                    if (typeof Reports !== 'undefined' && Reports.loadArchivedReports) {
+                        setTimeout(async () => {
+                            try {
+                                await Reports.loadArchivedReports();
+                                console.log('✅ Reportes archivados sincronizados después del login');
+                            } catch (syncError) {
+                                console.warn('⚠️ Error sincronizando reportes archivados después del login:', syncError);
+                            }
+                        }, 1500); // Esperar 1.5 segundos para asegurar que todo esté inicializado
+                    }
+                    
                     console.log('✅ Login exitoso con API');
                     return;
                 } catch (apiError) {
