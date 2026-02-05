@@ -12357,13 +12357,14 @@ const Reports = {
                     
                     console.log(`🔍 [Sincronización] Usuario: ${currentUserId}, Sucursal: ${currentBranchId}, Master Admin: ${isMasterAdmin}`);
                     
-                    // NO filtrar en el frontend - dejar que el backend haga el filtrado correcto
-                    // El backend filtrará por: sucursal actual O reportes creados por el usuario actual
+                    // NUEVA LÓGICA: El backend ahora filtra SOLO por branch_id y report_date
+                    // Todos los usuarios de la misma sucursal verán los mismos reportes archivados
+                    // No necesitamos pasar filtros adicionales - el backend usa req.user.branchId automáticamente
                     const filters = {};
-                    // Solo pasar branch_id si es master admin y quiere filtrar específicamente
-                    // Para usuarios normales, el backend usará req.user.branchId y req.user.id automáticamente
+                    // Opcional: Si quieres filtrar por rango de fechas, puedes agregar date_from y date_to aquí
+                    // Por ahora, dejamos que el backend devuelva todos los reportes de la sucursal
                     
-                    console.log(`📤 [Sincronización] Solicitando reportes con filtros:`, filters);
+                    console.log(`📤 [Sincronización] Solicitando reportes de la sucursal (filtrado automático por backend):`, filters);
                     
                     let serverReports;
                     try {
@@ -12446,7 +12447,20 @@ const Reports = {
             }
 
             // Obtener todos los reportes archivados (locales + sincronizados)
-            const archivedReports = await DB.getAll('archived_quick_captures') || [];
+            let archivedReports = await DB.getAll('archived_quick_captures') || [];
+            
+            // NUEVA LÓGICA: Filtrar por sucursal actual (para mostrar solo reportes de la sucursal)
+            // Esto asegura que solo se muestren reportes relevantes para la sucursal actual
+            const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
+            if (currentBranchId) {
+                archivedReports = archivedReports.filter(r => {
+                    // Mostrar reportes de la sucursal actual
+                    return r.branch_id === currentBranchId;
+                });
+                console.log(`🔍 [Filtrado Frontend] Mostrando ${archivedReports.length} reportes de la sucursal ${currentBranchId}`);
+            } else {
+                console.warn('⚠️ No hay sucursal seleccionada, mostrando todos los reportes');
+            }
             
             // Ordenar por fecha del reporte (más recientes primero) para el histórico
             // Usar la fecha del reporte (date), no la fecha de archivado (archived_at)
