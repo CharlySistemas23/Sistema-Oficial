@@ -316,6 +316,38 @@ router.put('/:id', requireBranchAccess, async (req, res) => {
       }
     }
 
+    // Validar duplicados de SKU y barcode ANTES de actualizar
+    if (updateData.sku !== undefined && updateData.sku !== existingItem.sku) {
+      const skuCheck = await query(
+        'SELECT id FROM inventory_items WHERE sku = $1 AND id != $2',
+        [updateData.sku, id]
+      );
+      if (skuCheck.rows.length > 0) {
+        return res.status(400).json({ 
+          error: `El SKU "${updateData.sku}" ya existe en otro item`,
+          code: 'DUPLICATE_SKU',
+          duplicateField: 'sku'
+        });
+      }
+    }
+
+    if (updateData.barcode !== undefined && updateData.barcode !== existingItem.barcode) {
+      // Solo validar si el barcode no está vacío
+      if (updateData.barcode && updateData.barcode.trim() !== '') {
+        const barcodeCheck = await query(
+          'SELECT id FROM inventory_items WHERE barcode = $1 AND id != $2',
+          [updateData.barcode, id]
+        );
+        if (barcodeCheck.rows.length > 0) {
+          return res.status(400).json({ 
+            error: `El código de barras "${updateData.barcode}" ya existe en otro item`,
+            code: 'DUPLICATE_BARCODE',
+            duplicateField: 'barcode'
+          });
+        }
+      }
+    }
+
     // Construir query de actualización dinámica
     const fields = [];
     const values = [];
@@ -389,26 +421,24 @@ router.put('/:id', requireBranchAccess, async (req, res) => {
 
     res.json(updatedItem);
   } catch (error) {
-    console.error('Error actualizando item:', error);
-    console.error('Error details:', {
-      message: error.message,
-      code: error.code,
-      detail: error.detail,
-      constraint: error.constraint,
-      stack: error.stack
-    });
-    
-    // Manejar errores específicos
+    // Manejar errores específicos PRIMERO (antes de loguear)
     if (error.code === '23505') { // Unique violation
       const skuValue = req.body?.sku || existingItem?.sku || 'desconocido';
       const barcodeValue = req.body?.barcode || existingItem?.barcode || 'desconocido';
       
       let errorMessage = 'El SKU o código de barras ya existe';
       if (error.constraint === 'inventory_items_sku_key') {
-        errorMessage = `El SKU "${skuValue}" ya existe`;
+        errorMessage = `El SKU "${skuValue}" ya existe en otro item. No se puede actualizar.`;
       } else if (error.constraint === 'inventory_items_barcode_key') {
-        errorMessage = `El código de barras "${barcodeValue}" ya existe. Si estás actualizando, verifica que no esté duplicado.`;
+        errorMessage = `El código de barras "${barcodeValue}" ya existe en otro item. No se puede actualizar.`;
       }
+      
+      // Solo loguear como warning, no como error (ya que lo estamos manejando)
+      console.warn(`⚠️ Intento de actualizar con ${error.constraint === 'inventory_items_sku_key' ? 'SKU' : 'barcode'} duplicado:`, {
+        itemId: id,
+        value: error.constraint === 'inventory_items_sku_key' ? skuValue : barcodeValue,
+        constraint: error.constraint
+      });
       
       return res.status(400).json({ 
         error: errorMessage,
@@ -417,6 +447,16 @@ router.put('/:id', requireBranchAccess, async (req, res) => {
         constraint: error.constraint
       });
     }
+    
+    // Para otros errores, loguear como error
+    console.error('Error actualizando item:', error);
+    console.error('Error details:', {
+      message: error.message,
+      code: error.code,
+      detail: error.detail,
+      constraint: error.constraint,
+      stack: error.stack
+    });
     
     res.status(500).json({ 
       error: 'Error al actualizar item',
