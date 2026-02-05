@@ -6,7 +6,3 @@ cmds = ["npm install"]
 
 [start]
 cmd = "node server.js"
-
-# Asegurar que solo se despliegue el directorio backend
-[providers]
-railway = { root = "." }
