@@ -668,11 +668,20 @@ router.post('/archived-quick-captures', requireBranchAccess, async (req, res) =>
 
     const finalBranchId = branch_id || req.user.branchId;
 
+    // Logging detallado para diagnóstico
+    console.log('📤 [POST /archived-quick-captures] Guardando reporte archivado');
+    console.log(`   Usuario: ${req.user.id} (${req.user.username})`);
+    console.log(`   Sucursal: ${finalBranchId}`);
+    console.log(`   Fecha reporte: ${report_date}`);
+    console.log(`   Capturas: ${total_captures || 0}`);
+
     // Verificar si ya existe un reporte para esta fecha y sucursal
     const existingResult = await query(
       'SELECT id FROM archived_quick_capture_reports WHERE report_date = $1 AND branch_id = $2',
       [report_date, finalBranchId]
     );
+    
+    console.log(`   🔍 Reporte existente: ${existingResult.rows.length > 0 ? 'Sí (ID: ' + existingResult.rows[0].id + ')' : 'No'}`);
 
     let result;
     if (existingResult.rows.length > 0) {
@@ -780,6 +789,9 @@ router.post('/archived-quick-captures', requireBranchAccess, async (req, res) =>
       metrics: report.metrics ? (typeof report.metrics === 'string' ? JSON.parse(report.metrics) : report.metrics) : null
     };
 
+    // Logging del reporte guardado
+    console.log(`   ✅ Reporte guardado: ID=${parsedReport.id}, Fecha=${parsedReport.report_date}, Branch=${parsedReport.branch_id}, Archived_by=${parsedReport.archived_by}`);
+
     // Emitir eventos Socket.IO para sincronización en tiempo real
     try {
       const io = getIO(req);
@@ -822,6 +834,36 @@ router.get('/archived-quick-captures', requireBranchAccess, async (req, res) => 
   try {
     const { branch_id, date_from, date_to, date, limit = 50, offset = 0 } = req.query;
 
+    // Logging detallado para diagnóstico
+    console.log('📥 [GET /archived-quick-captures] Solicitud recibida');
+    console.log(`   Usuario: ${req.user.id} (${req.user.username})`);
+    console.log(`   Sucursal: ${req.user.branchId}`);
+    console.log(`   Master Admin: ${req.user.isMasterAdmin}`);
+    console.log(`   Query params:`, { branch_id, date_from, date_to, date, limit, offset });
+
+    // Primero, verificar cuántos reportes hay en total en la base de datos (sin filtros)
+    const totalCheck = await query(
+      'SELECT COUNT(*) as total FROM archived_quick_capture_reports'
+    );
+    console.log(`   📊 Total reportes en BD: ${totalCheck.rows[0]?.total || 0}`);
+
+    // Verificar reportes por sucursal y por usuario
+    if (req.user.branchId) {
+      const branchCheck = await query(
+        'SELECT COUNT(*) as total FROM archived_quick_capture_reports WHERE branch_id = $1',
+        [req.user.branchId]
+      );
+      console.log(`   📊 Reportes de sucursal ${req.user.branchId}: ${branchCheck.rows[0]?.total || 0}`);
+    }
+    
+    if (req.user.id) {
+      const userCheck = await query(
+        'SELECT COUNT(*) as total FROM archived_quick_capture_reports WHERE archived_by = $1',
+        [req.user.id]
+      );
+      console.log(`   📊 Reportes archivados por usuario ${req.user.id}: ${userCheck.rows[0]?.total || 0}`);
+    }
+
     let sql = `
       SELECT 
         aqr.*,
@@ -841,20 +883,36 @@ router.get('/archived-quick-captures', requireBranchAccess, async (req, res) => 
         sql += ` AND aqr.branch_id = $${paramCount}`;
         params.push(branch_id);
         paramCount++;
+        console.log(`   🔍 Filtro Master Admin: branch_id = ${branch_id}`);
+      } else {
+        console.log(`   🔍 Master Admin: Sin filtro de sucursal (mostrando todos)`);
       }
     } else {
       // Mostrar reportes de la sucursal actual O reportes que el usuario creó
       // Esto permite que los usuarios vean sus propios reportes en diferentes computadoras
-      if (req.user.branchId) {
-        sql += ` AND (aqr.branch_id = $${paramCount} OR aqr.archived_by = $${paramCount + 1})`;
+      if (req.user.branchId && req.user.id) {
+        // Usar verificación de NULL para evitar problemas con archived_by NULL
+        sql += ` AND (aqr.branch_id = $${paramCount} OR (aqr.archived_by IS NOT NULL AND aqr.archived_by = $${paramCount + 1}))`;
         params.push(req.user.branchId);
         params.push(req.user.id);
         paramCount += 2;
-      } else {
-        // Si no hay branchId, mostrar solo los reportes que el usuario creó
-        sql += ` AND aqr.archived_by = $${paramCount}`;
+        console.log(`   🔍 Filtro Usuario: branch_id = ${req.user.branchId} OR archived_by = ${req.user.id}`);
+      } else if (req.user.id) {
+        // Si no hay branchId, mostrar solo los reportes que el usuario creó (y que no sean NULL)
+        sql += ` AND aqr.archived_by IS NOT NULL AND aqr.archived_by = $${paramCount}`;
         params.push(req.user.id);
         paramCount++;
+        console.log(`   🔍 Filtro Usuario: archived_by = ${req.user.id} (no NULL)`);
+      } else if (req.user.branchId) {
+        // Si solo hay branchId pero no id, mostrar reportes de la sucursal
+        sql += ` AND aqr.branch_id = $${paramCount}`;
+        params.push(req.user.branchId);
+        paramCount++;
+        console.log(`   🔍 Filtro Usuario: branch_id = ${req.user.branchId} (sin user.id)`);
+      } else {
+        console.warn(`   ⚠️ Usuario sin branchId ni id, no se pueden filtrar reportes`);
+        // No devolver ningún reporte si no hay información del usuario
+        sql += ` AND 1=0`;
       }
     }
 
@@ -863,24 +921,37 @@ router.get('/archived-quick-captures', requireBranchAccess, async (req, res) => 
       sql += ` AND aqr.report_date = $${paramCount}`;
       params.push(date);
       paramCount++;
+      console.log(`   🔍 Filtro fecha: report_date = ${date}`);
     } else {
       // Filtro por rango de fechas
       if (date_from) {
         sql += ` AND aqr.report_date >= $${paramCount}`;
         params.push(date_from);
         paramCount++;
+        console.log(`   🔍 Filtro fecha desde: ${date_from}`);
       }
       if (date_to) {
         sql += ` AND aqr.report_date <= $${paramCount}`;
         params.push(date_to);
         paramCount++;
+        console.log(`   🔍 Filtro fecha hasta: ${date_to}`);
       }
     }
 
     sql += ` ORDER BY aqr.report_date DESC, aqr.archived_at DESC LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
     params.push(parseInt(limit), parseInt(offset));
 
+    console.log(`   📝 SQL Query: ${sql}`);
+    console.log(`   📝 Parámetros:`, params);
+
     const result = await query(sql, params);
+    
+    console.log(`   ✅ Resultado: ${result.rows.length} reportes encontrados`);
+    if (result.rows.length > 0) {
+      console.log(`   📋 Fechas de reportes:`, result.rows.map(r => r.report_date).join(', '));
+      console.log(`   📋 Branch IDs:`, result.rows.map(r => r.branch_id).join(', '));
+      console.log(`   📋 Archived by:`, result.rows.map(r => r.archived_by).join(', '));
+    }
 
     // Parsear JSONB fields
     const reports = result.rows.map(row => ({
