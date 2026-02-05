@@ -809,6 +809,26 @@ CREATE TRIGGER update_historical_qc_reports_updated_at BEFORE UPDATE ON historic
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================================
+-- MIGRACIONES: Agregar columnas faltantes si no existen
+-- ============================================
+
+-- Agregar columna daily_summary a archived_quick_capture_reports si no existe
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 
+        FROM information_schema.columns 
+        WHERE table_name = 'archived_quick_capture_reports' 
+        AND column_name = 'daily_summary'
+    ) THEN
+        ALTER TABLE archived_quick_capture_reports 
+        ADD COLUMN daily_summary JSONB;
+        
+        RAISE NOTICE 'Columna daily_summary agregada a archived_quick_capture_reports';
+    END IF;
+END $$;
+
+-- ============================================
 -- DATOS INICIALES
 -- ============================================
 
