@@ -118,12 +118,12 @@ const Inventory = {
                             <button class="btn-secondary btn-sm" id="inventory-print-labels-btn" style="display: none;">
                                 <i class="fas fa-gem"></i> Imprimir Etiquetas (<span id="inventory-print-labels-count">0</span>)
                             </button>
-                            <div style="display: flex; gap: 2px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); overflow: hidden; background: var(--color-bg-secondary);">
-                                <button class="btn-secondary btn-sm" id="inventory-view-grid-btn" title="Vista de Tarjetas" style="border-radius: 0; margin: 0; border: none; padding: 8px 12px; font-weight: 600; ${this.currentView === 'grid' ? 'background: var(--color-primary) !important; color: white !important;' : 'background: transparent; color: var(--color-text);'}">
-                                    <i class="fas fa-th"></i> <span>Tarjetas</span>
+                            <div style="display: flex; gap: 2px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); overflow: hidden; background: var(--color-bg-secondary); margin-left: var(--spacing-xs);">
+                                <button class="btn-secondary btn-sm" id="inventory-view-grid-btn" title="Vista de Tarjetas" style="border-radius: 0; margin: 0; border: none; padding: 8px 16px; font-weight: 600; cursor: pointer; transition: all 0.2s; ${this.currentView === 'grid' ? 'background: var(--color-primary) !important; color: white !important;' : 'background: transparent; color: var(--color-text);'}">
+                                    <i class="fas fa-th"></i> <span style="margin-left: 4px;">Tarjetas</span>
                                 </button>
-                                <button class="btn-secondary btn-sm" id="inventory-view-list-btn" title="Vista de Lista" style="border-radius: 0; margin: 0; border: none; padding: 8px 12px; font-weight: 600; ${this.currentView === 'list' ? 'background: var(--color-primary) !important; color: white !important;' : 'background: transparent; color: var(--color-text);'}">
-                                    <i class="fas fa-list"></i> <span>Lista</span>
+                                <button class="btn-secondary btn-sm" id="inventory-view-list-btn" title="Vista de Lista" style="border-radius: 0; margin: 0; border: none; padding: 8px 16px; font-weight: 600; cursor: pointer; transition: all 0.2s; ${this.currentView === 'list' ? 'background: var(--color-primary) !important; color: white !important;' : 'background: transparent; color: var(--color-text);'}">
+                                    <i class="fas fa-list"></i> <span style="margin-left: 4px;">Lista</span>
                                 </button>
                             </div>
                         </div>
@@ -370,17 +370,64 @@ const Inventory = {
         document.getElementById('inventory-import-btn')?.addEventListener('click', () => this.importCSV());
         document.getElementById('inventory-export-btn')?.addEventListener('click', () => this.exportInventory());
         
-        // Toggle de vista (Grid/Lista)
-        document.getElementById('inventory-view-grid-btn')?.addEventListener('click', () => {
-            this.currentView = 'grid';
-            this.updateViewButtons();
-            this.loadInventory();
-        });
-        document.getElementById('inventory-view-list-btn')?.addEventListener('click', () => {
-            this.currentView = 'list';
-            this.updateViewButtons();
-            this.loadInventory();
-        });
+        // Toggle de vista (Grid/Lista) - Usar delegación de eventos para asegurar que funcione
+        const moduleContent = document.getElementById('module-content');
+        if (moduleContent) {
+            // Remover listeners anteriores si existen
+            const oldGridBtn = document.getElementById('inventory-view-grid-btn');
+            const oldListBtn = document.getElementById('inventory-view-list-btn');
+            if (oldGridBtn) {
+                oldGridBtn.replaceWith(oldGridBtn.cloneNode(true));
+            }
+            if (oldListBtn) {
+                oldListBtn.replaceWith(oldListBtn.cloneNode(true));
+            }
+            
+            // Agregar nuevos listeners
+            const gridBtn = document.getElementById('inventory-view-grid-btn');
+            const listBtn = document.getElementById('inventory-view-list-btn');
+            
+            if (gridBtn) {
+                gridBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('🔄 Cambiando a vista Grid');
+                    this.currentView = 'grid';
+                    this.updateViewButtons();
+                    this.loadInventory();
+                });
+            }
+            
+            if (listBtn) {
+                listBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('🔄 Cambiando a vista Lista');
+                    this.currentView = 'list';
+                    this.updateViewButtons();
+                    this.loadInventory();
+                });
+            }
+            
+            // También usar delegación de eventos como respaldo
+            moduleContent.addEventListener('click', (e) => {
+                if (e.target.closest('#inventory-view-grid-btn')) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('🔄 Cambiando a vista Grid (delegación)');
+                    this.currentView = 'grid';
+                    this.updateViewButtons();
+                    this.loadInventory();
+                } else if (e.target.closest('#inventory-view-list-btn')) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('🔄 Cambiando a vista Lista (delegación)');
+                    this.currentView = 'list';
+                    this.updateViewButtons();
+                    this.loadInventory();
+                }
+            });
+        }
         
         // Escaneo de código de barras
         this.setupBarcodeScanning();
@@ -1429,10 +1476,11 @@ const Inventory = {
             }
 
             // Decidir qué vista mostrar según currentView
+            console.log(`📊 Mostrando inventario en vista: ${this.currentView} (${items.length} items)`);
             if (this.currentView === 'list') {
-                this.displayInventoryList(items);
+                await this.displayInventoryList(items);
             } else {
-                this.displayInventoryGrid(items);
+                await this.displayInventoryGrid(items);
             }
             
             // Actualizar filtro de ubicación con ubicaciones disponibles
@@ -5254,18 +5302,28 @@ const Inventory = {
         const gridBtn = document.getElementById('inventory-view-grid-btn');
         const listBtn = document.getElementById('inventory-view-list-btn');
         
+        console.log(`🔄 Actualizando botones de vista. currentView: ${this.currentView}`, { gridBtn: !!gridBtn, listBtn: !!listBtn });
+        
         if (gridBtn && listBtn) {
             if (this.currentView === 'grid') {
                 gridBtn.style.background = 'var(--color-primary)';
                 gridBtn.style.color = 'white';
+                gridBtn.style.fontWeight = '600';
                 listBtn.style.background = 'transparent';
                 listBtn.style.color = 'var(--color-text)';
+                listBtn.style.fontWeight = 'normal';
+                console.log('✅ Botón Grid activado');
             } else {
                 listBtn.style.background = 'var(--color-primary)';
                 listBtn.style.color = 'white';
+                listBtn.style.fontWeight = '600';
                 gridBtn.style.background = 'transparent';
                 gridBtn.style.color = 'var(--color-text)';
+                gridBtn.style.fontWeight = 'normal';
+                console.log('✅ Botón Lista activado');
             }
+        } else {
+            console.warn('⚠️ Botones de vista no encontrados:', { gridBtn: !!gridBtn, listBtn: !!listBtn });
         }
     },
     
