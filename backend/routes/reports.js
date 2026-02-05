@@ -876,9 +876,11 @@ router.get('/archived-quick-captures', requireBranchAccess, async (req, res) => 
     let paramCount = 1;
 
     // Filtro por sucursal
-    // Para master admin, permitir filtrar por branch_id si se especifica
-    // Para otros usuarios, mostrar reportes de su sucursal O reportes que ellos crearon (archived_by)
+    // NUEVA LÓGICA: Filtrar SOLO por branch_id y report_date (fecha)
+    // Esto permite que todos los usuarios de la misma sucursal vean los mismos reportes archivados,
+    // independientemente de quién los archivó. Los reportes se filtran por fecha para evitar mostrar todos.
     if (req.user.isMasterAdmin) {
+      // Master admin puede ver todos los reportes, o filtrar por branch_id si se especifica
       if (branch_id) {
         sql += ` AND aqr.branch_id = $${paramCount}`;
         params.push(branch_id);
@@ -888,30 +890,16 @@ router.get('/archived-quick-captures', requireBranchAccess, async (req, res) => 
         console.log(`   🔍 Master Admin: Sin filtro de sucursal (mostrando todos)`);
       }
     } else {
-      // Mostrar reportes de la sucursal actual O reportes que el usuario creó
-      // Esto permite que los usuarios vean sus propios reportes en diferentes computadoras
-      if (req.user.branchId && req.user.id) {
-        // Usar verificación de NULL para evitar problemas con archived_by NULL
-        sql += ` AND (aqr.branch_id = $${paramCount} OR (aqr.archived_by IS NOT NULL AND aqr.archived_by = $${paramCount + 1}))`;
-        params.push(req.user.branchId);
-        params.push(req.user.id);
-        paramCount += 2;
-        console.log(`   🔍 Filtro Usuario: branch_id = ${req.user.branchId} OR archived_by = ${req.user.id}`);
-      } else if (req.user.id) {
-        // Si no hay branchId, mostrar solo los reportes que el usuario creó (y que no sean NULL)
-        sql += ` AND aqr.archived_by IS NOT NULL AND aqr.archived_by = $${paramCount}`;
-        params.push(req.user.id);
-        paramCount++;
-        console.log(`   🔍 Filtro Usuario: archived_by = ${req.user.id} (no NULL)`);
-      } else if (req.user.branchId) {
-        // Si solo hay branchId pero no id, mostrar reportes de la sucursal
+      // Usuarios normales: mostrar reportes de su sucursal SOLO
+      // NO usar archived_by para el filtrado - todos los usuarios de la sucursal ven los mismos reportes
+      if (req.user.branchId) {
         sql += ` AND aqr.branch_id = $${paramCount}`;
         params.push(req.user.branchId);
         paramCount++;
-        console.log(`   🔍 Filtro Usuario: branch_id = ${req.user.branchId} (sin user.id)`);
+        console.log(`   🔍 Filtro Usuario: branch_id = ${req.user.branchId} (todos los reportes de la sucursal)`);
       } else {
-        console.warn(`   ⚠️ Usuario sin branchId ni id, no se pueden filtrar reportes`);
-        // No devolver ningún reporte si no hay información del usuario
+        console.warn(`   ⚠️ Usuario sin branchId, no se pueden filtrar reportes`);
+        // No devolver ningún reporte si no hay información de sucursal
         sql += ` AND 1=0`;
       }
     }
