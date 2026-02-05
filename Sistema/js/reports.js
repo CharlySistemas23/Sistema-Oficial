@@ -12311,6 +12311,8 @@ const Reports = {
             try {
                 if (typeof API !== 'undefined' && API.baseURL && API.token && API.getArchivedReports) {
                     console.log('📥 Sincronizando reportes archivados desde el servidor...');
+                    console.log(`   API.baseURL: ${API.baseURL}`);
+                    console.log(`   API.token: ${API.token ? 'Presente' : 'Ausente'}`);
                     
                     // Obtener información del usuario actual
                     const currentUserId = typeof UserManager !== 'undefined' && UserManager.currentUser ? UserManager.currentUser.id : null;
@@ -12332,7 +12334,16 @@ const Reports = {
                     // Para usuarios normales, el backend usará req.user.branchId y req.user.id automáticamente
                     
                     console.log(`📤 [Sincronización] Solicitando reportes con filtros:`, filters);
-                    const serverReports = await API.getArchivedReports(filters);
+                    
+                    let serverReports;
+                    try {
+                        serverReports = await API.getArchivedReports(filters);
+                        console.log(`📥 [Sincronización] Respuesta del servidor recibida`);
+                    } catch (apiError) {
+                        console.error('❌ [Sincronización] Error al obtener reportes del servidor:', apiError);
+                        console.error('   Mensaje:', apiError.message);
+                        throw apiError; // Re-lanzar para que se maneje en el catch externo
+                    }
                     
                     if (serverReports && Array.isArray(serverReports)) {
                         console.log(`✅ ${serverReports.length} reportes archivados recibidos del servidor`);
@@ -13771,13 +13782,21 @@ const Reports = {
      */
     setupArchivedReportsSocketListeners() {
         try {
-            if (typeof API === 'undefined' || !API.socket || !API.socket.connected) {
-                console.log('⚠️ Socket.IO no disponible para reportes archivados, omitiendo listeners en tiempo real');
-                return;
-            }
-            
-            // Escuchar creación de reportes archivados
-            API.socket.on('archived_report_created', async (data) => {
+            // Función para configurar los listeners (se puede llamar cuando Socket.IO se conecte)
+            const setupListeners = () => {
+                if (typeof API === 'undefined' || !API.socket) {
+                    console.log('⚠️ Socket.IO no disponible para reportes archivados');
+                    return false;
+                }
+                
+                // Remover listeners anteriores si existen (evitar duplicados)
+                if (API.socket.hasListeners && API.socket.hasListeners('archived_report_created')) {
+                    API.socket.off('archived_report_created');
+                    API.socket.off('archived_report_updated');
+                }
+                
+                // Escuchar creación de reportes archivados
+                API.socket.on('archived_report_created', async (data) => {
                 try {
                     const { report } = data || {};
                     if (!report || !report.id) {
@@ -13916,12 +13935,62 @@ const Reports = {
                 } catch (error) {
                     console.error('❌ Error procesando reporte archivado actualizado desde servidor:', error);
                 }
-            });
+                });
+                
+                console.log('✅ Listeners de Socket.IO configurados para reportes archivados');
+                return true;
+            };
             
-            console.log('✅ Listeners de Socket.IO configurados para reportes archivados');
+            // Intentar configurar listeners ahora si Socket.IO está disponible
+            if (setupListeners()) {
+                // Si se configuraron correctamente, también escuchar cuando se conecte en el futuro
+                if (API.socket) {
+                    API.socket.on('connect', () => {
+                        console.log('🔄 Socket.IO reconectado, reconfigurando listeners de reportes archivados...');
+                        setupListeners();
+                    });
+                }
+            } else {
+                // Si Socket.IO no está disponible, intentar configurar cuando se conecte
+                console.log('⏳ Socket.IO no disponible aún, intentando configurar listeners cuando se conecte...');
+                
+                // Intentar configurar cuando API.socket esté disponible
+                const checkSocket = setInterval(() => {
+                    if (typeof API !== 'undefined' && API.socket && API.socket.connected) {
+                        console.log('✅ Socket.IO conectado, configurando listeners de reportes archivados...');
+                        setupListeners();
+                        clearInterval(checkSocket);
+                    }
+                }, 1000);
+                
+                // Limpiar el intervalo después de 30 segundos si no se conecta
+                setTimeout(() => {
+                    clearInterval(checkSocket);
+                }, 30000);
+            }
+            
+            // SIEMPRE ejecutar sincronización inicial, incluso si Socket.IO no está disponible
+            // Esto asegura que los reportes se sincronicen al cargar la página
+            setTimeout(async () => {
+                try {
+                    console.log('🔄 Ejecutando sincronización inicial de reportes archivados...');
+                    await this.loadArchivedReports();
+                } catch (syncError) {
+                    console.warn('⚠️ Error en sincronización inicial de reportes archivados:', syncError);
+                }
+            }, 2000); // Esperar 2 segundos para asegurar que todo esté inicializado
+            
         } catch (error) {
             console.error('❌ Error configurando listeners de Socket.IO para reportes archivados:', error);
             // No lanzar error para no bloquear la inicialización
+            // Aún así, intentar sincronización inicial
+            setTimeout(async () => {
+                try {
+                    await this.loadArchivedReports();
+                } catch (syncError) {
+                    console.warn('⚠️ Error en sincronización inicial de reportes archivados (fallback):', syncError);
+                }
+            }, 2000);
         }
     },
 
