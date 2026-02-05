@@ -6087,6 +6087,9 @@ const Reports = {
             
             // Escuchar actualizaciones del servidor en tiempo real
             this.setupQuickCaptureSocketListeners();
+            
+            // Escuchar actualizaciones de reportes archivados en tiempo real
+            this.setupArchivedReportsSocketListeners();
         } catch (error) {
             console.error('Error en setupQuickCaptureListeners:', error);
             // No lanzar el error para evitar que rompa otros módulos
@@ -12404,11 +12407,24 @@ const Reports = {
             // Obtener todos los reportes archivados (locales + sincronizados)
             const archivedReports = await DB.getAll('archived_quick_captures') || [];
             
-            // Ordenar por fecha (más recientes primero)
+            // Ordenar por fecha del reporte (más recientes primero) para el histórico
+            // Usar la fecha del reporte (date), no la fecha de archivado (archived_at)
             archivedReports.sort((a, b) => {
-                const dateA = new Date(a.archived_at || a.date);
-                const dateB = new Date(b.archived_at || b.date);
-                return dateB - dateA;
+                // Obtener la fecha del reporte (puede estar en 'date' o 'report_date')
+                const dateAStr = a.date || a.report_date || '';
+                const dateBStr = b.date || b.report_date || '';
+                
+                // Si las fechas están en formato YYYY-MM-DD, compararlas directamente
+                if (dateAStr && dateBStr) {
+                    // Comparar como strings (YYYY-MM-DD se ordena correctamente)
+                    if (dateBStr > dateAStr) return 1;
+                    if (dateBStr < dateAStr) return -1;
+                }
+                
+                // Si son iguales o no hay fecha, usar archived_at como desempate
+                const archivedA = new Date(a.archived_at || 0);
+                const archivedB = new Date(b.archived_at || 0);
+                return archivedB - archivedA;
             });
 
             if (archivedReports.length === 0) {
@@ -13746,6 +13762,165 @@ const Reports = {
             console.log('✅ Listeners de Socket.IO configurados para capturas rápidas');
         } catch (error) {
             console.error('Error configurando listeners de Socket.IO:', error);
+            // No lanzar error para no bloquear la inicialización
+        }
+    },
+    
+    /**
+     * Configurar listeners de Socket.IO para reportes archivados en tiempo real
+     */
+    setupArchivedReportsSocketListeners() {
+        try {
+            if (typeof API === 'undefined' || !API.socket || !API.socket.connected) {
+                console.log('⚠️ Socket.IO no disponible para reportes archivados, omitiendo listeners en tiempo real');
+                return;
+            }
+            
+            // Escuchar creación de reportes archivados
+            API.socket.on('archived_report_created', async (data) => {
+                try {
+                    const { report } = data || {};
+                    if (!report || !report.id) {
+                        console.warn('⚠️ Evento archived_report_created recibido sin datos válidos');
+                        return;
+                    }
+                    
+                    console.log('📥 Reporte archivado creado en servidor, sincronizando...', {
+                        id: report.id,
+                        date: report.report_date || report.date,
+                        branch_id: report.branch_id
+                    });
+                    
+                    // Convertir el reporte del servidor al formato local
+                    const reportId = report.id || report.report_date || `archived_${report.report_date}`;
+                    const localReport = {
+                        id: reportId,
+                        date: report.report_date || report.date,
+                        branch_id: report.branch_id,
+                        archived_by: report.archived_by,
+                        total_captures: report.total_captures || 0,
+                        total_quantity: report.total_quantity || 0,
+                        total_sales_mxn: report.total_sales_mxn || 0,
+                        total_cogs: report.total_cogs || 0,
+                        total_commissions: report.total_commissions || 0,
+                        total_arrival_costs: report.total_arrival_costs || 0,
+                        total_operating_costs: report.total_operating_costs || 0,
+                        variable_costs_daily: report.variable_costs_daily || 0,
+                        fixed_costs_prorated: report.fixed_costs_prorated || 0,
+                        bank_commissions: report.bank_commissions || 0,
+                        gross_profit: report.gross_profit || 0,
+                        net_profit: report.net_profit || 0,
+                        exchange_rates: report.exchange_rates || {},
+                        captures: report.captures || [],
+                        daily_summary: report.daily_summary || [],
+                        seller_commissions: report.seller_commissions || [],
+                        guide_commissions: report.guide_commissions || [],
+                        arrivals: report.arrivals || [],
+                        metrics: report.metrics || {},
+                        archived_at: report.archived_at || report.created_at || new Date().toISOString(),
+                        server_id: report.id,
+                        sync_status: 'synced'
+                    };
+                    
+                    // Verificar si ya existe localmente (por ID o por fecha y sucursal)
+                    const existing = await DB.get('archived_quick_captures', reportId);
+                    if (!existing) {
+                        // Verificar también por fecha y sucursal para evitar duplicados
+                        const allReports = await DB.getAll('archived_quick_captures') || [];
+                        const duplicate = allReports.find(r => 
+                            (r.date === localReport.date || r.date === report.report_date) &&
+                            r.branch_id === localReport.branch_id &&
+                            r.id !== reportId
+                        );
+                        
+                        if (!duplicate) {
+                            await DB.put('archived_quick_captures', localReport);
+                            console.log('✅ Reporte archivado sincronizado desde servidor en tiempo real:', reportId);
+                            
+                            // Actualizar la lista visual automáticamente
+                            await this.loadArchivedReports();
+                            
+                            // Mostrar notificación sutil
+                            if (typeof Utils !== 'undefined' && Utils.showNotification) {
+                                const dateStr = this.formatDateWithoutTimezone(localReport.date);
+                                Utils.showNotification(`Nuevo reporte archivado recibido: ${dateStr}`, 'success', 3000);
+                            }
+                        } else {
+                            console.log('⚠️ Reporte duplicado detectado, actualizando existente:', duplicate.id);
+                            // Actualizar el existente con los nuevos datos
+                            localReport.id = duplicate.id;
+                            await DB.put('archived_quick_captures', localReport);
+                            await this.loadArchivedReports();
+                        }
+                    } else {
+                        // Si existe, actualizarlo con los datos más recientes
+                        console.log('📝 Actualizando reporte archivado existente:', reportId);
+                        await DB.put('archived_quick_captures', localReport);
+                        await this.loadArchivedReports();
+                    }
+                } catch (error) {
+                    console.error('❌ Error procesando reporte archivado creado desde servidor:', error);
+                }
+            });
+            
+            // Escuchar actualización de reportes archivados
+            API.socket.on('archived_report_updated', async (data) => {
+                try {
+                    const { report } = data || {};
+                    if (!report || !report.id) {
+                        console.warn('⚠️ Evento archived_report_updated recibido sin datos válidos');
+                        return;
+                    }
+                    
+                    console.log('📥 Reporte archivado actualizado en servidor, sincronizando...', {
+                        id: report.id,
+                        date: report.report_date || report.date
+                    });
+                    
+                    // Convertir el reporte del servidor al formato local (mismo proceso que created)
+                    const reportId = report.id || report.report_date || `archived_${report.report_date}`;
+                    const localReport = {
+                        id: reportId,
+                        date: report.report_date || report.date,
+                        branch_id: report.branch_id,
+                        archived_by: report.archived_by,
+                        total_captures: report.total_captures || 0,
+                        total_quantity: report.total_quantity || 0,
+                        total_sales_mxn: report.total_sales_mxn || 0,
+                        total_cogs: report.total_cogs || 0,
+                        total_commissions: report.total_commissions || 0,
+                        total_arrival_costs: report.total_arrival_costs || 0,
+                        total_operating_costs: report.total_operating_costs || 0,
+                        variable_costs_daily: report.variable_costs_daily || 0,
+                        fixed_costs_prorated: report.fixed_costs_prorated || 0,
+                        bank_commissions: report.bank_commissions || 0,
+                        gross_profit: report.gross_profit || 0,
+                        net_profit: report.net_profit || 0,
+                        exchange_rates: report.exchange_rates || {},
+                        captures: report.captures || [],
+                        daily_summary: report.daily_summary || [],
+                        seller_commissions: report.seller_commissions || [],
+                        guide_commissions: report.guide_commissions || [],
+                        arrivals: report.arrivals || [],
+                        metrics: report.metrics || {},
+                        archived_at: report.archived_at || report.created_at || new Date().toISOString(),
+                        server_id: report.id,
+                        sync_status: 'synced'
+                    };
+                    
+                    await DB.put('archived_quick_captures', localReport);
+                    console.log('✅ Reporte archivado actualizado desde servidor en tiempo real:', reportId);
+                    
+                    // Actualizar la lista visual automáticamente
+                    await this.loadArchivedReports();
+                } catch (error) {
+                    console.error('❌ Error procesando reporte archivado actualizado desde servidor:', error);
+                }
+            });
+            
+            console.log('✅ Listeners de Socket.IO configurados para reportes archivados');
+        } catch (error) {
+            console.error('❌ Error configurando listeners de Socket.IO para reportes archivados:', error);
             // No lanzar error para no bloquear la inicialización
         }
     },
