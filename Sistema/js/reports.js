@@ -12060,89 +12060,119 @@ const Reports = {
                 }
                 
                 console.log(`✅ ${syncedCount} capturas sincronizadas con el servidor${failedCount > 0 ? `, ${failedCount} fallaron` : ''}`);
-                
-                // Guardar el reporte archivado en el servidor
-                try {
-                    if (typeof API !== 'undefined' && API.saveArchivedReport) {
-                        const branchId = captureBranchIds.length === 1 ? captureBranchIds[0] : null;
-                        const currentUserId = typeof UserManager !== 'undefined' && UserManager.currentUser ? UserManager.currentUser.id : null;
-                        
-                        console.log('📤 Guardando reporte archivado en servidor...');
-                        console.log(`   Fecha: ${normalizedSelectedDate}`);
-                        console.log(`   Sucursal: ${branchId}`);
-                        console.log(`   Usuario: ${currentUserId}`);
-                        console.log(`   Capturas: ${captures.length}`);
-                        
-                        const reportData = {
-                            report_date: normalizedSelectedDate,
-                            branch_id: branchId,
-                            total_captures: captures.length,
-                            total_quantity: totalQuantity,
-                            total_sales_mxn: totalSalesMXN,
-                            total_cogs: totalCOGS,
-                            total_commissions: totalCommissions,
-                            total_arrival_costs: totalArrivalCosts,
-                            total_operating_costs: totalOperatingCosts,
-                            variable_costs_daily: variableCostsDaily,
-                            fixed_costs_prorated: fixedCostsProrated,
-                            bank_commissions: bankCommissions,
-                            gross_profit: grossProfit,
-                            net_profit: netProfit,
-                            exchange_rates: { usd: usdRate, cad: cadRate },
-                            captures: captures,
-                            daily_summary: [{
-                                date: normalizedSelectedDate,
-                                captures: captures.length,
-                                sales: totalSalesMXN,
-                                profit: netProfit
-                            }],
-                            seller_commissions: Object.values(sellerCommissions).map(s => ({
-                                seller_id: s.seller?.id,
-                                seller_name: s.seller?.name,
-                                total: s.total,
-                                sales: s.sales,
-                                commissions: s.commissions
-                            })),
-                            guide_commissions: Object.values(guideCommissions).map(g => ({
-                                guide_id: g.guide?.id,
-                                guide_name: g.guide?.name,
-                                total: g.total,
-                                sales: g.sales,
-                                commissions: g.commissions
-                            })),
-                            arrivals: filteredArrivals,
-                            metrics: metrics
-                        };
-                        
-                        const serverReport = await API.saveArchivedReport(reportData);
-                        
-                        if (serverReport && serverReport.id) {
-                            console.log('✅ Reporte archivado guardado en servidor:', serverReport.id);
-                            console.log(`   Fecha del reporte: ${serverReport.report_date || serverReport.date}`);
-                            console.log(`   Archivado por: ${serverReport.archived_by || 'N/A'}`);
-                            
-                            // Actualizar el reporte local con el ID del servidor
-                            archivedReport.server_id = serverReport.id;
-                            archivedReport.archived_by = serverReport.archived_by;
-                            await DB.put('archived_quick_captures', archivedReport);
-                        } else {
-                            console.warn('⚠️ El servidor no devolvió un ID para el reporte archivado');
-                        }
-                    } else {
-                        console.warn('⚠️ API.saveArchivedReport no disponible, reporte guardado solo localmente');
-                        if (!API || !API.baseURL) console.warn('   - API.baseURL no configurado');
-                        if (!API || !API.token) console.warn('   - API.token no disponible');
-                        if (!API || !API.saveArchivedReport) console.warn('   - API.saveArchivedReport no disponible');
-                    }
-                } catch (e) {
-                    console.error('❌ Error guardando reporte archivado en backend:', e);
-                    console.error('   Mensaje:', e.message);
-                    console.error('   Stack:', e.stack);
-                    Utils.showNotification(`Error al guardar reporte en servidor: ${e.message}. El reporte se guardó localmente.`, 'warning');
-                    // No bloquear el proceso si falla el guardado en servidor
-                }
             } else {
-                console.warn('⚠️ API no disponible, reporte guardado solo localmente');
+                console.warn('⚠️ API.createQuickCapture no disponible, capturas no sincronizadas con servidor');
+            }
+            
+            // CRÍTICO: Guardar el reporte archivado en el servidor (SIEMPRE intentar, incluso si las capturas fallaron)
+            // Esto es independiente de la sincronización de capturas
+            try {
+                // Verificar que API esté disponible y configurado
+                const isAPIAvailable = typeof API !== 'undefined' && 
+                                      API.saveArchivedReport && 
+                                      API.baseURL; // baseURL es requerido para hacer requests
+                
+                if (isAPIAvailable) {
+                    const branchId = captureBranchIds.length === 1 ? captureBranchIds[0] : null;
+                    const currentUserId = typeof UserManager !== 'undefined' && UserManager.currentUser ? UserManager.currentUser.id : null;
+                    
+                    console.log('📤 [CRÍTICO] Guardando reporte archivado en servidor...');
+                    console.log(`   API.baseURL: ${API.baseURL}`);
+                    console.log(`   API.token: ${API.token ? 'Presente' : 'Ausente (usará headers x-username/x-branch-id)'}`);
+                    console.log(`   Fecha: ${normalizedSelectedDate}`);
+                    console.log(`   Sucursal: ${branchId}`);
+                    console.log(`   Usuario: ${currentUserId}`);
+                    console.log(`   Capturas: ${captures.length}`);
+                    
+                    const reportData = {
+                        report_date: normalizedSelectedDate,
+                        branch_id: branchId,
+                        total_captures: captures.length,
+                        total_quantity: totalQuantity,
+                        total_sales_mxn: totalSalesMXN,
+                        total_cogs: totalCOGS,
+                        total_commissions: totalCommissions,
+                        total_arrival_costs: totalArrivalCosts,
+                        total_operating_costs: totalOperatingCosts,
+                        variable_costs_daily: variableCostsDaily,
+                        fixed_costs_prorated: fixedCostsProrated,
+                        bank_commissions: bankCommissions,
+                        gross_profit: grossProfit,
+                        net_profit: netProfit,
+                        exchange_rates: { usd: usdRate, cad: cadRate },
+                        captures: captures,
+                        daily_summary: [{
+                            date: normalizedSelectedDate,
+                            captures: captures.length,
+                            sales: totalSalesMXN,
+                            profit: netProfit
+                        }],
+                        seller_commissions: Object.values(sellerCommissions).map(s => ({
+                            seller_id: s.seller?.id,
+                            seller_name: s.seller?.name,
+                            total: s.total,
+                            sales: s.sales,
+                            commissions: s.commissions
+                        })),
+                        guide_commissions: Object.values(guideCommissions).map(g => ({
+                            guide_id: g.guide?.id,
+                            guide_name: g.guide?.name,
+                            total: g.total,
+                            sales: g.sales,
+                            commissions: g.commissions
+                        })),
+                        arrivals: filteredArrivals,
+                        metrics: metrics
+                    };
+                    
+                    console.log('📤 [CRÍTICO] Enviando petición POST a /api/reports/archived-quick-captures...');
+                    const serverReport = await API.saveArchivedReport(reportData);
+                    
+                    if (serverReport && serverReport.id) {
+                        console.log('✅ [CRÍTICO] Reporte archivado guardado en servidor:', serverReport.id);
+                        console.log(`   Fecha del reporte: ${serverReport.report_date || serverReport.date}`);
+                        console.log(`   Archivado por: ${serverReport.archived_by || 'N/A'}`);
+                        
+                        // Actualizar el reporte local con el ID del servidor
+                        archivedReport.server_id = serverReport.id;
+                        archivedReport.archived_by = serverReport.archived_by;
+                        await DB.put('archived_quick_captures', archivedReport);
+                        
+                        Utils.showNotification('✅ Reporte archivado guardado en servidor correctamente', 'success', 3000);
+                    } else {
+                        console.error('❌ [CRÍTICO] El servidor no devolvió un ID para el reporte archivado');
+                        console.error('   Respuesta del servidor:', serverReport);
+                        Utils.showNotification('⚠️ El servidor no devolvió un ID para el reporte. Verifica los logs.', 'warning');
+                    }
+                } else {
+                    console.error('❌ [CRÍTICO] API no está disponible o no está configurado correctamente');
+                    console.error('   API disponible:', typeof API !== 'undefined');
+                    console.error('   API.saveArchivedReport:', typeof API?.saveArchivedReport);
+                    console.error('   API.baseURL:', API?.baseURL || 'NO CONFIGURADO');
+                    console.error('   API.token:', API?.token ? 'Presente' : 'Ausente');
+                    Utils.showNotification('⚠️ API no configurado. El reporte se guardó solo localmente. Configura la URL del servidor en Configuración → Sincronización.', 'warning');
+                }
+            } catch (e) {
+                console.error('❌ [CRÍTICO] Error guardando reporte archivado en backend:', e);
+                console.error('   Mensaje:', e.message);
+                console.error('   Status:', e.status);
+                console.error('   URL:', e.url);
+                console.error('   Stack:', e.stack);
+                
+                // Mostrar mensaje de error más detallado
+                let errorMessage = `Error al guardar reporte en servidor: ${e.message}`;
+                if (e.status === 401) {
+                    errorMessage += '. Token expirado. Por favor, inicia sesión nuevamente.';
+                } else if (e.status === 403) {
+                    errorMessage += '. No tienes permisos para guardar reportes.';
+                } else if (e.message && e.message.includes('CORS')) {
+                    errorMessage += '. Error de CORS. Verifica la configuración del servidor.';
+                } else if (e.message && e.message.includes('Failed to fetch')) {
+                    errorMessage += '. No se pudo conectar al servidor. Verifica tu conexión.';
+                }
+                
+                Utils.showNotification(errorMessage + ' El reporte se guardó localmente.', 'warning');
+                // No bloquear el proceso si falla el guardado en servidor
             }
 
             // Mostrar modal personalizado para confirmar limpieza
