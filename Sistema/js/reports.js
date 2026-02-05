@@ -6090,6 +6090,9 @@ const Reports = {
             
             // Escuchar actualizaciones de reportes archivados en tiempo real
             this.setupArchivedReportsSocketListeners();
+            
+            // Escuchar actualizaciones de reportes históricos en tiempo real
+            this.setupHistoricalReportsSocketListeners();
         } catch (error) {
             console.error('Error en setupQuickCaptureListeners:', error);
             // No lanzar el error para evitar que rompa otros módulos
@@ -14225,6 +14228,169 @@ const Reports = {
         }
     },
 
+    setupHistoricalReportsSocketListeners() {
+        try {
+            const setupListeners = () => {
+                if (typeof API === 'undefined' || !API.socket) {
+                    console.log('⚠️ Socket.IO no disponible para reportes históricos');
+                    return false;
+                }
+
+                if (!API.socket.connected) {
+                    console.log('⚠️ Socket.IO no conectado aún para reportes históricos');
+                    return false;
+                }
+
+                // Obtener información del usuario actual
+                const currentUserId = typeof UserManager !== 'undefined' && UserManager.currentUser ? UserManager.currentUser.id : null;
+                const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
+                const isMasterAdmin = typeof UserManager !== 'undefined' && (
+                    UserManager.currentUser?.role === 'master_admin' ||
+                    UserManager.currentUser?.is_master_admin ||
+                    UserManager.currentUser?.isMasterAdmin ||
+                    UserManager.currentEmployee?.role === 'master_admin' ||
+                    (typeof PermissionManager !== 'undefined' && PermissionManager.hasPermission('admin.all'))
+                );
+
+                // Unirse a las salas relevantes
+                if (currentBranchId) {
+                    API.socket.emit('join', `branch:${currentBranchId}`);
+                    console.log(`✅ Usuario unido a sala branch:${currentBranchId} para reportes históricos`);
+                }
+                if (isMasterAdmin) {
+                    API.socket.emit('join', 'master_admin');
+                    console.log('✅ Usuario unido a sala master_admin para reportes históricos');
+                }
+                if (currentUserId) {
+                    API.socket.emit('join', `user:${currentUserId}`);
+                    console.log(`✅ Usuario unido a sala user:${currentUserId} para reportes históricos`);
+                }
+                
+                // Escuchar creación de reportes históricos
+                API.socket.on('historical_report_created', async (data) => {
+                    try {
+                        const { report } = data;
+                        if (!report) return;
+
+                        console.log('📥 Reporte histórico creado recibido desde servidor en tiempo real:', report.id);
+
+                        // Verificar si ya existe localmente
+                        const existingReport = await DB.get('historical_reports', report.id);
+                        
+                        const localReport = {
+                            id: report.id,
+                            period_type: report.period_type,
+                            period_name: report.period_name,
+                            date_from: report.date_from,
+                            date_to: report.date_to,
+                            branch_id: report.branch_id,
+                            total_days: report.total_days || 0,
+                            total_captures: report.total_captures || 0,
+                            total_quantity: report.total_quantity || 0,
+                            total_sales_mxn: report.total_sales_mxn || 0,
+                            total_cogs: report.total_cogs || 0,
+                            total_commissions: report.total_commissions || 0,
+                            total_arrival_costs: report.total_arrival_costs || 0,
+                            total_operating_costs: report.total_operating_costs || 0,
+                            gross_profit: report.gross_profit || 0,
+                            net_profit: report.net_profit || 0,
+                            daily_summary: report.daily_summary || [],
+                            archived_report_ids: report.archived_report_ids || [],
+                            metrics: report.metrics || {},
+                            created_at: report.created_at || new Date().toISOString(),
+                            created_by: report.created_by,
+                            server_id: report.id,
+                            sync_status: 'synced'
+                        };
+                        
+                        await DB.put('historical_reports', localReport);
+                        console.log('✅ Reporte histórico guardado desde servidor en tiempo real:', report.id);
+                        
+                        // Actualizar la lista visual automáticamente si estamos en la pestaña de históricos
+                        if (this.currentTab === 'historical') {
+                            await this.loadHistoricalReports();
+                        }
+                    } catch (error) {
+                        console.error('❌ Error procesando reporte histórico creado desde servidor:', error);
+                    }
+                });
+                
+                // Escuchar eliminación de reportes históricos
+                API.socket.on('historical_report_deleted', async (data) => {
+                    try {
+                        const { report_id } = data;
+                        if (!report_id) return;
+
+                        console.log('📥 Reporte histórico eliminado recibido desde servidor en tiempo real:', report_id);
+                        
+                        // Eliminar del IndexedDB local
+                        await DB.delete('historical_reports', report_id);
+                        console.log('✅ Reporte histórico eliminado localmente:', report_id);
+                        
+                        // Actualizar la lista visual automáticamente si estamos en la pestaña de históricos
+                        if (this.currentTab === 'historical') {
+                            await this.loadHistoricalReports();
+                        }
+                    } catch (error) {
+                        console.error('❌ Error procesando reporte histórico eliminado desde servidor:', error);
+                    }
+                });
+                
+                console.log('✅ Listeners de Socket.IO configurados para reportes históricos');
+                return true;
+            };
+            
+            // Intentar configurar listeners ahora si Socket.IO está disponible
+            if (setupListeners()) {
+                // Si se configuraron correctamente, también escuchar cuando se conecte en el futuro
+                if (API.socket) {
+                    API.socket.on('connect', () => {
+                        console.log('🔄 Socket.IO reconectado, reconfigurando listeners de reportes históricos...');
+                        setupListeners();
+                    });
+                }
+            } else {
+                // Si Socket.IO no está disponible, intentar configurar cuando se conecte
+                console.log('⏳ Socket.IO no disponible aún, intentando configurar listeners de históricos cuando se conecte...');
+                
+                // Intentar configurar cuando API.socket esté disponible
+                const checkSocket = setInterval(() => {
+                    if (typeof API !== 'undefined' && API.socket && API.socket.connected) {
+                        console.log('✅ Socket.IO conectado, configurando listeners de reportes históricos...');
+                        setupListeners();
+                        clearInterval(checkSocket);
+                    }
+                }, 1000);
+                
+                // Limpiar el intervalo después de 30 segundos si no se conecta
+                setTimeout(() => {
+                    clearInterval(checkSocket);
+                }, 30000);
+            }
+            
+            // SIEMPRE ejecutar sincronización inicial, incluso si Socket.IO no está disponible
+            setTimeout(async () => {
+                try {
+                    console.log('🔄 Ejecutando sincronización inicial de reportes históricos...');
+                    await this.loadHistoricalReports();
+                } catch (syncError) {
+                    console.warn('⚠️ Error en sincronización inicial de reportes históricos:', syncError);
+                }
+            }, 2000);
+            
+        } catch (error) {
+            console.error('❌ Error configurando listeners de Socket.IO para reportes históricos:', error);
+            // No lanzar error para no bloquear la inicialización
+            setTimeout(async () => {
+                try {
+                    await this.loadHistoricalReports();
+                } catch (syncError) {
+                    console.warn('⚠️ Error en sincronización inicial de reportes históricos (fallback):', syncError);
+                }
+            }, 2000);
+        }
+    },
+
     // ==================== REPORTES HISTÓRICOS ====================
 
     /**
@@ -14694,30 +14860,226 @@ const Reports = {
             const container = document.getElementById('historical-reports-list');
             if (!container) return;
 
-            // Obtener reportes del servidor y local
-            let historicalReports = [];
+            // PASO 1: Sincronizar reportes históricos locales que NO están en el servidor (subirlos)
+            try {
+                if (typeof API !== 'undefined' && API.baseURL && API.generateHistoricalReport) {
+                    console.log('📤 [Paso 1 Históricos] Buscando reportes históricos locales que no están en el servidor...');
+                    
+                    // Obtener todos los reportes históricos locales
+                    const allLocalHistorical = await DB.getAll('historical_reports') || [];
+                    
+                    // Filtrar reportes que NO tienen server_id (no están en el servidor)
+                    const unsyncedHistorical = allLocalHistorical.filter(r => !r.server_id);
+                    
+                    console.log(`📊 [Paso 1 Históricos] Encontrados ${unsyncedHistorical.length} reportes históricos locales sin sincronizar`);
+                    
+                    if (unsyncedHistorical.length > 0) {
+                        const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
+                        
+                        // Agrupar reportes por period_type + date_from + date_to + branch_id para evitar duplicados
+                        const historicalByKey = new Map();
+                        for (const localReport of unsyncedHistorical) {
+                            // Solo procesar reportes de la sucursal actual (o todos si no hay sucursal seleccionada)
+                            if (currentBranchId && localReport.branch_id !== currentBranchId) {
+                                continue;
+                            }
+                            
+                            const key = `${localReport.period_type}_${localReport.date_from}_${localReport.date_to}_${localReport.branch_id}`;
+                            
+                            // Si ya hay un reporte con esta clave, usar el más reciente
+                            if (!historicalByKey.has(key)) {
+                                historicalByKey.set(key, localReport);
+                            } else {
+                                const existing = historicalByKey.get(key);
+                                const existingCreated = existing.created_at ? new Date(existing.created_at) : new Date(0);
+                                const currentCreated = localReport.created_at ? new Date(localReport.created_at) : new Date(0);
+                                if (currentCreated > existingCreated) {
+                                    historicalByKey.set(key, localReport);
+                                }
+                            }
+                        }
+                        
+                        // Subir solo los reportes únicos
+                        let uploadedCount = 0;
+                        for (const [key, localReport] of historicalByKey) {
+                            try {
+                                console.log(`📤 [Paso 1 Históricos] Subiendo reporte histórico local al servidor: ${localReport.id} (${localReport.period_name || localReport.period_type})`);
+                                
+                                // El backend recalcula los totales desde los reportes archivados, así que solo enviamos los metadatos
+                                const reportData = {
+                                    period_type: localReport.period_type,
+                                    period_name: localReport.period_name,
+                                    date_from: localReport.date_from,
+                                    date_to: localReport.date_to,
+                                    branch_id: localReport.branch_id,
+                                    archived_report_ids: localReport.archived_report_ids || [],
+                                    metrics: localReport.metrics || {}
+                                };
+                                
+                                const serverReport = await API.generateHistoricalReport(reportData);
+                                
+                                if (serverReport && serverReport.id) {
+                                    // Actualizar TODOS los reportes históricos locales con la misma clave
+                                    const allLocalHistorical = await DB.getAll('historical_reports') || [];
+                                    const reportsToUpdate = allLocalHistorical.filter(r => {
+                                        const rKey = `${r.period_type}_${r.date_from}_${r.date_to}_${r.branch_id}`;
+                                        return rKey === key;
+                                    });
+                                    
+                                    for (const reportToUpdate of reportsToUpdate) {
+                                        reportToUpdate.server_id = serverReport.id;
+                                        reportToUpdate.created_by = serverReport.created_by;
+                                        reportToUpdate.sync_status = 'synced';
+                                        // Actualizar con datos del servidor (más precisos)
+                                        reportToUpdate.total_days = serverReport.total_days;
+                                        reportToUpdate.total_captures = serverReport.total_captures;
+                                        reportToUpdate.total_sales_mxn = serverReport.total_sales_mxn;
+                                        reportToUpdate.gross_profit = serverReport.gross_profit;
+                                        reportToUpdate.net_profit = serverReport.net_profit;
+                                        reportToUpdate.daily_summary = serverReport.daily_summary;
+                                        await DB.put('historical_reports', reportToUpdate);
+                                    }
+                                    
+                                    uploadedCount++;
+                                    console.log(`✅ [Paso 1 Históricos] Reporte histórico ${localReport.id} subido correctamente (server_id: ${serverReport.id})`);
+                                } else {
+                                    console.warn(`⚠️ [Paso 1 Históricos] El servidor no devolvió un ID para el reporte ${localReport.id}`);
+                                }
+                            } catch (uploadError) {
+                                // Si el error es 409 (conflicto), significa que ya existe en el servidor
+                                if (uploadError.status === 409 || (uploadError.message && uploadError.message.includes('Ya existe'))) {
+                                    console.log(`ℹ️ [Paso 1 Históricos] Reporte histórico ${localReport.id} ya existe en el servidor, marcando como sincronizado`);
+                                    // Intentar obtener el ID existente del servidor
+                                    try {
+                                        const serverFilters = {
+                                            period_type: localReport.period_type,
+                                            date_from: localReport.date_from,
+                                            date_to: localReport.date_to,
+                                            branch_id: localReport.branch_id
+                                        };
+                                        const existingReports = await API.getHistoricalReports(serverFilters);
+                                        if (existingReports && existingReports.length > 0) {
+                                            const existingReport = existingReports[0];
+                                            localReport.server_id = existingReport.id;
+                                            localReport.sync_status = 'synced';
+                                            await DB.put('historical_reports', localReport);
+                                            uploadedCount++;
+                                        }
+                                    } catch (getError) {
+                                        console.warn(`⚠️ [Paso 1 Históricos] No se pudo obtener el reporte existente del servidor:`, getError);
+                                    }
+                                } else {
+                                    console.error(`❌ [Paso 1 Históricos] Error subiendo reporte histórico ${localReport.id}:`, uploadError);
+                                    console.error('   Mensaje:', uploadError.message);
+                                }
+                            }
+                        }
+                        
+                        console.log(`✅ [Paso 1 Históricos] Sincronización local→servidor completada: ${uploadedCount} reportes subidos`);
+                    }
+                } else {
+                    console.log('⚠️ [Paso 1 Históricos] API no disponible para subir reportes históricos locales');
+                }
+            } catch (error) {
+                console.error('❌ [Paso 1 Históricos] Error sincronizando reportes históricos locales al servidor:', error);
+                // Continuar aunque falle este paso
+            }
 
-            // Intentar obtener del servidor primero
-            if (typeof API !== 'undefined' && API.getHistoricalReports) {
-                try {
+            // PASO 2: Sincronizar reportes históricos desde el servidor (descargarlos)
+            let historicalReports = [];
+            try {
+                if (typeof API !== 'undefined' && API.baseURL && API.token && API.getHistoricalReports) {
+                    console.log('📥 [Paso 2 Históricos] Sincronizando reportes históricos desde el servidor...');
+                    
                     const serverFilters = {};
+                    const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
+                    const isMasterAdmin = typeof UserManager !== 'undefined' && (
+                        UserManager.currentUser?.role === 'master_admin' ||
+                        UserManager.currentUser?.is_master_admin ||
+                        UserManager.currentUser?.isMasterAdmin ||
+                        UserManager.currentEmployee?.role === 'master_admin' ||
+                        (typeof PermissionManager !== 'undefined' && PermissionManager.hasPermission('admin.all'))
+                    );
+                    
+                    // El backend filtra automáticamente por branch_id según el usuario
+                    // Master admin puede ver todos, usuarios normales solo su sucursal
                     if (filters.branchId) serverFilters.branch_id = filters.branchId;
                     if (filters.periodType) serverFilters.period_type = filters.periodType;
                     if (filters.dateFrom) serverFilters.date_from = filters.dateFrom;
                     if (filters.dateTo) serverFilters.date_to = filters.dateTo;
                     
                     historicalReports = await API.getHistoricalReports(serverFilters);
-                    console.log(`📥 ${historicalReports.length} reportes históricos obtenidos del servidor`);
-                } catch (error) {
-                    console.warn('Error obteniendo reportes históricos del servidor, usando locales:', error);
+                    console.log(`📥 [Paso 2 Históricos] ${historicalReports.length} reportes históricos recibidos del servidor`);
+                    
+                    // Guardar/actualizar cada reporte en IndexedDB local
+                    let savedCount = 0;
+                    let updatedCount = 0;
+                    for (const serverReport of historicalReports) {
+                        try {
+                            const key = `${serverReport.period_type}_${serverReport.date_from}_${serverReport.date_to}_${serverReport.branch_id}`;
+                            
+                            // Verificar si ya existe un reporte local con la misma clave
+                            const existingLocalHistorical = await DB.getAll('historical_reports') || [];
+                            const existingReport = existingLocalHistorical.find(r => {
+                                const rKey = `${r.period_type}_${r.date_from}_${r.date_to}_${r.branch_id}`;
+                                return rKey === key;
+                            });
+                            
+                            // Si existe, actualizar; si no, crear nuevo
+                            const localReport = {
+                                id: existingReport ? existingReport.id : serverReport.id || `historical_${key}`,
+                                period_type: serverReport.period_type,
+                                period_name: serverReport.period_name,
+                                date_from: serverReport.date_from,
+                                date_to: serverReport.date_to,
+                                branch_id: serverReport.branch_id,
+                                total_days: serverReport.total_days || 0,
+                                total_captures: serverReport.total_captures || 0,
+                                total_quantity: serverReport.total_quantity || 0,
+                                total_sales_mxn: serverReport.total_sales_mxn || 0,
+                                total_cogs: serverReport.total_cogs || 0,
+                                total_commissions: serverReport.total_commissions || 0,
+                                total_arrival_costs: serverReport.total_arrival_costs || 0,
+                                total_operating_costs: serverReport.total_operating_costs || 0,
+                                gross_profit: serverReport.gross_profit || 0,
+                                net_profit: serverReport.net_profit || 0,
+                                daily_summary: serverReport.daily_summary || [],
+                                archived_report_ids: serverReport.archived_report_ids || [],
+                                metrics: serverReport.metrics || {},
+                                created_at: serverReport.created_at || new Date().toISOString(),
+                                created_by: serverReport.created_by,
+                                server_id: serverReport.id,
+                                sync_status: 'synced'
+                            };
+                            
+                            await DB.put('historical_reports', localReport);
+                            
+                            if (existingReport) {
+                                updatedCount++;
+                                console.log(`🔄 [Paso 2 Históricos] Reporte histórico actualizado: ${localReport.id} (${localReport.period_name})`);
+                            } else {
+                                savedCount++;
+                                console.log(`💾 [Paso 2 Históricos] Reporte histórico guardado: ${localReport.id} (${localReport.period_name})`);
+                            }
+                        } catch (error) {
+                            console.warn(`⚠️ [Paso 2 Históricos] Error guardando reporte histórico ${serverReport.id}:`, error);
+                        }
+                    }
+                    
+                    console.log(`✅ [Paso 2 Históricos] Sincronización servidor→local completada: ${savedCount} nuevos, ${updatedCount} actualizados`);
+                } else {
+                    console.log('⚠️ [Paso 2 Históricos] API no disponible, usando solo reportes históricos locales');
                 }
+            } catch (error) {
+                console.error('❌ [Paso 2 Históricos] Error sincronizando reportes históricos desde el servidor:', error);
+                console.error('   Detalles:', error.message);
             }
 
             // Si no hay reportes del servidor, obtener de IndexedDB local
             if (historicalReports.length === 0) {
                 const localHistorical = await DB.getAll('historical_reports') || [];
                 historicalReports = localHistorical;
-                console.log(`📥 ${historicalReports.length} reportes históricos obtenidos localmente`);
+                console.log(`📥 [Históricos] ${historicalReports.length} reportes históricos obtenidos localmente`);
             }
 
             // Aplicar filtros locales si es necesario
@@ -14730,6 +15092,51 @@ const Reports = {
             if (filters.dateTo) {
                 historicalReports = historicalReports.filter(r => r.date_from <= filters.dateTo);
             }
+            
+            // Filtrar por sucursal actual (si no es master admin)
+            const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
+            const isMasterAdmin = typeof UserManager !== 'undefined' && (
+                UserManager.currentUser?.role === 'master_admin' ||
+                UserManager.currentUser?.is_master_admin ||
+                UserManager.currentUser?.isMasterAdmin ||
+                UserManager.currentEmployee?.role === 'master_admin' ||
+                (typeof PermissionManager !== 'undefined' && PermissionManager.hasPermission('admin.all'))
+            );
+            
+            if (!isMasterAdmin && currentBranchId) {
+                historicalReports = historicalReports.filter(r => r.branch_id === currentBranchId);
+                console.log(`🔍 [Históricos] Mostrando ${historicalReports.length} reportes históricos de la sucursal ${currentBranchId}`);
+            } else if (isMasterAdmin) {
+                console.log(`🔍 [Históricos] Master Admin: mostrando ${historicalReports.length} reportes históricos de todas las sucursales`);
+            }
+            
+            // Eliminar duplicados: mantener solo el más reciente por period_type + date_from + date_to + branch_id
+            const historicalByKey = new Map();
+            for (const report of historicalReports) {
+                const key = `${report.period_type}_${report.date_from}_${report.date_to}_${report.branch_id}`;
+                
+                if (!historicalByKey.has(key)) {
+                    historicalByKey.set(key, report);
+                } else {
+                    const existing = historicalByKey.get(key);
+                    // Preferir el que tiene server_id (está sincronizado)
+                    if (report.server_id && !existing.server_id) {
+                        historicalByKey.set(key, report);
+                    } else if (existing.server_id && !report.server_id) {
+                        // Mantener el existente
+                    } else {
+                        // Si ambos tienen o no tienen server_id, usar el más reciente por created_at
+                        const existingCreated = existing.created_at ? new Date(existing.created_at) : new Date(0);
+                        const currentCreated = report.created_at ? new Date(report.created_at) : new Date(0);
+                        if (currentCreated > existingCreated) {
+                            historicalByKey.set(key, report);
+                        }
+                    }
+                }
+            }
+            
+            historicalReports = Array.from(historicalByKey.values());
+            console.log(`🔍 [Históricos Deduplicación] ${historicalReports.length} reportes históricos únicos después de eliminar duplicados`);
 
             // Ordenar por fecha (más recientes primero)
             historicalReports.sort((a, b) => {
