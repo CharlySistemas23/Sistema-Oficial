@@ -341,10 +341,10 @@ const Inventory = {
                             <div class="form-group" style="margin-bottom: 0;">
                                 <label style="font-size: 11px; font-weight: 600;">Ordenar por</label>
                                 <select id="inventory-sort-by" class="form-select">
+                                    <option value="newest" selected>Más nuevo primero</option>
+                                    <option value="oldest">Más antiguo primero</option>
                                     <option value="name">Nombre A-Z</option>
                                     <option value="name_desc">Nombre Z-A</option>
-                                    <option value="newest">Más nuevo primero</option>
-                                    <option value="oldest">Más antiguo primero</option>
                                     <option value="price_asc">Precio: Menor a Mayor</option>
                                     <option value="price_desc">Precio: Mayor a Menor</option>
                                     <option value="cost_asc">Costo: Menor a Mayor</option>
@@ -1282,18 +1282,14 @@ const Inventory = {
             if (statusFilter) {
                 items = items.filter(item => item.status === statusFilter);
             } else {
-                // Por defecto, excluir items vendidos O con stock <= 0
-                // Esto asegura consistencia entre status y stock_actual
+                // Por defecto, excluir SOLO items vendidos con stock <= 0
+                // NO excluir items disponibles aunque tengan stock 0 (pueden ser nuevos)
                 items = items.filter(item => {
                     const stock = item.stock_actual ?? 0;
-                    // Si está marcado como vendida Y tiene stock <= 0, excluir
-                    // Si está marcado como disponible PERO tiene stock <= 0, también excluir
+                    // Solo excluir si está marcado como vendida Y tiene stock <= 0
                     if (item.status === 'vendida' && stock <= 0) return false;
-                    if (item.status === 'disponible' && stock <= 0) return false;
-                    // Si tiene stock > 0, incluir independientemente del status (puede estar mal marcado)
-                    if (stock > 0) return true;
-                    // Si no tiene stock y no está marcado como vendida, puede estar en otro estado (apartada, reparacion, etc.)
-                    return item.status !== 'vendida';
+                    // Incluir todos los demás items (disponibles, apartados, reparación, etc.)
+                    return true;
                 });
             }
 
@@ -1403,7 +1399,7 @@ const Inventory = {
             }
 
             // ========== ORDENAMIENTO ==========
-            const sortBy = document.getElementById('inventory-sort-by')?.value || 'name';
+            const sortBy = document.getElementById('inventory-sort-by')?.value || 'newest';
             items = this.sortInventoryItems(items, sortBy);
 
             // ========== AGRUPACIÓN POR COLECCIÓN (OPCIONAL) ==========
@@ -3299,7 +3295,10 @@ const Inventory = {
 
         const isUUID = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || ''));
         // Solo enviar branch_id al servidor si es UUID. Si no, dejarlo null para que el backend lo maneje.
+        // PERO para IndexedDB local, siempre usar el branch_id del usuario actual si está disponible
         const branchId = isUUID(rawBranchId) ? rawBranchId : null;
+        // Para guardar en IndexedDB, usar el branch_id del usuario actual si no hay UUID válido
+        const localBranchId = isUUID(rawBranchId) ? rawBranchId : (rawBranchId || null);
 
         const formBarcode = document.getElementById('inv-barcode').value.trim();
         const formSku = document.getElementById('inv-sku').value.trim();
@@ -3366,7 +3365,8 @@ const Inventory = {
             status: document.getElementById('inv-status').value,
             certificate_number: document.getElementById('inv-certificate-number')?.value || '',
             // IMPORTANTE: branch_id debe ser UUID para Postgres. Si no lo es, lo dejamos null.
-            branch_id: branchId,
+            // Para IndexedDB local, usar localBranchId para que el item sea visible después de guardar
+            branch_id: branchId, // Para API (puede ser null, el backend lo asignará)
             // Campos adicionales para compatibilidad local (se guardan en IndexedDB)
             stone: document.getElementById('inv-stone').value,
             carats: parseFloat(document.getElementById('inv-carats')?.value || 0),
@@ -3577,11 +3577,16 @@ const Inventory = {
                 if (!savedWithAPI) {
                     console.warn('Usando modo local como fallback (se sincronizará después)');
                     try {
+                        // Asegurar que el item tenga branch_id para IndexedDB (usar localBranchId si branchId es null)
+                        const itemForLocal = {
+                            ...item,
+                            branch_id: item.branch_id || localBranchId || rawBranchId || null
+                        };
                         // Guardar en IndexedDB con TODOS los campos
-                        await DB.put('inventory_items', item, { autoBranchId: false });
+                        await DB.put('inventory_items', itemForLocal, { autoBranchId: false });
                         console.log('✅ Item guardado en IndexedDB (modo offline)');
                         // Definir mergedItem para consistencia
-                        mergedItem = item;
+                        mergedItem = itemForLocal;
                     } catch (error) {
                         throw error;
                     }
@@ -3590,8 +3595,15 @@ const Inventory = {
         } else {
             // Modo offline: guardar solo en IndexedDB (se sincronizará cuando haya conexión)
             try {
-                await DB.put('inventory_items', item, { autoBranchId: false });
+                // Asegurar que el item tenga branch_id para IndexedDB (usar localBranchId si branchId es null)
+                const itemForLocal = {
+                    ...item,
+                    branch_id: item.branch_id || localBranchId || rawBranchId || null
+                };
+                await DB.put('inventory_items', itemForLocal, { autoBranchId: false });
                 console.log('✅ Item guardado en IndexedDB (sin conexión al servidor)');
+                // Actualizar item para que tenga el branch_id correcto
+                item = itemForLocal;
             } catch (error) {
                 throw error;
             }
