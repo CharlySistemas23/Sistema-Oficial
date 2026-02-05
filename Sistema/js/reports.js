@@ -12595,8 +12595,9 @@ const Reports = {
                         <tbody>
                             ${archivedReports.map(report => {
                                 // Formatear fecha sin desfase de zona horaria
-                                const normalizedDate = report.date.split('T')[0];
-                                const dateStr = this.formatDateWithoutTimezone(normalizedDate);
+                                const reportDate = report.date || report.report_date || '';
+                                const normalizedDate = reportDate ? (typeof reportDate === 'string' ? reportDate.split('T')[0] : reportDate) : '';
+                                const dateStr = normalizedDate ? this.formatDateWithoutTimezone(normalizedDate) : 'Sin fecha';
                                 
                                 // Formatear fecha de archivado (puede tener hora, así que usar Date)
                                 let archivedDate = '';
@@ -12612,10 +12613,11 @@ const Reports = {
                                     archivedDate = `${day}/${month}/${year}, ${hour12}:${minute} ${ampm}`;
                                 }
                                 
-                                const grossProfit = report.gross_profit || 0;
-                                const netProfit = report.net_profit || 0;
-                                const totalSales = report.total_sales_mxn || 0;
-                                const captureCount = report.captures ? report.captures.length : 0;
+                                // Asegurar que los valores sean números (pueden venir como strings desde el servidor)
+                                const grossProfit = parseFloat(report.gross_profit || 0) || 0;
+                                const netProfit = parseFloat(report.net_profit || 0) || 0;
+                                const totalSales = parseFloat(report.total_sales_mxn || 0) || 0;
+                                const captureCount = report.captures ? (Array.isArray(report.captures) ? report.captures.length : 0) : 0;
                                 
                                 const grossMargin = totalSales > 0 ? ((grossProfit / totalSales) * 100).toFixed(2) : '0.00';
                                 const netMargin = totalSales > 0 ? ((netProfit / totalSales) * 100).toFixed(2) : '0.00';
