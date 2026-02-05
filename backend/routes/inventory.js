@@ -14,7 +14,10 @@ const router = express.Router();
 // Obtener items de inventario
 router.get('/', requireBranchAccess, async (req, res) => {
   try {
-    const { branch_id, status, search, category, metal, stone_type, min_price, max_price } = req.query;
+    const { 
+      branch_id, status, search, category, metal, stone_type, min_price, max_price,
+      material, purity, plating, style, finish, theme, condition, location_detail, collection
+    } = req.query;
     
     // Manejar branch_id cuando viene como string "null" desde el frontend
     let branchId = null;
@@ -89,6 +92,61 @@ router.get('/', requireBranchAccess, async (req, res) => {
     if (max_price) {
       sql += ` AND price <= $${paramCount}`;
       params.push(max_price);
+      paramCount++;
+    }
+
+    // Filtros avanzados
+    if (material) {
+      sql += ` AND (material = $${paramCount} OR metal ILIKE $${paramCount})`;
+      params.push(`%${material}%`);
+      paramCount++;
+    }
+
+    if (purity) {
+      sql += ` AND (purity = $${paramCount} OR metal ILIKE $${paramCount})`;
+      params.push(`%${purity}%`);
+      paramCount++;
+    }
+
+    if (plating) {
+      sql += ` AND plating = $${paramCount}`;
+      params.push(plating);
+      paramCount++;
+    }
+
+    if (style) {
+      sql += ` AND style = $${paramCount}`;
+      params.push(style);
+      paramCount++;
+    }
+
+    if (finish) {
+      sql += ` AND finish_type = $${paramCount}`;
+      params.push(finish);
+      paramCount++;
+    }
+
+    if (theme) {
+      sql += ` AND theme = $${paramCount}`;
+      params.push(theme);
+      paramCount++;
+    }
+
+    if (condition) {
+      sql += ` AND condition = $${paramCount}`;
+      params.push(condition);
+      paramCount++;
+    }
+
+    if (location_detail) {
+      sql += ` AND (location_detail = $${paramCount} OR location = $${paramCount})`;
+      params.push(location_detail);
+      paramCount++;
+    }
+
+    if (collection) {
+      sql += ` AND collection = $${paramCount}`;
+      params.push(collection);
       paramCount++;
     }
 
