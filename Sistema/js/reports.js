@@ -12353,21 +12353,51 @@ const Reports = {
                     if (unsyncedReports.length > 0) {
                         const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
                         
-                        // Subir cada reporte local que no está en el servidor
-                        let uploadedCount = 0;
+                        // Agrupar reportes por fecha y sucursal para evitar duplicados
+                        const reportsByKey = new Map();
                         for (const localReport of unsyncedReports) {
-                            try {
-                                // Solo subir reportes de la sucursal actual (o todos si no hay sucursal seleccionada)
-                                if (currentBranchId && localReport.branch_id !== currentBranchId) {
-                                    console.log(`⏭️ [Paso 1] Omitiendo reporte ${localReport.id} (sucursal diferente)`);
-                                    continue;
+                            // Solo procesar reportes de la sucursal actual (o todos si no hay sucursal seleccionada)
+                            if (currentBranchId && localReport.branch_id !== currentBranchId) {
+                                console.log(`⏭️ [Paso 1] Omitiendo reporte ${localReport.id} (sucursal diferente)`);
+                                continue;
+                            }
+                            
+                            const reportDate = localReport.date || localReport.report_date || '';
+                            const reportDateStr = reportDate ? (typeof reportDate === 'string' ? reportDate.split('T')[0] : reportDate) : '';
+                            const branchId = localReport.branch_id;
+                            
+                            if (!reportDateStr || !branchId) {
+                                console.warn(`⚠️ [Paso 1] Reporte ${localReport.id} sin fecha o sucursal, omitiendo`);
+                                continue;
+                            }
+                            
+                            // Clave única: fecha + sucursal
+                            const key = `${reportDateStr}_${branchId}`;
+                            
+                            // Si ya hay un reporte con esta clave, usar el más reciente (por archived_at)
+                            if (!reportsByKey.has(key)) {
+                                reportsByKey.set(key, localReport);
+                            } else {
+                                const existing = reportsByKey.get(key);
+                                const existingArchived = existing.archived_at ? new Date(existing.archived_at) : new Date(0);
+                                const currentArchived = localReport.archived_at ? new Date(localReport.archived_at) : new Date(0);
+                                if (currentArchived > existingArchived) {
+                                    reportsByKey.set(key, localReport);
                                 }
-                                
-                                console.log(`📤 [Paso 1] Subiendo reporte local al servidor: ${localReport.id} (Fecha: ${localReport.date})`);
+                            }
+                        }
+                        
+                        // Subir solo los reportes únicos (uno por fecha + sucursal)
+                        let uploadedCount = 0;
+                        let skippedCount = 0;
+                        for (const [key, localReport] of reportsByKey) {
+                            try {
+                                const reportDate = localReport.date || localReport.report_date || '';
+                                console.log(`📤 [Paso 1] Subiendo reporte local al servidor: ${localReport.id} (Fecha: ${reportDate}, Branch: ${localReport.branch_id})`);
                                 
                                 // Convertir reporte local al formato que espera el servidor
                                 const reportData = {
-                                    report_date: localReport.date || localReport.report_date,
+                                    report_date: reportDate,
                                     branch_id: localReport.branch_id,
                                     total_captures: localReport.total_captures || (localReport.captures ? localReport.captures.length : 0),
                                     total_quantity: localReport.total_quantity || 0,
@@ -12393,11 +12423,21 @@ const Reports = {
                                 const serverReport = await API.saveArchivedReport(reportData);
                                 
                                 if (serverReport && serverReport.id) {
-                                    // Actualizar el reporte local con el server_id
-                                    localReport.server_id = serverReport.id;
-                                    localReport.archived_by = serverReport.archived_by;
-                                    localReport.sync_status = 'synced';
-                                    await DB.put('archived_quick_captures', localReport);
+                                    // Actualizar TODOS los reportes locales con la misma fecha y sucursal
+                                    const allLocalReports = await DB.getAll('archived_quick_captures') || [];
+                                    const reportsToUpdate = allLocalReports.filter(r => {
+                                        const rDate = r.date || r.report_date || '';
+                                        const rDateStr = rDate ? (typeof rDate === 'string' ? rDate.split('T')[0] : rDate) : '';
+                                        return rDateStr === reportDate.split('T')[0] && r.branch_id === localReport.branch_id;
+                                    });
+                                    
+                                    for (const reportToUpdate of reportsToUpdate) {
+                                        reportToUpdate.server_id = serverReport.id;
+                                        reportToUpdate.archived_by = serverReport.archived_by;
+                                        reportToUpdate.sync_status = 'synced';
+                                        await DB.put('archived_quick_captures', reportToUpdate);
+                                    }
+                                    
                                     uploadedCount++;
                                     console.log(`✅ [Paso 1] Reporte ${localReport.id} subido correctamente (server_id: ${serverReport.id})`);
                                 } else {
@@ -12408,6 +12448,11 @@ const Reports = {
                                 console.error('   Mensaje:', uploadError.message);
                                 // Continuar con el siguiente reporte aunque falle uno
                             }
+                        }
+                        
+                        skippedCount = unsyncedReports.length - reportsByKey.size;
+                        if (skippedCount > 0) {
+                            console.log(`⏭️ [Paso 1] ${skippedCount} reportes duplicados omitidos (misma fecha y sucursal)`);
                         }
                         
                         console.log(`✅ [Paso 1] Sincronización local→servidor completada: ${uploadedCount} reportes subidos`);
@@ -12469,16 +12514,32 @@ const Reports = {
                         
                         // Guardar/actualizar cada reporte en IndexedDB local
                         let savedCount = 0;
+                        let updatedCount = 0;
                         for (const serverReport of serverReports) {
                             try {
-                                // Usar el ID del servidor como clave principal para evitar duplicados
-                                const reportId = serverReport.id || serverReport.report_date || `archived_${serverReport.report_date}`;
+                                const reportDate = serverReport.report_date || serverReport.date;
+                                const branchId = serverReport.branch_id;
                                 
-                                // Convertir el reporte del servidor al formato local
+                                // Usar una clave única basada en fecha y sucursal para evitar duplicados
+                                // Formato: report_YYYY-MM-DD_branchId
+                                const reportDateStr = reportDate ? (typeof reportDate === 'string' ? reportDate.split('T')[0] : reportDate) : '';
+                                const uniqueKey = branchId && reportDateStr 
+                                    ? `report_${reportDateStr}_${branchId}` 
+                                    : serverReport.id || `archived_${reportDateStr || Date.now()}`;
+                                
+                                // Verificar si ya existe un reporte local con la misma fecha y sucursal
+                                const existingLocalReports = await DB.getAll('archived_quick_captures') || [];
+                                const existingReport = existingLocalReports.find(r => {
+                                    const rDate = r.date || r.report_date || '';
+                                    const rDateStr = rDate ? (typeof rDate === 'string' ? rDate.split('T')[0] : rDate) : '';
+                                    return rDateStr === reportDateStr && r.branch_id === branchId;
+                                });
+                                
+                                // Si existe, actualizar; si no, crear nuevo
                                 const localReport = {
-                                    id: reportId,
-                                    date: serverReport.report_date || serverReport.date,
-                                    branch_id: serverReport.branch_id,
+                                    id: existingReport ? existingReport.id : uniqueKey, // Mantener ID existente o usar clave única
+                                    date: reportDate,
+                                    branch_id: branchId,
                                     archived_by: serverReport.archived_by, // Guardar quién archivó el reporte
                                     total_captures: serverReport.total_captures || 0,
                                     total_quantity: serverReport.total_quantity || 0,
@@ -12504,16 +12565,23 @@ const Reports = {
                                     sync_status: 'synced'
                                 };
                                 
-                                // Guardar en IndexedDB local
+                                // Guardar en IndexedDB local (actualizar si existe, crear si no)
                                 await DB.put('archived_quick_captures', localReport);
-                                savedCount++;
-                                console.log(`💾 [Paso 2] Reporte guardado: ${reportId} (Fecha: ${localReport.date})`);
+                                
+                                if (existingReport) {
+                                    updatedCount++;
+                                    console.log(`🔄 [Paso 2] Reporte actualizado: ${localReport.id} (Fecha: ${reportDateStr}, Branch: ${branchId})`);
+                                } else {
+                                    savedCount++;
+                                    console.log(`💾 [Paso 2] Reporte guardado: ${localReport.id} (Fecha: ${reportDateStr}, Branch: ${branchId})`);
+                                }
                             } catch (error) {
                                 console.warn(`⚠️ [Paso 2] Error guardando reporte archivado ${serverReport.id}:`, error);
                             }
                         }
                         
-                        console.log(`✅ [Paso 2] Sincronización servidor→local completada: ${savedCount} reportes guardados`);
+                        console.log(`✅ [Paso 2] Sincronización servidor→local completada: ${savedCount} nuevos, ${updatedCount} actualizados`);
+                        
                     } else {
                         console.warn('⚠️ [Paso 2] No se recibieron reportes del servidor o el formato es incorrecto');
                     }
@@ -12544,6 +12612,40 @@ const Reports = {
             } else {
                 console.warn('⚠️ No hay sucursal seleccionada, mostrando todos los reportes');
             }
+            
+            // Eliminar duplicados: mantener solo el más reciente por fecha + sucursal
+            const reportsByKey = new Map();
+            for (const report of archivedReports) {
+                const reportDate = report.date || report.report_date || '';
+                const reportDateStr = reportDate ? (typeof reportDate === 'string' ? reportDate.split('T')[0] : reportDate) : '';
+                const branchId = report.branch_id;
+                
+                if (!reportDateStr || !branchId) continue;
+                
+                const key = `${reportDateStr}_${branchId}`;
+                
+                if (!reportsByKey.has(key)) {
+                    reportsByKey.set(key, report);
+                } else {
+                    const existing = reportsByKey.get(key);
+                    // Preferir el que tiene server_id (está sincronizado)
+                    if (report.server_id && !existing.server_id) {
+                        reportsByKey.set(key, report);
+                    } else if (existing.server_id && !report.server_id) {
+                        // Mantener el existente
+                    } else {
+                        // Si ambos tienen o no tienen server_id, usar el más reciente por archived_at
+                        const existingArchived = existing.archived_at ? new Date(existing.archived_at) : new Date(0);
+                        const currentArchived = report.archived_at ? new Date(report.archived_at) : new Date(0);
+                        if (currentArchived > existingArchived) {
+                            reportsByKey.set(key, report);
+                        }
+                    }
+                }
+            }
+            
+            archivedReports = Array.from(reportsByKey.values());
+            console.log(`🔍 [Deduplicación] ${archivedReports.length} reportes únicos después de eliminar duplicados`);
             
             // Ordenar por fecha del reporte (más recientes primero) para el histórico
             // Usar la fecha del reporte (date), no la fecha de archivado (archived_at)
