@@ -5909,15 +5909,95 @@ const Reports = {
                 // Filtrar guías cuando se selecciona una agencia manualmente
                 if (agencySelect) {
                     agencySelect.addEventListener('change', async () => {
-                        // Solo limpiar el guía si NO estamos auto-seleccionando desde el guía
+                        // Solo procesar si NO estamos auto-seleccionando desde el guía
                         if (!isAutoSelectingAgency) {
                             const selectedAgencyId = agencySelect.value;
-                            // Filtrar guías por la agencia seleccionada
-                            await this.loadGuidesForAgencyInArrivalsForm(selectedAgencyId);
-                            // Limpiar selección de guía solo si el usuario cambió la agencia manualmente
-                            if (guideSelect) {
-                                guideSelect.value = '';
+                            
+                            // Guardar el guía actualmente seleccionado ANTES de filtrar
+                            const currentGuideId = guideSelect?.value || null;
+                            
+                            // Verificar si el guía actualmente seleccionado pertenece a la nueva agencia
+                            let shouldKeepGuide = false;
+                            let currentGuide = null;
+                            
+                            if (guideSelect && currentGuideId) {
+                                try {
+                                    const guides = await DB.getAll('catalog_guides') || [];
+                                    currentGuide = guides.find(g => this.compareIds(g.id, currentGuideId));
+                                    if (currentGuide && currentGuide.agency_id) {
+                                        // Verificar si el guía pertenece a la agencia seleccionada
+                                        shouldKeepGuide = this.compareIds(currentGuide.agency_id, selectedAgencyId);
+                                        
+                                        // Si no coincide por ID, intentar comparar por nombre (más flexible)
+                                        if (!shouldKeepGuide) {
+                                            const agencies = await DB.getAll('catalog_agencies') || [];
+                                            const guideAgency = agencies.find(a => this.compareIds(a.id, currentGuide.agency_id));
+                                            const selectedAgency = agencies.find(a => this.compareIds(a.id, selectedAgencyId));
+                                            if (guideAgency && selectedAgency) {
+                                                const guideAgencyName = String(guideAgency.name || '').trim().toUpperCase();
+                                                const selectedAgencyName = String(selectedAgency.name || '').trim().toUpperCase();
+                                                
+                                                // Normalizar espacios para comparar (ej: "TANITOURS" vs "TANI TOURS")
+                                                const guideAgencyNameNormalized = guideAgencyName.replace(/\s+/g, '');
+                                                const selectedAgencyNameNormalized = selectedAgencyName.replace(/\s+/g, '');
+                                                
+                                                shouldKeepGuide = guideAgencyName === selectedAgencyName || 
+                                                                  guideAgencyName.includes(selectedAgencyName) || 
+                                                                  selectedAgencyName.includes(guideAgencyName) ||
+                                                                  guideAgencyNameNormalized === selectedAgencyNameNormalized ||
+                                                                  guideAgencyNameNormalized.includes(selectedAgencyNameNormalized) ||
+                                                                  selectedAgencyNameNormalized.includes(guideAgencyNameNormalized);
+                                            }
+                                        }
+                                    }
+                                } catch (error) {
+                                    console.warn('Error verificando guía actual:', error);
+                                }
                             }
+                            
+                            // Filtrar guías por la agencia seleccionada (esto actualiza el innerHTML del select)
+                            await this.loadGuidesForAgencyInArrivalsForm(selectedAgencyId);
+                            
+                            // Después de cargar los guías, restaurar o limpiar según corresponda
+                            if (guideSelect) {
+                                // Esperar un momento para que el DOM se actualice
+                                await new Promise(resolve => setTimeout(resolve, 50));
+                                
+                                if (shouldKeepGuide && currentGuideId) {
+                                    // El guía pertenece a la nueva agencia, intentar restaurarlo
+                                    const guideOption = guideSelect.querySelector(`option[value="${currentGuideId}"]`);
+                                    if (guideOption) {
+                                        // El guía está en la lista filtrada, restaurarlo
+                                        guideSelect.value = currentGuideId;
+                                        console.log(`✅ [Llegadas] Guía "${currentGuide?.name || currentGuideId}" restaurado para agencia ${selectedAgencyId}`);
+                                    } else if (currentGuide) {
+                                        // El guía no está en la lista filtrada pero debería estar, agregarlo
+                                        try {
+                                            const option = document.createElement('option');
+                                            option.value = currentGuideId;
+                                            option.textContent = currentGuide.name;
+                                            // Insertar después de la opción "Seleccionar..."
+                                            const firstOption = guideSelect.querySelector('option[value=""]');
+                                            if (firstOption) {
+                                                firstOption.insertAdjacentElement('afterend', option);
+                                            } else {
+                                                guideSelect.appendChild(option);
+                                            }
+                                            guideSelect.value = currentGuideId;
+                                            console.log(`✅ [Llegadas] Guía "${currentGuide.name}" agregado manualmente a la lista`);
+                                        } catch (error) {
+                                            console.warn('Error agregando guía a la lista:', error);
+                                            guideSelect.value = '';
+                                        }
+                                    } else {
+                                        guideSelect.value = '';
+                                    }
+                                } else {
+                                    // El guía no pertenece a la nueva agencia, limpiarlo
+                                    guideSelect.value = '';
+                                }
+                            }
+                            
                             // Recalcular costo si hay datos
                             await calculateArrivalCost();
                             // Recargar llegadas
@@ -6199,8 +6279,18 @@ const Reports = {
             const guides = await DB.getAll('catalog_guides') || [];
             const guideSelect = document.getElementById('qc-arrival-guide');
             if (guideSelect) {
-                // Inicialmente mostrar todos los guías
-                await this.loadGuidesForAgencyInArrivalsForm(null);
+                // Verificar si ya hay una agencia seleccionada al cargar
+                const agencySelect = document.getElementById('qc-arrival-agency');
+                const preSelectedAgencyId = agencySelect?.value;
+                
+                if (preSelectedAgencyId) {
+                    // Si ya hay una agencia seleccionada, cargar solo los guías de esa agencia
+                    console.log(`🔍 [Llegadas] Agencia pre-seleccionada detectada: ${preSelectedAgencyId}, cargando guías...`);
+                    await this.loadGuidesForAgencyInArrivalsForm(preSelectedAgencyId);
+                } else {
+                    // Inicialmente mostrar todos los guías
+                    await this.loadGuidesForAgencyInArrivalsForm(null);
+                }
             }
         } catch (error) {
             console.error('Error cargando catálogos de llegadas:', error);
@@ -6404,6 +6494,7 @@ const Reports = {
             }
 
             console.log(`   [Llegadas] Agencia seleccionada: ${selectedAgency.name} (ID: ${selectedAgency.id})`);
+            console.log(`   [Llegadas] Total guías en DB: ${guides.length}`);
 
             // Filtrar guías por agencia seleccionada
             const filteredGuides = guides.filter(g => {
@@ -6411,25 +6502,60 @@ const Reports = {
                     return false;
                 }
                 
-                // Comparar por ID
+                // Comparar por ID (método principal)
                 let matches = this.compareIds(g.agency_id, agencyId);
                 
-                // Si no coincide por ID, intentar comparar por nombre de agencia
+                // Si no coincide por ID, intentar comparar por nombre de agencia (método fallback)
                 if (!matches) {
                     const guideAgency = agencies.find(a => this.compareIds(a.id, g.agency_id));
                     if (guideAgency) {
                         const selectedName = String(selectedAgency.name || '').trim().toUpperCase();
                         const guideAgencyName = String(guideAgency.name || '').trim().toUpperCase();
+                        
+                        // Comparación flexible por nombre (incluye variaciones como "TANITOURS" vs "TANI TOURS")
+                        // Normalizar espacios para comparar
+                        const selectedNameNormalized = selectedName.replace(/\s+/g, '');
+                        const guideAgencyNameNormalized = guideAgencyName.replace(/\s+/g, '');
+                        
                         matches = selectedName === guideAgencyName || 
                                  selectedName.includes(guideAgencyName) || 
-                                 guideAgencyName.includes(selectedName);
+                                 guideAgencyName.includes(selectedName) ||
+                                 selectedNameNormalized === guideAgencyNameNormalized ||
+                                 selectedNameNormalized.includes(guideAgencyNameNormalized) ||
+                                 guideAgencyNameNormalized.includes(selectedNameNormalized);
                     }
+                }
+                
+                // Si aún no coincide, intentar comparar directamente el agency_id del guía con el nombre de la agencia seleccionada
+                // (por si hay guías que tienen el nombre de la agencia en lugar del ID)
+                if (!matches) {
+                    const guideAgencyIdStr = String(g.agency_id || '').trim().toUpperCase();
+                    const selectedName = String(selectedAgency.name || '').trim().toUpperCase();
+                    const selectedNameNormalized = selectedName.replace(/\s+/g, '');
+                    const guideAgencyIdNormalized = guideAgencyIdStr.replace(/\s+/g, '');
+                    
+                    matches = guideAgencyIdStr === selectedName || 
+                             guideAgencyIdStr.includes(selectedName) || 
+                             selectedName.includes(guideAgencyIdStr) ||
+                             guideAgencyIdNormalized === selectedNameNormalized ||
+                             guideAgencyIdNormalized.includes(selectedNameNormalized) ||
+                             selectedNameNormalized.includes(guideAgencyIdNormalized);
                 }
                 
                 return matches;
             });
 
             console.log(`   [Llegadas] Guías filtradas: ${filteredGuides.length}`);
+            if (filteredGuides.length === 0) {
+                console.warn(`   ⚠️ [Llegadas] No se encontraron guías para ${selectedAgency.name}.`);
+                console.log(`   [Llegadas] Debug: Primeros 10 guías disponibles con agency_id:`, 
+                    guides.filter(g => g.agency_id).slice(0, 10).map(g => ({
+                        name: g.name,
+                        agency_id: g.agency_id,
+                        agency_name: agencies.find(a => this.compareIds(a.id, g.agency_id))?.name || 'N/A'
+                    }))
+                );
+            }
             
             // Eliminar duplicados de guías filtrados
             const seenFilteredGuides = new Map();
