@@ -12277,7 +12277,82 @@ const Reports = {
             const container = document.getElementById('archived-reports-list');
             if (!container) return;
 
-            // Obtener todos los reportes archivados
+            // Sincronizar reportes archivados desde el servidor
+            try {
+                if (typeof API !== 'undefined' && API.baseURL && API.token && API.getArchivedReports) {
+                    console.log('📥 Sincronizando reportes archivados desde el servidor...');
+                    
+                    // Obtener sucursal actual para filtrar
+                    const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
+                    const isMasterAdmin = typeof UserManager !== 'undefined' && (
+                        UserManager.currentUser?.role === 'master_admin' ||
+                        UserManager.currentUser?.is_master_admin ||
+                        UserManager.currentUser?.isMasterAdmin ||
+                        UserManager.currentEmployee?.role === 'master_admin' ||
+                        (typeof PermissionManager !== 'undefined' && PermissionManager.hasPermission('admin.all'))
+                    );
+                    
+                    // Para master admin, obtener todos los reportes; para otros, filtrar por sucursal o usuario
+                    const filters = {};
+                    if (!isMasterAdmin && currentBranchId) {
+                        filters.branch_id = currentBranchId;
+                    }
+                    
+                    const serverReports = await API.getArchivedReports(filters);
+                    
+                    if (serverReports && Array.isArray(serverReports)) {
+                        console.log(`✅ ${serverReports.length} reportes archivados recibidos del servidor`);
+                        
+                        // Guardar/actualizar cada reporte en IndexedDB local
+                        for (const serverReport of serverReports) {
+                            try {
+                                // Convertir el reporte del servidor al formato local
+                                const localReport = {
+                                    id: serverReport.id || serverReport.report_date || `archived_${serverReport.report_date}`,
+                                    date: serverReport.report_date || serverReport.date,
+                                    branch_id: serverReport.branch_id,
+                                    total_captures: serverReport.total_captures || 0,
+                                    total_quantity: serverReport.total_quantity || 0,
+                                    total_sales_mxn: serverReport.total_sales_mxn || 0,
+                                    total_cogs: serverReport.total_cogs || 0,
+                                    total_commissions: serverReport.total_commissions || 0,
+                                    total_arrival_costs: serverReport.total_arrival_costs || 0,
+                                    total_operating_costs: serverReport.total_operating_costs || 0,
+                                    variable_costs_daily: serverReport.variable_costs_daily || 0,
+                                    fixed_costs_prorated: serverReport.fixed_costs_prorated || 0,
+                                    bank_commissions: serverReport.bank_commissions || 0,
+                                    gross_profit: serverReport.gross_profit || 0,
+                                    net_profit: serverReport.net_profit || 0,
+                                    exchange_rates: serverReport.exchange_rates || {},
+                                    captures: serverReport.captures || [],
+                                    daily_summary: serverReport.daily_summary || [],
+                                    seller_commissions: serverReport.seller_commissions || [],
+                                    guide_commissions: serverReport.guide_commissions || [],
+                                    arrivals: serverReport.arrivals || [],
+                                    metrics: serverReport.metrics || {},
+                                    archived_at: serverReport.archived_at || serverReport.created_at || new Date().toISOString(),
+                                    server_id: serverReport.id, // Guardar el ID del servidor para referencia
+                                    sync_status: 'synced'
+                                };
+                                
+                                // Guardar en IndexedDB local
+                                await DB.put('archived_quick_captures', localReport);
+                            } catch (error) {
+                                console.warn(`⚠️ Error guardando reporte archivado ${serverReport.id}:`, error);
+                            }
+                        }
+                        
+                        console.log('✅ Sincronización de reportes archivados completada');
+                    }
+                } else {
+                    console.log('⚠️ API no disponible, usando solo reportes locales');
+                }
+            } catch (error) {
+                console.warn('⚠️ Error sincronizando reportes archivados desde el servidor:', error);
+                // Continuar con reportes locales aunque falle la sincronización
+            }
+
+            // Obtener todos los reportes archivados (locales + sincronizados)
             const archivedReports = await DB.getAll('archived_quick_captures') || [];
             
             // Ordenar por fecha (más recientes primero)
