@@ -664,6 +664,7 @@ CREATE TABLE IF NOT EXISTS archived_quick_capture_reports (
 CREATE INDEX idx_archived_qc_reports_date ON archived_quick_capture_reports(report_date);
 CREATE INDEX idx_archived_qc_reports_branch_id ON archived_quick_capture_reports(branch_id);
 CREATE INDEX idx_archived_qc_reports_archived_at ON archived_quick_capture_reports(archived_at);
+CREATE INDEX IF NOT EXISTS idx_archived_qc_reports_archived_by ON archived_quick_capture_reports(archived_by);
 
 -- Reportes Históricos de Capturas Rápidas (Historical Quick Capture Reports)
 CREATE TABLE IF NOT EXISTS historical_quick_capture_reports (
