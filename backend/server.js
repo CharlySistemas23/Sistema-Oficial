@@ -721,6 +721,33 @@ async function checkAndMigrate() {
           }
         }
       }
+      
+      // Verificar y agregar columna daily_summary a archived_quick_capture_reports si no existe
+      const dailySummaryCheck = await pool.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.columns 
+          WHERE table_schema = 'public' 
+          AND table_name = 'archived_quick_capture_reports' 
+          AND column_name = 'daily_summary'
+        );
+      `);
+      
+      if (!dailySummaryCheck.rows[0].exists) {
+        console.log('🔄 Agregando daily_summary a tabla archived_quick_capture_reports...');
+        try {
+          await pool.query(`
+            ALTER TABLE archived_quick_capture_reports 
+            ADD COLUMN daily_summary JSONB;
+          `);
+          console.log('✅ Columna daily_summary agregada a archived_quick_capture_reports');
+        } catch (migrationError) {
+          if (migrationError.code === '42701') {
+            console.log('ℹ️  daily_summary ya existe en archived_quick_capture_reports');
+          } else {
+            console.error('⚠️  Error agregando daily_summary a archived_quick_capture_reports:', migrationError.message);
+          }
+        }
+      }
     }
 
     await pool.end();
