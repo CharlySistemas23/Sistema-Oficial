@@ -1601,6 +1601,10 @@ const Inventory = {
         const sortedCollections = Object.keys(grouped).sort();
         for (const collection of sortedCollections) {
             const collectionItems = grouped[collection];
+            const collectionHTML = this.currentView === 'list' 
+                ? await this.getInventoryListHTML(collectionItems)
+                : await this.getInventoryGridHTML(collectionItems);
+            
             html += `
                 <div style="background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light); overflow: hidden;">
                     <div style="padding: var(--spacing-md); background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%); color: white;">
@@ -1610,16 +1614,17 @@ const Inventory = {
                         </h3>
                     </div>
                     <div style="padding: var(--spacing-md);">
-                        ${this.currentView === 'list' 
-                            ? await this.getInventoryListHTML(collectionItems)
-                            : await this.getInventoryGridHTML(collectionItems)
-                        }
+                        ${collectionHTML}
                     </div>
                 </div>
             `;
         }
 
         if (noCollection.length > 0) {
+            const noCollectionHTML = this.currentView === 'list' 
+                ? await this.getInventoryListHTML(noCollection)
+                : await this.getInventoryGridHTML(noCollection);
+            
             html += `
                 <div style="background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light); overflow: hidden;">
                     <div style="padding: var(--spacing-md); background: var(--color-bg-secondary);">
@@ -1629,10 +1634,7 @@ const Inventory = {
                         </h3>
                     </div>
                     <div style="padding: var(--spacing-md);">
-                        ${this.currentView === 'list' 
-                            ? await this.getInventoryListHTML(noCollection)
-                            : await this.getInventoryGridHTML(noCollection)
-                        }
+                        ${noCollectionHTML}
                     </div>
                 </div>
             `;
