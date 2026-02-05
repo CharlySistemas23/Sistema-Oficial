@@ -624,12 +624,21 @@ const Inventory = {
             }
             
             // Eventos de inventario locales (para usuarios normales o master_admin viendo su sucursal)
+            let inventoryUpdateTimeout = null;
+            const pendingUpdates = new Set(); // Para evitar procesar el mismo item múltiples veces
+            
             window.addEventListener('inventory-updated', async (e) => {
                 const { item, action } = e.detail || {};
                 if (this.initialized && item) {
                     const currentBranchId = BranchManager?.getCurrentBranchId();
                     // Solo actualizar si el item es de la sucursal actual o es master admin
                     if (!currentBranchId || item.branch_id === currentBranchId || UserManager.currentUser?.is_master_admin) {
+                        // Evitar procesar el mismo item múltiples veces simultáneamente
+                        if (pendingUpdates.has(item.id)) {
+                            return; // Ya se está procesando
+                        }
+                        pendingUpdates.add(item.id);
+                        
                         console.log(`📦 Inventory: Actualizando IndexedDB con item del servidor (${action || 'updated'})`);
                         try {
                             // Actualizar o crear en IndexedDB según la acción
@@ -643,6 +652,7 @@ const Inventory = {
                                 // Merge: combinar datos del servidor con campos adicionales locales
                                 const mergedItem = {
                                     ...item, // Datos del servidor (campos del esquema)
+                                    server_id: item.id, // Marcar como sincronizado
                                     // Preservar campos adicionales locales si existen
                                     ...(localItem ? {
                                         stone: localItem.stone || item.stone || '',
@@ -669,17 +679,27 @@ const Inventory = {
                                 await DB.put('inventory_items', mergedItem, { autoBranchId: false });
                                 console.log(`✅ Item actualizado en IndexedDB: ${item.id}`);
                             }
-                            // Recargar inventario después de un pequeño delay
-                            setTimeout(async () => {
+                            
+                            // Remover del set de pendientes después de un pequeño delay
+                            setTimeout(() => {
+                                pendingUpdates.delete(item.id);
+                            }, 500);
+                            
+                            // Debounce: Recargar inventario después de un delay (evitar múltiples recargas)
+                            if (inventoryUpdateTimeout) {
+                                clearTimeout(inventoryUpdateTimeout);
+                            }
+                            inventoryUpdateTimeout = setTimeout(async () => {
                                 await this.loadInventory();
                                 if (item && item.id && action !== 'deleted') {
                                     setTimeout(() => {
                                         this.highlightItem(item.id);
                                     }, 300);
                                 }
-                            }, 300);
+                            }, 2000); // Aumentado a 2 segundos para evitar loops y sobrecarga
                         } catch (error) {
                             console.error('Error actualizando IndexedDB desde servidor:', error);
+                            pendingUpdates.delete(item.id); // Remover en caso de error
                         }
                     }
                 }
@@ -758,13 +778,18 @@ const Inventory = {
                     const allLocalItems = await DB.getAll('inventory_items') || [];
                     
                     // Filtrar items que NO tienen server_id o tienen un ID local (no UUID)
+                    // IMPORTANTE: Si el item tiene un UUID como ID, significa que ya está en el servidor
+                    // Solo necesitamos sincronizar si NO tiene server_id Y el ID no es UUID
                     const unsyncedItems = allLocalItems.filter(item => {
                         if (!item || !item.id) return false;
                         // Verificar si el ID es un UUID (formato del servidor)
                         const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(item.id));
-                        // Si no es UUID, probablemente es un ID local que necesita sincronizarse
-                        // O si no tiene server_id, también necesita sincronizarse
-                        return !isUUID || !item.server_id;
+                        // Si el ID es UUID, el item ya está en el servidor (no necesita sincronización)
+                        if (isUUID) {
+                            return false; // Ya está sincronizado
+                        }
+                        // Si no es UUID y no tiene server_id, necesita sincronizarse
+                        return !item.server_id;
                     });
                     
                     // Filtrar por sucursal actual si no es master admin
