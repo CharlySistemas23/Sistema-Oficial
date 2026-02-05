@@ -225,18 +225,25 @@ router.put('/:id', requireBranchAccess, async (req, res) => {
     // Si cambió el stock, registrar en log
     if (updateData.stock_actual !== undefined && updateData.stock_actual !== existingItem.stock_actual) {
       const stockDiff = updateData.stock_actual - existingItem.stock_actual;
-      await query(
-        `INSERT INTO inventory_logs (item_id, action, quantity, stock_before, stock_after, reason, notes, user_id)
-         VALUES ($1, $2, $3, $4, $5, 'edicion', 'Stock modificado', $6)`,
-        [
-          id,
-          stockDiff > 0 ? 'entrada' : 'salida',
-          Math.abs(stockDiff),
-          existingItem.stock_actual,
-          updateData.stock_actual,
-          req.user.id
-        ]
-      );
+      const userId = req.user?.id || req.user?.userId || null;
+      if (userId) {
+        try {
+          await query(
+            `INSERT INTO inventory_logs (item_id, action, quantity, stock_before, stock_after, reason, notes, user_id)
+             VALUES ($1, $2, $3, $4, $5, 'edicion', 'Stock modificado', $6)`,
+            [
+              id,
+              stockDiff > 0 ? 'entrada' : 'salida',
+              Math.abs(stockDiff),
+              existingItem.stock_actual,
+              updateData.stock_actual,
+              userId
+            ]
+          );
+        } catch (logError) {
+          console.warn('Error registrando log de inventario (continuando):', logError);
+        }
+      }
     }
 
     // Construir query de actualización dinámica
@@ -271,11 +278,18 @@ router.put('/:id', requireBranchAccess, async (req, res) => {
     const updatedItem = result.rows[0];
 
     // Registrar en audit log
-    await query(
-      `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
-       VALUES ($1, 'update', 'inventory_item', $2, $3)`,
-      [req.user.id, id, JSON.stringify(updateData)]
-    );
+    const userId = req.user?.id || req.user?.userId || null;
+    if (userId) {
+      try {
+        await query(
+          `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
+           VALUES ($1, 'update', 'inventory_item', $2, $3)`,
+          [userId, id, JSON.stringify(updateData)]
+        );
+      } catch (auditError) {
+        console.warn('Error registrando audit log (continuando):', auditError);
+      }
+    }
 
     // Emitir actualización en tiempo real
     if (io) {
@@ -285,7 +299,18 @@ router.put('/:id', requireBranchAccess, async (req, res) => {
     res.json(updatedItem);
   } catch (error) {
     console.error('Error actualizando item:', error);
-    res.status(500).json({ error: 'Error al actualizar item' });
+    console.error('Error details:', {
+      message: error.message,
+      code: error.code,
+      detail: error.detail,
+      constraint: error.constraint,
+      stack: error.stack
+    });
+    res.status(500).json({ 
+      error: 'Error al actualizar item',
+      details: error.message,
+      code: error.code
+    });
   }
 });
 
