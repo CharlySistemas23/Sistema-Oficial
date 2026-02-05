@@ -804,6 +804,8 @@ router.get('/archived-quick-captures', requireBranchAccess, async (req, res) => 
     let paramCount = 1;
 
     // Filtro por sucursal
+    // Para master admin, permitir filtrar por branch_id si se especifica
+    // Para otros usuarios, mostrar reportes de su sucursal O reportes que ellos crearon (archived_by)
     if (req.user.isMasterAdmin) {
       if (branch_id) {
         sql += ` AND aqr.branch_id = $${paramCount}`;
@@ -811,9 +813,17 @@ router.get('/archived-quick-captures', requireBranchAccess, async (req, res) => 
         paramCount++;
       }
     } else {
+      // Mostrar reportes de la sucursal actual O reportes que el usuario creó
+      // Esto permite que los usuarios vean sus propios reportes en diferentes computadoras
       if (req.user.branchId) {
-        sql += ` AND aqr.branch_id = $${paramCount}`;
+        sql += ` AND (aqr.branch_id = $${paramCount} OR aqr.archived_by = $${paramCount + 1})`;
         params.push(req.user.branchId);
+        params.push(req.user.id);
+        paramCount += 2;
+      } else {
+        // Si no hay branchId, mostrar solo los reportes que el usuario creó
+        sql += ` AND aqr.archived_by = $${paramCount}`;
+        params.push(req.user.id);
         paramCount++;
       }
     }
