@@ -780,6 +780,36 @@ router.post('/archived-quick-captures', requireBranchAccess, async (req, res) =>
       metrics: report.metrics ? (typeof report.metrics === 'string' ? JSON.parse(report.metrics) : report.metrics) : null
     };
 
+    // Emitir eventos Socket.IO para sincronización en tiempo real
+    try {
+      const io = getIO(req);
+      if (io) {
+        const isUpdate = existingResult.rows.length > 0;
+        const eventName = isUpdate ? 'archived_report_updated' : 'archived_report_created';
+        
+        // 1. Emitir a la sucursal del reporte
+        if (finalBranchId) {
+          io.to(`branch:${finalBranchId}`).emit(eventName, { report: parsedReport });
+          console.log(`📡 [Socket.IO] Evento ${eventName} emitido a branch:${finalBranchId}`);
+        }
+        
+        // 2. Emitir al master admin (ve todos los reportes de todas las sucursales)
+        io.to('master_admin').emit(eventName, { report: parsedReport });
+        console.log(`📡 [Socket.IO] Evento ${eventName} emitido a master_admin`);
+        
+        // 3. Emitir al usuario que archivó el reporte (para ver en otras computadoras)
+        if (req.user.id) {
+          io.to(`user:${req.user.id}`).emit(eventName, { report: parsedReport });
+          console.log(`📡 [Socket.IO] Evento ${eventName} emitido a user:${req.user.id}`);
+        }
+      } else {
+        console.warn('⚠️ Socket.IO no disponible para emitir eventos de reporte archivado');
+      }
+    } catch (socketError) {
+      console.warn('⚠️ Error emitiendo evento Socket.IO para reporte archivado:', socketError);
+      // No bloquear la respuesta si falla la emisión del evento
+    }
+
     res.status(existingResult.rows.length > 0 ? 200 : 201).json(parsedReport);
   } catch (error) {
     console.error('Error guardando reporte archivado:', error);
