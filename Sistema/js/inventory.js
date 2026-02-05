@@ -118,14 +118,6 @@ const Inventory = {
                             <button class="btn-secondary btn-sm" id="inventory-print-labels-btn" style="display: none;">
                                 <i class="fas fa-gem"></i> Imprimir Etiquetas (<span id="inventory-print-labels-count">0</span>)
                             </button>
-                            <div style="display: flex; gap: 2px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); overflow: hidden; background: var(--color-bg-secondary); margin-left: var(--spacing-xs);">
-                                <button class="btn-secondary btn-sm" id="inventory-view-grid-btn" title="Vista de Tarjetas" style="border-radius: 0; margin: 0; border: none; padding: 8px 16px; font-weight: 600; cursor: pointer; transition: all 0.2s; ${this.currentView === 'grid' ? 'background: var(--color-primary) !important; color: white !important;' : 'background: transparent; color: var(--color-text);'}">
-                                    <i class="fas fa-th"></i> <span style="margin-left: 4px;">Tarjetas</span>
-                                </button>
-                                <button class="btn-secondary btn-sm" id="inventory-view-list-btn" title="Vista de Lista" style="border-radius: 0; margin: 0; border: none; padding: 8px 16px; font-weight: 600; cursor: pointer; transition: all 0.2s; ${this.currentView === 'list' ? 'background: var(--color-primary) !important; color: white !important;' : 'background: transparent; color: var(--color-text);'}">
-                                    <i class="fas fa-list"></i> <span style="margin-left: 4px;">Lista</span>
-                                </button>
-                            </div>
                         </div>
                     </div>
                     
@@ -210,6 +202,16 @@ const Inventory = {
                         </div>
                         <div class="form-group" style="margin-bottom: 0;">
                             <input type="number" id="inventory-max-price" class="form-input" placeholder="Costo Máx" step="0.01">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <div style="display: flex; gap: 2px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); overflow: hidden; background: var(--color-bg-secondary); height: 100%; align-items: stretch;">
+                                <button class="btn-secondary btn-sm" id="inventory-view-grid-btn" title="Vista de Tarjetas" style="border-radius: 0; margin: 0; border: none; padding: 8px 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; flex: 1; ${this.currentView === 'grid' ? 'background: var(--color-primary) !important; color: white !important;' : 'background: transparent; color: var(--color-text);'}">
+                                    <i class="fas fa-th"></i> <span style="margin-left: 4px;">Tarjetas</span>
+                                </button>
+                                <button class="btn-secondary btn-sm" id="inventory-view-list-btn" title="Vista de Lista" style="border-radius: 0; margin: 0; border: none; padding: 8px 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; flex: 1; ${this.currentView === 'list' ? 'background: var(--color-primary) !important; color: white !important;' : 'background: transparent; color: var(--color-text);'}">
+                                    <i class="fas fa-list"></i> <span style="margin-left: 4px;">Lista</span>
+                                </button>
+                            </div>
                         </div>
                         <div class="form-group" style="margin-bottom: 0;">
                             <button class="btn-secondary btn-sm" id="inventory-advanced-filters-toggle" style="width: 100%;">
