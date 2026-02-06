@@ -1,0 +1,13 @@
+{
+  "name": "opal-co-pos-root",
+  "version": "1.0.0",
+  "description": "Root package.json para Railway deployment",
+  "type": "module",
+  "scripts": {
+    "start": "node start-server.js",
+    "install": "cd backend && npm install"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
