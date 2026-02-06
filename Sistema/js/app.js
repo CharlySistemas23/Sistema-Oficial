@@ -654,7 +654,7 @@ const App = {
                         BarcodesModule = window.BarcodesModule;
                         barcodesRetries++;
                     }
-                    if (BarcodesModule && typeof BarcodesModule !== 'undefined') {
+                    if (BarcodesModule && typeof BarcodesModule !== 'undefined' && typeof BarcodesModule.init === 'function') {
                         if (!BarcodesModule.initialized) {
                             await BarcodesModule.init();
                         } else {
