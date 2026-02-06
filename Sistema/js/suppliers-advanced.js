@@ -125,10 +125,11 @@ window.SuppliersAdvanced = {
 
         UI.showModal(
             title,
-            `<div style="max-width: 800px; margin: 0 auto;">${body}</div>`,
+            body,
             [
                 { text: 'Cerrar', class: 'btn-secondary', onclick: () => UI.closeModal() }
-            ]
+            ],
+            { size: 'lg' }
         );
 
         await this.loadOverviewData(supplier.id);
@@ -218,11 +219,12 @@ window.SuppliersAdvanced = {
 
         UI.showModal(
             title,
-            `<div style="max-width: 800px; margin: 0 auto;">${body}</div>`,
+            body,
             [
                 { text: '← Regresar', class: 'btn-secondary', onclick: () => this.showAdvancedView(supplier.id, 'overview') },
                 { text: 'Cerrar', class: 'btn-secondary', onclick: () => UI.closeModal() }
-            ]
+            ],
+            { size: 'lg' }
         );
 
         await this.loadContracts(supplier.id);
@@ -371,7 +373,7 @@ window.SuppliersAdvanced = {
         
         UI.showModal(
             contractTitle,
-            `<div style="max-width: 800px; margin: 0 auto;">${contractBody}</div>`,
+            contractBody,
             [
                 { text: 'Cancelar', class: 'btn-secondary', onclick: () => UI.closeModal() },
                 { 
@@ -379,7 +381,8 @@ window.SuppliersAdvanced = {
                     class: 'btn-primary', 
                     onclick: () => this.saveContract(supplierId, contractId) 
                 }
-            ]
+            ],
+            { size: 'lg' }
         );
     },
 
@@ -485,11 +488,12 @@ window.SuppliersAdvanced = {
 
         UI.showModal(
             title,
-            `<div style="max-width: 800px; margin: 0 auto;">${body}</div>`,
+            body,
             [
                 { text: '← Regresar', class: 'btn-secondary', onclick: () => this.showAdvancedView(supplier.id, 'overview') },
                 { text: 'Cerrar', class: 'btn-secondary', onclick: () => UI.closeModal() }
-            ]
+            ],
+            { size: 'lg' }
         );
 
         await this.loadPurchaseOrders(supplier.id);
@@ -707,7 +711,7 @@ window.SuppliersAdvanced = {
         const orderModalTitle = isEdit ? `Editar Orden: ${orderNumber}` : `Nueva Orden: ${supplier.name}`;
         UI.showModal(
             orderModalTitle,
-            `<div style="max-width: 800px; margin: 0 auto;">${body}</div>`,
+            body,
             [
                 { text: 'Cancelar', class: 'btn-secondary', onclick: () => UI.closeModal() },
                 { 
@@ -715,7 +719,8 @@ window.SuppliersAdvanced = {
                     class: 'btn-primary', 
                     onclick: () => this.saveOrder(supplierId, orderId) 
                 }
-            ]
+            ],
+            { size: 'lg' }
         );
 
         // Guardar supplierId y orderId para uso en funciones
@@ -986,10 +991,11 @@ window.SuppliersAdvanced = {
 
             UI.showModal(
                 `Orden #${order.order_number}`,
-                `<div style="max-width: 800px; margin: 0 auto;">${body}</div>`,
+                body,
                 [
                     { text: 'Cerrar', class: 'btn-secondary', onclick: () => UI.closeModal() }
-                ]
+                ],
+                { size: 'lg' }
             );
         } catch (error) {
             console.error('Error obteniendo orden:', error);
@@ -1044,11 +1050,12 @@ window.SuppliersAdvanced = {
 
         UI.showModal(
             title,
-            `<div style="max-width: 800px; margin: 0 auto;">${body}</div>`,
+            body,
             [
                 { text: '← Regresar', class: 'btn-secondary', onclick: () => this.showAdvancedView(supplier.id, 'overview') },
                 { text: 'Cerrar', class: 'btn-secondary', onclick: () => UI.closeModal() }
-            ]
+            ],
+            { size: 'lg' }
         );
 
         await this.loadPayments(supplier.id);
@@ -1282,7 +1289,7 @@ window.SuppliersAdvanced = {
         const paymentTitle = isEdit ? `Editar Pago: ${referenceNumber}` : `Nuevo Pago/Factura: ${supplier.name}`;
         UI.showModal(
             paymentTitle,
-            `<div style="max-width: 800px; margin: 0 auto;">${body}</div>`,
+            body,
             [
                 { text: 'Cancelar', class: 'btn-secondary', onclick: () => UI.closeModal() },
                 { 
@@ -1290,7 +1297,8 @@ window.SuppliersAdvanced = {
                     class: 'btn-primary', 
                     onclick: () => this.savePayment(supplierId, paymentId) 
                 }
-            ]
+            ],
+            { size: 'lg' }
         );
 
         // Calcular totales iniciales
@@ -1454,7 +1462,7 @@ window.SuppliersAdvanced = {
 
             UI.showModal(
                 'Registrar Pago',
-                `<div style="max-width: 800px; margin: 0 auto;">${body}</div>`,
+                body,
                 [
                     { text: 'Cancelar', class: 'btn-secondary', onclick: () => UI.closeModal() },
                     { 
@@ -1462,7 +1470,8 @@ window.SuppliersAdvanced = {
                         class: 'btn-primary', 
                         onclick: () => this.saveRecordedPayment(paymentId, receiptNumber) 
                     }
-                ]
+                ],
+                { size: 'lg' }
             );
         } catch (error) {
             console.error('Error obteniendo información del pago:', error);
@@ -1901,10 +1910,11 @@ window.SuppliersAdvanced = {
 
             UI.showModal(
                 `Pago: ${payment.reference_number}`,
-                `<div style="max-width: 800px; margin: 0 auto;">${body}</div>`,
+                body,
                 [
                     { text: 'Cerrar', class: 'btn-secondary', onclick: () => UI.closeModal() }
-                ]
+                ],
+                { size: 'lg' }
             );
         } catch (error) {
             console.error('Error obteniendo pago:', error);
@@ -1963,11 +1973,12 @@ window.SuppliersAdvanced = {
 
         UI.showModal(
             title,
-            `<div style="max-width: 800px; margin: 0 auto;">${body}</div>`,
+            body,
             [
                 { text: '← Regresar', class: 'btn-secondary', onclick: () => this.showAdvancedView(supplier.id, 'overview') },
                 { text: 'Cerrar', class: 'btn-secondary', onclick: () => UI.closeModal() }
-            ]
+            ],
+            { size: 'lg' }
         );
 
         await this.loadAnalytics(supplier.id);
