@@ -241,7 +241,13 @@ var BarcodesModule = {
                                 const typeFilter = document.getElementById('barcodes-type-filter');
                                 if (typeFilter) {
                                     typeFilter.value = 'suppliers';
-                                    typeFilter.dispatchEvent(new Event('change'));
+                                    // Disparar evento change para que se recargue
+                                    const changeEvent = new Event('change', { bubbles: true });
+                                    typeFilter.dispatchEvent(changeEvent);
+                                    // También recargar manualmente por si acaso
+                                    setTimeout(() => {
+                                        this.loadBarcodes();
+                                    }, 100);
                                 }
                             };
                         }
@@ -1337,7 +1343,9 @@ var BarcodesModule = {
 
             // Cargar proveedores
             if (typeFilter === 'all' || typeFilter === 'suppliers') {
+                console.log('🔍 Cargando proveedores, typeFilter:', typeFilter);
                 suppliers = await DB.getAll('suppliers') || [];
+                console.log('📦 Proveedores encontrados:', suppliers.length);
                 
                 // Filtrar por sucursal si aplica
                 if (filterBranchId) {
@@ -1380,8 +1388,8 @@ var BarcodesModule = {
 
             let html = '';
 
-            // Mostrar productos con contador y acciones
-            if (items.length > 0) {
+            // Mostrar productos con contador y acciones (solo si el filtro es 'all' o 'items')
+            if (items.length > 0 && (typeFilter === 'all' || typeFilter === 'items')) {
                 const itemsWithoutBarcode = items.filter(item => Utils.isBarcodeEmpty(item.barcode)).length;
                 html += `
                     <div class="barcodes-section">
@@ -1405,8 +1413,8 @@ var BarcodesModule = {
                 `;
             }
 
-            // Mostrar empleados con contador y acciones
-            if (employees.length > 0) {
+            // Mostrar empleados con contador y acciones (solo si el filtro es 'all' o 'employees')
+            if (employees.length > 0 && (typeFilter === 'all' || typeFilter === 'employees')) {
                 const employeesWithoutBarcode = employees.filter(emp => Utils.isBarcodeEmpty(emp.barcode)).length;
                 html += `
                     <div class="barcodes-section">
@@ -1430,8 +1438,8 @@ var BarcodesModule = {
                 `;
             }
 
-            // Mostrar vendedores con contador y acciones
-            if (sellers.length > 0) {
+            // Mostrar vendedores con contador y acciones (solo si el filtro es 'all' o 'sellers')
+            if (sellers.length > 0 && (typeFilter === 'all' || typeFilter === 'sellers')) {
                 const sellersWithoutBarcode = sellers.filter(s => Utils.isBarcodeEmpty(s.barcode)).length;
                 html += `
                     <div class="barcodes-section">
@@ -1455,8 +1463,8 @@ var BarcodesModule = {
                 `;
             }
 
-            // Mostrar guías con contador y acciones
-            if (guides.length > 0) {
+            // Mostrar guías con contador y acciones (solo si el filtro es 'all' o 'guides')
+            if (guides.length > 0 && (typeFilter === 'all' || typeFilter === 'guides')) {
                 const guidesWithoutBarcode = guides.filter(g => Utils.isBarcodeEmpty(g.barcode)).length;
                 html += `
                     <div class="barcodes-section">
@@ -1480,8 +1488,8 @@ var BarcodesModule = {
                 `;
             }
 
-            // Mostrar agencias con contador y acciones
-            if (agencies.length > 0) {
+            // Mostrar agencias con contador y acciones (solo si el filtro es 'all' o 'agencies')
+            if (agencies.length > 0 && (typeFilter === 'all' || typeFilter === 'agencies')) {
                 const agenciesWithoutBarcode = agencies.filter(a => Utils.isBarcodeEmpty(a.barcode)).length;
                 html += `
                     <div class="barcodes-section">
@@ -1505,8 +1513,8 @@ var BarcodesModule = {
                 `;
             }
 
-            // Mostrar proveedores con contador y acciones
-            if (suppliers.length > 0) {
+            // Mostrar proveedores con contador y acciones (solo si el filtro es 'all' o 'suppliers')
+            if (suppliers.length > 0 && (typeFilter === 'all' || typeFilter === 'suppliers')) {
                 const suppliersWithoutBarcode = suppliers.filter(s => Utils.isBarcodeEmpty(s.barcode)).length;
                 html += `
                     <div class="barcodes-section">
