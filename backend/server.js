@@ -432,9 +432,15 @@ async function executeSchemaSafely(pool) {
         return false;
       }
       
-      // Para errores de "does not exist" en índices, solo loguear si es crítico
+      // Para errores de "does not exist" en índices, verificar si es una columna faltante
       if (errorMsg.includes('does not exist') && type === 'index') {
-        // Puede ser que la tabla aún no existe, lo intentaremos de nuevo después
+        // Si es un error de columna faltante, ignorarlo (puede ser una columna opcional)
+        if (errorMsg.includes('column') && errorMsg.includes('does not exist')) {
+          // Ignorar errores de columnas faltantes en índices (pueden ser opcionales)
+          skipped++;
+          return false;
+        }
+        // Para otros errores de "does not exist" en índices, puede ser que la tabla aún no existe
         console.warn(`⚠️  Error en ${type} ${index + 1}: ${stmtError.message.substring(0, 80)}`);
         errors++;
         return false;
@@ -481,9 +487,28 @@ async function executeSchemaSafely(pool) {
   }
   
   // 6. Reintentar índices que fallaron (puede que las tablas ya existan ahora)
+  // Solo reintentar índices que fallaron por "does not exist" (tabla), no por columnas faltantes
   let retryCount = 0;
+  const failedIndexes = []; // Guardar índices que fallaron por tabla no existente
+  
+  // Primera pasada: identificar índices que fallaron por tabla no existente
   for (let i = 0; i < createIndexes.length; i++) {
     const statement = createIndexes[i];
+    try {
+      await pool.query(statement);
+      // Si ya existe, no hacer nada
+    } catch (e) {
+      const errorMsg = e.message.toLowerCase();
+      // Solo reintentar si el error es de tabla no existente, no de columna faltante
+      if (errorMsg.includes('does not exist') && !errorMsg.includes('column')) {
+        failedIndexes.push(statement);
+      }
+      // Ignorar otros errores (columnas faltantes, ya existe, etc.)
+    }
+  }
+  
+  // Segunda pasada: reintentar solo los que fallaron por tabla no existente
+  for (const statement of failedIndexes) {
     try {
       await pool.query(statement);
       retryCount++;
