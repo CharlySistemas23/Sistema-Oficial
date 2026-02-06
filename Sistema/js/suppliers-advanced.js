@@ -119,14 +119,13 @@ window.SuppliersAdvanced = {
             </div>
         `;
 
-        UI.showModal({
+        UI.showModal(
             title,
-            content: body,
-            buttons: [
+            body,
+            [
                 { text: 'Cerrar', class: 'btn-secondary', onclick: () => UI.closeModal() }
-            ],
-            size: 'modal-xl'
-        });
+            ]
+        );
 
         await this.loadOverviewData(supplier.id);
     },
@@ -658,19 +657,19 @@ window.SuppliersAdvanced = {
             </form>
         `;
 
-        UI.showModal({
-            title: isEdit ? `Editar Orden: ${orderNumber}` : `Nueva Orden: ${supplier.name}`,
-            content: body,
-            buttons: [
+        const orderModalTitle = isEdit ? `Editar Orden: ${orderNumber}` : `Nueva Orden: ${supplier.name}`;
+        UI.showModal(
+            orderModalTitle,
+            body,
+            [
                 { text: 'Cancelar', class: 'btn-secondary', onclick: () => UI.closeModal() },
                 { 
                     text: isEdit ? 'Actualizar Orden' : 'Crear Orden', 
                     class: 'btn-primary', 
                     onclick: () => this.saveOrder(supplierId, orderId) 
                 }
-            ],
-            size: 'modal-xl'
-        });
+            ]
+        );
 
         // Guardar supplierId y orderId para uso en funciones
         window.currentOrderSupplierId = supplierId;
@@ -938,13 +937,13 @@ window.SuppliersAdvanced = {
                 </div>
             `;
 
-            UI.showModal({
-                title: `Orden #${order.order_number}`,
-                content: body,
-                buttons: [
+            UI.showModal(
+                `Orden #${order.order_number}`,
+                body,
+                [
                     { text: 'Cerrar', class: 'btn-secondary', onclick: () => UI.closeModal() }
                 ]
-            });
+            );
         } catch (error) {
             console.error('Error obteniendo orden:', error);
             Utils.showNotification('Error al obtener orden', 'error');
@@ -996,14 +995,13 @@ window.SuppliersAdvanced = {
             </div>
         `;
 
-        UI.showModal({
+        UI.showModal(
             title,
-            content: body,
-            buttons: [
+            body,
+            [
                 { text: 'Cerrar', class: 'btn-secondary', onclick: () => UI.closeModal() }
-            ],
-            size: 'modal-xl'
-        });
+            ]
+        );
 
         await this.loadPayments(supplier.id);
     },
@@ -1417,14 +1415,13 @@ window.SuppliersAdvanced = {
             </div>
         `;
 
-        UI.showModal({
+        UI.showModal(
             title,
-            content: body,
-            buttons: [
+            body,
+            [
                 { text: 'Cerrar', class: 'btn-secondary', onclick: () => UI.closeModal() }
-            ],
-            size: 'modal-xl'
-        });
+            ]
+        );
 
         await this.loadAnalytics(supplier.id);
     },
