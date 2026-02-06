@@ -358,45 +358,122 @@ async function executeSchemaSafely(pool) {
   
   console.log(`📋 Schema.sql dividido en ${statements.length} statements`);
   
+  // Separar statements por tipo para ejecutarlos en el orden correcto
+  const createTables = [];
+  const createIndexes = [];
+  const createFunctions = [];
+  const alterTables = [];
+  const otherStatements = [];
+  
+  for (const statement of statements) {
+    const trimmed = statement.trim();
+    if (!trimmed || trimmed.startsWith('--') || trimmed.length < 5) {
+      continue;
+    }
+    
+    const upper = trimmed.toUpperCase();
+    if (upper.startsWith('CREATE TABLE')) {
+      createTables.push(trimmed);
+    } else if (upper.startsWith('CREATE INDEX') || upper.startsWith('CREATE UNIQUE INDEX')) {
+      createIndexes.push(trimmed);
+    } else if (upper.startsWith('CREATE OR REPLACE FUNCTION') || upper.startsWith('CREATE FUNCTION')) {
+      createFunctions.push(trimmed);
+    } else if (upper.startsWith('ALTER TABLE')) {
+      alterTables.push(trimmed);
+    } else {
+      otherStatements.push(trimmed);
+    }
+  }
+  
+  console.log(`📊 Clasificados: ${createTables.length} tablas, ${createIndexes.length} índices, ${createFunctions.length} funciones, ${alterTables.length} alteraciones, ${otherStatements.length} otros`);
+  
   let executed = 0;
   let skipped = 0;
   let errors = 0;
   
-  // Ejecutar cada statement individualmente
-  for (let i = 0; i < statements.length; i++) {
-    const statement = statements[i].trim();
-    
-    // Saltar comentarios y líneas vacías
-    if (!statement || statement.startsWith('--') || statement.length < 5) {
-      skipped++;
-      continue;
-    }
-    
+  // Función helper para ejecutar un statement
+  const executeStatement = async (statement, type, index) => {
     try {
       await pool.query(statement);
       executed++;
-      
-      // Log cada 50 statements para no saturar
-      if (executed % 50 === 0) {
-        console.log(`   ✅ ${executed} statements ejecutados...`);
-      }
+      return true;
     } catch (stmtError) {
-      // Ignorar errores de "already exists" - es normal y esperado
       const errorMsg = stmtError.message.toLowerCase();
       const errorCode = stmtError.code;
       
+      // Ignorar errores de "already exists" - es normal y esperado
       if (errorCode === '42P07' || errorCode === '42710' || 
           errorMsg.includes('already exists') ||
           errorMsg.includes('duplicate') ||
-          (errorMsg.includes('relation') && errorMsg.includes('already exists'))) {
+          (errorMsg.includes('relation') && errorMsg.includes('already exists')) ||
+          (errorMsg.includes('column') && errorMsg.includes('already exists'))) {
         skipped++;
-        // No loguear estos errores para no saturar
-      } else {
-        // Solo loguear errores reales
-        console.warn(`⚠️  Error en statement ${i + 1}: ${stmtError.message.substring(0, 100)}`);
+        return false;
+      }
+      
+      // Para errores de "does not exist" en índices, solo loguear si es crítico
+      if (errorMsg.includes('does not exist') && type === 'index') {
+        // Puede ser que la tabla aún no existe, lo intentaremos de nuevo después
+        console.warn(`⚠️  Error en ${type} ${index + 1}: ${stmtError.message.substring(0, 80)}`);
+        errors++;
+        return false;
+      }
+      
+      // Para otros errores, loguear
+      if (!errorMsg.includes('does not exist') || type === 'table') {
+        console.warn(`⚠️  Error en ${type} ${index + 1}: ${stmtError.message.substring(0, 80)}`);
         errors++;
       }
+      return false;
     }
+  };
+  
+  // 1. Ejecutar funciones primero (pueden ser necesarias para triggers)
+  for (let i = 0; i < createFunctions.length; i++) {
+    await executeStatement(createFunctions[i], 'function', i);
+  }
+  
+  // 2. Ejecutar CREATE TABLE
+  for (let i = 0; i < createTables.length; i++) {
+    await executeStatement(createTables[i], 'table', i);
+    if ((i + 1) % 10 === 0) {
+      console.log(`   ✅ ${i + 1}/${createTables.length} tablas procesadas...`);
+    }
+  }
+  
+  // 3. Ejecutar ALTER TABLE (agregar columnas, etc.)
+  for (let i = 0; i < alterTables.length; i++) {
+    await executeStatement(alterTables[i], 'alter', i);
+  }
+  
+  // 4. Ejecutar CREATE INDEX (después de que las tablas existan)
+  for (let i = 0; i < createIndexes.length; i++) {
+    await executeStatement(createIndexes[i], 'index', i);
+    if ((i + 1) % 20 === 0) {
+      console.log(`   ✅ ${i + 1}/${createIndexes.length} índices procesados...`);
+    }
+  }
+  
+  // 5. Ejecutar otros statements (triggers, DO blocks, etc.)
+  for (let i = 0; i < otherStatements.length; i++) {
+    await executeStatement(otherStatements[i], 'other', i);
+  }
+  
+  // 6. Reintentar índices que fallaron (puede que las tablas ya existan ahora)
+  let retryCount = 0;
+  for (let i = 0; i < createIndexes.length; i++) {
+    const statement = createIndexes[i];
+    try {
+      await pool.query(statement);
+      retryCount++;
+    } catch (e) {
+      // Ignorar si aún falla
+    }
+  }
+  
+  if (retryCount > 0) {
+    console.log(`   🔄 ${retryCount} índices creados en reintento`);
+    executed += retryCount;
   }
   
   console.log(`✅ Schema ejecutado: ${executed} creados, ${skipped} ya existían, ${errors} errores`);
