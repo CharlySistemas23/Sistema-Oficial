@@ -738,6 +738,18 @@ const Settings = {
                         Gestionar Sucursales
                     </button>
                 </div>
+
+                <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light); text-align: center;">
+                    <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+                        <i class="fas fa-truck"></i> Proveedores
+                    </h3>
+                    <p style="font-size: 11px; color: var(--color-text-secondary); margin-bottom: var(--spacing-sm);">
+                        Gestiona los proveedores del sistema
+                    </p>
+                    <button class="btn-secondary btn-sm" onclick="window.Settings.manageSuppliers()" style="width: 100%;">
+                        Gestionar Proveedores
+                    </button>
+                </div>
             </div>
         `;
     },
@@ -7472,6 +7484,16 @@ const Settings = {
             if (selectBtn) selectBtn.disabled = false;
         } catch (error) {
             console.error('Error cargando información del directorio:', error);
+        }
+    },
+
+    manageSuppliers() {
+        if (typeof App !== 'undefined' && App.loadModule) {
+            App.loadModule('suppliers');
+        } else if (typeof Suppliers !== 'undefined' && Suppliers.init) {
+            Suppliers.init();
+        } else {
+            Utils.showNotification('Módulo de proveedores no disponible', 'error');
         }
     },
 };
