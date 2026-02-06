@@ -785,8 +785,9 @@ const App = {
                     // Esperar un momento para que el módulo esté disponible
                     let Suppliers = window.Suppliers;
                     let suppliersRetries = 0;
-                    while (!Suppliers && suppliersRetries < 10) {
-                        await Utils.delay(50);
+                    const maxSuppliersRetries = 20; // Aumentar intentos
+                    while (!Suppliers && suppliersRetries < maxSuppliersRetries) {
+                        await Utils.delay(100); // Aumentar delay
                         Suppliers = window.Suppliers;
                         suppliersRetries++;
                     }
@@ -819,18 +820,32 @@ const App = {
                     } else {
                         console.warn('⚠️ Suppliers module not found after retries, intentando cargar manualmente...');
                         // Intentar cargar el módulo manualmente si no está disponible
-                        if (typeof window.Suppliers === 'undefined') {
-                            // Esperar un poco más y verificar de nuevo
-                            await Utils.delay(200);
-                            if (typeof window.Suppliers !== 'undefined') {
-                                console.log('✅ Suppliers module encontrado después de delay adicional');
-                                await window.Suppliers.init();
+                        // Esperar un poco más y verificar de nuevo (puede ser un problema de timing)
+                        await Utils.delay(500);
+                        Suppliers = window.Suppliers;
+                        
+                        if (Suppliers && typeof Suppliers !== 'undefined') {
+                            console.log('✅ Suppliers module encontrado después de delay adicional');
+                            if (!Suppliers.initialized) {
+                                await Suppliers.init();
                             } else {
-                                console.error('❌ Suppliers module not found after retries');
-                                const content = document.getElementById('module-content');
-                                if (content) {
-                                    content.innerHTML = '<div style="padding: var(--spacing-lg); text-align: center; color: var(--color-danger);">Error: Módulo de Proveedores no disponible. Por favor, recarga la página.</div>';
-                                }
+                                await Suppliers.loadSuppliers();
+                            }
+                        } else {
+                            console.error('❌ Suppliers module not found after retries');
+                            const content = document.getElementById('module-content');
+                            if (content) {
+                                content.innerHTML = `
+                                    <div style="padding: var(--spacing-lg); text-align: center;">
+                                        <h3 style="color: var(--color-danger); margin-bottom: var(--spacing-md);">Error: Módulo de Proveedores no disponible</h3>
+                                        <p style="color: var(--color-text-secondary); margin-bottom: var(--spacing-md);">
+                                            El módulo no se pudo cargar. Por favor, recarga la página.
+                                        </p>
+                                        <button class="btn-primary" onclick="location.reload()">
+                                            <i class="fas fa-sync-alt"></i> Recargar Página
+                                        </button>
+                                    </div>
+                                `;
                             }
                         }
                     }
