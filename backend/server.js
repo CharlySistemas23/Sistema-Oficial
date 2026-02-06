@@ -305,25 +305,31 @@ async function executeSchemaSafely(pool) {
   const schemaPath = join(__dirname, 'database', 'schema.sql');
   const schemaSQL = readFileSync(schemaPath, 'utf8');
   
-  // Dividir el schema en statements individuales
-  // Separar por punto y coma, pero mantener bloques de funciones/triggers intactos
+  // Dividir el schema en statements individuales usando una expresión regular más robusta
+  // Esto maneja correctamente CREATE TABLE multilínea, funciones, triggers, etc.
+  
+  // Primero, normalizar el SQL: eliminar comentarios de línea y normalizar espacios
+  let normalizedSQL = schemaSQL
+    .replace(/--[^\n]*/g, '') // Eliminar comentarios de línea
+    .replace(/\/\*[\s\S]*?\*\//g, ''); // Eliminar comentarios de bloque
+  
+  // Dividir por punto y coma, pero respetando bloques entre paréntesis y funciones
   const statements = [];
   let currentStatement = '';
-  let inFunction = false;
-  let inTrigger = false;
+  let parenDepth = 0;
+  let inDollarQuote = false;
   let dollarQuote = null;
   
-  for (let i = 0; i < schemaSQL.length; i++) {
-    const char = schemaSQL[i];
-    const nextChar = schemaSQL[i + 1] || '';
-    const prevChar = schemaSQL[i - 1] || '';
+  for (let i = 0; i < normalizedSQL.length; i++) {
+    const char = normalizedSQL[i];
+    const nextChars = normalizedSQL.substring(i, i + 10);
     
-    // Detectar inicio de función ($$ o $tag$)
-    if (char === '$' && !dollarQuote) {
-      const match = schemaSQL.substring(i).match(/^\$([^$]*)\$/);
+    // Detectar inicio de función con $$ o $tag$
+    if (char === '$' && !inDollarQuote) {
+      const match = normalizedSQL.substring(i).match(/^\$([^$]*)\$/);
       if (match) {
         dollarQuote = match[0];
-        inFunction = true;
+        inDollarQuote = true;
         currentStatement += dollarQuote;
         i += dollarQuote.length - 1;
         continue;
@@ -331,28 +337,42 @@ async function executeSchemaSafely(pool) {
     }
     
     // Detectar fin de función
-    if (dollarQuote && schemaSQL.substring(i).startsWith(dollarQuote)) {
+    if (inDollarQuote && normalizedSQL.substring(i).startsWith(dollarQuote)) {
       currentStatement += dollarQuote;
       i += dollarQuote.length - 1;
       dollarQuote = null;
-      inFunction = false;
+      inDollarQuote = false;
       continue;
+    }
+    
+    // Si estamos dentro de una función, agregar todo sin procesar
+    if (inDollarQuote) {
+      currentStatement += char;
+      continue;
+    }
+    
+    // Contar paréntesis para detectar bloques
+    if (char === '(') {
+      parenDepth++;
+    } else if (char === ')') {
+      parenDepth--;
     }
     
     currentStatement += char;
     
-    // Si no estamos en una función y encontramos punto y coma, es el fin de un statement
-    if (!inFunction && char === ';' && (nextChar === '\n' || nextChar === '\r' || nextChar === ' ' || nextChar === '')) {
+    // Si encontramos punto y coma y no estamos dentro de paréntesis ni función, es el fin del statement
+    if (char === ';' && parenDepth === 0 && !inDollarQuote) {
       const trimmed = currentStatement.trim();
-      if (trimmed.length > 0 && !trimmed.startsWith('--')) {
+      if (trimmed.length > 5 && !trimmed.match(/^\s*$/)) {
         statements.push(trimmed);
       }
       currentStatement = '';
+      parenDepth = 0;
     }
   }
   
   // Agregar el último statement si existe
-  if (currentStatement.trim().length > 0) {
+  if (currentStatement.trim().length > 5) {
     statements.push(currentStatement.trim());
   }
   
@@ -371,12 +391,13 @@ async function executeSchemaSafely(pool) {
       continue;
     }
     
-    const upper = trimmed.toUpperCase();
-    if (upper.startsWith('CREATE TABLE')) {
+    const upper = trimmed.toUpperCase().replace(/\s+/g, ' ');
+    // Detectar CREATE TABLE (con o sin IF NOT EXISTS)
+    if (upper.match(/^CREATE\s+TABLE/)) {
       createTables.push(trimmed);
-    } else if (upper.startsWith('CREATE INDEX') || upper.startsWith('CREATE UNIQUE INDEX')) {
+    } else if (upper.match(/^CREATE\s+(UNIQUE\s+)?INDEX/)) {
       createIndexes.push(trimmed);
-    } else if (upper.startsWith('CREATE OR REPLACE FUNCTION') || upper.startsWith('CREATE FUNCTION')) {
+    } else if (upper.match(/^CREATE\s+(OR\s+REPLACE\s+)?FUNCTION/)) {
       createFunctions.push(trimmed);
     } else if (upper.startsWith('ALTER TABLE')) {
       alterTables.push(trimmed);
