@@ -768,7 +768,11 @@ CREATE TABLE IF NOT EXISTS suppliers (
     email VARCHAR(255),
     phone VARCHAR(50),
     mobile VARCHAR(50),
+    whatsapp VARCHAR(50),
     website VARCHAR(255),
+    facebook VARCHAR(255),
+    instagram VARCHAR(255),
+    business_hours VARCHAR(255),
     
     -- Dirección
     address TEXT,
@@ -781,8 +785,11 @@ CREATE TABLE IF NOT EXISTS suppliers (
     supplier_type VARCHAR(50),
     category VARCHAR(100),
     payment_terms VARCHAR(100),
+    payment_methods VARCHAR(255),
+    delivery_days INTEGER,
     credit_limit DECIMAL(12, 2),
     currency VARCHAR(3) DEFAULT 'MXN',
+    relationship_start_date DATE,
     
     -- Métricas y Evaluación
     rating DECIMAL(3, 2) DEFAULT 0,
@@ -799,6 +806,13 @@ CREATE TABLE IF NOT EXISTS suppliers (
     -- Multisucursal
     branch_id UUID REFERENCES branches(id) ON DELETE SET NULL,
     is_shared BOOLEAN DEFAULT true,
+    
+    -- Información Bancaria
+    bank_name VARCHAR(255),
+    bank_account VARCHAR(100),
+    clabe VARCHAR(18),
+    account_holder VARCHAR(255),
+    bank_references TEXT,
     
     -- Auditoría
     created_by UUID REFERENCES users(id) ON DELETE SET NULL,
