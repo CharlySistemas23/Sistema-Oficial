@@ -1,6 +1,12 @@
 // Barcodes Module - Gestión Avanzada de Códigos de Barras
 
-const BarcodesModule = {
+// Verificar si ya está declarado para evitar errores de redeclaración
+let BarcodesModule;
+if (typeof window.BarcodesModule !== 'undefined') {
+    console.warn('⚠️ BarcodesModule ya está declarado. Usando la instancia existente.');
+    BarcodesModule = window.BarcodesModule;
+} else {
+    BarcodesModule = {
     initialized: false,
     isExporting: false, // Flag para prevenir múltiples exportaciones simultáneas
     currentTab: 'overview',
@@ -210,6 +216,34 @@ const BarcodesModule = {
                     await this.setupBranchFilter();
                     // Configurar event listeners después de crear el HTML
                     this.setupBarcodeEventListeners();
+                    // Configurar event listeners para botones de generación individual
+                    setTimeout(() => {
+                        const generateItemBtn = document.getElementById('barcodes-generate-item');
+                        const generateEmployeeBtn = document.getElementById('barcodes-generate-employee');
+                        const generateSellerBtn = document.getElementById('barcodes-generate-seller');
+                        const generateGuideBtn = document.getElementById('barcodes-generate-guide');
+                        const generateAgencyBtn = document.getElementById('barcodes-generate-agency');
+                        const generateSupplierBtn = document.getElementById('barcodes-generate-supplier');
+                        
+                        if (generateItemBtn) {
+                            generateItemBtn.onclick = () => App.loadModule('inventory');
+                        }
+                        if (generateEmployeeBtn) {
+                            generateEmployeeBtn.onclick = () => App.loadModule('employees');
+                        }
+                        if (generateSellerBtn) {
+                            generateSellerBtn.onclick = () => this.loadCatalogModule('sellers');
+                        }
+                        if (generateGuideBtn) {
+                            generateGuideBtn.onclick = () => this.loadCatalogModule('guides');
+                        }
+                        if (generateAgencyBtn) {
+                            generateAgencyBtn.onclick = () => this.loadCatalogModule('agencies');
+                        }
+                        if (generateSupplierBtn) {
+                            generateSupplierBtn.onclick = () => App.loadModule('suppliers');
+                        }
+                    }, 100);
                     await this.loadBarcodes();
                     break;
                 case 'scan-history':
@@ -354,6 +388,7 @@ const BarcodesModule = {
                     <button class="btn-secondary btn-sm" id="barcodes-generate-seller"><i class="fas fa-user-tag"></i> Vendedores</button>
                     <button class="btn-secondary btn-sm" id="barcodes-generate-guide"><i class="fas fa-suitcase"></i> Guías</button>
                     <button class="btn-secondary btn-sm" id="barcodes-generate-agency"><i class="fas fa-building"></i> Agencias</button>
+                    <button class="btn-secondary btn-sm" id="barcodes-generate-supplier"><i class="fas fa-truck"></i> Proveedores</button>
                     <button class="btn-primary btn-sm" id="barcodes-batch-print"><i class="fas fa-print"></i> Imprimir Seleccionados</button>
                     <button class="btn-secondary btn-sm" id="barcodes-export-all"><i class="fas fa-download"></i> Exportar</button>
                 </div>
@@ -385,6 +420,7 @@ const BarcodesModule = {
                         <option value="sellers">Vendedores</option>
                         <option value="guides">Guías</option>
                         <option value="agencies">Agencias</option>
+                        <option value="suppliers">Proveedores</option>
                     </select>
                 </div>
                 <div class="form-group" style="width: 150px;">
@@ -703,7 +739,8 @@ const BarcodesModule = {
                 employees: employees.length,
                 sellers: sellers.length,
                 guides: guides.length,
-                agencies: agencies.length
+                agencies: agencies.length,
+                suppliers: (await DB.getAll('suppliers') || []).length
             }
         };
     },
@@ -717,7 +754,8 @@ const BarcodesModule = {
             { name: 'Empleados', count: stats.byType.employees, color: 'var(--color-success)' },
             { name: 'Vendedores', count: stats.byType.sellers, color: 'var(--color-info)' },
             { name: 'Guías', count: stats.byType.guides, color: 'var(--color-warning)' },
-            { name: 'Agencias', count: stats.byType.agencies, color: 'var(--color-danger)' }
+            { name: 'Agencias', count: stats.byType.agencies, color: 'var(--color-danger)' },
+            { name: 'Proveedores', count: stats.byType.suppliers || 0, color: '#f59e0b' }
         ];
 
         return types.map(type => {
@@ -798,12 +836,19 @@ const BarcodesModule = {
         const guides = await DB.getAll('catalog_guides') || [];
         const agencies = await DB.getAll('catalog_agencies') || [];
 
+        const suppliers = await DB.getAll('suppliers') || [];
+        const filteredSuppliers = filterBranchId ? suppliers.filter(s => {
+            if (s.branch_id) return String(s.branch_id) === String(filterBranchId);
+            return s.is_shared === true;
+        }) : suppliers;
+
         const all = [
             ...filteredItems.map(i => ({ ...i, type: 'item' })),
             ...employees.map(e => ({ ...e, type: 'employee' })),
             ...sellers.map(s => ({ ...s, type: 'seller' })),
             ...guides.map(g => ({ ...g, type: 'guide' })),
-            ...agencies.map(a => ({ ...a, type: 'agency' }))
+            ...agencies.map(a => ({ ...a, type: 'agency' })),
+            ...filteredSuppliers.map(s => ({ ...s, type: 'supplier' }))
         ];
 
         const barcodeMap = {};
@@ -1138,6 +1183,7 @@ const BarcodesModule = {
             let sellers = [];
             let guides = [];
             let agencies = [];
+            let suppliers = [];
 
             // Cargar productos con filtrado por sucursal
             if (typeFilter === 'all' || typeFilter === 'items') {
@@ -1287,7 +1333,45 @@ const BarcodesModule = {
                 }
             }
 
-            if (items.length === 0 && employees.length === 0 && sellers.length === 0 && guides.length === 0 && agencies.length === 0) {
+            // Cargar proveedores
+            if (typeFilter === 'all' || typeFilter === 'suppliers') {
+                suppliers = await DB.getAll('suppliers') || [];
+                
+                // Filtrar por sucursal si aplica
+                if (filterBranchId) {
+                    const normalizedBranchId = String(filterBranchId);
+                    suppliers = suppliers.filter(supplier => {
+                        if (supplier.branch_id) {
+                            return String(supplier.branch_id) === normalizedBranchId;
+                        }
+                        // Si es compartido, mostrarlo siempre
+                        return supplier.is_shared === true;
+                    });
+                } else if (!viewAllBranches && currentBranchId) {
+                    const normalizedCurrentBranchId = String(currentBranchId);
+                    suppliers = suppliers.filter(supplier => {
+                        if (supplier.branch_id) {
+                            return String(supplier.branch_id) === normalizedCurrentBranchId;
+                        }
+                        return supplier.is_shared === true;
+                    });
+                }
+                
+                if (search) {
+                    suppliers = suppliers.filter(supplier => 
+                        supplier.name?.toLowerCase().includes(search) ||
+                        supplier.code?.toLowerCase().includes(search) ||
+                        supplier.barcode?.includes(search)
+                    );
+                }
+                if (statusFilter === 'with') {
+                    suppliers = suppliers.filter(s => !Utils.isBarcodeEmpty(s.barcode));
+                } else if (statusFilter === 'without') {
+                    suppliers = suppliers.filter(s => Utils.isBarcodeEmpty(s.barcode));
+                }
+            }
+
+            if (items.length === 0 && employees.length === 0 && sellers.length === 0 && guides.length === 0 && agencies.length === 0 && suppliers.length === 0) {
                 container.innerHTML = '<div class="empty-state">No se encontraron códigos de barras</div>';
                 return;
             }
@@ -1419,6 +1503,31 @@ const BarcodesModule = {
                 `;
             }
 
+            // Mostrar proveedores con contador y acciones
+            if (suppliers.length > 0) {
+                const suppliersWithoutBarcode = suppliers.filter(s => Utils.isBarcodeEmpty(s.barcode)).length;
+                html += `
+                    <div class="barcodes-section">
+                        <div class="barcodes-section-header">
+                            <h3><i class="fas fa-truck"></i> Proveedores <span class="barcode-count">(${suppliers.length})</span></h3>
+                            <div style="display: flex; gap: var(--spacing-xs);">
+                                ${suppliersWithoutBarcode > 0 ? `
+                                    <button class="btn-secondary btn-sm" id="btn-gen-suppliers-${Date.now()}" data-action="generate-suppliers" data-count="${suppliersWithoutBarcode}">
+                                        Generar ${suppliersWithoutBarcode} Faltantes
+                                    </button>
+                                ` : ''}
+                                <button class="btn-primary btn-sm" onclick="window.BarcodesModule.batchPrint('suppliers', [${suppliers.filter(s => !Utils.isBarcodeEmpty(s.barcode)).map(s => `'${s.id}'`).join(',')}])">
+                                    <i class="fas fa-print"></i> Imprimir Todos
+                                </button>
+                            </div>
+                        </div>
+                        <div class="barcodes-grid">
+                            ${suppliers.map(supplier => this.renderBarcodeCard(supplier, 'supplier')).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+
             container.innerHTML = html;
 
             // Configurar event listeners para botones de generación masiva
@@ -1439,6 +1548,8 @@ const BarcodesModule = {
                             await this.generateAllGuideBarcodes();
                         } else if (action === 'generate-agencies') {
                             await this.generateAllAgencyBarcodes();
+                        } else if (action === 'generate-suppliers') {
+                            await this.generateAllSupplierBarcodes();
                         }
                     } catch (error) {
                         console.error('Error en generación masiva:', error);
@@ -1553,6 +1664,23 @@ const BarcodesModule = {
                 }
             });
 
+            delay += agencies.length * 10 + 100; // Aumentar delay para suppliers
+            suppliers.forEach((supplier, index) => {
+                if (!Utils.isBarcodeEmpty(supplier.barcode)) {
+                    setTimeout(async () => {
+                        try {
+                            await BarcodeManager.generateBarcode(supplier.barcode, `barcode-supplier-${supplier.id}`, format, {
+                                width: settings.width,
+                                height: settings.height,
+                                displayValue: settings.displayValue
+                            });
+                        } catch (error) {
+                            console.warn(`Error generando código de barras para proveedor ${supplier.id}:`, error.message);
+                        }
+                    }, delay + (index * 10));
+                }
+            });
+
         } catch (e) {
             console.error('Error loading barcodes:', e);
             container.innerHTML = '<div class="empty-state">Error al cargar códigos de barras</div>';
@@ -1580,6 +1708,9 @@ const BarcodesModule = {
         } else if (type === 'agency') {
             code = item.id || 'N/A';
             barcodeId = `barcode-agency-${id}`;
+        } else if (type === 'supplier') {
+            code = item.code || 'N/A';
+            barcodeId = `barcode-supplier-${id}`;
         }
         
         const barcode = item.barcode || 'Sin código';
@@ -1677,6 +1808,14 @@ const BarcodesModule = {
                     return;
                 }
                 barcode = Utils.generateAgencyBarcode(entity);
+            } else if (type === 'supplier') {
+                entity = await DB.get('suppliers', id);
+                storeName = 'suppliers';
+                if (!entity) {
+                    Utils.showNotification('Proveedor no encontrado', 'error');
+                    return;
+                }
+                barcode = entity.barcode || entity.code || `PROV${entity.id.substring(0, 6).toUpperCase()}`;
             } else {
                 Utils.showNotification('Tipo no válido', 'error');
                 return;
@@ -1715,6 +1854,8 @@ const BarcodesModule = {
                 await SyncManager.addToQueue('catalog_guide', id);
             } else if (type === 'agency' && typeof SyncManager !== 'undefined') {
                 await SyncManager.addToQueue('catalog_agency', id);
+            } else if (type === 'supplier' && typeof SyncManager !== 'undefined') {
+                await SyncManager.addToQueue('supplier', id);
             }
 
             Utils.showNotification('Código de barras generado', 'success');
@@ -2785,6 +2926,9 @@ const BarcodesModule = {
             case 'agency':
                 entity = await DB.get('catalog_agencies', id);
                 break;
+            case 'supplier':
+                entity = await DB.get('suppliers', id);
+                break;
         }
 
         if (!entity) {
@@ -2897,6 +3041,9 @@ const BarcodesModule = {
             case 'agency':
                 entity = await DB.get('catalog_agencies', id);
                 break;
+            case 'supplier':
+                entity = await DB.get('suppliers', id);
+                break;
         }
 
         if (entity) {
@@ -2906,7 +3053,8 @@ const BarcodesModule = {
                 type === 'employee' ? 'employees' :
                 type === 'seller' ? 'catalog_sellers' :
                 type === 'guide' ? 'catalog_guides' :
-                'catalog_agencies',
+                type === 'agency' ? 'catalog_agencies' :
+                'suppliers',
                 entity
             );
 
@@ -2943,13 +3091,15 @@ const BarcodesModule = {
         const sellers = await DB.getAll('catalog_sellers') || [];
         const guides = await DB.getAll('catalog_guides') || [];
         const agencies = await DB.getAll('catalog_agencies') || [];
+        const suppliers = await DB.getAll('suppliers') || [];
 
         const all = [
             ...items.map(i => ({ ...i, type: 'item' })),
             ...employees.map(e => ({ ...e, type: 'employee' })),
             ...sellers.map(s => ({ ...s, type: 'seller' })),
             ...guides.map(g => ({ ...g, type: 'guide' })),
-            ...agencies.map(a => ({ ...a, type: 'agency' }))
+            ...agencies.map(a => ({ ...a, type: 'agency' })),
+            ...suppliers.map(s => ({ ...s, type: 'supplier' }))
         ];
 
         return all.filter(item => 
@@ -2979,8 +3129,65 @@ const BarcodesModule = {
 
     async exportAllToPDF() {
         await this.exportAll('pdf');
-    }
-};
+    },
 
-window.BarcodesModule = BarcodesModule;
+    loadCatalogModule(type) {
+        if (typeof Settings !== 'undefined') {
+            switch(type) {
+                case 'sellers':
+                    Settings.manageSellers();
+                    break;
+                case 'guides':
+                    Settings.manageGuides();
+                    break;
+                case 'agencies':
+                    Settings.manageAgencies();
+                    break;
+            }
+        } else {
+            Utils.showNotification('Módulo de configuración no disponible', 'error');
+        }
+    },
+
+    async generateAllSupplierBarcodes() {
+        try {
+            const suppliers = await DB.getAll('suppliers') || [];
+            const suppliersWithoutBarcode = suppliers.filter(s => Utils.isBarcodeEmpty(s.barcode));
+            
+            if (suppliersWithoutBarcode.length === 0) {
+                Utils.showNotification('Todos los proveedores ya tienen código de barras', 'info');
+                return;
+            }
+
+            let generated = 0;
+            for (const supplier of suppliersWithoutBarcode) {
+                try {
+                    // Generar código de barras basado en el código del proveedor
+                    supplier.barcode = supplier.code || `PROV${supplier.id.substring(0, 6).toUpperCase()}`;
+                    await DB.put('suppliers', supplier);
+                    
+                    // Sincronizar si aplica
+                    if (typeof SyncManager !== 'undefined') {
+                        await SyncManager.addToQueue('supplier', supplier.id);
+                    }
+                    
+                    generated++;
+                } catch (error) {
+                    console.error(`Error generando código para proveedor ${supplier.id}:`, error);
+                }
+            }
+
+            Utils.showNotification(`${generated} códigos de barras generados para proveedores`, 'success');
+            await this.loadBarcodes();
+        } catch (error) {
+            console.error('Error generando códigos de barras de proveedores:', error);
+            Utils.showNotification('Error al generar códigos de barras', 'error');
+        }
+    };
+
+    // Solo exponer si no existe ya
+    if (typeof window.BarcodesModule === 'undefined') {
+        window.BarcodesModule = BarcodesModule;
+    }
+}
 
