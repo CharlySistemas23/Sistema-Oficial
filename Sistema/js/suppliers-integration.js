@@ -315,14 +315,13 @@ window.SuppliersIntegration = {
                 </div>
             `;
 
-            UI.showModal({
-                title: `Comparación de Precios: ${item.name}`,
-                content: body,
-                buttons: [
+            UI.showModal(
+                `Comparación de Precios: ${item.name}`,
+                body,
+                [
                     { text: 'Cerrar', class: 'btn-secondary', onclick: () => UI.closeModal() }
-                ],
-                size: 'modal-lg'
-            });
+                ]
+            );
         } catch (error) {
             console.error('Error comparando precios:', error);
             Utils.showNotification('Error al comparar precios', 'error');
