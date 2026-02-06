@@ -47,26 +47,9 @@ const Inventory = {
             await this.setupEventListeners();
             await this.loadInventory();
             
-            // Inicializar botones de vista después de cargar el inventario
+            // Actualizar estado visual de los botones de vista (si existen)
             setTimeout(() => {
-                const gridBtn = document.getElementById('inventory-view-grid-btn');
-                const listBtn = document.getElementById('inventory-view-list-btn');
-                console.log('🔍 Verificando botones de vista después de loadInventory:', { 
-                    gridBtn: !!gridBtn, 
-                    listBtn: !!listBtn, 
-                    currentView: this.currentView,
-                    gridBtnVisible: gridBtn ? window.getComputedStyle(gridBtn).display !== 'none' : false,
-                    listBtnVisible: listBtn ? window.getComputedStyle(listBtn).display !== 'none' : false
-                });
-                if (gridBtn && listBtn) {
-                    this.updateViewButtons();
-                    console.log('✅ Botones de vista inicializados correctamente');
-                } else {
-                    console.warn('⚠️ Botones de vista no encontrados, reintentando...');
-                    setTimeout(() => {
-                        this.updateViewButtons();
-                    }, 500);
-                }
+                this.updateViewButtons();
             }, 300);
             this.initialized = true;
             
@@ -393,73 +376,60 @@ const Inventory = {
         document.getElementById('inventory-import-btn')?.addEventListener('click', () => this.importCSV());
         document.getElementById('inventory-export-btn')?.addEventListener('click', () => this.exportInventory());
         
-        // Toggle de vista (Grid/Lista)
-        const setupViewButtons = () => {
-            const gridBtn = document.getElementById('inventory-view-grid-btn');
-            const listBtn = document.getElementById('inventory-view-list-btn');
-            
-            console.log('🔍 Configurando botones de vista:', { gridBtn: !!gridBtn, listBtn: !!listBtn });
-            
-            if (gridBtn) {
-                // Remover listener anterior si existe
-                const newGridBtn = gridBtn.cloneNode(true);
-                gridBtn.parentNode.replaceChild(newGridBtn, gridBtn);
-                
-                newGridBtn.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    console.log('🔄 Cambiando a vista Grid');
-                    this.currentView = 'grid';
-                    this.updateViewButtons();
-                    this.loadInventory();
-                });
-            }
-            
-            if (listBtn) {
-                // Remover listener anterior si existe
-                const newListBtn = listBtn.cloneNode(true);
-                listBtn.parentNode.replaceChild(newListBtn, listBtn);
-                
-                newListBtn.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    console.log('🔄 Cambiando a vista Lista');
-                    this.currentView = 'list';
-                    this.updateViewButtons();
-                    this.loadInventory();
-                });
-            }
-        };
-        
-        // Intentar configurar inmediatamente
-        setupViewButtons();
-        
-        // También intentar después de un pequeño delay por si el DOM no está listo
-        setTimeout(() => {
-            setupViewButtons();
-        }, 100);
-        
-        // Y usar delegación de eventos como respaldo
+        // Toggle de vista (Grid/Lista) - Usar delegación de eventos
         const moduleContent = document.getElementById('module-content');
         if (moduleContent) {
+            // Usar delegación de eventos para los botones de vista (evita problemas de timing)
             moduleContent.addEventListener('click', (e) => {
-                if (e.target.closest('#inventory-view-grid-btn')) {
+                const gridBtn = e.target.closest('#inventory-view-grid-btn');
+                const listBtn = e.target.closest('#inventory-view-list-btn');
+                
+                if (gridBtn) {
                     e.preventDefault();
                     e.stopPropagation();
-                    console.log('🔄 Cambiando a vista Grid (delegación)');
                     this.currentView = 'grid';
                     this.updateViewButtons();
                     this.loadInventory();
-                } else if (e.target.closest('#inventory-view-list-btn')) {
+                } else if (listBtn) {
                     e.preventDefault();
                     e.stopPropagation();
-                    console.log('🔄 Cambiando a vista Lista (delegación)');
                     this.currentView = 'list';
                     this.updateViewButtons();
                     this.loadInventory();
                 }
             });
         }
+        
+        // Adjuntar listeners directos después de un delay (como respaldo)
+        setTimeout(() => {
+            const gridBtn = document.getElementById('inventory-view-grid-btn');
+            const listBtn = document.getElementById('inventory-view-list-btn');
+            
+            if (gridBtn && !gridBtn.dataset.listenerAttached) {
+                gridBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.currentView = 'grid';
+                    this.updateViewButtons();
+                    this.loadInventory();
+                });
+                gridBtn.dataset.listenerAttached = 'true';
+            }
+            
+            if (listBtn && !listBtn.dataset.listenerAttached) {
+                listBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.currentView = 'list';
+                    this.updateViewButtons();
+                    this.loadInventory();
+                });
+                listBtn.dataset.listenerAttached = 'true';
+            }
+            
+            // Actualizar estado visual de los botones
+            this.updateViewButtons();
+        }, 200);
         
         // Escaneo de código de barras
         this.setupBarcodeScanning();
@@ -3079,7 +3049,7 @@ const Inventory = {
                     <div class="form-row">
                         <div class="form-group">
                             <label>Material *</label>
-                            <select id="inv-material" class="form-select">
+                            <select id="inv-material" class="form-select" required>
                                 <option value="">Seleccionar...</option>
                                 <option value="Oro" ${item?.material === 'Oro' || (!item?.material && item?.metal?.includes('Oro')) ? 'selected' : ''}>Oro</option>
                                 <option value="Plata" ${item?.material === 'Plata' || (!item?.material && item?.metal?.includes('Plata')) ? 'selected' : ''}>Plata</option>
@@ -3105,7 +3075,7 @@ const Inventory = {
                         </div>
                         <div class="form-group">
                             <label>Peso (g) *</label>
-                            <input type="number" id="inv-weight" class="form-input" step="0.01" value="${item?.weight_g || item?.weight || ''}">
+                            <input type="number" id="inv-weight" class="form-input" step="0.01" value="${item?.weight_g || item?.weight || ''}" required>
                             <small style="color: var(--color-text-secondary); font-size: 11px;">Peso en gramos</small>
                         </div>
                     </div>
@@ -3332,7 +3302,7 @@ const Inventory = {
                     <div class="form-row">
                         <div class="form-group">
                             <label>Costo *</label>
-                            <input type="number" id="inv-cost" class="form-input" step="0.01" value="${item?.cost || ''}">
+                            <input type="number" id="inv-cost" class="form-input" step="0.01" value="${item?.cost || ''}" required>
                             <small style="color: var(--color-text-secondary); font-size: 11px;">Costo de adquisición</small>
                         </div>
                         <div class="form-group">
@@ -3910,41 +3880,6 @@ const Inventory = {
     },
 
     async saveItem(itemId) {
-        // Validación manual de campos requeridos (ya que están en pestañas ocultas)
-        const sku = document.getElementById('inv-sku')?.value?.trim();
-        const material = document.getElementById('inv-material')?.value?.trim();
-        const weight = document.getElementById('inv-weight')?.value?.trim();
-        const cost = document.getElementById('inv-cost')?.value?.trim();
-        
-        // Validar campos requeridos
-        if (!sku) {
-            Utils.showNotification('El SKU es requerido', 'error');
-            this.switchTab('basic');
-            document.getElementById('inv-sku')?.focus();
-            return;
-        }
-        
-        if (!material) {
-            Utils.showNotification('El Material es requerido', 'error');
-            this.switchTab('material');
-            document.getElementById('inv-material')?.focus();
-            return;
-        }
-        
-        if (!weight || parseFloat(weight) <= 0) {
-            Utils.showNotification('El Peso es requerido y debe ser mayor a 0', 'error');
-            this.switchTab('material');
-            document.getElementById('inv-weight')?.focus();
-            return;
-        }
-        
-        if (!cost || parseFloat(cost) < 0) {
-            Utils.showNotification('El Costo es requerido y debe ser mayor o igual a 0', 'error');
-            this.switchTab('pricing');
-            document.getElementById('inv-cost')?.focus();
-            return;
-        }
-        
         try {
             const form = document.getElementById('inventory-form');
             if (!form) {
@@ -5364,22 +5299,17 @@ const Inventory = {
         }
     },
     
-    // Actualizar botones de vista
+    // Actualizar botones de vista (solo si existen)
     updateViewButtons() {
         const gridBtn = document.getElementById('inventory-view-grid-btn');
         const listBtn = document.getElementById('inventory-view-list-btn');
         
+        // Si los botones no existen, simplemente retornar sin hacer nada
         if (!gridBtn || !listBtn) {
-            // Si los botones no existen, esperar un poco y reintentar
-            console.log(`🔄 Botones de vista no encontrados aún, reintentando en 100ms...`, { gridBtn: !!gridBtn, listBtn: !!listBtn });
-            setTimeout(() => {
-                this.updateViewButtons();
-            }, 100);
             return;
         }
         
-        console.log(`🔄 Actualizando botones de vista. currentView: ${this.currentView}`, { gridBtn: !!gridBtn, listBtn: !!listBtn });
-        
+        // Actualizar estilos según la vista actual
         if (this.currentView === 'grid') {
             gridBtn.style.background = 'var(--color-primary)';
             gridBtn.style.color = 'white';
@@ -5387,7 +5317,6 @@ const Inventory = {
             listBtn.style.background = 'transparent';
             listBtn.style.color = 'var(--color-text)';
             listBtn.style.fontWeight = 'normal';
-            console.log('✅ Botón Grid activado');
         } else {
             listBtn.style.background = 'var(--color-primary)';
             listBtn.style.color = 'white';
@@ -5395,7 +5324,6 @@ const Inventory = {
             gridBtn.style.background = 'transparent';
             gridBtn.style.color = 'var(--color-text)';
             gridBtn.style.fontWeight = 'normal';
-            console.log('✅ Botón Lista activado');
         }
     },
     
