@@ -29,6 +29,10 @@ window.SuppliersAdvanced = {
             return;
         }
 
+        // Verificar si el modal ya está abierto
+        const modalOverlay = document.getElementById('modal-overlay');
+        const isModalOpen = modalOverlay && modalOverlay.style.display === 'flex';
+
         const views = {
             overview: () => this.showOverview(supplier),
             contracts: () => this.showContracts(supplier),
@@ -133,22 +137,58 @@ window.SuppliersAdvanced = {
     async loadOverviewData(supplierId) {
         try {
             // Cargar contratos activos
-            const contracts = await API.getSupplierContracts(supplierId, { status: 'active' }) || [];
-            document.getElementById('contracts-count').textContent = contracts.length;
+            try {
+                const contracts = (typeof API !== 'undefined' && API.getSupplierContracts) 
+                    ? await API.getSupplierContracts(supplierId, { status: 'active' }) || []
+                    : [];
+                const contractsCount = document.getElementById('contracts-count');
+                if (contractsCount) contractsCount.textContent = contracts.length;
+            } catch (e) {
+                console.warn('Error cargando contratos:', e);
+                const contractsCount = document.getElementById('contracts-count');
+                if (contractsCount) contractsCount.textContent = '0';
+            }
 
             // Cargar órdenes pendientes
-            const orders = await API.getPurchaseOrders({ supplier_id: supplierId, status: 'pending' }) || [];
-            document.getElementById('orders-count').textContent = orders.length;
+            try {
+                const orders = (typeof API !== 'undefined' && API.getPurchaseOrders)
+                    ? await API.getPurchaseOrders({ supplier_id: supplierId, status: 'pending' }) || []
+                    : [];
+                const ordersCount = document.getElementById('orders-count');
+                if (ordersCount) ordersCount.textContent = orders.length;
+            } catch (e) {
+                console.warn('Error cargando órdenes:', e);
+                const ordersCount = document.getElementById('orders-count');
+                if (ordersCount) ordersCount.textContent = '0';
+            }
 
             // Cargar pagos pendientes
-            const payments = await API.getSupplierPayments({ supplier_id: supplierId, status: 'pending' }) || [];
-            const totalPending = payments.reduce((sum, p) => sum + (parseFloat(p.total_amount) - parseFloat(p.paid_amount || 0)), 0);
-            document.getElementById('payments-pending').textContent = Utils.formatCurrency(totalPending);
+            try {
+                const payments = (typeof API !== 'undefined' && API.getSupplierPayments)
+                    ? await API.getSupplierPayments({ supplier_id: supplierId, status: 'pending' }) || []
+                    : [];
+                const totalPending = payments.reduce((sum, p) => sum + (parseFloat(p.total_amount || 0) - parseFloat(p.paid_amount || 0)), 0);
+                const paymentsPending = document.getElementById('payments-pending');
+                if (paymentsPending) paymentsPending.textContent = Utils.formatCurrency(totalPending);
+            } catch (e) {
+                console.warn('Error cargando pagos:', e);
+                const paymentsPending = document.getElementById('payments-pending');
+                if (paymentsPending) paymentsPending.textContent = Utils.formatCurrency(0);
+            }
 
             // Cargar calificación promedio
-            const stats = await API.getSupplierStatsAdvanced(supplierId) || {};
-            const avgRating = stats.ratings?.avg_rating || 0;
-            document.getElementById('avg-rating').textContent = avgRating > 0 ? avgRating.toFixed(1) : 'N/A';
+            try {
+                const stats = (typeof API !== 'undefined' && API.getSupplierStatsAdvanced)
+                    ? await API.getSupplierStatsAdvanced(supplierId) || {}
+                    : {};
+                const avgRating = stats.ratings?.avg_rating || 0;
+                const avgRatingEl = document.getElementById('avg-rating');
+                if (avgRatingEl) avgRatingEl.textContent = avgRating > 0 ? avgRating.toFixed(1) : 'N/A';
+            } catch (e) {
+                console.warn('Error cargando estadísticas:', e);
+                const avgRatingEl = document.getElementById('avg-rating');
+                if (avgRatingEl) avgRatingEl.textContent = 'N/A';
+            }
 
             // Cargar listas recientes
             await this.loadRecentContracts(supplierId);
@@ -176,14 +216,14 @@ window.SuppliersAdvanced = {
             </div>
         `;
 
-        UI.showModal({
+        UI.showModal(
             title,
-            content: body,
-            buttons: [
+            body,
+            [
+                { text: '← Regresar', class: 'btn-secondary', onclick: () => this.showAdvancedView(supplier.id, 'overview') },
                 { text: 'Cerrar', class: 'btn-secondary', onclick: () => UI.closeModal() }
-            ],
-            size: 'modal-lg'
-        });
+            ]
+        );
 
         await this.loadContracts(supplier.id);
     },
@@ -193,7 +233,9 @@ window.SuppliersAdvanced = {
         if (!contractsList) return;
 
         try {
-            const contracts = await API.getSupplierContracts(supplierId) || [];
+            const contracts = (typeof API !== 'undefined' && API.getSupplierContracts)
+                ? await API.getSupplierContracts(supplierId) || []
+                : [];
             
             if (contracts.length === 0) {
                 contractsList.innerHTML = '<div class="empty-state">No hay contratos registrados</div>';
@@ -256,9 +298,8 @@ window.SuppliersAdvanced = {
             }
         }
 
-        UI.showModal({
-            title: isEdit ? 'Editar Contrato' : 'Nuevo Contrato',
-            content: `
+        const contractTitle = isEdit ? 'Editar Contrato' : 'Nuevo Contrato';
+        const contractBody = `
                 <form id="contract-form" class="contract-form">
                     <div class="form-row">
                         <div class="form-group">
@@ -326,8 +367,12 @@ window.SuppliersAdvanced = {
                         </select>
                     </div>
                 </form>
-            `,
-            buttons: [
+            `;
+        
+        UI.showModal(
+            contractTitle,
+            contractBody,
+            [
                 { text: 'Cancelar', class: 'btn-secondary', onclick: () => UI.closeModal() },
                 { 
                     text: isEdit ? 'Actualizar' : 'Crear', 
@@ -335,7 +380,7 @@ window.SuppliersAdvanced = {
                     onclick: () => this.saveContract(supplierId, contractId) 
                 }
             ]
-        });
+        );
     },
 
     async saveContract(supplierId, contractId) {
@@ -438,14 +483,14 @@ window.SuppliersAdvanced = {
             </div>
         `;
 
-        UI.showModal({
+        UI.showModal(
             title,
-            content: body,
-            buttons: [
+            body,
+            [
+                { text: '← Regresar', class: 'btn-secondary', onclick: () => this.showAdvancedView(supplier.id, 'overview') },
                 { text: 'Cerrar', class: 'btn-secondary', onclick: () => UI.closeModal() }
-            ],
-            size: 'modal-xl'
-        });
+            ]
+        );
 
         await this.loadPurchaseOrders(supplier.id);
     },
@@ -456,7 +501,9 @@ window.SuppliersAdvanced = {
 
         try {
             const params = { supplier_id: supplierId, ...filters };
-            const orders = await API.getPurchaseOrders(params) || [];
+            const orders = (typeof API !== 'undefined' && API.getPurchaseOrders)
+                ? await API.getPurchaseOrders(params) || []
+                : [];
             
             if (orders.length === 0) {
                 ordersList.innerHTML = '<div class="empty-state">No hay órdenes de compra</div>';
@@ -999,6 +1046,7 @@ window.SuppliersAdvanced = {
             title,
             body,
             [
+                { text: '← Regresar', class: 'btn-secondary', onclick: () => this.showAdvancedView(supplier.id, 'overview') },
                 { text: 'Cerrar', class: 'btn-secondary', onclick: () => UI.closeModal() }
             ]
         );
@@ -1015,7 +1063,9 @@ window.SuppliersAdvanced = {
             if (document.getElementById('overdue-only')?.checked) {
                 params.overdue_only = 'true';
             }
-            const payments = await API.getSupplierPayments(params) || [];
+            const payments = (typeof API !== 'undefined' && API.getSupplierPayments)
+                ? await API.getSupplierPayments(params) || []
+                : [];
             
             if (payments.length === 0) {
                 paymentsList.innerHTML = '<div class="empty-state">No hay pagos registrados</div>';
@@ -1204,19 +1254,19 @@ window.SuppliersAdvanced = {
             </form>
         `;
 
-        UI.showModal({
-            title: isEdit ? `Editar Pago: ${referenceNumber}` : `Nuevo Pago/Factura: ${supplier.name}`,
-            content: body,
-            buttons: [
+        const paymentTitle = isEdit ? `Editar Pago: ${referenceNumber}` : `Nuevo Pago/Factura: ${supplier.name}`;
+        UI.showModal(
+            paymentTitle,
+            body,
+            [
                 { text: 'Cancelar', class: 'btn-secondary', onclick: () => UI.closeModal() },
                 { 
                     text: isEdit ? 'Actualizar' : 'Crear', 
                     class: 'btn-primary', 
                     onclick: () => this.savePayment(supplierId, paymentId) 
                 }
-            ],
-            size: 'modal-lg'
-        });
+            ]
+        );
 
         // Calcular totales iniciales
         this.calculatePaymentTotals();
@@ -1353,13 +1403,13 @@ window.SuppliersAdvanced = {
                 </div>
             `;
 
-            UI.showModal({
-                title: `Pago: ${payment.reference_number}`,
-                content: body,
-                buttons: [
+            UI.showModal(
+                `Pago: ${payment.reference_number}`,
+                body,
+                [
                     { text: 'Cerrar', class: 'btn-secondary', onclick: () => UI.closeModal() }
                 ]
-            });
+            );
         } catch (error) {
             console.error('Error obteniendo pago:', error);
             Utils.showNotification('Error al obtener pago', 'error');
@@ -1419,6 +1469,7 @@ window.SuppliersAdvanced = {
             title,
             body,
             [
+                { text: '← Regresar', class: 'btn-secondary', onclick: () => this.showAdvancedView(supplier.id, 'overview') },
                 { text: 'Cerrar', class: 'btn-secondary', onclick: () => UI.closeModal() }
             ]
         );
@@ -1438,11 +1489,17 @@ window.SuppliersAdvanced = {
             if (startDate) filters.start_date = startDate;
             if (endDate) filters.end_date = endDate;
 
-            const stats = await API.getSupplierStatsAdvanced(supplierId, filters) || {};
+            const stats = (typeof API !== 'undefined' && API.getSupplierStatsAdvanced)
+                ? await API.getSupplierStatsAdvanced(supplierId, filters) || {}
+                : {};
             
             // Obtener datos para gráficos
-            const orders = await API.getPurchaseOrders({ supplier_id: supplierId, ...filters }) || [];
-            const payments = await API.getSupplierPayments({ supplier_id: supplierId, ...filters }) || [];
+            const orders = (typeof API !== 'undefined' && API.getPurchaseOrders)
+                ? await API.getPurchaseOrders({ supplier_id: supplierId, ...filters }) || []
+                : [];
+            const payments = (typeof API !== 'undefined' && API.getSupplierPayments)
+                ? await API.getSupplierPayments({ supplier_id: supplierId, ...filters }) || []
+                : [];
             
             analyticsContent.innerHTML = `
                 <div class="analytics-grid">
@@ -1846,7 +1903,9 @@ window.SuppliersAdvanced = {
         if (!list) return;
 
         try {
-            const contracts = await API.getSupplierContracts(supplierId) || [];
+            const contracts = (typeof API !== 'undefined' && API.getSupplierContracts)
+                ? await API.getSupplierContracts(supplierId) || []
+                : [];
             const recent = contracts.slice(0, 3);
             
             if (recent.length === 0) {
@@ -1870,7 +1929,9 @@ window.SuppliersAdvanced = {
         if (!list) return;
 
         try {
-            const orders = await API.getPurchaseOrders({ supplier_id: supplierId }) || [];
+            const orders = (typeof API !== 'undefined' && API.getPurchaseOrders)
+                ? await API.getPurchaseOrders({ supplier_id: supplierId }) || []
+                : [];
             const recent = orders.slice(0, 3);
             
             if (recent.length === 0) {
@@ -1894,7 +1955,9 @@ window.SuppliersAdvanced = {
         if (!list) return;
 
         try {
-            const payments = await API.getSupplierPayments({ supplier_id: supplierId, status: 'pending' }) || [];
+            const payments = (typeof API !== 'undefined' && API.getSupplierPayments)
+                ? await API.getSupplierPayments({ supplier_id: supplierId, status: 'pending' }) || []
+                : [];
             const recent = payments.slice(0, 3);
             
             if (recent.length === 0) {
