@@ -3072,6 +3072,13 @@ button.btn-xs {
     width: fit-content;
 }
 
+/* Modales extra grandes para formularios de proveedores */
+.modal-lg {
+    max-width: 800px !important;
+    min-width: fit-content;
+    width: fit-content;
+}
+
 .modal-header {
     display: flex;
     justify-content: space-between;
