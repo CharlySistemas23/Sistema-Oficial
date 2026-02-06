@@ -516,8 +516,11 @@ const Suppliers = {
                     ${supplier.supplier_type ? `<div class="supplier-info"><strong>Tipo:</strong> ${supplier.supplier_type}</div>` : ''}
                     ${supplier.category ? `<div class="supplier-info"><strong>Categoría:</strong> ${supplier.category}</div>` : ''}
                     ${supplier.contact_person ? `<div class="supplier-info"><strong>Contacto:</strong> ${supplier.contact_person}</div>` : ''}
-                    ${supplier.email ? `<div class="supplier-info"><i class="fas fa-envelope"></i> ${supplier.email}</div>` : ''}
-                    ${supplier.phone ? `<div class="supplier-info"><i class="fas fa-phone"></i> ${supplier.phone}</div>` : ''}
+                    ${supplier.email ? `<div class="supplier-info"><i class="fas fa-envelope"></i> <a href="mailto:${supplier.email}">${supplier.email}</a></div>` : ''}
+                    ${supplier.phone ? `<div class="supplier-info"><i class="fas fa-phone"></i> <a href="tel:${supplier.phone}">${supplier.phone}</a></div>` : ''}
+                    ${supplier.whatsapp ? `<div class="supplier-info"><i class="fab fa-whatsapp"></i> <a href="https://wa.me/${supplier.whatsapp.replace(/[^0-9]/g, '')}" target="_blank">${supplier.whatsapp}</a></div>` : ''}
+                    ${supplier.delivery_days ? `<div class="supplier-info"><i class="fas fa-truck"></i> Entrega: ${supplier.delivery_days} días</div>` : ''}
+                    ${supplier.payment_terms ? `<div class="supplier-info"><i class="fas fa-money-bill-wave"></i> ${supplier.payment_terms}</div>` : ''}
                     <div class="supplier-rating">${ratingStars}</div>
                 </div>
                 <div class="supplier-card-footer">
@@ -610,6 +613,121 @@ const Suppliers = {
         await this.showSupplierForm(supplier);
     },
 
+    // Generar código de proveedor automáticamente
+    async generateSupplierCode() {
+        const codeInput = document.getElementById('supplier-code');
+        
+        if (!codeInput) {
+            Utils.showNotification('Error: Campo de código no encontrado', 'error');
+            return;
+        }
+
+        // Si ya hay un código, preguntar si desea generar uno nuevo
+        if (codeInput.value.trim()) {
+            const confirmed = await Utils.confirm(
+                '¿Generar nuevo código?',
+                'Ya existe un código. ¿Deseas generar uno nuevo?'
+            );
+            if (!confirmed) return;
+        }
+
+        try {
+            // Obtener sucursal actual para generar código único por sucursal
+            const currentBranchId = typeof BranchManager !== 'undefined' 
+                ? BranchManager.getCurrentBranchId() 
+                : null;
+            
+            // Obtener código de la sucursal
+            let branchCode = '';
+            if (currentBranchId) {
+                try {
+                    const branch = await DB.get('catalog_branches', currentBranchId);
+                    if (branch && branch.code) {
+                        branchCode = branch.code.toUpperCase().substring(0, 3);
+                    } else if (branch && branch.name) {
+                        branchCode = branch.name.toUpperCase()
+                            .replace(/[^A-Z]/g, '')
+                            .substring(0, 3)
+                            .padEnd(3, 'X');
+                    }
+                } catch (e) {
+                    console.warn('No se pudo obtener código de sucursal:', e);
+                }
+            }
+            
+            // Prefijo para proveedores: PROV-
+            const codePrefix = branchCode ? `${branchCode}-PROV-` : 'PROV-';
+            const codePattern = branchCode 
+                ? new RegExp(`^${branchCode}-PROV-(\\d+)$`, 'i')
+                : /^PROV-(\d+)$/i;
+            
+            // Obtener proveedores de la sucursal actual (o todos si no hay sucursal)
+            let allSuppliers = [];
+            if (currentBranchId) {
+                const allSuppliersRaw = await DB.getAll('suppliers') || [];
+                const normalizedBranchId = String(currentBranchId);
+                allSuppliers = allSuppliersRaw.filter(supplier => {
+                    if (!supplier.branch_id) return false;
+                    return String(supplier.branch_id) === normalizedBranchId;
+                });
+            } else {
+                const allSuppliersRaw = await DB.getAll('suppliers') || [];
+                allSuppliers = allSuppliersRaw.filter(supplier => {
+                    if (!supplier.code) return false;
+                    return supplier.code.match(codePattern);
+                });
+            }
+            
+            // Buscar el último código numérico con el prefijo
+            let lastNumber = 0;
+            
+            allSuppliers.forEach(supplier => {
+                if (supplier.code) {
+                    const match = supplier.code.match(codePattern);
+                    if (match) {
+                        const num = parseInt(match[1], 10);
+                        if (num > lastNumber) {
+                            lastNumber = num;
+                        }
+                    }
+                }
+            });
+
+            // Generar nuevo código
+            const newNumber = lastNumber + 1;
+            const newCode = `${codePrefix}${String(newNumber).padStart(4, '0')}`;
+            
+            // Verificar que no exista globalmente
+            const allSuppliersGlobal = await DB.getAll('suppliers') || [];
+            const exists = allSuppliersGlobal.some(s => s.code === newCode);
+            
+            if (exists) {
+                // Si existe, buscar el siguiente disponible
+                let nextNumber = newNumber + 1;
+                while (allSuppliersGlobal.some(s => s.code === `${codePrefix}${String(nextNumber).padStart(4, '0')}`)) {
+                    nextNumber++;
+                }
+                codeInput.value = `${codePrefix}${String(nextNumber).padStart(4, '0')}`;
+            } else {
+                codeInput.value = newCode;
+            }
+
+            // Auto-generar código de barras si existe el campo (usar el mismo código)
+            const barcodeInput = document.getElementById('supplier-barcode');
+            if (barcodeInput && !barcodeInput.value.trim()) {
+                barcodeInput.value = codeInput.value;
+            }
+
+            Utils.showNotification(`Código generado: ${codeInput.value}`, 'success');
+        } catch (error) {
+            console.error('Error generando código de proveedor:', error);
+            // Fallback: generar código con timestamp
+            const timestamp = Date.now().toString(36).toUpperCase().substring(0, 6);
+            codeInput.value = `PROV-${timestamp}`;
+            Utils.showNotification('Código generado (formato alternativo)', 'info');
+        }
+    },
+
     async showSupplierForm(supplier = null) {
         const isEdit = !!supplier;
         const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
@@ -622,7 +740,12 @@ const Suppliers = {
                     <div class="form-row">
                         <div class="form-group">
                             <label>Código *</label>
-                            <input type="text" id="supplier-code" class="form-input" value="${supplier?.code || ''}" required>
+                            <div style="display: flex; gap: var(--spacing-xs);">
+                                <input type="text" id="supplier-code" class="form-input" value="${supplier?.code || ''}" required style="flex: 1;">
+                                <button type="button" class="btn-secondary" onclick="window.Suppliers.generateSupplierCode()" title="Generar código automático">
+                                    <i class="fas fa-magic"></i>
+                                </button>
+                            </div>
                         </div>
                         <div class="form-group">
                             <label>Nombre *</label>
@@ -631,15 +754,19 @@ const Suppliers = {
                     </div>
                     <div class="form-row">
                         <div class="form-group">
+                            <label>Código de Barras</label>
+                            <input type="text" id="supplier-barcode" class="form-input" value="${supplier?.barcode || supplier?.code || ''}" placeholder="Se genera automáticamente con el código">
+                        </div>
+                        <div class="form-group">
                             <label>Razón Social</label>
                             <input type="text" id="supplier-legal-name" class="form-input" value="${supplier?.legal_name || ''}">
                         </div>
+                    </div>
+                    <div class="form-row">
                         <div class="form-group">
                             <label>RFC / Tax ID</label>
                             <input type="text" id="supplier-tax-id" class="form-input" value="${supplier?.tax_id || ''}">
                         </div>
-                    </div>
-                    <div class="form-row">
                         <div class="form-group">
                             <label>Tipo</label>
                             <select id="supplier-type" class="form-select">
@@ -650,6 +777,8 @@ const Suppliers = {
                                 <option value="internacional" ${supplier?.supplier_type === 'internacional' ? 'selected' : ''}>Internacional</option>
                             </select>
                         </div>
+                    </div>
+                    <div class="form-row">
                         <div class="form-group">
                             <label>Categoría</label>
                             <input type="text" id="supplier-category" class="form-input" value="${supplier?.category || ''}" placeholder="Ej: Joyería fina, Bisutería">
@@ -679,9 +808,29 @@ const Suppliers = {
                             <input type="tel" id="supplier-mobile" class="form-input" value="${supplier?.mobile || ''}">
                         </div>
                     </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>WhatsApp</label>
+                            <input type="tel" id="supplier-whatsapp" class="form-input" value="${supplier?.whatsapp || ''}" placeholder="Ej: +52 123 456 7890">
+                        </div>
+                        <div class="form-group">
+                            <label>Sitio Web</label>
+                            <input type="url" id="supplier-website" class="form-input" value="${supplier?.website || ''}">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Facebook</label>
+                            <input type="url" id="supplier-facebook" class="form-input" value="${supplier?.facebook || ''}" placeholder="URL de Facebook">
+                        </div>
+                        <div class="form-group">
+                            <label>Instagram</label>
+                            <input type="text" id="supplier-instagram" class="form-input" value="${supplier?.instagram || ''}" placeholder="@usuario">
+                        </div>
+                    </div>
                     <div class="form-group">
-                        <label>Sitio Web</label>
-                        <input type="url" id="supplier-website" class="form-input" value="${supplier?.website || ''}">
+                        <label>Horarios de Atención</label>
+                        <input type="text" id="supplier-business-hours" class="form-input" value="${supplier?.business_hours || ''}" placeholder="Ej: Lunes a Viernes 9:00 - 18:00, Sábados 9:00 - 14:00">
                     </div>
                 </div>
 
@@ -732,19 +881,30 @@ const Suppliers = {
                     <div class="form-row">
                         <div class="form-group">
                             <label>Términos de Pago</label>
-                            <input type="text" id="supplier-payment-terms" class="form-input" value="${supplier?.payment_terms || ''}" placeholder="Ej: Contado, 30 días">
+                            <input type="text" id="supplier-payment-terms" class="form-input" value="${supplier?.payment_terms || ''}" placeholder="Ej: Contado, 30 días, 60 días">
                         </div>
                         <div class="form-group">
                             <label>Límite de Crédito</label>
-                            <input type="number" id="supplier-credit-limit" class="form-input" value="${supplier?.credit_limit || ''}" step="0.01">
+                            <input type="number" id="supplier-credit-limit" class="form-input" value="${supplier?.credit_limit || ''}" step="0.01" placeholder="0.00">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Métodos de Pago Aceptados</label>
+                            <input type="text" id="supplier-payment-methods" class="form-input" value="${supplier?.payment_methods || ''}" placeholder="Ej: Efectivo, Transferencia, Cheque, Tarjeta">
+                        </div>
+                        <div class="form-group">
+                            <label>Días de Entrega Promedio</label>
+                            <input type="number" id="supplier-delivery-days" class="form-input" value="${supplier?.delivery_days || ''}" min="0" placeholder="Ej: 7">
                         </div>
                     </div>
                     <div class="form-row">
                         <div class="form-group">
                             <label>Moneda</label>
                             <select id="supplier-currency" class="form-select">
-                                <option value="MXN" ${supplier?.currency === 'MXN' ? 'selected' : ''}>MXN</option>
-                                <option value="USD" ${supplier?.currency === 'USD' ? 'selected' : ''}>USD</option>
+                                <option value="MXN" ${supplier?.currency === 'MXN' ? 'selected' : ''}>MXN - Peso Mexicano</option>
+                                <option value="USD" ${supplier?.currency === 'USD' ? 'selected' : ''}>USD - Dólar Americano</option>
+                                <option value="EUR" ${supplier?.currency === 'EUR' ? 'selected' : ''}>EUR - Euro</option>
                             </select>
                         </div>
                         <div class="form-group">
@@ -756,6 +916,16 @@ const Suppliers = {
                             </select>
                         </div>
                     </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Calificación Inicial (1-5)</label>
+                            <input type="number" id="supplier-rating" class="form-input" value="${supplier?.rating || ''}" min="0" max="5" step="0.1" placeholder="0.0">
+                        </div>
+                        <div class="form-group">
+                            <label>Fecha de Inicio de Relación</label>
+                            <input type="date" id="supplier-relationship-start" class="form-input" value="${supplier?.relationship_start_date || ''}">
+                        </div>
+                    </div>
                     ${typeof UserManager !== 'undefined' && (UserManager.currentUser?.role === 'master_admin' || UserManager.currentUser?.is_master_admin) ? `
                         <div class="form-group">
                             <label>
@@ -764,6 +934,34 @@ const Suppliers = {
                             </label>
                         </div>
                     ` : ''}
+                </div>
+
+                <div class="form-section">
+                    <h3>Información Bancaria</h3>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Banco</label>
+                            <input type="text" id="supplier-bank-name" class="form-input" value="${supplier?.bank_name || ''}" placeholder="Nombre del banco">
+                        </div>
+                        <div class="form-group">
+                            <label>Número de Cuenta</label>
+                            <input type="text" id="supplier-bank-account" class="form-input" value="${supplier?.bank_account || ''}" placeholder="Número de cuenta">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>CLABE</label>
+                            <input type="text" id="supplier-clabe" class="form-input" value="${supplier?.clabe || ''}" placeholder="CLABE interbancaria">
+                        </div>
+                        <div class="form-group">
+                            <label>Titular de la Cuenta</label>
+                            <input type="text" id="supplier-account-holder" class="form-input" value="${supplier?.account_holder || ''}" placeholder="Nombre del titular">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Referencias Bancarias</label>
+                        <textarea id="supplier-bank-references" class="form-input" rows="2" placeholder="Información adicional sobre cuentas bancarias...">${supplier?.bank_references || ''}</textarea>
+                    </div>
                 </div>
 
                 <div class="form-section">
@@ -995,6 +1193,7 @@ const Suppliers = {
 
             const supplierData = {
                 code: document.getElementById('supplier-code').value.trim(),
+                barcode: document.getElementById('supplier-barcode').value.trim() || document.getElementById('supplier-code').value.trim(),
                 name: document.getElementById('supplier-name').value.trim(),
                 legal_name: document.getElementById('supplier-legal-name').value.trim() || null,
                 tax_id: document.getElementById('supplier-tax-id').value.trim() || null,
@@ -1004,15 +1203,28 @@ const Suppliers = {
                 email: document.getElementById('supplier-email').value.trim() || null,
                 phone: document.getElementById('supplier-phone').value.trim() || null,
                 mobile: document.getElementById('supplier-mobile').value.trim() || null,
+                whatsapp: document.getElementById('supplier-whatsapp').value.trim() || null,
                 website: document.getElementById('supplier-website').value.trim() || null,
+                facebook: document.getElementById('supplier-facebook').value.trim() || null,
+                instagram: document.getElementById('supplier-instagram').value.trim() || null,
+                business_hours: document.getElementById('supplier-business-hours').value.trim() || null,
                 address: document.getElementById('supplier-address').value.trim() || null,
                 city: document.getElementById('supplier-city').value.trim() || null,
                 state: document.getElementById('supplier-state').value.trim() || null,
                 country: document.getElementById('supplier-country').value.trim() || 'México',
                 postal_code: document.getElementById('supplier-postal-code').value.trim() || null,
                 payment_terms: document.getElementById('supplier-payment-terms').value.trim() || null,
+                payment_methods: document.getElementById('supplier-payment-methods').value.trim() || null,
+                delivery_days: parseInt(document.getElementById('supplier-delivery-days').value) || null,
                 credit_limit: parseFloat(document.getElementById('supplier-credit-limit').value) || null,
                 currency: document.getElementById('supplier-currency').value || 'MXN',
+                rating: parseFloat(document.getElementById('supplier-rating').value) || null,
+                relationship_start_date: document.getElementById('supplier-relationship-start').value || null,
+                bank_name: document.getElementById('supplier-bank-name').value.trim() || null,
+                bank_account: document.getElementById('supplier-bank-account').value.trim() || null,
+                clabe: document.getElementById('supplier-clabe').value.trim() || null,
+                account_holder: document.getElementById('supplier-account-holder').value.trim() || null,
+                bank_references: document.getElementById('supplier-bank-references').value.trim() || null,
                 status: document.getElementById('supplier-status').value || 'active',
                 notes: document.getElementById('supplier-notes').value.trim() || null,
                 branch_id: currentBranchId,
@@ -1128,10 +1340,14 @@ const Suppliers = {
                     <h3>Contacto</h3>
                     <div class="details-grid">
                         ${supplier.contact_person ? `<div><strong>Contacto:</strong> ${supplier.contact_person}</div>` : ''}
-                        ${supplier.email ? `<div><strong>Email:</strong> ${supplier.email}</div>` : ''}
-                        ${supplier.phone ? `<div><strong>Teléfono:</strong> ${supplier.phone}</div>` : ''}
-                        ${supplier.mobile ? `<div><strong>Móvil:</strong> ${supplier.mobile}</div>` : ''}
+                        ${supplier.email ? `<div><strong>Email:</strong> <a href="mailto:${supplier.email}">${supplier.email}</a></div>` : ''}
+                        ${supplier.phone ? `<div><strong>Teléfono:</strong> <a href="tel:${supplier.phone}">${supplier.phone}</a></div>` : ''}
+                        ${supplier.mobile ? `<div><strong>Móvil:</strong> <a href="tel:${supplier.mobile}">${supplier.mobile}</a></div>` : ''}
+                        ${supplier.whatsapp ? `<div><strong>WhatsApp:</strong> <a href="https://wa.me/${supplier.whatsapp.replace(/[^0-9]/g, '')}" target="_blank">${supplier.whatsapp}</a></div>` : ''}
                         ${supplier.website ? `<div><strong>Web:</strong> <a href="${supplier.website}" target="_blank">${supplier.website}</a></div>` : ''}
+                        ${supplier.facebook ? `<div><strong>Facebook:</strong> <a href="${supplier.facebook}" target="_blank">${supplier.facebook}</a></div>` : ''}
+                        ${supplier.instagram ? `<div><strong>Instagram:</strong> <a href="https://instagram.com/${supplier.instagram.replace('@', '')}" target="_blank">${supplier.instagram}</a></div>` : ''}
+                        ${supplier.business_hours ? `<div><strong>Horarios:</strong> ${supplier.business_hours}</div>` : ''}
                     </div>
                 </div>
 
@@ -1148,15 +1364,40 @@ const Suppliers = {
                 </div>
                 ` : ''}
 
-                <div class="details-section">
-                    <h3>Estadísticas</h3>
-                    <div class="details-grid">
-                        <div><strong>Items en Inventario:</strong> ${supplierItems.length}</div>
-                        <div><strong>Costos Registrados:</strong> ${supplierCosts.length}</div>
-                        <div><strong>Calificación:</strong> ${this.renderRating(supplier.rating || 0)}</div>
-                        ${supplier.total_purchases ? `<div><strong>Total Compras:</strong> ${Utils.formatCurrency(supplier.total_purchases)}</div>` : ''}
+                    <div class="details-section">
+                        <h3>Información Comercial</h3>
+                        <div class="details-grid">
+                            ${supplier.payment_terms ? `<div><strong>Términos de Pago:</strong> ${supplier.payment_terms}</div>` : ''}
+                            ${supplier.payment_methods ? `<div><strong>Métodos de Pago:</strong> ${supplier.payment_methods}</div>` : ''}
+                            ${supplier.delivery_days ? `<div><strong>Días de Entrega:</strong> ${supplier.delivery_days} días</div>` : ''}
+                            ${supplier.credit_limit ? `<div><strong>Límite de Crédito:</strong> ${Utils.formatCurrency(supplier.credit_limit)}</div>` : ''}
+                            <div><strong>Moneda:</strong> ${supplier.currency || 'MXN'}</div>
+                            ${supplier.rating ? `<div><strong>Calificación:</strong> ${this.renderRating(supplier.rating)}</div>` : ''}
+                            ${supplier.relationship_start_date ? `<div><strong>Fecha de Inicio:</strong> ${new Date(supplier.relationship_start_date).toLocaleDateString('es-MX')}</div>` : ''}
+                        </div>
                     </div>
-                </div>
+
+                    ${supplier.bank_name || supplier.bank_account ? `
+                    <div class="details-section">
+                        <h3>Información Bancaria</h3>
+                        <div class="details-grid">
+                            ${supplier.bank_name ? `<div><strong>Banco:</strong> ${supplier.bank_name}</div>` : ''}
+                            ${supplier.bank_account ? `<div><strong>Número de Cuenta:</strong> ${supplier.bank_account}</div>` : ''}
+                            ${supplier.clabe ? `<div><strong>CLABE:</strong> ${supplier.clabe}</div>` : ''}
+                            ${supplier.account_holder ? `<div><strong>Titular:</strong> ${supplier.account_holder}</div>` : ''}
+                            ${supplier.bank_references ? `<div><strong>Referencias:</strong> ${supplier.bank_references}</div>` : ''}
+                        </div>
+                    </div>
+                    ` : ''}
+
+                    <div class="details-section">
+                        <h3>Estadísticas</h3>
+                        <div class="details-grid">
+                            <div><strong>Items en Inventario:</strong> ${supplierItems.length}</div>
+                            <div><strong>Costos Registrados:</strong> ${supplierCosts.length}</div>
+                            ${supplier.total_purchases ? `<div><strong>Total Compras:</strong> ${Utils.formatCurrency(supplier.total_purchases)}</div>` : ''}
+                        </div>
+                    </div>
 
                 ${supplier.notes ? `
                 <div class="details-section">
