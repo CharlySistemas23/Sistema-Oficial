@@ -614,176 +614,176 @@ const Suppliers = {
         const isEdit = !!supplier;
         const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
         
-        UI.showModal({
-            title: isEdit ? 'Editar Proveedor' : 'Nuevo Proveedor',
-            content: `
-                <form id="supplier-form" class="supplier-form">
-                    <div class="form-section">
-                        <h3>Información Básica</h3>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>Código *</label>
-                                <input type="text" id="supplier-code" class="form-input" value="${supplier?.code || ''}" required>
-                            </div>
-                            <div class="form-group">
-                                <label>Nombre *</label>
-                                <input type="text" id="supplier-name" class="form-input" value="${supplier?.name || ''}" required>
-                            </div>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>Razón Social</label>
-                                <input type="text" id="supplier-legal-name" class="form-input" value="${supplier?.legal_name || ''}">
-                            </div>
-                            <div class="form-group">
-                                <label>RFC / Tax ID</label>
-                                <input type="text" id="supplier-tax-id" class="form-input" value="${supplier?.tax_id || ''}">
-                            </div>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>Tipo</label>
-                                <select id="supplier-type" class="form-select">
-                                    <option value="">Seleccionar...</option>
-                                    <option value="mayoreo" ${supplier?.supplier_type === 'mayoreo' ? 'selected' : ''}>Mayoreo</option>
-                                    <option value="menudeo" ${supplier?.supplier_type === 'menudeo' ? 'selected' : ''}>Menudeo</option>
-                                    <option value="especializado" ${supplier?.supplier_type === 'especializado' ? 'selected' : ''}>Especializado</option>
-                                    <option value="internacional" ${supplier?.supplier_type === 'internacional' ? 'selected' : ''}>Internacional</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label>Categoría</label>
-                                <input type="text" id="supplier-category" class="form-input" value="${supplier?.category || ''}" placeholder="Ej: Joyería fina, Bisutería">
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="form-section">
-                        <h3>Contacto Principal</h3>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>Persona de Contacto</label>
-                                <input type="text" id="supplier-contact-person" class="form-input" value="${supplier?.contact_person || ''}">
-                            </div>
-                            <div class="form-group">
-                                <label>Email</label>
-                                <input type="email" id="supplier-email" class="form-input" value="${supplier?.email || ''}">
-                            </div>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>Teléfono</label>
-                                <input type="tel" id="supplier-phone" class="form-input" value="${supplier?.phone || ''}">
-                            </div>
-                            <div class="form-group">
-                                <label>Móvil</label>
-                                <input type="tel" id="supplier-mobile" class="form-input" value="${supplier?.mobile || ''}">
-                            </div>
+        const modalTitle = isEdit ? 'Editar Proveedor' : 'Nuevo Proveedor';
+        const modalContent = `
+            <form id="supplier-form" class="supplier-form">
+                <div class="form-section">
+                    <h3>Información Básica</h3>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Código *</label>
+                            <input type="text" id="supplier-code" class="form-input" value="${supplier?.code || ''}" required>
                         </div>
                         <div class="form-group">
-                            <label>Sitio Web</label>
-                            <input type="url" id="supplier-website" class="form-input" value="${supplier?.website || ''}">
+                            <label>Nombre *</label>
+                            <input type="text" id="supplier-name" class="form-input" value="${supplier?.name || ''}" required>
                         </div>
                     </div>
-
-                    <div class="form-section">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-md);">
-                            <h3 style="margin: 0;">Contactos Adicionales</h3>
-                            ${isEdit ? `
-                                <button type="button" class="btn-secondary btn-sm" onclick="window.Suppliers.showContactForm('${supplier.id}')">
-                                    <i class="fas fa-plus"></i> Agregar Contacto
-                                </button>
-                            ` : '<small style="color: var(--color-text-secondary);">Guarda el proveedor primero para agregar contactos</small>'}
-                        </div>
-                        <div id="supplier-contacts-list" class="contacts-list">
-                            ${isEdit ? '<div class="loading-text">Cargando contactos...</div>' : ''}
-                        </div>
-                    </div>
-
-                    <div class="form-section">
-                        <h3>Dirección</h3>
+                    <div class="form-row">
                         <div class="form-group">
-                            <label>Dirección</label>
-                            <textarea id="supplier-address" class="form-input" rows="2">${supplier?.address || ''}</textarea>
+                            <label>Razón Social</label>
+                            <input type="text" id="supplier-legal-name" class="form-input" value="${supplier?.legal_name || ''}">
                         </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>Ciudad</label>
-                                <input type="text" id="supplier-city" class="form-input" value="${supplier?.city || ''}">
-                            </div>
-                            <div class="form-group">
-                                <label>Estado</label>
-                                <input type="text" id="supplier-state" class="form-input" value="${supplier?.state || ''}">
-                            </div>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>País</label>
-                                <input type="text" id="supplier-country" class="form-input" value="${supplier?.country || 'México'}">
-                            </div>
-                            <div class="form-group">
-                                <label>Código Postal</label>
-                                <input type="text" id="supplier-postal-code" class="form-input" value="${supplier?.postal_code || ''}">
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="form-section">
-                        <h3>Información Comercial</h3>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>Términos de Pago</label>
-                                <input type="text" id="supplier-payment-terms" class="form-input" value="${supplier?.payment_terms || ''}" placeholder="Ej: Contado, 30 días">
-                            </div>
-                            <div class="form-group">
-                                <label>Límite de Crédito</label>
-                                <input type="number" id="supplier-credit-limit" class="form-input" value="${supplier?.credit_limit || ''}" step="0.01">
-                            </div>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>Moneda</label>
-                                <select id="supplier-currency" class="form-select">
-                                    <option value="MXN" ${supplier?.currency === 'MXN' ? 'selected' : ''}>MXN</option>
-                                    <option value="USD" ${supplier?.currency === 'USD' ? 'selected' : ''}>USD</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label>Estado</label>
-                                <select id="supplier-status" class="form-select">
-                                    <option value="active" ${supplier?.status === 'active' ? 'selected' : ''}>Activo</option>
-                                    <option value="inactive" ${supplier?.status === 'inactive' ? 'selected' : ''}>Inactivo</option>
-                                    <option value="suspended" ${supplier?.status === 'suspended' ? 'selected' : ''}>Suspendido</option>
-                                </select>
-                            </div>
-                        </div>
-                        ${typeof UserManager !== 'undefined' && (UserManager.currentUser?.role === 'master_admin' || UserManager.currentUser?.is_master_admin) ? `
-                            <div class="form-group">
-                                <label>
-                                    <input type="checkbox" id="supplier-is-shared" ${supplier?.is_shared !== false ? 'checked' : ''}>
-                                    Compartido entre sucursales
-                                </label>
-                            </div>
-                        ` : ''}
-                    </div>
-
-                    <div class="form-section">
-                        <h3>Notas</h3>
                         <div class="form-group">
-                            <textarea id="supplier-notes" class="form-input" rows="3" placeholder="Notas adicionales...">${supplier?.notes || ''}</textarea>
+                            <label>RFC / Tax ID</label>
+                            <input type="text" id="supplier-tax-id" class="form-input" value="${supplier?.tax_id || ''}">
                         </div>
                     </div>
-                </form>
-            `,
-            buttons: [
-                { text: 'Cancelar', class: 'btn-secondary', onclick: () => UI.closeModal() },
-                { 
-                    text: isEdit ? 'Actualizar' : 'Crear', 
-                    class: 'btn-primary', 
-                    onclick: () => this.saveSupplier(supplier?.id) 
-                }
-            ]
-        });
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Tipo</label>
+                            <select id="supplier-type" class="form-select">
+                                <option value="">Seleccionar...</option>
+                                <option value="mayoreo" ${supplier?.supplier_type === 'mayoreo' ? 'selected' : ''}>Mayoreo</option>
+                                <option value="menudeo" ${supplier?.supplier_type === 'menudeo' ? 'selected' : ''}>Menudeo</option>
+                                <option value="especializado" ${supplier?.supplier_type === 'especializado' ? 'selected' : ''}>Especializado</option>
+                                <option value="internacional" ${supplier?.supplier_type === 'internacional' ? 'selected' : ''}>Internacional</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Categoría</label>
+                            <input type="text" id="supplier-category" class="form-input" value="${supplier?.category || ''}" placeholder="Ej: Joyería fina, Bisutería">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h3>Contacto Principal</h3>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Persona de Contacto</label>
+                            <input type="text" id="supplier-contact-person" class="form-input" value="${supplier?.contact_person || ''}">
+                        </div>
+                        <div class="form-group">
+                            <label>Email</label>
+                            <input type="email" id="supplier-email" class="form-input" value="${supplier?.email || ''}">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Teléfono</label>
+                            <input type="tel" id="supplier-phone" class="form-input" value="${supplier?.phone || ''}">
+                        </div>
+                        <div class="form-group">
+                            <label>Móvil</label>
+                            <input type="tel" id="supplier-mobile" class="form-input" value="${supplier?.mobile || ''}">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Sitio Web</label>
+                        <input type="url" id="supplier-website" class="form-input" value="${supplier?.website || ''}">
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-md);">
+                        <h3 style="margin: 0;">Contactos Adicionales</h3>
+                        ${isEdit ? `
+                            <button type="button" class="btn-secondary btn-sm" onclick="window.Suppliers.showContactForm('${supplier.id}')">
+                                <i class="fas fa-plus"></i> Agregar Contacto
+                            </button>
+                        ` : '<small style="color: var(--color-text-secondary);">Guarda el proveedor primero para agregar contactos</small>'}
+                    </div>
+                    <div id="supplier-contacts-list" class="contacts-list">
+                        ${isEdit ? '<div class="loading-text">Cargando contactos...</div>' : ''}
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h3>Dirección</h3>
+                    <div class="form-group">
+                        <label>Dirección</label>
+                        <textarea id="supplier-address" class="form-input" rows="2">${supplier?.address || ''}</textarea>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Ciudad</label>
+                            <input type="text" id="supplier-city" class="form-input" value="${supplier?.city || ''}">
+                        </div>
+                        <div class="form-group">
+                            <label>Estado</label>
+                            <input type="text" id="supplier-state" class="form-input" value="${supplier?.state || ''}">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>País</label>
+                            <input type="text" id="supplier-country" class="form-input" value="${supplier?.country || 'México'}">
+                        </div>
+                        <div class="form-group">
+                            <label>Código Postal</label>
+                            <input type="text" id="supplier-postal-code" class="form-input" value="${supplier?.postal_code || ''}">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h3>Información Comercial</h3>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Términos de Pago</label>
+                            <input type="text" id="supplier-payment-terms" class="form-input" value="${supplier?.payment_terms || ''}" placeholder="Ej: Contado, 30 días">
+                        </div>
+                        <div class="form-group">
+                            <label>Límite de Crédito</label>
+                            <input type="number" id="supplier-credit-limit" class="form-input" value="${supplier?.credit_limit || ''}" step="0.01">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Moneda</label>
+                            <select id="supplier-currency" class="form-select">
+                                <option value="MXN" ${supplier?.currency === 'MXN' ? 'selected' : ''}>MXN</option>
+                                <option value="USD" ${supplier?.currency === 'USD' ? 'selected' : ''}>USD</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Estado</label>
+                            <select id="supplier-status" class="form-select">
+                                <option value="active" ${supplier?.status === 'active' ? 'selected' : ''}>Activo</option>
+                                <option value="inactive" ${supplier?.status === 'inactive' ? 'selected' : ''}>Inactivo</option>
+                                <option value="suspended" ${supplier?.status === 'suspended' ? 'selected' : ''}>Suspendido</option>
+                            </select>
+                        </div>
+                    </div>
+                    ${typeof UserManager !== 'undefined' && (UserManager.currentUser?.role === 'master_admin' || UserManager.currentUser?.is_master_admin) ? `
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="supplier-is-shared" ${supplier?.is_shared !== false ? 'checked' : ''}>
+                                Compartido entre sucursales
+                            </label>
+                        </div>
+                    ` : ''}
+                </div>
+
+                <div class="form-section">
+                    <h3>Notas</h3>
+                    <div class="form-group">
+                        <textarea id="supplier-notes" class="form-input" rows="3" placeholder="Notas adicionales...">${supplier?.notes || ''}</textarea>
+                    </div>
+                </div>
+            </form>
+        `;
+        const modalButtons = [
+            { text: 'Cancelar', class: 'btn-secondary', onclick: () => UI.closeModal() },
+            { 
+                text: isEdit ? 'Actualizar' : 'Crear', 
+                class: 'btn-primary', 
+                onclick: () => this.saveSupplier(supplier?.id) 
+            }
+        ];
+        
+        UI.showModal(modalTitle, modalContent, modalButtons);
 
         // Cargar contactos si es edición
         if (isEdit && supplier?.id) {
@@ -850,73 +850,73 @@ const Suppliers = {
             }
         }
 
-        UI.showModal({
-            title: isEdit ? 'Editar Contacto' : 'Nuevo Contacto',
-            content: `
-                <form id="contact-form" class="contact-form">
+        const contactModalTitle = isEdit ? 'Editar Contacto' : 'Nuevo Contacto';
+        const contactModalContent = `
+            <form id="contact-form" class="contact-form">
+                <div class="form-group">
+                    <label>Nombre *</label>
+                    <input type="text" id="contact-name" class="form-input" value="${contact?.name || ''}" required>
+                </div>
+                <div class="form-row">
                     <div class="form-group">
-                        <label>Nombre *</label>
-                        <input type="text" id="contact-name" class="form-input" value="${contact?.name || ''}" required>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>Posición</label>
-                            <input type="text" id="contact-position" class="form-input" value="${contact?.position || ''}" placeholder="Ej: Gerente de Ventas">
-                        </div>
-                        <div class="form-group">
-                            <label>Departamento</label>
-                            <input type="text" id="contact-department" class="form-input" value="${contact?.department || ''}" placeholder="Ej: Ventas">
-                        </div>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>Email</label>
-                            <input type="email" id="contact-email" class="form-input" value="${contact?.email || ''}">
-                        </div>
-                        <div class="form-group">
-                            <label>Teléfono</label>
-                            <input type="tel" id="contact-phone" class="form-input" value="${contact?.phone || ''}">
-                        </div>
+                        <label>Posición</label>
+                        <input type="text" id="contact-position" class="form-input" value="${contact?.position || ''}" placeholder="Ej: Gerente de Ventas">
                     </div>
                     <div class="form-group">
-                        <label>Móvil</label>
-                        <input type="tel" id="contact-mobile" class="form-input" value="${contact?.mobile || ''}">
+                        <label>Departamento</label>
+                        <input type="text" id="contact-department" class="form-input" value="${contact?.department || ''}" placeholder="Ej: Ventas">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" id="contact-email" class="form-input" value="${contact?.email || ''}">
                     </div>
                     <div class="form-group">
-                        <label>Horarios de Contacto</label>
-                        <input type="text" id="contact-hours" class="form-input" value="${contact?.contact_hours || ''}" placeholder="Ej: Lunes a Viernes 9:00 - 18:00">
+                        <label>Teléfono</label>
+                        <input type="tel" id="contact-phone" class="form-input" value="${contact?.phone || ''}">
                     </div>
-                    <div class="form-group">
-                        <label>Preferencia de Comunicación</label>
-                        <select id="contact-preference" class="form-select">
-                            <option value="">Seleccionar...</option>
-                            <option value="email" ${contact?.communication_preference === 'email' ? 'selected' : ''}>Email</option>
-                            <option value="phone" ${contact?.communication_preference === 'phone' ? 'selected' : ''}>Teléfono</option>
-                            <option value="mobile" ${contact?.communication_preference === 'mobile' ? 'selected' : ''}>Móvil</option>
-                            <option value="whatsapp" ${contact?.communication_preference === 'whatsapp' ? 'selected' : ''}>WhatsApp</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Notas</label>
-                        <textarea id="contact-notes" class="form-input" rows="2">${contact?.notes || ''}</textarea>
-                    </div>
-                    <div class="form-group">
-                        <label>
-                            <input type="checkbox" id="contact-is-primary" ${contact?.is_primary ? 'checked' : ''}>
-                            Marcar como contacto principal
-                        </label>
-                    </div>
-                </form>
-            `,
-            buttons: [
-                { text: 'Cancelar', class: 'btn-secondary', onclick: () => UI.closeModal() },
-                { 
-                    text: isEdit ? 'Actualizar' : 'Crear', 
-                    class: 'btn-primary', 
-                    onclick: () => this.saveContact(supplierId, contactId) 
-                }
-            ]
-        });
+                </div>
+                <div class="form-group">
+                    <label>Móvil</label>
+                    <input type="tel" id="contact-mobile" class="form-input" value="${contact?.mobile || ''}">
+                </div>
+                <div class="form-group">
+                    <label>Horarios de Contacto</label>
+                    <input type="text" id="contact-hours" class="form-input" value="${contact?.contact_hours || ''}" placeholder="Ej: Lunes a Viernes 9:00 - 18:00">
+                </div>
+                <div class="form-group">
+                    <label>Preferencia de Comunicación</label>
+                    <select id="contact-preference" class="form-select">
+                        <option value="">Seleccionar...</option>
+                        <option value="email" ${contact?.communication_preference === 'email' ? 'selected' : ''}>Email</option>
+                        <option value="phone" ${contact?.communication_preference === 'phone' ? 'selected' : ''}>Teléfono</option>
+                        <option value="mobile" ${contact?.communication_preference === 'mobile' ? 'selected' : ''}>Móvil</option>
+                        <option value="whatsapp" ${contact?.communication_preference === 'whatsapp' ? 'selected' : ''}>WhatsApp</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Notas</label>
+                    <textarea id="contact-notes" class="form-input" rows="2">${contact?.notes || ''}</textarea>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="contact-is-primary" ${contact?.is_primary ? 'checked' : ''}>
+                        Marcar como contacto principal
+                    </label>
+                </div>
+            </form>
+        `;
+        const contactModalButtons = [
+            { text: 'Cancelar', class: 'btn-secondary', onclick: () => UI.closeModal() },
+            { 
+                text: isEdit ? 'Actualizar' : 'Crear', 
+                class: 'btn-primary', 
+                onclick: () => this.saveContact(supplierId, contactId) 
+            }
+        ];
+        
+        UI.showModal(contactModalTitle, contactModalContent, contactModalButtons);
     },
 
     async saveContact(supplierId, contactId) {
@@ -1108,77 +1108,77 @@ const Suppliers = {
         const costs = await DB.getAll('cost_entries') || [];
         const supplierCosts = costs.filter(c => c.supplier_id === supplierId);
 
-        UI.showModal({
-            title: `Detalles: ${supplier.name}`,
-            content: `
-                <div class="supplier-details">
-                    <div class="details-section">
-                        <h3>Información Básica</h3>
-                        <div class="details-grid">
-                            <div><strong>Código:</strong> ${supplier.code || '-'}</div>
-                            <div><strong>Nombre:</strong> ${supplier.name || '-'}</div>
-                            ${supplier.legal_name ? `<div><strong>Razón Social:</strong> ${supplier.legal_name}</div>` : ''}
-                            ${supplier.tax_id ? `<div><strong>RFC:</strong> ${supplier.tax_id}</div>` : ''}
-                            <div><strong>Tipo:</strong> ${supplier.supplier_type || '-'}</div>
-                            <div><strong>Categoría:</strong> ${supplier.category || '-'}</div>
-                            <div><strong>Estado:</strong> <span class="status-badge ${supplier.status === 'active' ? 'status-active' : 'status-inactive'}">${this.getStatusLabel(supplier.status)}</span></div>
-                        </div>
+        const detailsModalTitle = `Detalles: ${supplier.name}`;
+        const detailsModalContent = `
+            <div class="supplier-details">
+                <div class="details-section">
+                    <h3>Información Básica</h3>
+                    <div class="details-grid">
+                        <div><strong>Código:</strong> ${supplier.code || '-'}</div>
+                        <div><strong>Nombre:</strong> ${supplier.name || '-'}</div>
+                        ${supplier.legal_name ? `<div><strong>Razón Social:</strong> ${supplier.legal_name}</div>` : ''}
+                        ${supplier.tax_id ? `<div><strong>RFC:</strong> ${supplier.tax_id}</div>` : ''}
+                        <div><strong>Tipo:</strong> ${supplier.supplier_type || '-'}</div>
+                        <div><strong>Categoría:</strong> ${supplier.category || '-'}</div>
+                        <div><strong>Estado:</strong> <span class="status-badge ${supplier.status === 'active' ? 'status-active' : 'status-inactive'}">${this.getStatusLabel(supplier.status)}</span></div>
                     </div>
-
-                    <div class="details-section">
-                        <h3>Contacto</h3>
-                        <div class="details-grid">
-                            ${supplier.contact_person ? `<div><strong>Contacto:</strong> ${supplier.contact_person}</div>` : ''}
-                            ${supplier.email ? `<div><strong>Email:</strong> ${supplier.email}</div>` : ''}
-                            ${supplier.phone ? `<div><strong>Teléfono:</strong> ${supplier.phone}</div>` : ''}
-                            ${supplier.mobile ? `<div><strong>Móvil:</strong> ${supplier.mobile}</div>` : ''}
-                            ${supplier.website ? `<div><strong>Web:</strong> <a href="${supplier.website}" target="_blank">${supplier.website}</a></div>` : ''}
-                        </div>
-                    </div>
-
-                    ${supplier.address ? `
-                    <div class="details-section">
-                        <h3>Dirección</h3>
-                        <div class="details-grid">
-                            <div><strong>Dirección:</strong> ${supplier.address}</div>
-                            ${supplier.city ? `<div><strong>Ciudad:</strong> ${supplier.city}</div>` : ''}
-                            ${supplier.state ? `<div><strong>Estado:</strong> ${supplier.state}</div>` : ''}
-                            ${supplier.country ? `<div><strong>País:</strong> ${supplier.country}</div>` : ''}
-                            ${supplier.postal_code ? `<div><strong>Código Postal:</strong> ${supplier.postal_code}</div>` : ''}
-                        </div>
-                    </div>
-                    ` : ''}
-
-                    <div class="details-section">
-                        <h3>Estadísticas</h3>
-                        <div class="details-grid">
-                            <div><strong>Items en Inventario:</strong> ${supplierItems.length}</div>
-                            <div><strong>Costos Registrados:</strong> ${supplierCosts.length}</div>
-                            <div><strong>Calificación:</strong> ${this.renderRating(supplier.rating || 0)}</div>
-                            ${supplier.total_purchases ? `<div><strong>Total Compras:</strong> ${Utils.formatCurrency(supplier.total_purchases)}</div>` : ''}
-                        </div>
-                    </div>
-
-                    ${supplier.notes ? `
-                    <div class="details-section">
-                        <h3>Notas</h3>
-                        <p>${supplier.notes}</p>
-                    </div>
-                    ` : ''}
                 </div>
-            `,
-            buttons: [
-                { text: 'Cerrar', class: 'btn-secondary', onclick: () => UI.closeModal() },
-                { 
-                    text: 'Editar', 
-                    class: 'btn-primary', 
-                    onclick: () => {
-                        UI.closeModal();
-                        this.showEditForm(supplierId);
-                    }
+
+                <div class="details-section">
+                    <h3>Contacto</h3>
+                    <div class="details-grid">
+                        ${supplier.contact_person ? `<div><strong>Contacto:</strong> ${supplier.contact_person}</div>` : ''}
+                        ${supplier.email ? `<div><strong>Email:</strong> ${supplier.email}</div>` : ''}
+                        ${supplier.phone ? `<div><strong>Teléfono:</strong> ${supplier.phone}</div>` : ''}
+                        ${supplier.mobile ? `<div><strong>Móvil:</strong> ${supplier.mobile}</div>` : ''}
+                        ${supplier.website ? `<div><strong>Web:</strong> <a href="${supplier.website}" target="_blank">${supplier.website}</a></div>` : ''}
+                    </div>
+                </div>
+
+                ${supplier.address ? `
+                <div class="details-section">
+                    <h3>Dirección</h3>
+                    <div class="details-grid">
+                        <div><strong>Dirección:</strong> ${supplier.address}</div>
+                        ${supplier.city ? `<div><strong>Ciudad:</strong> ${supplier.city}</div>` : ''}
+                        ${supplier.state ? `<div><strong>Estado:</strong> ${supplier.state}</div>` : ''}
+                        ${supplier.country ? `<div><strong>País:</strong> ${supplier.country}</div>` : ''}
+                        ${supplier.postal_code ? `<div><strong>Código Postal:</strong> ${supplier.postal_code}</div>` : ''}
+                    </div>
+                </div>
+                ` : ''}
+
+                <div class="details-section">
+                    <h3>Estadísticas</h3>
+                    <div class="details-grid">
+                        <div><strong>Items en Inventario:</strong> ${supplierItems.length}</div>
+                        <div><strong>Costos Registrados:</strong> ${supplierCosts.length}</div>
+                        <div><strong>Calificación:</strong> ${this.renderRating(supplier.rating || 0)}</div>
+                        ${supplier.total_purchases ? `<div><strong>Total Compras:</strong> ${Utils.formatCurrency(supplier.total_purchases)}</div>` : ''}
+                    </div>
+                </div>
+
+                ${supplier.notes ? `
+                <div class="details-section">
+                    <h3>Notas</h3>
+                    <p>${supplier.notes}</p>
+                </div>
+                ` : ''}
+            </div>
+        `;
+        const detailsModalButtons = [
+            { text: 'Cerrar', class: 'btn-secondary', onclick: () => UI.closeModal() },
+            { 
+                text: 'Editar', 
+                class: 'btn-primary', 
+                onclick: () => {
+                    UI.closeModal();
+                    this.showEditForm(supplierId);
                 }
-            ]
-        });
+            }
+        ];
+        
+        UI.showModal(detailsModalTitle, detailsModalContent, detailsModalButtons);
     },
 
     async exportSuppliers() {
