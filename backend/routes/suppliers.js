@@ -11,9 +11,123 @@ export const setIO = (socketIO) => {
 
 const router = express.Router();
 
+// Función helper para verificar/crear tabla suppliers si no existe
+async function ensureSuppliersTable() {
+  try {
+    // Verificar si la tabla existe
+    const tableCheck = await query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'suppliers'
+      );
+    `);
+    
+    if (!tableCheck.rows[0].exists) {
+      console.log('⚠️  Tabla suppliers no existe. Creándola desde schema.sql...');
+      const { readFileSync } = await import('fs');
+      const { join, dirname } = await import('path');
+      const { fileURLToPath } = await import('url');
+      const __filename = fileURLToPath(import.meta.url);
+      const __dirname = dirname(__filename);
+      const schemaPath = join(__dirname, '..', 'database', 'schema.sql');
+      
+      try {
+        const schemaSQL = readFileSync(schemaPath, 'utf8');
+        
+        // Dividir el schema en statements individuales para ejecutarlos uno por uno
+        // Esto evita errores si algunos objetos ya existen
+        const statements = schemaSQL
+          .split(';')
+          .map(s => s.trim())
+          .filter(s => s.length > 0 && !s.startsWith('--'));
+        
+        let executed = 0;
+        let errors = 0;
+        
+        for (const statement of statements) {
+          try {
+            // Solo ejecutar statements relacionados con suppliers o que sean seguros (IF NOT EXISTS)
+            if (statement.includes('suppliers') || 
+                statement.includes('IF NOT EXISTS') || 
+                statement.includes('CREATE INDEX IF NOT EXISTS') ||
+                statement.includes('CREATE OR REPLACE')) {
+              await query(statement + ';');
+              executed++;
+            }
+          } catch (stmtError) {
+            // Ignorar errores de "already exists" pero loguear otros
+            if (!stmtError.message.includes('already exists') && 
+                !stmtError.message.includes('duplicate') &&
+                !stmtError.message.includes('relation') && 
+                !stmtError.message.includes('already exists')) {
+              console.warn(`⚠️  Error en statement (continuando): ${stmtError.message.substring(0, 100)}`);
+              errors++;
+            }
+          }
+        }
+        
+        // Verificar nuevamente si la tabla se creó
+        const verifyCheck = await query(`
+          SELECT EXISTS (
+            SELECT FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            AND table_name = 'suppliers'
+          );
+        `);
+        
+        if (verifyCheck.rows[0].exists) {
+          console.log(`✅ Tabla suppliers creada exitosamente (${executed} statements ejecutados)`);
+        } else {
+          // Si aún no existe, intentar ejecutar el schema completo
+          console.log('⚠️  Tabla suppliers aún no existe después de ejecución selectiva. Ejecutando schema completo...');
+          await query(schemaSQL);
+          console.log('✅ Schema completo ejecutado');
+        }
+      } catch (error) {
+        console.error('❌ Error creando tabla suppliers:', error.message);
+        console.error('   Stack:', error.stack);
+        // No lanzar error, solo loguear - el servidor puede continuar
+      }
+    } else {
+      // Tabla existe, verificar que tenga las columnas necesarias
+      try {
+        const columnsCheck = await query(`
+          SELECT column_name 
+          FROM information_schema.columns 
+          WHERE table_schema = 'public' 
+          AND table_name = 'suppliers'
+          AND column_name IN ('code', 'name', 'barcode');
+        `);
+        
+        if (columnsCheck.rows.length < 3) {
+          console.warn('⚠️  Tabla suppliers existe pero le faltan columnas. Ejecutando schema.sql...');
+          const { readFileSync } = await import('fs');
+          const { join, dirname } = await import('path');
+          const { fileURLToPath } = await import('url');
+          const __filename = fileURLToPath(import.meta.url);
+          const __dirname = dirname(__filename);
+          const schemaPath = join(__dirname, '..', 'database', 'schema.sql');
+          const schemaSQL = readFileSync(schemaPath, 'utf8');
+          await query(schemaSQL);
+          console.log('✅ Schema ejecutado para actualizar columnas');
+        }
+      } catch (colError) {
+        console.warn('⚠️  Error verificando columnas (no crítico):', colError.message);
+      }
+    }
+  } catch (error) {
+    console.error('⚠️  Error verificando tabla suppliers:', error.message);
+    // No lanzar error, solo loguear
+  }
+}
+
 // Listar proveedores
 router.get('/', requireBranchAccess, async (req, res) => {
   try {
+    // Asegurar que la tabla existe antes de usarla
+    await ensureSuppliersTable();
+    
     const { branch_id, status, search, supplier_type, category } = req.query;
     
     // Manejar branch_id cuando viene como string "null" desde el frontend
@@ -87,6 +201,9 @@ router.get('/', requireBranchAccess, async (req, res) => {
 // Obtener proveedor por ID
 router.get('/:id', requireBranchAccess, async (req, res) => {
   try {
+    // Asegurar que la tabla existe antes de usarla
+    await ensureSuppliersTable();
+    
     const { id } = req.params;
 
     // Obtener proveedor
@@ -129,6 +246,9 @@ router.get('/:id', requireBranchAccess, async (req, res) => {
 // Crear proveedor
 router.post('/', requireBranchAccess, async (req, res) => {
   try {
+    // Asegurar que la tabla existe antes de usarla
+    await ensureSuppliersTable();
+    
     const {
       code, name, legal_name, tax_id, barcode,
       contact_person, email, phone, mobile, website,
