@@ -452,7 +452,9 @@ const Suppliers = {
 
     renderSupplierRow(supplier) {
         const statusClass = supplier.status === 'active' ? 'status-active' : supplier.status === 'inactive' ? 'status-inactive' : 'status-suspended';
-        const ratingStars = this.renderRating(supplier.rating || 0);
+        // Asegurar que rating sea un número válido
+        const ratingValue = supplier.rating != null ? parseFloat(supplier.rating) : 0;
+        const ratingStars = this.renderRating(isNaN(ratingValue) ? 0 : ratingValue);
         
         return `
             <tr data-supplier-id="${supplier.id}">
@@ -541,8 +543,12 @@ const Suppliers = {
     },
 
     renderRating(rating) {
-        const fullStars = Math.floor(rating);
-        const hasHalfStar = rating % 1 >= 0.5;
+        // Convertir rating a número, manejar null/undefined/string
+        const ratingNum = rating != null ? parseFloat(rating) : 0;
+        const validRating = isNaN(ratingNum) ? 0 : Math.max(0, Math.min(5, ratingNum)); // Asegurar que esté entre 0 y 5
+        
+        const fullStars = Math.floor(validRating);
+        const hasHalfStar = validRating % 1 >= 0.5;
         const emptyStars = 5 - fullStars - (hasHalfStar ? 1 : 0);
         
         let html = '';
@@ -555,7 +561,7 @@ const Suppliers = {
         for (let i = 0; i < emptyStars; i++) {
             html += '<i class="far fa-star"></i>';
         }
-        return `<span class="rating-stars">${html}</span> <span class="rating-value">${rating.toFixed(1)}</span>`;
+        return `<span class="rating-stars">${html}</span> <span class="rating-value">${validRating.toFixed(1)}</span>`;
     },
 
     getStatusLabel(status) {
@@ -985,6 +991,14 @@ const Suppliers = {
         
         UI.showModal(modalTitle, modalContent, modalButtons);
 
+        // Generar código automáticamente si es un nuevo proveedor y no tiene código
+        if (!isEdit) {
+            const codeInput = document.getElementById('supplier-code');
+            if (codeInput && !codeInput.value) {
+                await this.generateSupplierCode();
+            }
+        }
+
         // Cargar contactos si es edición
         if (isEdit && supplier?.id) {
             await this.loadContactsList(supplier.id);
@@ -1220,7 +1234,7 @@ const Suppliers = {
                 delivery_days: parseInt(document.getElementById('supplier-delivery-days').value) || null,
                 credit_limit: parseFloat(document.getElementById('supplier-credit-limit').value) || null,
                 currency: document.getElementById('supplier-currency').value || 'MXN',
-                rating: parseFloat(document.getElementById('supplier-rating').value) || null,
+                rating: document.getElementById('supplier-rating')?.value ? parseFloat(document.getElementById('supplier-rating').value) : 0,
                 relationship_start_date: document.getElementById('supplier-relationship-start').value || null,
                 bank_name: document.getElementById('supplier-bank-name').value.trim() || null,
                 bank_account: document.getElementById('supplier-bank-account').value.trim() || null,
