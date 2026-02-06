@@ -166,8 +166,15 @@ const App = {
             }
 
             // Initialize Barcode Manager
-            BarcodeManager.init();
-            console.log('Barcode manager initialized');
+            if (typeof BarcodeManager !== 'undefined') {
+                BarcodeManager.init();
+                console.log('Barcode manager initialized');
+            } else if (typeof window.BarcodeManager !== 'undefined') {
+                window.BarcodeManager.init();
+                console.log('Barcode manager initialized');
+            } else {
+                console.warn('⚠️ BarcodeManager no está disponible. El módulo de códigos de barras puede no funcionar correctamente.');
+            }
 
             // Initialize Sync Manager (Server sync)
             if (typeof window.SyncManager !== 'undefined') {
