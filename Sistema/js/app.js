@@ -817,10 +817,21 @@ const App = {
                             }
                         }
                     } else {
-                        console.error('Suppliers module not found after retries');
-                        const content = document.getElementById('module-content');
-                        if (content) {
-                            content.innerHTML = '<div style="padding: var(--spacing-lg); text-align: center; color: var(--color-danger);">Error: Módulo de Proveedores no disponible</div>';
+                        console.warn('⚠️ Suppliers module not found after retries, intentando cargar manualmente...');
+                        // Intentar cargar el módulo manualmente si no está disponible
+                        if (typeof window.Suppliers === 'undefined') {
+                            // Esperar un poco más y verificar de nuevo
+                            await Utils.delay(200);
+                            if (typeof window.Suppliers !== 'undefined') {
+                                console.log('✅ Suppliers module encontrado después de delay adicional');
+                                await window.Suppliers.init();
+                            } else {
+                                console.error('❌ Suppliers module not found after retries');
+                                const content = document.getElementById('module-content');
+                                if (content) {
+                                    content.innerHTML = '<div style="padding: var(--spacing-lg); text-align: center; color: var(--color-danger);">Error: Módulo de Proveedores no disponible. Por favor, recarga la página.</div>';
+                                }
+                            }
                         }
                     }
                     break;
