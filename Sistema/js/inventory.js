@@ -45,9 +45,29 @@ const Inventory = {
             }
 
             await this.setupEventListeners();
-            // Inicializar botones de vista
-            this.updateViewButtons();
             await this.loadInventory();
+            
+            // Inicializar botones de vista después de cargar el inventario
+            setTimeout(() => {
+                const gridBtn = document.getElementById('inventory-view-grid-btn');
+                const listBtn = document.getElementById('inventory-view-list-btn');
+                console.log('🔍 Verificando botones de vista después de loadInventory:', { 
+                    gridBtn: !!gridBtn, 
+                    listBtn: !!listBtn, 
+                    currentView: this.currentView,
+                    gridBtnVisible: gridBtn ? window.getComputedStyle(gridBtn).display !== 'none' : false,
+                    listBtnVisible: listBtn ? window.getComputedStyle(listBtn).display !== 'none' : false
+                });
+                if (gridBtn && listBtn) {
+                    this.updateViewButtons();
+                    console.log('✅ Botones de vista inicializados correctamente');
+                } else {
+                    console.warn('⚠️ Botones de vista no encontrados, reintentando...');
+                    setTimeout(() => {
+                        this.updateViewButtons();
+                    }, 500);
+                }
+            }, 300);
             this.initialized = true;
             
             // Escuchar cambios de sucursal para recargar inventario
@@ -154,7 +174,7 @@ const Inventory = {
                     </div>
                     
                     <!-- Filtros -->
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--spacing-sm); margin-bottom: var(--spacing-md);">
+                    <div id="inventory-filters-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--spacing-sm); margin-bottom: var(--spacing-md);">
                         <div class="form-group" style="margin-bottom: 0;">
                             <input type="text" id="inventory-search" class="form-input" placeholder="Buscar...">
                         </div>
@@ -204,12 +224,13 @@ const Inventory = {
                             <input type="number" id="inventory-max-price" class="form-input" placeholder="Costo Máx" step="0.01">
                         </div>
                         <div class="form-group" style="margin-bottom: 0;">
-                            <div style="display: flex; gap: 2px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); overflow: hidden; background: var(--color-bg-secondary); height: 100%; align-items: stretch;">
-                                <button class="btn-secondary btn-sm" id="inventory-view-grid-btn" title="Vista de Tarjetas" style="border-radius: 0; margin: 0; border: none; padding: 8px 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; flex: 1; ${this.currentView === 'grid' ? 'background: var(--color-primary) !important; color: white !important;' : 'background: transparent; color: var(--color-text);'}">
-                                    <i class="fas fa-th"></i> <span style="margin-left: 4px;">Tarjetas</span>
+                            <label style="font-size: 11px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 4px; display: block;">Vista</label>
+                            <div style="display: flex; gap: 2px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); overflow: hidden; background: var(--color-bg-secondary); width: 100%; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                                <button type="button" class="btn-secondary btn-sm" id="inventory-view-grid-btn" title="Vista de Tarjetas" style="border-radius: 0; margin: 0; border: none; padding: 10px 16px; font-weight: 600; cursor: pointer; transition: all 0.2s; flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 38px; ${this.currentView === 'grid' ? 'background: var(--color-primary) !important; color: white !important;' : 'background: transparent; color: var(--color-text);'}">
+                                    <i class="fas fa-th"></i> <span>Tarjetas</span>
                                 </button>
-                                <button class="btn-secondary btn-sm" id="inventory-view-list-btn" title="Vista de Lista" style="border-radius: 0; margin: 0; border: none; padding: 8px 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; flex: 1; ${this.currentView === 'list' ? 'background: var(--color-primary) !important; color: white !important;' : 'background: transparent; color: var(--color-text);'}">
-                                    <i class="fas fa-list"></i> <span style="margin-left: 4px;">Lista</span>
+                                <button type="button" class="btn-secondary btn-sm" id="inventory-view-list-btn" title="Vista de Lista" style="border-radius: 0; margin: 0; border: none; padding: 10px 16px; font-weight: 600; cursor: pointer; transition: all 0.2s; flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 38px; ${this.currentView === 'list' ? 'background: var(--color-primary) !important; color: white !important;' : 'background: transparent; color: var(--color-text);'}">
+                                    <i class="fas fa-list"></i> <span>Lista</span>
                                 </button>
                             </div>
                         </div>
@@ -372,25 +393,19 @@ const Inventory = {
         document.getElementById('inventory-import-btn')?.addEventListener('click', () => this.importCSV());
         document.getElementById('inventory-export-btn')?.addEventListener('click', () => this.exportInventory());
         
-        // Toggle de vista (Grid/Lista) - Usar delegación de eventos para asegurar que funcione
-        const moduleContent = document.getElementById('module-content');
-        if (moduleContent) {
-            // Remover listeners anteriores si existen
-            const oldGridBtn = document.getElementById('inventory-view-grid-btn');
-            const oldListBtn = document.getElementById('inventory-view-list-btn');
-            if (oldGridBtn) {
-                oldGridBtn.replaceWith(oldGridBtn.cloneNode(true));
-            }
-            if (oldListBtn) {
-                oldListBtn.replaceWith(oldListBtn.cloneNode(true));
-            }
-            
-            // Agregar nuevos listeners
+        // Toggle de vista (Grid/Lista)
+        const setupViewButtons = () => {
             const gridBtn = document.getElementById('inventory-view-grid-btn');
             const listBtn = document.getElementById('inventory-view-list-btn');
             
+            console.log('🔍 Configurando botones de vista:', { gridBtn: !!gridBtn, listBtn: !!listBtn });
+            
             if (gridBtn) {
-                gridBtn.addEventListener('click', (e) => {
+                // Remover listener anterior si existe
+                const newGridBtn = gridBtn.cloneNode(true);
+                gridBtn.parentNode.replaceChild(newGridBtn, gridBtn);
+                
+                newGridBtn.addEventListener('click', (e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     console.log('🔄 Cambiando a vista Grid');
@@ -401,7 +416,11 @@ const Inventory = {
             }
             
             if (listBtn) {
-                listBtn.addEventListener('click', (e) => {
+                // Remover listener anterior si existe
+                const newListBtn = listBtn.cloneNode(true);
+                listBtn.parentNode.replaceChild(newListBtn, listBtn);
+                
+                newListBtn.addEventListener('click', (e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     console.log('🔄 Cambiando a vista Lista');
@@ -410,8 +429,19 @@ const Inventory = {
                     this.loadInventory();
                 });
             }
-            
-            // También usar delegación de eventos como respaldo
+        };
+        
+        // Intentar configurar inmediatamente
+        setupViewButtons();
+        
+        // También intentar después de un pequeño delay por si el DOM no está listo
+        setTimeout(() => {
+            setupViewButtons();
+        }, 100);
+        
+        // Y usar delegación de eventos como respaldo
+        const moduleContent = document.getElementById('module-content');
+        if (moduleContent) {
             moduleContent.addEventListener('click', (e) => {
                 if (e.target.closest('#inventory-view-grid-btn')) {
                     e.preventDefault();
