@@ -3079,7 +3079,7 @@ const Inventory = {
                     <div class="form-row">
                         <div class="form-group">
                             <label>Material *</label>
-                            <select id="inv-material" class="form-select" required>
+                            <select id="inv-material" class="form-select">
                                 <option value="">Seleccionar...</option>
                                 <option value="Oro" ${item?.material === 'Oro' || (!item?.material && item?.metal?.includes('Oro')) ? 'selected' : ''}>Oro</option>
                                 <option value="Plata" ${item?.material === 'Plata' || (!item?.material && item?.metal?.includes('Plata')) ? 'selected' : ''}>Plata</option>
@@ -3105,7 +3105,7 @@ const Inventory = {
                         </div>
                         <div class="form-group">
                             <label>Peso (g) *</label>
-                            <input type="number" id="inv-weight" class="form-input" step="0.01" value="${item?.weight_g || item?.weight || ''}" required>
+                            <input type="number" id="inv-weight" class="form-input" step="0.01" value="${item?.weight_g || item?.weight || ''}">
                             <small style="color: var(--color-text-secondary); font-size: 11px;">Peso en gramos</small>
                         </div>
                     </div>
@@ -3332,7 +3332,7 @@ const Inventory = {
                     <div class="form-row">
                         <div class="form-group">
                             <label>Costo *</label>
-                            <input type="number" id="inv-cost" class="form-input" step="0.01" value="${item?.cost || ''}" required>
+                            <input type="number" id="inv-cost" class="form-input" step="0.01" value="${item?.cost || ''}">
                             <small style="color: var(--color-text-secondary); font-size: 11px;">Costo de adquisición</small>
                         </div>
                         <div class="form-group">
@@ -3910,6 +3910,41 @@ const Inventory = {
     },
 
     async saveItem(itemId) {
+        // Validación manual de campos requeridos (ya que están en pestañas ocultas)
+        const sku = document.getElementById('inv-sku')?.value?.trim();
+        const material = document.getElementById('inv-material')?.value?.trim();
+        const weight = document.getElementById('inv-weight')?.value?.trim();
+        const cost = document.getElementById('inv-cost')?.value?.trim();
+        
+        // Validar campos requeridos
+        if (!sku) {
+            Utils.showNotification('El SKU es requerido', 'error');
+            this.switchTab('basic');
+            document.getElementById('inv-sku')?.focus();
+            return;
+        }
+        
+        if (!material) {
+            Utils.showNotification('El Material es requerido', 'error');
+            this.switchTab('material');
+            document.getElementById('inv-material')?.focus();
+            return;
+        }
+        
+        if (!weight || parseFloat(weight) <= 0) {
+            Utils.showNotification('El Peso es requerido y debe ser mayor a 0', 'error');
+            this.switchTab('material');
+            document.getElementById('inv-weight')?.focus();
+            return;
+        }
+        
+        if (!cost || parseFloat(cost) < 0) {
+            Utils.showNotification('El Costo es requerido y debe ser mayor o igual a 0', 'error');
+            this.switchTab('pricing');
+            document.getElementById('inv-cost')?.focus();
+            return;
+        }
+        
         try {
             const form = document.getElementById('inventory-form');
             if (!form) {
@@ -5334,28 +5369,33 @@ const Inventory = {
         const gridBtn = document.getElementById('inventory-view-grid-btn');
         const listBtn = document.getElementById('inventory-view-list-btn');
         
+        if (!gridBtn || !listBtn) {
+            // Si los botones no existen, esperar un poco y reintentar
+            console.log(`🔄 Botones de vista no encontrados aún, reintentando en 100ms...`, { gridBtn: !!gridBtn, listBtn: !!listBtn });
+            setTimeout(() => {
+                this.updateViewButtons();
+            }, 100);
+            return;
+        }
+        
         console.log(`🔄 Actualizando botones de vista. currentView: ${this.currentView}`, { gridBtn: !!gridBtn, listBtn: !!listBtn });
         
-        if (gridBtn && listBtn) {
-            if (this.currentView === 'grid') {
-                gridBtn.style.background = 'var(--color-primary)';
-                gridBtn.style.color = 'white';
-                gridBtn.style.fontWeight = '600';
-                listBtn.style.background = 'transparent';
-                listBtn.style.color = 'var(--color-text)';
-                listBtn.style.fontWeight = 'normal';
-                console.log('✅ Botón Grid activado');
-            } else {
-                listBtn.style.background = 'var(--color-primary)';
-                listBtn.style.color = 'white';
-                listBtn.style.fontWeight = '600';
-                gridBtn.style.background = 'transparent';
-                gridBtn.style.color = 'var(--color-text)';
-                gridBtn.style.fontWeight = 'normal';
-                console.log('✅ Botón Lista activado');
-            }
+        if (this.currentView === 'grid') {
+            gridBtn.style.background = 'var(--color-primary)';
+            gridBtn.style.color = 'white';
+            gridBtn.style.fontWeight = '600';
+            listBtn.style.background = 'transparent';
+            listBtn.style.color = 'var(--color-text)';
+            listBtn.style.fontWeight = 'normal';
+            console.log('✅ Botón Grid activado');
         } else {
-            console.warn('⚠️ Botones de vista no encontrados:', { gridBtn: !!gridBtn, listBtn: !!listBtn });
+            listBtn.style.background = 'var(--color-primary)';
+            listBtn.style.color = 'white';
+            listBtn.style.fontWeight = '600';
+            gridBtn.style.background = 'transparent';
+            gridBtn.style.color = 'var(--color-text)';
+            gridBtn.style.fontWeight = 'normal';
+            console.log('✅ Botón Lista activado');
         }
     },
     
