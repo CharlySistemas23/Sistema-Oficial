@@ -1109,6 +1109,20 @@ CREATE INDEX IF NOT EXISTS idx_payment_invoices_payment_date ON payment_invoices
 CREATE INDEX IF NOT EXISTS idx_payment_invoices_receipt_number ON payment_invoices(receipt_number);
 CREATE INDEX IF NOT EXISTS idx_payment_invoices_branch_id ON payment_invoices(branch_id);
 
+-- Agregar branch_id a payment_invoices si no existe (para tablas existentes)
+DO $$ 
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'payment_invoices' AND column_name = 'branch_id'
+    ) THEN
+        ALTER TABLE payment_invoices 
+        ADD COLUMN branch_id UUID REFERENCES branches(id) ON DELETE SET NULL;
+        
+        CREATE INDEX IF NOT EXISTS idx_payment_invoices_branch_id ON payment_invoices(branch_id);
+    END IF;
+END $$;
+
 -- Historial de Precios
 CREATE TABLE IF NOT EXISTS supplier_price_history (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
