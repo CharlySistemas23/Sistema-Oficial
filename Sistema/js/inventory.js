@@ -3928,6 +3928,36 @@ const Inventory = {
             }
         }
         
+        // VALIDAR CÓDIGO DE BARRAS DUPLICADO EN INDEXEDDB
+        // Verificar si ya existe un item con este código de barras (excepto el item actual si es edición)
+        if (finalBarcode) {
+            try {
+                const existingBarcodeItems = await DB.query('inventory_items', 'barcode', finalBarcode);
+                const duplicateItem = existingBarcodeItems.find(item => item.id !== itemId);
+                
+                if (duplicateItem) {
+                    // Si es un código de barras duplicado, generar uno nuevo automáticamente
+                    console.warn(`⚠️ Código de barras "${finalBarcode}" ya existe, generando uno nuevo...`);
+                    const timestamp = Date.now().toString(36).toUpperCase();
+                    const random = Math.random().toString(36).substring(2, 8).toUpperCase();
+                    finalBarcode = `${formBarcode || formSku || 'ITEM'}${timestamp}${random}`.substring(0, 20);
+                    console.log(`✅ Nuevo código de barras generado: ${finalBarcode}`);
+                    
+                    // Actualizar el campo en el formulario para que el usuario vea el nuevo código
+                    const barcodeInput = document.getElementById('inv-barcode');
+                    if (barcodeInput) {
+                        barcodeInput.value = finalBarcode;
+                    }
+                    
+                    // Mostrar notificación informativa
+                    Utils.showNotification(`Código de barras duplicado detectado. Se generó uno nuevo: ${finalBarcode}`, 'info');
+                }
+            } catch (queryError) {
+                // Si hay error al consultar, continuar (puede ser que el índice no exista aún)
+                console.warn('⚠️ Error verificando código de barras duplicado:', queryError);
+            }
+        }
+        
         // Obtener valores de stock
         const stockActual = parseInt(document.getElementById('inv-stock-actual')?.value) || 1;
         const stockMin = parseInt(document.getElementById('inv-stock-min')?.value) || 1;
@@ -4151,7 +4181,34 @@ const Inventory = {
                 
                 // Guardar en IndexedDB como caché (con todos los campos)
                 // Nota: NO auto-inyectar branch_id local (branch1/branch2...) porque el backend espera UUID
-                await DB.put('inventory_items', mergedItem, { autoBranchId: false });
+                try {
+                    await DB.put('inventory_items', mergedItem, { autoBranchId: false });
+                } catch (dbError) {
+                    // Manejar error de código de barras duplicado en IndexedDB
+                    if (dbError.message && dbError.message.includes('BARCODE') && dbError.message.includes('UNIQUENESS')) {
+                        console.warn('⚠️ Código de barras duplicado en IndexedDB, actualizando item existente...');
+                        // Si el item ya existe en IndexedDB con ese código de barras, actualizarlo en lugar de crear uno nuevo
+                        const existingItem = await DB.query('inventory_items', 'barcode', mergedItem.barcode).then(items => items[0]);
+                        if (existingItem) {
+                            // Actualizar el item existente con los nuevos datos
+                            mergedItem.id = existingItem.id;
+                            await DB.put('inventory_items', mergedItem, { autoBranchId: false });
+                            item = mergedItem;
+                            console.log('✅ Item actualizado en IndexedDB (código de barras existente)');
+                        } else {
+                            // Si no existe, generar nuevo código de barras
+                            const timestamp = Date.now().toString(36).toUpperCase();
+                            const random = Math.random().toString(36).substring(2, 8).toUpperCase();
+                            mergedItem.barcode = `${mergedItem.barcode || 'ITEM'}${timestamp}${random}`.substring(0, 20);
+                            await DB.put('inventory_items', mergedItem, { autoBranchId: false });
+                            item = mergedItem;
+                            console.log(`✅ Item guardado con nuevo código de barras: ${mergedItem.barcode}`);
+                        }
+                    } else {
+                        // Para otros errores, solo loguear pero no fallar (el item ya está en el servidor)
+                        console.warn('⚠️ Error guardando en IndexedDB (pero ya está en servidor):', dbError);
+                    }
+                }
             } catch (apiError) {
                 console.error('Error guardando item con API:', apiError);
                 
@@ -4243,7 +4300,26 @@ const Inventory = {
                         // Definir mergedItem para consistencia
                         mergedItem = itemForLocal;
                     } catch (error) {
-                        throw error;
+                        // Manejar error de código de barras duplicado
+                        if (error.message && error.message.includes('BARCODE') && error.message.includes('UNIQUENESS')) {
+                            console.warn('⚠️ Código de barras duplicado detectado al guardar, generando uno nuevo...');
+                            // Generar nuevo código de barras único
+                            const timestamp = Date.now().toString(36).toUpperCase();
+                            const random = Math.random().toString(36).substring(2, 8).toUpperCase();
+                            itemForLocal.barcode = `${itemForLocal.barcode || 'ITEM'}${timestamp}${random}`.substring(0, 20);
+                            // Actualizar en el formulario
+                            const barcodeInput = document.getElementById('inv-barcode');
+                            if (barcodeInput) {
+                                barcodeInput.value = itemForLocal.barcode;
+                            }
+                            // Reintentar guardar
+                            await DB.put('inventory_items', itemForLocal, { autoBranchId: false });
+                            console.log(`✅ Item guardado con nuevo código de barras: ${itemForLocal.barcode}`);
+                            mergedItem = itemForLocal;
+                            Utils.showNotification(`Código de barras duplicado. Se generó uno nuevo: ${itemForLocal.barcode}`, 'info');
+                        } else {
+                            throw error;
+                        }
                     }
                 }
             }
@@ -4260,7 +4336,30 @@ const Inventory = {
                 // Actualizar item para que tenga el branch_id correcto
                 item = itemForLocal;
             } catch (error) {
-                throw error;
+                // Manejar error de código de barras duplicado
+                if (error.message && error.message.includes('BARCODE') && error.message.includes('UNIQUENESS')) {
+                    console.warn('⚠️ Código de barras duplicado detectado al guardar, generando uno nuevo...');
+                    // Generar nuevo código de barras único
+                    const timestamp = Date.now().toString(36).toUpperCase();
+                    const random = Math.random().toString(36).substring(2, 8).toUpperCase();
+                    item.barcode = `${item.barcode || 'ITEM'}${timestamp}${random}`.substring(0, 20);
+                    // Actualizar en el formulario
+                    const barcodeInput = document.getElementById('inv-barcode');
+                    if (barcodeInput) {
+                        barcodeInput.value = item.barcode;
+                    }
+                    // Reintentar guardar
+                    const itemForLocal = {
+                        ...item,
+                        branch_id: item.branch_id || localBranchId || rawBranchId || null
+                    };
+                    await DB.put('inventory_items', itemForLocal, { autoBranchId: false });
+                    console.log(`✅ Item guardado con nuevo código de barras: ${item.barcode}`);
+                    item = itemForLocal;
+                    Utils.showNotification(`Código de barras duplicado. Se generó uno nuevo: ${item.barcode}`, 'info');
+                } else {
+                    throw error;
+                }
             }
         }
 
