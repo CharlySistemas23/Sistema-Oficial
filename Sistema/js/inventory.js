@@ -1682,9 +1682,44 @@ const Inventory = {
         const sortedCollections = Object.keys(grouped).sort();
         for (const collection of sortedCollections) {
             const collectionItems = grouped[collection];
-            const collectionHTML = this.currentView === 'list' 
-                ? await this.getInventoryListHTML(collectionItems)
-                : await this.getInventoryGridHTML(collectionItems);
+            let collectionHTML;
+            
+            if (this.currentView === 'list') {
+                // Para vista de lista, envolver las filas en una tabla completa
+                const rowsHTML = await this.getInventoryListHTML(collectionItems);
+                collectionHTML = `
+                    <div style="overflow-x: auto;">
+                        <table style="width: 100%; border-collapse: collapse; background: var(--color-bg-card); border-radius: var(--radius-md); overflow: hidden;">
+                            <thead>
+                                <tr style="background: var(--color-bg-secondary); border-bottom: 2px solid var(--color-border);">
+                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 40px;">
+                                        <input type="checkbox" class="inventory-select-all-collection" onchange="window.Inventory.toggleSelectAll(this.checked)">
+                                    </th>
+                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 80px;">Foto</th>
+                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">SKU</th>
+                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Nombre</th>
+                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Categoría</th>
+                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Material</th>
+                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Piedra</th>
+                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Peso (g)</th>
+                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Costo</th>
+                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Precio Venta</th>
+                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Stock</th>
+                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Estado</th>
+                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Ubicación</th>
+                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 100px;">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${rowsHTML}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            } else {
+                // Para vista de grid, usar directamente el HTML de las tarjetas
+                collectionHTML = await this.getInventoryGridHTML(collectionItems);
+            }
             
             html += `
                 <div style="background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light); overflow: hidden;">
@@ -1702,9 +1737,44 @@ const Inventory = {
         }
 
         if (noCollection.length > 0) {
-            const noCollectionHTML = this.currentView === 'list' 
-                ? await this.getInventoryListHTML(noCollection)
-                : await this.getInventoryGridHTML(noCollection);
+            let noCollectionHTML;
+            
+            if (this.currentView === 'list') {
+                // Para vista de lista, envolver las filas en una tabla completa
+                const rowsHTML = await this.getInventoryListHTML(noCollection);
+                noCollectionHTML = `
+                    <div style="overflow-x: auto;">
+                        <table style="width: 100%; border-collapse: collapse; background: var(--color-bg-card); border-radius: var(--radius-md); overflow: hidden;">
+                            <thead>
+                                <tr style="background: var(--color-bg-secondary); border-bottom: 2px solid var(--color-border);">
+                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 40px;">
+                                        <input type="checkbox" class="inventory-select-all-collection" onchange="window.Inventory.toggleSelectAll(this.checked)">
+                                    </th>
+                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 80px;">Foto</th>
+                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">SKU</th>
+                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Nombre</th>
+                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Categoría</th>
+                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Material</th>
+                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Piedra</th>
+                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Peso (g)</th>
+                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Costo</th>
+                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Precio Venta</th>
+                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Stock</th>
+                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Estado</th>
+                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Ubicación</th>
+                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 100px;">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${rowsHTML}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            } else {
+                // Para vista de grid, usar directamente el HTML de las tarjetas
+                noCollectionHTML = await this.getInventoryGridHTML(noCollection);
+            }
             
             html += `
                 <div style="background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light); overflow: hidden;">
@@ -1873,25 +1943,10 @@ const Inventory = {
         }
     },
 
-    // Vista de lista (tabla)
-    async displayInventoryList(items) {
-        const container = document.getElementById('inventory-list');
-        if (!container) {
-            console.warn('Container inventory-list no encontrado');
-            return;
-        }
-
-        // Mostrar estadísticas
-        await this.displayInventoryStats(items);
-
-        if (items.length === 0) {
-            container.innerHTML = `
-                <div style="text-align: center; padding: var(--spacing-xl); color: var(--color-text-secondary);">
-                    <i class="fas fa-box-open" style="font-size: 48px; opacity: 0.3; margin-bottom: var(--spacing-md);"></i>
-                    <p>No se encontraron piezas de inventario</p>
-                </div>
-            `;
-            return;
+    // Helper: Obtener HTML de las filas de tabla (sin thead ni contenedor)
+    async getInventoryListHTML(items) {
+        if (!items || items.length === 0) {
+            return '<tr><td colspan="14" style="text-align: center; padding: 40px; color: var(--color-text-secondary);">No hay items para mostrar</td></tr>';
         }
 
         // Obtener fotos de los items
@@ -1915,141 +1970,93 @@ const Inventory = {
             return { ...item, photo };
         }));
 
-        // Construir tabla
-        const tableHTML = `
-            <div style="overflow-x: auto;">
-                <table style="width: 100%; border-collapse: collapse; background: var(--color-bg-card); border-radius: var(--radius-md); overflow: hidden;">
-                    <thead>
-                        <tr style="background: var(--color-bg-secondary); border-bottom: 2px solid var(--color-border);">
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 40px;">
-                                <input type="checkbox" id="inventory-select-all-list" onchange="window.Inventory.toggleSelectAll(this.checked)">
-                            </th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 80px;">Foto</th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">SKU</th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Nombre</th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Categoría</th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Material</th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Piedra</th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Peso (g)</th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Costo</th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Precio Venta</th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Stock</th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Estado</th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Ubicación</th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 100px;">Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${itemsWithPhotos.map(item => {
-                            const isSelected = this.selectedItems.has(item.id);
-                            const stockActual = item.stock_actual ?? 0;
-                            const stockMin = item.stock_min ?? 1;
-                            const stockMax = item.stock_max ?? 10;
-                            const stockStatus = this.getStockStatus(item);
-                            const stockBadgeClass = this.getStockBadgeClass(stockStatus);
-                            const stockStatusText = this.getStockStatusText(stockStatus);
-                            const hasCertificate = item.certificate_type && item.certificate_number;
-                            
-                            const stoneInfo = item.stone_type ? `${item.stone_type}${item.total_carats ? ` (${item.total_carats}ct)` : ''}` : 'N/A';
-                            
-                            const measurements = item.measurements ? (typeof item.measurements === 'string' ? JSON.parse(item.measurements) : item.measurements) : {};
-                            const measuresText = [
-                                measurements.ring_size ? `Talla: ${measurements.ring_size}` : null,
-                                measurements.chain_length ? `Cadena: ${measurements.chain_length}cm` : null,
-                                measurements.bracelet_length ? `Pulsera: ${measurements.bracelet_length}cm` : null,
-                                measurements.width ? `Ancho: ${measurements.width}mm` : null,
-                                measurements.thickness ? `Grosor: ${measurements.thickness}mm` : null
-                            ].filter(Boolean).join(', ') || 'N/A';
-                            
-                            return `
-                            <tr style="border-bottom: 1px solid var(--color-border-light); ${isSelected ? 'background: var(--color-primary-light);' : ''}" data-item-id="${item.id}">
-                                <td style="padding: 12px;">
-                                    <input type="checkbox" class="inventory-checkbox" 
-                                           ${isSelected ? 'checked' : ''} 
-                                           onchange="window.Inventory.toggleItemSelection('${item.id}', this.checked)">
-                                </td>
-                                <td style="padding: 12px;">
-                                    ${item.photo ? 
-                                        `<img src="${item.photo}" alt="${item.name}" style="width: 50px; height: 50px; object-fit: cover; border-radius: var(--radius-sm);">` : 
-                                        '<div style="width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; color: #999; background: var(--color-bg-secondary); border-radius: var(--radius-sm);"><i class="fas fa-gem"></i></div>'}
-                                </td>
-                                <td style="padding: 12px; font-size: 12px; font-weight: 600;">${item.sku || 'N/A'}</td>
-                                <td style="padding: 12px; font-size: 12px;">
-                                    <div style="font-weight: 600; margin-bottom: 4px;">${item.name || 'Sin nombre'}</div>
-                                    ${item.description ? `<div style="font-size: 11px; color: var(--color-text-secondary);">${item.description.substring(0, 50)}${item.description.length > 50 ? '...' : ''}</div>` : ''}
-                                </td>
-                                <td style="padding: 12px; font-size: 12px;">
-                                    <div>${item.category || 'N/A'}</div>
-                                    ${item.subcategory ? `<div style="font-size: 11px; color: var(--color-text-secondary);">${item.subcategory}</div>` : ''}
-                                </td>
-                                <td style="padding: 12px; font-size: 12px;">
-                                    <div>${item.metal || item.material || 'N/A'}</div>
-                                    ${item.purity ? `<div style="font-size: 11px; color: var(--color-text-secondary);">${item.purity}</div>` : ''}
-                                </td>
-                                <td style="padding: 12px; font-size: 12px;">${stoneInfo}</td>
-                                <td style="padding: 12px; font-size: 12px;">${item.weight ? `${item.weight}g` : 'N/A'}</td>
-                                <td style="padding: 12px; font-size: 12px; font-weight: 600;">${item.cost ? `$${parseFloat(item.cost).toLocaleString('es-MX', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : 'N/A'}</td>
-                                <td style="padding: 12px; font-size: 12px; font-weight: 600; color: var(--color-primary);">
-                                    ${item.sale_price ? `$${parseFloat(item.sale_price).toLocaleString('es-MX', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : (item.price ? `$${parseFloat(item.price).toLocaleString('es-MX', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : 'N/A')}
-                                </td>
-                                <td style="padding: 12px; font-size: 12px;">
-                                    <span class="stock-badge ${stockBadgeClass}" title="Stock: ${stockActual} (Mín: ${stockMin}, Máx: ${stockMax})">${stockActual}</span>
-                                    ${hasCertificate ? '<span class="cert-badge" title="Certificado"><i class="fas fa-certificate"></i></span>' : ''}
-                                </td>
-                                <td style="padding: 12px; font-size: 12px;">
-                                    <span style="padding: 4px 8px; background: var(--color-bg-secondary); border-radius: var(--radius-sm); font-size: 11px;">
-                                        ${item.status === 'disponible' ? 'Disponible' : 
-                                          item.status === 'vendida' ? 'Vendida' : 
-                                          item.status === 'apartada' ? 'Apartada' : 
-                                          item.status === 'reparacion' ? 'Reparación' : 
-                                          item.status === 'exhibicion' ? 'Exhibición' : 
-                                          item.status || 'N/A'}
-                                    </span>
-                                </td>
-                                <td style="padding: 12px; font-size: 12px;">
-                                    <div>${item.location_detail || item.location || 'N/A'}</div>
-                                    ${item.location && item.location_detail && item.location !== item.location_detail ? 
-                                        `<div style="font-size: 11px; color: var(--color-text-secondary);">${item.location}</div>` : ''}
-                                </td>
-                                <td style="padding: 12px;">
-                                    <div style="display: flex; gap: 4px;">
-                                        <button class="btn-secondary btn-sm" onclick="window.Inventory.showAddForm('${item.id}')" title="Editar" style="padding: 4px 8px; font-size: 10px;"><i class="fas fa-edit"></i></button>
-                                        <button class="btn-danger btn-sm" onclick="window.Inventory.deleteItem('${item.id}')" title="Eliminar" style="padding: 4px 8px; font-size: 10px;"><i class="fas fa-trash"></i></button>
-                                    </div>
-                                </td>
-                            </tr>
-                            `;
-                        }).join('')}
-                    </tbody>
-                </table>
-            </div>
-        `;
-
-        container.innerHTML = tableHTML;
-
-        // Actualizar estado de selección
-        this.updateViewButtons();
+        // Construir solo las filas de la tabla
+        return itemsWithPhotos.map(item => {
+            const isSelected = this.selectedItems.has(item.id);
+            const stockActual = item.stock_actual ?? 0;
+            const stockMin = item.stock_min ?? 1;
+            const stockMax = item.stock_max ?? 10;
+            const stockStatus = this.getStockStatus(item);
+            const stockBadgeClass = this.getStockBadgeClass(stockStatus);
+            const stockStatusText = this.getStockStatusText(stockStatus);
+            const hasCertificate = item.certificate_type && item.certificate_number;
+            
+            const stoneInfo = item.stone_type ? `${item.stone_type}${item.total_carats ? ` (${item.total_carats}ct)` : ''}` : 'N/A';
+            
+            const measurements = item.measurements ? (typeof item.measurements === 'string' ? JSON.parse(item.measurements) : item.measurements) : {};
+            const measuresText = [
+                measurements.ring_size ? `Talla: ${measurements.ring_size}` : null,
+                measurements.chain_length ? `Cadena: ${measurements.chain_length}cm` : null,
+                measurements.bracelet_length ? `Pulsera: ${measurements.bracelet_length}cm` : null,
+                measurements.width ? `Ancho: ${measurements.width}mm` : null,
+                measurements.thickness ? `Grosor: ${measurements.thickness}mm` : null
+            ].filter(Boolean).join(', ') || 'N/A';
+            
+            return `
+            <tr style="border-bottom: 1px solid var(--color-border-light); ${isSelected ? 'background: var(--color-primary-light);' : ''}" data-item-id="${item.id}">
+                <td style="padding: 12px;">
+                    <input type="checkbox" class="inventory-checkbox" 
+                           ${isSelected ? 'checked' : ''} 
+                           onchange="window.Inventory.toggleItemSelection('${item.id}', this.checked)">
+                </td>
+                <td style="padding: 12px;">
+                    ${item.photo ? 
+                        `<img src="${item.photo}" alt="${item.name}" style="width: 50px; height: 50px; object-fit: cover; border-radius: var(--radius-sm);">` : 
+                        '<div style="width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; color: #999; background: var(--color-bg-secondary); border-radius: var(--radius-sm);"><i class="fas fa-gem"></i></div>'}
+                </td>
+                <td style="padding: 12px; font-size: 12px; font-weight: 600;">${item.sku || 'N/A'}</td>
+                <td style="padding: 12px; font-size: 12px;">
+                    <div style="font-weight: 600; margin-bottom: 4px;">${item.name || 'Sin nombre'}</div>
+                    ${item.description ? `<div style="font-size: 11px; color: var(--color-text-secondary);">${item.description.substring(0, 50)}${item.description.length > 50 ? '...' : ''}</div>` : ''}
+                </td>
+                <td style="padding: 12px; font-size: 12px;">
+                    <div>${item.category || 'N/A'}</div>
+                    ${item.subcategory ? `<div style="font-size: 11px; color: var(--color-text-secondary);">${item.subcategory}</div>` : ''}
+                </td>
+                <td style="padding: 12px; font-size: 12px;">
+                    <div>${item.metal || item.material || 'N/A'}</div>
+                    ${item.purity ? `<div style="font-size: 11px; color: var(--color-text-secondary);">${item.purity}</div>` : ''}
+                </td>
+                <td style="padding: 12px; font-size: 12px;">${stoneInfo}</td>
+                <td style="padding: 12px; font-size: 12px;">${item.weight ? `${item.weight}g` : 'N/A'}</td>
+                <td style="padding: 12px; font-size: 12px; font-weight: 600;">${item.cost ? `$${parseFloat(item.cost).toLocaleString('es-MX', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : 'N/A'}</td>
+                <td style="padding: 12px; font-size: 12px; font-weight: 600; color: var(--color-primary);">
+                    ${item.sale_price ? `$${parseFloat(item.sale_price).toLocaleString('es-MX', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : (item.price ? `$${parseFloat(item.price).toLocaleString('es-MX', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : 'N/A')}
+                </td>
+                <td style="padding: 12px; font-size: 12px;">
+                    <span class="stock-badge ${stockBadgeClass}" title="Stock: ${stockActual} (Mín: ${stockMin}, Máx: ${stockMax})">${stockActual}</span>
+                    ${hasCertificate ? '<span class="cert-badge" title="Certificado"><i class="fas fa-certificate"></i></span>' : ''}
+                </td>
+                <td style="padding: 12px; font-size: 12px;">
+                    <span style="padding: 4px 8px; background: var(--color-bg-secondary); border-radius: var(--radius-sm); font-size: 11px;">
+                        ${item.status === 'disponible' ? 'Disponible' : 
+                          item.status === 'vendida' ? 'Vendida' : 
+                          item.status === 'apartada' ? 'Apartada' : 
+                          item.status === 'reparacion' ? 'Reparación' : 
+                          item.status === 'exhibicion' ? 'Exhibición' : 
+                          item.status || 'N/A'}
+                    </span>
+                </td>
+                <td style="padding: 12px; font-size: 12px;">
+                    <div>${item.location_detail || item.location || 'N/A'}</div>
+                    ${item.location && item.location_detail && item.location !== item.location_detail ? 
+                        `<div style="font-size: 11px; color: var(--color-text-secondary);">${item.location}</div>` : ''}
+                </td>
+                <td style="padding: 12px;">
+                    <div style="display: flex; gap: 4px;">
+                        <button class="btn-secondary btn-sm" onclick="window.Inventory.showAddForm('${item.id}')" title="Editar" style="padding: 4px 8px; font-size: 10px;"><i class="fas fa-edit"></i></button>
+                        <button class="btn-danger btn-sm" onclick="window.Inventory.deleteItem('${item.id}')" title="Eliminar" style="padding: 4px 8px; font-size: 10px;"><i class="fas fa-trash"></i></button>
+                    </div>
+                </td>
+            </tr>
+            `;
+        }).join('');
     },
 
-    async displayInventoryGrid(items) {
-        
-        const container = document.getElementById('inventory-list');
-        if (!container) {
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/d085ffd8-d37f-46dc-af23-0f9fbbe46595',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'inventory.js:404',message:'Container not found in displayInventory',data:{itemsCount:items.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-            // #endregion
-            return;
-        }
-        
-        // Mostrar estadísticas si hay items
-        await this.displayInventoryStats(items);
-        
-        // Actualizar contador de seleccionados
-        this.updateSelectionUI();
-
-        if (items.length === 0) {
-            container.innerHTML = '<p style="text-align: center; padding: 40px;">No hay piezas en inventario</p>';
-            return;
+    // Helper: Obtener HTML de las tarjetas (sin contenedor)
+    async getInventoryGridHTML(items) {
+        if (!items || items.length === 0) {
+            return '<p style="text-align: center; padding: 40px; color: var(--color-text-secondary);">No hay items para mostrar</p>';
         }
 
         // Load photos for items
@@ -2058,7 +2065,7 @@ const Inventory = {
             return { ...item, photo: photos[0]?.thumbnail_blob || null };
         }));
 
-        container.innerHTML = itemsWithPhotos.map(item => {
+        return itemsWithPhotos.map(item => {
             const hasCertificate = item.certificate_type && item.certificate_number;
             const stoneInfo = item.stone_type ? `${item.stone_type}${item.carats ? ` ${item.carats}ct` : ''}${item.color ? ` ${item.color}` : ''}${item.clarity ? ` ${item.clarity}` : ''}` : (item.stone || 'N/A');
             const isSelected = this.selectedItems.has(item.id);
@@ -2124,6 +2131,93 @@ const Inventory = {
             </div>
         `;
         }).join('');
+    },
+
+    // Vista de lista (tabla)
+    async displayInventoryList(items) {
+        const container = document.getElementById('inventory-list');
+        if (!container) {
+            console.warn('Container inventory-list no encontrado');
+            return;
+        }
+
+        // Mostrar estadísticas
+        await this.displayInventoryStats(items);
+
+        if (items.length === 0) {
+            container.innerHTML = `
+                <div style="text-align: center; padding: var(--spacing-xl); color: var(--color-text-secondary);">
+                    <i class="fas fa-box-open" style="font-size: 48px; opacity: 0.3; margin-bottom: var(--spacing-md);"></i>
+                    <p>No se encontraron piezas de inventario</p>
+                </div>
+            `;
+            return;
+        }
+
+        // Usar función helper para obtener HTML de las filas
+        const rowsHTML = await this.getInventoryListHTML(items);
+
+        // Construir tabla completa con thead
+        const tableHTML = `
+            <div style="overflow-x: auto;">
+                <table style="width: 100%; border-collapse: collapse; background: var(--color-bg-card); border-radius: var(--radius-md); overflow: hidden;">
+                    <thead>
+                        <tr style="background: var(--color-bg-secondary); border-bottom: 2px solid var(--color-border);">
+                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 40px;">
+                                <input type="checkbox" id="inventory-select-all-list" onchange="window.Inventory.toggleSelectAll(this.checked)">
+                            </th>
+                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 80px;">Foto</th>
+                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">SKU</th>
+                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Nombre</th>
+                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Categoría</th>
+                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Material</th>
+                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Piedra</th>
+                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Peso (g)</th>
+                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Costo</th>
+                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Precio Venta</th>
+                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Stock</th>
+                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Estado</th>
+                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Ubicación</th>
+                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 100px;">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rowsHTML}
+                    </tbody>
+                </table>
+            </div>
+        `;
+
+        container.innerHTML = tableHTML;
+
+        // Actualizar estado de selección
+        this.updateViewButtons();
+    },
+
+    async displayInventoryGrid(items) {
+        
+        const container = document.getElementById('inventory-list');
+        if (!container) {
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/d085ffd8-d37f-46dc-af23-0f9fbbe46595',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'inventory.js:404',message:'Container not found in displayInventory',data:{itemsCount:items.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+            // #endregion
+            return;
+        }
+        
+        // Mostrar estadísticas si hay items
+        await this.displayInventoryStats(items);
+        
+        // Actualizar contador de seleccionados
+        this.updateSelectionUI();
+
+        if (items.length === 0) {
+            container.innerHTML = '<p style="text-align: center; padding: 40px;">No hay piezas en inventario</p>';
+            return;
+        }
+
+        // Usar función helper para obtener HTML de las tarjetas
+        const cardsHTML = await this.getInventoryGridHTML(items);
+        container.innerHTML = cardsHTML;
     },
 
     async displayInventoryList(items) {
