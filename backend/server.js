@@ -507,6 +507,93 @@ async function checkAndMigrate() {
                   CREATE INDEX IF NOT EXISTS idx_historical_qc_reports_branch_id ON historical_quick_capture_reports(branch_id);
                 `);
                 console.log('✅ Tabla historical_quick_capture_reports creada directamente');
+              } else if (tableName === 'suppliers') {
+                console.log('🔨 Creando tabla suppliers...');
+                
+                // Verificar si la tabla ya existe
+                const tableExists = await pool.query(`
+                  SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_schema = 'public' 
+                    AND table_name = 'suppliers'
+                  );
+                `);
+                
+                if (tableExists.rows[0].exists) {
+                  console.log('ℹ️  Tabla suppliers ya existe, saltando creación');
+                  continue;
+                }
+                
+                // Cargar y ejecutar schema.sql completo para crear suppliers y todas sus dependencias
+                try {
+                  const { readFileSync } = await import('fs');
+                  const { join } = await import('path');
+                  const schemaPath = join(__dirname, 'database', 'schema.sql');
+                  const schemaSQL = readFileSync(schemaPath, 'utf8');
+                  
+                  // Ejecutar schema completo (usa IF NOT EXISTS, así que es seguro)
+                  await pool.query(schemaSQL);
+                  console.log('✅ Tabla suppliers y dependencias creadas desde schema.sql');
+                } catch (schemaError) {
+                  console.error('❌ Error ejecutando schema.sql para suppliers:', schemaError.message);
+                  // Intentar crear la tabla directamente como fallback
+                  try {
+                    await pool.query(`
+                      CREATE TABLE IF NOT EXISTS suppliers (
+                        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                        code VARCHAR(50) UNIQUE NOT NULL,
+                        name VARCHAR(255) NOT NULL,
+                        legal_name VARCHAR(255),
+                        tax_id VARCHAR(50),
+                        barcode VARCHAR(100) UNIQUE,
+                        contact_person VARCHAR(255),
+                        email VARCHAR(255),
+                        phone VARCHAR(50),
+                        mobile VARCHAR(50),
+                        whatsapp VARCHAR(50),
+                        website VARCHAR(255),
+                        facebook VARCHAR(255),
+                        instagram VARCHAR(255),
+                        business_hours VARCHAR(255),
+                        address TEXT,
+                        city VARCHAR(100),
+                        state VARCHAR(100),
+                        country VARCHAR(100) DEFAULT 'México',
+                        postal_code VARCHAR(20),
+                        supplier_type VARCHAR(50),
+                        category VARCHAR(100),
+                        payment_terms VARCHAR(100),
+                        payment_methods VARCHAR(255),
+                        delivery_days INTEGER,
+                        credit_limit DECIMAL(12, 2),
+                        currency VARCHAR(3) DEFAULT 'MXN',
+                        relationship_start_date DATE,
+                        rating DECIMAL(3, 2) DEFAULT 0,
+                        total_purchases DECIMAL(12, 2) DEFAULT 0,
+                        total_items INTEGER DEFAULT 0,
+                        last_purchase_date DATE,
+                        average_delivery_days INTEGER,
+                        status VARCHAR(50) DEFAULT 'active',
+                        notes TEXT,
+                        tags TEXT[],
+                        branch_id UUID REFERENCES branches(id) ON DELETE SET NULL,
+                        is_shared BOOLEAN DEFAULT true,
+                        bank_name VARCHAR(255),
+                        bank_account VARCHAR(100),
+                        clabe VARCHAR(18),
+                        account_holder VARCHAR(255),
+                        bank_references TEXT,
+                        created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+                        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                      );
+                    `);
+                    console.log('✅ Tabla suppliers creada directamente (fallback)');
+                  } catch (directError) {
+                    console.error('❌ Error creando tabla suppliers directamente:', directError.message);
+                    throw directError;
+                  }
+                }
               }
             } catch (tableError) {
               console.error(`❌ Error creando tabla ${tableName}:`, tableError.message);
