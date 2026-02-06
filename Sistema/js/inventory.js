@@ -47,10 +47,10 @@ const Inventory = {
             await this.setupEventListeners();
             await this.loadInventory();
             
-            // Actualizar estado visual de los botones de vista (si existen)
+            // Actualizar estado visual de los botones de vista (igual que POS)
             setTimeout(() => {
                 this.updateViewButtons();
-            }, 300);
+            }, 100);
             this.initialized = true;
             
             // Escuchar cambios de sucursal para recargar inventario
@@ -208,11 +208,11 @@ const Inventory = {
                         </div>
                         <div class="form-group" style="margin-bottom: 0;">
                             <label style="font-size: 11px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 4px; display: block;">Vista</label>
-                            <div style="display: flex; gap: 2px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); overflow: hidden; background: var(--color-bg-secondary); width: 100%; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                                <button type="button" class="btn-secondary btn-sm" id="inventory-view-grid-btn" title="Vista de Tarjetas" style="border-radius: 0; margin: 0; border: none; padding: 10px 16px; font-weight: 600; cursor: pointer; transition: all 0.2s; flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 38px; ${this.currentView === 'grid' ? 'background: var(--color-primary) !important; color: white !important;' : 'background: transparent; color: var(--color-text);'}">
+                            <div class="inventory-view-toggle" style="display: flex; gap: 2px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); overflow: hidden; background: var(--color-bg-secondary); width: 100%; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                                <button type="button" class="inventory-view-btn ${this.currentView === 'grid' ? 'active' : ''}" data-view="grid" title="Vista de Tarjetas" style="border-radius: 0; margin: 0; border: none; padding: 10px 16px; font-weight: 600; cursor: pointer; transition: all 0.2s; flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 38px; ${this.currentView === 'grid' ? 'background: var(--color-primary) !important; color: white !important;' : 'background: transparent; color: var(--color-text);'}">
                                     <i class="fas fa-th"></i> <span>Tarjetas</span>
                                 </button>
-                                <button type="button" class="btn-secondary btn-sm" id="inventory-view-list-btn" title="Vista de Lista" style="border-radius: 0; margin: 0; border: none; padding: 10px 16px; font-weight: 600; cursor: pointer; transition: all 0.2s; flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 38px; ${this.currentView === 'list' ? 'background: var(--color-primary) !important; color: white !important;' : 'background: transparent; color: var(--color-text);'}">
+                                <button type="button" class="inventory-view-btn ${this.currentView === 'list' ? 'active' : ''}" data-view="list" title="Vista de Lista" style="border-radius: 0; margin: 0; border: none; padding: 10px 16px; font-weight: 600; cursor: pointer; transition: all 0.2s; flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 38px; ${this.currentView === 'list' ? 'background: var(--color-primary) !important; color: white !important;' : 'background: transparent; color: var(--color-text);'}">
                                     <i class="fas fa-list"></i> <span>Lista</span>
                                 </button>
                             </div>
@@ -376,60 +376,31 @@ const Inventory = {
         document.getElementById('inventory-import-btn')?.addEventListener('click', () => this.importCSV());
         document.getElementById('inventory-export-btn')?.addEventListener('click', () => this.exportInventory());
         
-        // Toggle de vista (Grid/Lista) - Usar delegación de eventos
-        const moduleContent = document.getElementById('module-content');
-        if (moduleContent) {
-            // Usar delegación de eventos para los botones de vista (evita problemas de timing)
-            moduleContent.addEventListener('click', (e) => {
-                const gridBtn = e.target.closest('#inventory-view-grid-btn');
-                const listBtn = e.target.closest('#inventory-view-list-btn');
-                
-                if (gridBtn) {
+        // Toggle de vista (Grid/Lista) - Usar el mismo patrón que POS
+        const inventoryContainer = document.getElementById('module-content') || document.querySelector('.inventory-container');
+        if (inventoryContainer) {
+            // Usar delegación de eventos exactamente como en POS
+            inventoryContainer.addEventListener('click', (e) => {
+                const viewBtn = e.target.closest('.inventory-view-btn');
+                if (viewBtn) {
                     e.preventDefault();
                     e.stopPropagation();
-                    this.currentView = 'grid';
-                    this.updateViewButtons();
-                    this.loadInventory();
-                } else if (listBtn) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    this.currentView = 'list';
-                    this.updateViewButtons();
+                    // Remover active de todos los botones
+                    document.querySelectorAll('.inventory-view-btn').forEach(b => {
+                        b.classList.remove('active');
+                        b.style.background = 'transparent';
+                        b.style.color = 'var(--color-text)';
+                    });
+                    // Agregar active al botón clickeado
+                    viewBtn.classList.add('active');
+                    viewBtn.style.background = 'var(--color-primary)';
+                    viewBtn.style.color = 'white';
+                    // Cambiar vista
+                    this.currentView = viewBtn.dataset.view;
                     this.loadInventory();
                 }
             });
         }
-        
-        // Adjuntar listeners directos después de un delay (como respaldo)
-        setTimeout(() => {
-            const gridBtn = document.getElementById('inventory-view-grid-btn');
-            const listBtn = document.getElementById('inventory-view-list-btn');
-            
-            if (gridBtn && !gridBtn.dataset.listenerAttached) {
-                gridBtn.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    this.currentView = 'grid';
-                    this.updateViewButtons();
-                    this.loadInventory();
-                });
-                gridBtn.dataset.listenerAttached = 'true';
-            }
-            
-            if (listBtn && !listBtn.dataset.listenerAttached) {
-                listBtn.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    this.currentView = 'list';
-                    this.updateViewButtons();
-                    this.loadInventory();
-                });
-                listBtn.dataset.listenerAttached = 'true';
-            }
-            
-            // Actualizar estado visual de los botones
-            this.updateViewButtons();
-        }, 200);
         
         // Escaneo de código de barras
         this.setupBarcodeScanning();
@@ -5492,32 +5463,27 @@ const Inventory = {
         }
     },
     
-    // Actualizar botones de vista (solo si existen)
+    // Actualizar botones de vista (usando clases como en POS)
     updateViewButtons() {
-        const gridBtn = document.getElementById('inventory-view-grid-btn');
-        const listBtn = document.getElementById('inventory-view-list-btn');
-        
-        // Si los botones no existen, simplemente retornar sin hacer nada
-        if (!gridBtn || !listBtn) {
+        const viewBtns = document.querySelectorAll('.inventory-view-btn');
+        if (!viewBtns || viewBtns.length === 0) {
             return;
         }
         
-        // Actualizar estilos según la vista actual
-        if (this.currentView === 'grid') {
-            gridBtn.style.background = 'var(--color-primary)';
-            gridBtn.style.color = 'white';
-            gridBtn.style.fontWeight = '600';
-            listBtn.style.background = 'transparent';
-            listBtn.style.color = 'var(--color-text)';
-            listBtn.style.fontWeight = 'normal';
-        } else {
-            listBtn.style.background = 'var(--color-primary)';
-            listBtn.style.color = 'white';
-            listBtn.style.fontWeight = '600';
-            gridBtn.style.background = 'transparent';
-            gridBtn.style.color = 'var(--color-text)';
-            gridBtn.style.fontWeight = 'normal';
-        }
+        // Actualizar estilos según la vista actual (igual que POS)
+        viewBtns.forEach(btn => {
+            if (btn.dataset.view === this.currentView) {
+                btn.classList.add('active');
+                btn.style.background = 'var(--color-primary)';
+                btn.style.color = 'white';
+                btn.style.fontWeight = '600';
+            } else {
+                btn.classList.remove('active');
+                btn.style.background = 'transparent';
+                btn.style.color = 'var(--color-text)';
+                btn.style.fontWeight = 'normal';
+            }
+        });
     },
     
     // Toggle seleccionar todos los items
