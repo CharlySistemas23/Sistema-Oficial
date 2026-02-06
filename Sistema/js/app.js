@@ -782,64 +782,71 @@ const App = {
                     break;
                 case 'suppliers':
                     if (abortController.aborted) return;
+                    
+                    // Mostrar mensaje de carga
+                    const content = document.getElementById('module-content');
+                    if (content) {
+                        content.innerHTML = '<div style="padding: var(--spacing-lg); text-align: center;"><p>Cargando módulo de Proveedores...</p></div>';
+                    }
+                    
                     // Esperar un momento para que el módulo esté disponible
                     let Suppliers = window.Suppliers;
                     let suppliersRetries = 0;
-                    const maxSuppliersRetries = 20; // Aumentar intentos
-                    while (!Suppliers && suppliersRetries < maxSuppliersRetries) {
-                        await Utils.delay(100); // Aumentar delay
-                        Suppliers = window.Suppliers;
-                        suppliersRetries++;
-                    }
-                    if (Suppliers && typeof Suppliers !== 'undefined') {
-                        if (!Suppliers.initialized) {
-                            await Suppliers.init();
-                        } else {
-                            if (abortController.aborted) return;
-                            // Verificar si el contenido necesita ser reconfigurado
-                            const content = document.getElementById('module-content');
-                            const suppliersList = content?.querySelector('#suppliers-list');
-                            const suppliersModule = content?.querySelector('.suppliers-module');
-                            const needsReconfig = !content || 
-                                content.innerHTML.trim() === '' || 
-                                content.innerHTML.includes('Cargando módulo') || 
-                                !suppliersModule;
-                            
-                            if (needsReconfig) {
-                                console.log('🔄 Reconfigurando UI de Suppliers...');
-                                Suppliers.setupEventListeners();
-                                // Esperar a que el DOM se actualice
-                                await Utils.delay(150);
+                    const maxSuppliersRetries = 30; // Aumentar intentos
+                    
+                    // Verificar si el script se cargó correctamente
+                    if (!Suppliers) {
+                        console.log('🔄 Esperando a que suppliers.js se cargue...');
+                        while (!Suppliers && suppliersRetries < maxSuppliersRetries) {
+                            await Utils.delay(150);
+                            Suppliers = window.Suppliers;
+                            suppliersRetries++;
+                            if (suppliersRetries % 5 === 0) {
+                                console.log(`   Intento ${suppliersRetries}/${maxSuppliersRetries}...`);
                             }
+                        }
+                    }
+                    
+                    if (Suppliers && typeof Suppliers !== 'undefined' && typeof Suppliers.init === 'function') {
+                        console.log('✅ Suppliers module encontrado, inicializando...');
+                        try {
+                            if (!Suppliers.initialized) {
+                                await Suppliers.init();
+                            } else {
+                                if (abortController.aborted) return;
+                                // Verificar si el contenido necesita ser reconfigurado
+                                const suppliersList = content?.querySelector('#suppliers-list');
+                                const suppliersModule = content?.querySelector('.suppliers-module');
+                                const needsReconfig = !content || 
+                                    content.innerHTML.trim() === '' || 
+                                    content.innerHTML.includes('Cargando módulo') || 
+                                    !suppliersModule;
+                                
+                                if (needsReconfig) {
+                                    console.log('🔄 Reconfigurando UI de Suppliers...');
+                                    if (typeof Suppliers.setupEventListeners === 'function') {
+                                        Suppliers.setupEventListeners();
+                                    }
+                                    // Esperar a que el DOM se actualice
+                                    await Utils.delay(150);
+                                }
+                            }
+                            
                             if (abortController.aborted) return;
                             // Siempre recargar los datos cuando se navega al módulo
                             if (typeof Suppliers.loadSuppliers === 'function') {
                                 await Suppliers.loadSuppliers();
-                            }
-                        }
-                    } else {
-                        console.warn('⚠️ Suppliers module not found after retries, intentando cargar manualmente...');
-                        // Intentar cargar el módulo manualmente si no está disponible
-                        // Esperar un poco más y verificar de nuevo (puede ser un problema de timing)
-                        await Utils.delay(500);
-                        Suppliers = window.Suppliers;
-                        
-                        if (Suppliers && typeof Suppliers !== 'undefined') {
-                            console.log('✅ Suppliers module encontrado después de delay adicional');
-                            if (!Suppliers.initialized) {
-                                await Suppliers.init();
                             } else {
-                                await Suppliers.loadSuppliers();
+                                console.warn('⚠️ Suppliers.loadSuppliers no es una función');
                             }
-                        } else {
-                            console.error('❌ Suppliers module not found after retries');
-                            const content = document.getElementById('module-content');
+                        } catch (initError) {
+                            console.error('❌ Error inicializando Suppliers:', initError);
                             if (content) {
                                 content.innerHTML = `
                                     <div style="padding: var(--spacing-lg); text-align: center;">
-                                        <h3 style="color: var(--color-danger); margin-bottom: var(--spacing-md);">Error: Módulo de Proveedores no disponible</h3>
+                                        <h3 style="color: var(--color-danger); margin-bottom: var(--spacing-md);">Error al inicializar módulo</h3>
                                         <p style="color: var(--color-text-secondary); margin-bottom: var(--spacing-md);">
-                                            El módulo no se pudo cargar. Por favor, recarga la página.
+                                            ${initError.message || 'Error desconocido'}
                                         </p>
                                         <button class="btn-primary" onclick="location.reload()">
                                             <i class="fas fa-sync-alt"></i> Recargar Página
@@ -847,6 +854,62 @@ const App = {
                                     </div>
                                 `;
                             }
+                        }
+                    } else {
+                        console.error('❌ Suppliers module not found or invalid after retries');
+                        console.error('   window.Suppliers:', window.Suppliers);
+                        console.error('   typeof window.Suppliers:', typeof window.Suppliers);
+                        
+                        // Intentar cargar el script manualmente como último recurso
+                        if (!window.Suppliers) {
+                            console.log('🔄 Intentando cargar suppliers.js manualmente...');
+                            const script = document.createElement('script');
+                            script.src = 'js/suppliers.js?v=' + Date.now();
+                            script.onload = () => {
+                                console.log('✅ suppliers.js cargado manualmente');
+                                if (window.Suppliers) {
+                                    window.Suppliers.init().then(() => {
+                                        if (typeof window.Suppliers.loadSuppliers === 'function') {
+                                            window.Suppliers.loadSuppliers();
+                                        }
+                                    });
+                                }
+                            };
+                            script.onerror = () => {
+                                console.error('❌ Error cargando suppliers.js manualmente');
+                            };
+                            document.head.appendChild(script);
+                            await Utils.delay(1000);
+                            
+                            if (window.Suppliers && typeof window.Suppliers !== 'undefined') {
+                                console.log('✅ Suppliers module encontrado después de carga manual');
+                                try {
+                                    if (!window.Suppliers.initialized) {
+                                        await window.Suppliers.init();
+                                    } else {
+                                        await window.Suppliers.loadSuppliers();
+                                    }
+                                    return; // Salir exitosamente
+                                } catch (e) {
+                                    console.error('❌ Error después de carga manual:', e);
+                                }
+                            }
+                        }
+                        
+                        // Mostrar error final
+                        if (content) {
+                            content.innerHTML = `
+                                <div style="padding: var(--spacing-lg); text-align: center;">
+                                    <h3 style="color: var(--color-danger); margin-bottom: var(--spacing-md);">Error: Módulo de Proveedores no disponible</h3>
+                                    <p style="color: var(--color-text-secondary); margin-bottom: var(--spacing-md);">
+                                        El módulo no se pudo cargar después de ${maxSuppliersRetries} intentos.<br>
+                                        Por favor, recarga la página o verifica la consola para más detalles.
+                                    </p>
+                                    <button class="btn-primary" onclick="location.reload()">
+                                        <i class="fas fa-sync-alt"></i> Recargar Página
+                                    </button>
+                                </div>
+                            `;
                         }
                     }
                     break;
