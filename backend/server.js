@@ -573,150 +573,6 @@ async function checkAndMigrate() {
         console.log('💡 Puedes crear el usuario admin manualmente con: npm run create-admin');
         // No lanzar error, continuar con el servidor
       }
-    } else {
-      console.log('✅ Tablas principales presentes en la base de datos');
-      
-      // Verificar si faltan tablas específicas (como quick_captures) y crearlas
-      if (missingTables.length > 0) {
-        console.log(`⚠️  Faltan algunas tablas: ${missingTables.join(', ')}`);
-        console.log('🔄 Ejecutando migración parcial para crear tablas faltantes...');
-        
-        const { readFileSync } = await import('fs');
-        const { join } = await import('path');
-        const schemaPath = join(__dirname, 'database', 'schema.sql');
-        const schemaSQL = readFileSync(schemaPath, 'utf8');
-        
-        try {
-          // Ejecutar schema completo (usa IF NOT EXISTS, así que es seguro)
-          await pool.query(schemaSQL);
-          console.log(`✅ Tablas faltantes creadas: ${missingTables.join(', ')}`);
-        } catch (error) {
-          if (error.code === '42P07' || error.code === '42710' || 
-              error.message.includes('already exists')) {
-            console.log('⚠️  Algunos objetos ya existen, continuando...');
-          } else {
-            console.error('❌ Error creando tablas faltantes:', error.message);
-            // No lanzar error, continuar con el servidor
-          }
-        }
-      }
-      
-      // Verificar si el usuario master_admin existe, si no, crearlo
-      const adminCheck = await pool.query(`
-        SELECT id FROM users WHERE username = 'master_admin' LIMIT 1
-      `);
-      
-      if (adminCheck.rows.length === 0) {
-        console.log('👤 Usuario master_admin no encontrado, creando...');
-        
-        // Verificar si existe la sucursal MAIN
-        let branchResult = await pool.query(`SELECT id FROM branches WHERE code = 'MAIN' LIMIT 1`);
-        let branchId;
-        
-        if (branchResult.rows.length === 0) {
-          // Crear sucursal principal
-          await pool.query(`
-            INSERT INTO branches (id, name, code, address, phone, email, active)
-            VALUES (
-              '00000000-0000-0000-0000-000000000001',
-              'Sucursal Principal',
-              'MAIN',
-              'Dirección principal',
-              '1234567890',
-              'admin@opalco.com',
-              true
-            )
-            ON CONFLICT (id) DO NOTHING
-          `);
-          branchResult = await pool.query(`SELECT id FROM branches WHERE code = 'MAIN' LIMIT 1`);
-        }
-        
-        branchId = branchResult.rows[0]?.id;
-        if (!branchId) {
-          // Si no hay sucursal MAIN, obtener la primera disponible
-          const firstBranch = await pool.query(`SELECT id FROM branches WHERE active = true LIMIT 1`);
-          branchId = firstBranch.rows[0]?.id;
-        }
-        
-        // Verificar si existe el empleado ADMIN
-        let employeeResult = await pool.query(`SELECT id FROM employees WHERE code = 'ADMIN' LIMIT 1`);
-        let employeeId;
-        
-        if (employeeResult.rows.length === 0) {
-          // Crear empleado admin (master_admin NO debe tener branch_id para acceder a todas las sucursales)
-          await pool.query(`
-            INSERT INTO employees (id, code, name, role, branch_id, active)
-            VALUES (
-              '00000000-0000-0000-0000-000000000002',
-              'ADMIN',
-              'Administrador Maestro',
-              'master_admin',
-              NULL,
-              true
-            )
-            ON CONFLICT (id) DO UPDATE SET
-              role = 'master_admin',
-              branch_id = NULL
-          `);
-          employeeResult = await pool.query(`SELECT id FROM employees WHERE code = 'ADMIN' LIMIT 1`);
-        } else {
-          // Asegurar que el empleado master_admin tenga branch_id NULL
-          await pool.query(`
-            UPDATE employees 
-            SET role = 'master_admin', branch_id = NULL 
-            WHERE code = 'ADMIN' AND role = 'master_admin'
-          `);
-        }
-        
-        employeeId = employeeResult.rows[0]?.id || '00000000-0000-0000-0000-000000000002';
-        
-        // Crear usuario admin
-        const bcrypt = await import('bcryptjs');
-        const passwordHash = await bcrypt.default.hash('1234', 10);
-        
-        try {
-          await pool.query(`
-            INSERT INTO users (id, username, password_hash, employee_id, role, active)
-            VALUES (
-              '00000000-0000-0000-0000-000000000001',
-              'master_admin',
-              $1,
-              $2,
-              'master_admin',
-              true
-            )
-            ON CONFLICT (id) DO UPDATE SET
-              username = 'master_admin',
-              password_hash = EXCLUDED.password_hash,
-              employee_id = EXCLUDED.employee_id,
-              role = 'master_admin',
-              active = EXCLUDED.active
-          `, [passwordHash, employeeId]);
-          
-          console.log('✅ Usuario master_admin creado/actualizado');
-          console.log('📋 Credenciales: username=master_admin, PIN=1234');
-        } catch (userError) {
-          if (userError.code === '23505') {
-            // Usuario ya existe (conflicto de username)
-            console.log('⚠️  Usuario master_admin ya existe con otro ID');
-            // Intentar actualizar el existente
-            await pool.query(`
-              UPDATE users 
-              SET password_hash = $1, 
-                  employee_id = $2, 
-                  role = 'master_admin',
-                  active = true,
-                  username = 'master_admin'
-              WHERE username = 'master_admin' OR id = '00000000-0000-0000-0000-000000000001'
-            `, [passwordHash, employeeId]);
-            console.log('✅ Usuario master_admin actualizado');
-          } else {
-            throw userError;
-          }
-        }
-      } else {
-        console.log('✅ Usuario master_admin ya existe');
-      }
       
       // Verificar y agregar branch_id a customers si no existe
       const customersBranchCheck = await pool.query(`
@@ -877,6 +733,9 @@ async function checkAndMigrate() {
       } catch (error) {
         console.error('⚠️  Error verificando columna price:', error.message);
       }
+    } catch (migrationError) {
+      console.error('⚠️  Error en migraciones adicionales:', migrationError.message);
+      // No crítico, continuar
     }
 
     await pool.end();
