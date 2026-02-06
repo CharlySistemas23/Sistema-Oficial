@@ -3,7 +3,7 @@
 const DB = {
     db: null,
     dbName: 'opal_pos_db',
-    version: 11, // Incrementado para agregar store historical_reports
+    version: 12, // Incrementado para agregar store suppliers
 
     async init() {
         return new Promise((resolve, reject) => {
@@ -403,6 +403,16 @@ const DB = {
             histStore.createIndex('date_to', 'date_to', { unique: false });
             histStore.createIndex('branch_id', 'branch_id', { unique: false });
             histStore.createIndex('created_at', 'created_at', { unique: false });
+        }
+
+        // Suppliers (Proveedores)
+        if (!db.objectStoreNames.contains('suppliers')) {
+            const supplierStore = db.createObjectStore('suppliers', { keyPath: 'id' });
+            supplierStore.createIndex('code', 'code', { unique: true });
+            supplierStore.createIndex('barcode', 'barcode', { unique: false });
+            supplierStore.createIndex('branch_id', 'branch_id', { unique: false });
+            supplierStore.createIndex('status', 'status', { unique: false });
+            supplierStore.createIndex('supplier_type', 'supplier_type', { unique: false });
         }
     },
 
