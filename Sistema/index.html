@@ -959,6 +959,16 @@
                 missingDeps.push('js/ui.js');
             }
             
+            // Verificar módulos opcionales después de un delay
+            setTimeout(() => {
+                if (typeof window.Suppliers === 'undefined') {
+                    console.warn('⚠️ Suppliers module no está disponible después de DOMContentLoaded');
+                    console.warn('   Esto puede ser normal si el script aún se está cargando');
+                } else {
+                    console.log('✅ Suppliers module disponible en window.Suppliers');
+                }
+            }, 1000);
+            
             if (missingDeps.length > 0) {
                 console.error('❌ Dependencias críticas no cargadas:', missingDeps);
                 const errorMsg = 'Error: Los siguientes archivos no se pudieron cargar:\n\n' + 
