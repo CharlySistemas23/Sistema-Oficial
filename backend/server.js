@@ -247,17 +247,17 @@ async function checkAndMigrate() {
       ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
     });
 
-    // Verificar si existen las tablas principales (branches y quick_captures)
+    // Verificar si existen las tablas principales (branches, quick_captures, suppliers)
     const checkTables = await pool.query(`
       SELECT table_name 
       FROM information_schema.tables 
       WHERE table_schema = 'public' 
-      AND table_name IN ('branches', 'quick_captures', 'archived_quick_capture_reports', 'historical_quick_capture_reports')
+      AND table_name IN ('branches', 'quick_captures', 'archived_quick_capture_reports', 'historical_quick_capture_reports', 'suppliers')
       ORDER BY table_name;
     `);
     
     const existingTables = checkTables.rows.map(r => r.table_name);
-    const requiredTables = ['branches', 'quick_captures', 'archived_quick_capture_reports', 'historical_quick_capture_reports'];
+    const requiredTables = ['branches', 'quick_captures', 'archived_quick_capture_reports', 'historical_quick_capture_reports', 'suppliers'];
     const missingTables = requiredTables.filter(t => !existingTables.includes(t));
     
     // Si falta alguna tabla importante, crear directamente primero (más confiable)
@@ -460,10 +460,47 @@ async function checkAndMigrate() {
           const finalExisting = finalCheck.rows.map(r => r.table_name);
           const finalMissing = missingTables.filter(t => !finalExisting.includes(t));
           
+          // Si aún faltan tablas (como suppliers), ejecutar schema.sql completo
           if (finalMissing.length > 0) {
-            console.error(`❌ No se pudieron crear las siguientes tablas: ${finalMissing.join(', ')}`);
-            console.log('💡 Ejecuta el SQL manualmente en Railway Database');
-            console.log('💡 Revisa los logs anteriores para ver los errores específicos');
+            console.log(`⚠️  Aún faltan tablas: ${finalMissing.join(', ')}`);
+            console.log('🔄 Ejecutando schema.sql completo para crear tablas faltantes...');
+            
+            try {
+              const { readFileSync } = await import('fs');
+              const { join } = await import('path');
+              const schemaPath = join(__dirname, 'database', 'schema.sql');
+              const schemaSQL = readFileSync(schemaPath, 'utf8');
+              
+              // Ejecutar schema completo (usa IF NOT EXISTS, así que es seguro)
+              await pool.query(schemaSQL);
+              console.log(`✅ Schema ejecutado. Tablas faltantes deberían estar creadas: ${finalMissing.join(', ')}`);
+              
+              // Verificar una vez más
+              const verifyCheck = await pool.query(`
+                SELECT table_name 
+                FROM information_schema.tables 
+                WHERE table_schema = 'public' 
+                AND table_name = ANY($1::text[])
+              `, [finalMissing]);
+              
+              const verifyExisting = verifyCheck.rows.map(r => r.table_name);
+              const stillMissing = finalMissing.filter(t => !verifyExisting.includes(t));
+              
+              if (stillMissing.length > 0) {
+                console.error(`❌ Aún faltan tablas después de ejecutar schema: ${stillMissing.join(', ')}`);
+                console.log('💡 Revisa los logs anteriores para ver los errores específicos');
+              } else {
+                console.log(`✅ Todas las tablas requeridas están presentes: ${requiredTables.join(', ')}`);
+              }
+            } catch (schemaError) {
+              console.error('❌ Error ejecutando schema.sql:', schemaError.message);
+              if (schemaError.code === '42P07' || schemaError.code === '42710' || 
+                  schemaError.message.includes('already exists')) {
+                console.log('⚠️  Algunos objetos ya existen, continuando...');
+              } else {
+                console.error('   Detalles:', schemaError);
+              }
+            }
           } else {
             console.log(`✅ Todas las tablas requeridas están presentes: ${requiredTables.join(', ')}`);
           }
