@@ -22,8 +22,8 @@ CREATE TABLE IF NOT EXISTS branches (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_branches_active ON branches(active);
-CREATE INDEX idx_branches_code ON branches(code);
+CREATE INDEX IF NOT EXISTS idx_branches_active ON branches(active);
+CREATE INDEX IF NOT EXISTS idx_branches_code ON branches(code);
 
 -- Empleados
 CREATE TABLE IF NOT EXISTS employees (
@@ -41,10 +41,10 @@ CREATE TABLE IF NOT EXISTS employees (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_employees_barcode ON employees(barcode);
-CREATE INDEX idx_employees_branch_id ON employees(branch_id);
-CREATE INDEX idx_employees_active ON employees(active);
-CREATE INDEX idx_employees_role ON employees(role);
+CREATE INDEX IF NOT EXISTS idx_employees_barcode ON employees(barcode);
+CREATE INDEX IF NOT EXISTS idx_employees_branch_id ON employees(branch_id);
+CREATE INDEX IF NOT EXISTS idx_employees_active ON employees(active);
+CREATE INDEX IF NOT EXISTS idx_employees_role ON employees(role);
 
 -- Usuarios (login)
 CREATE TABLE IF NOT EXISTS users (
@@ -59,9 +59,9 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_users_username ON users(username);
-CREATE INDEX idx_users_employee_id ON users(employee_id);
-CREATE INDEX idx_users_active ON users(active);
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+CREATE INDEX IF NOT EXISTS idx_users_employee_id ON users(employee_id);
+CREATE INDEX IF NOT EXISTS idx_users_active ON users(active);
 
 -- Catálogo de Agencias
 CREATE TABLE IF NOT EXISTS catalog_agencies (
@@ -74,8 +74,8 @@ CREATE TABLE IF NOT EXISTS catalog_agencies (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_catalog_agencies_barcode ON catalog_agencies(barcode);
-CREATE INDEX idx_catalog_agencies_active ON catalog_agencies(active);
+CREATE INDEX IF NOT EXISTS idx_catalog_agencies_barcode ON catalog_agencies(barcode);
+CREATE INDEX IF NOT EXISTS idx_catalog_agencies_active ON catalog_agencies(active);
 
 -- Catálogo de Guías
 CREATE TABLE IF NOT EXISTS catalog_guides (
@@ -89,8 +89,8 @@ CREATE TABLE IF NOT EXISTS catalog_guides (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_catalog_guides_barcode ON catalog_guides(barcode);
-CREATE INDEX idx_catalog_guides_agency_id ON catalog_guides(agency_id);
+CREATE INDEX IF NOT EXISTS idx_catalog_guides_barcode ON catalog_guides(barcode);
+CREATE INDEX IF NOT EXISTS idx_catalog_guides_agency_id ON catalog_guides(agency_id);
 
 -- Catálogo de Vendedores
 CREATE TABLE IF NOT EXISTS catalog_sellers (
@@ -103,7 +103,7 @@ CREATE TABLE IF NOT EXISTS catalog_sellers (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_catalog_sellers_barcode ON catalog_sellers(barcode);
+CREATE INDEX IF NOT EXISTS idx_catalog_sellers_barcode ON catalog_sellers(barcode);
 
 -- ============================================
 -- TABLAS DE CLIENTES (debe crearse antes de repairs y sales)
@@ -122,10 +122,10 @@ CREATE TABLE IF NOT EXISTS customers (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_customers_name_trgm ON customers USING gin(name gin_trgm_ops);
-CREATE INDEX idx_customers_email ON customers(email);
-CREATE INDEX idx_customers_phone ON customers(phone);
-CREATE INDEX idx_customers_branch_id ON customers(branch_id);
+CREATE INDEX IF NOT EXISTS idx_customers_name_trgm ON customers USING gin(name gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_customers_email ON customers(email);
+CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
+CREATE INDEX IF NOT EXISTS idx_customers_branch_id ON customers(branch_id);
 
 -- ============================================
 -- TABLAS DE INVENTARIO
@@ -177,12 +177,12 @@ CREATE TABLE IF NOT EXISTS inventory_items (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_inventory_items_sku ON inventory_items(sku);
-CREATE INDEX idx_inventory_items_barcode ON inventory_items(barcode);
-CREATE INDEX idx_inventory_items_branch_id ON inventory_items(branch_id);
-CREATE INDEX idx_inventory_items_status ON inventory_items(status);
-CREATE INDEX idx_inventory_items_category ON inventory_items(category);
-CREATE INDEX idx_inventory_items_name_trgm ON inventory_items USING gin(name gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_inventory_items_sku ON inventory_items(sku);
+CREATE INDEX IF NOT EXISTS idx_inventory_items_barcode ON inventory_items(barcode);
+CREATE INDEX IF NOT EXISTS idx_inventory_items_branch_id ON inventory_items(branch_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_items_status ON inventory_items(status);
+CREATE INDEX IF NOT EXISTS idx_inventory_items_category ON inventory_items(category);
+CREATE INDEX IF NOT EXISTS idx_inventory_items_name_trgm ON inventory_items USING gin(name gin_trgm_ops);
 
 -- Logs de Inventario
 CREATE TABLE IF NOT EXISTS inventory_logs (
@@ -682,9 +682,9 @@ CREATE TABLE IF NOT EXISTS archived_quick_capture_reports (
 );
 
 -- Índices para archived_quick_capture_reports
-CREATE INDEX idx_archived_qc_reports_date ON archived_quick_capture_reports(report_date);
-CREATE INDEX idx_archived_qc_reports_branch_id ON archived_quick_capture_reports(branch_id);
-CREATE INDEX idx_archived_qc_reports_archived_at ON archived_quick_capture_reports(archived_at);
+CREATE INDEX IF NOT EXISTS idx_archived_qc_reports_date ON archived_quick_capture_reports(report_date);
+CREATE INDEX IF NOT EXISTS idx_archived_qc_reports_branch_id ON archived_quick_capture_reports(branch_id);
+CREATE INDEX IF NOT EXISTS idx_archived_qc_reports_archived_at ON archived_quick_capture_reports(archived_at);
 CREATE INDEX IF NOT EXISTS idx_archived_qc_reports_archived_by ON archived_quick_capture_reports(archived_by);
 
 -- Reportes Históricos de Capturas Rápidas (Historical Quick Capture Reports)
@@ -732,10 +732,10 @@ CREATE TABLE IF NOT EXISTS historical_quick_capture_reports (
 );
 
 -- Índices para historical_quick_capture_reports
-CREATE INDEX idx_historical_qc_reports_period_type ON historical_quick_capture_reports(period_type);
-CREATE INDEX idx_historical_qc_reports_branch_id ON historical_quick_capture_reports(branch_id);
-CREATE INDEX idx_historical_qc_reports_date_range ON historical_quick_capture_reports(date_from, date_to);
-CREATE INDEX idx_historical_qc_reports_created_at ON historical_quick_capture_reports(created_at);
+CREATE INDEX IF NOT EXISTS idx_historical_qc_reports_period_type ON historical_quick_capture_reports(period_type);
+CREATE INDEX IF NOT EXISTS idx_historical_qc_reports_branch_id ON historical_quick_capture_reports(branch_id);
+CREATE INDEX IF NOT EXISTS idx_historical_qc_reports_date_range ON historical_quick_capture_reports(date_from, date_to);
+CREATE INDEX IF NOT EXISTS idx_historical_qc_reports_created_at ON historical_quick_capture_reports(created_at);
 
 -- Tourist Report Lines (Líneas de Reportes Turísticos)
 CREATE TABLE IF NOT EXISTS tourist_report_lines (
@@ -820,12 +820,12 @@ CREATE TABLE IF NOT EXISTS suppliers (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_suppliers_code ON suppliers(code);
-CREATE INDEX idx_suppliers_barcode ON suppliers(barcode);
-CREATE INDEX idx_suppliers_branch_id ON suppliers(branch_id);
-CREATE INDEX idx_suppliers_status ON suppliers(status);
-CREATE INDEX idx_suppliers_type ON suppliers(supplier_type);
-CREATE INDEX idx_suppliers_name_trgm ON suppliers USING gin(name gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_suppliers_code ON suppliers(code);
+CREATE INDEX IF NOT EXISTS idx_suppliers_barcode ON suppliers(barcode);
+CREATE INDEX IF NOT EXISTS idx_suppliers_branch_id ON suppliers(branch_id);
+CREATE INDEX IF NOT EXISTS idx_suppliers_status ON suppliers(status);
+CREATE INDEX IF NOT EXISTS idx_suppliers_type ON suppliers(supplier_type);
+CREATE INDEX IF NOT EXISTS idx_suppliers_name_trgm ON suppliers USING gin(name gin_trgm_ops);
 
 -- Contactos de Proveedores
 CREATE TABLE IF NOT EXISTS supplier_contacts (
