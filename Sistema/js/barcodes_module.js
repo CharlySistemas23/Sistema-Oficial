@@ -236,7 +236,14 @@ var BarcodesModule = {
                             generateAgencyBtn.onclick = () => this.loadCatalogModule('agencies');
                         }
                         if (generateSupplierBtn) {
-                            generateSupplierBtn.onclick = () => App.loadModule('suppliers');
+                            generateSupplierBtn.onclick = () => {
+                                // Filtrar por proveedores
+                                const typeFilter = document.getElementById('barcodes-type-filter');
+                                if (typeFilter) {
+                                    typeFilter.value = 'suppliers';
+                                    typeFilter.dispatchEvent(new Event('change'));
+                                }
+                            };
                         }
                     }, 100);
                     await this.loadBarcodes();
@@ -1722,6 +1729,7 @@ var BarcodesModule = {
                             type === 'employee' ? 'Código' : 
                             type === 'seller' ? 'ID' : 
                             type === 'guide' ? 'ID' : 
+                            type === 'supplier' ? 'Código' :
                             'ID'
                         }: ${code}</div>
                     </div>
@@ -2785,12 +2793,15 @@ var BarcodesModule = {
                 case 'guide':
                     entity = await DB.get('catalog_guides', id);
                     break;
-                case 'agency':
-                    entity = await DB.get('catalog_agencies', id);
-                    break;
-            }
+            case 'agency':
+                entity = await DB.get('catalog_agencies', id);
+                break;
+            case 'supplier':
+                entity = await DB.get('suppliers', id);
+                break;
+        }
 
-            if (!entity || Utils.isBarcodeEmpty(entity.barcode)) {
+        if (!entity || Utils.isBarcodeEmpty(entity.barcode)) {
                 Utils.showNotification('No hay código de barras para generar QR', 'error');
                 return;
             }
