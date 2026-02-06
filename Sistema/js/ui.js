@@ -365,11 +365,26 @@ const UI = {
         }
     },
 
-    showModal(title, body, footer = '') {
+    showModal(title, body, footer = '', options = {}) {
         const overlay = document.getElementById('modal-overlay');
+        const modalContainer = document.getElementById('modal-container');
         const modalTitle = document.getElementById('modal-title');
         const modalBody = document.getElementById('modal-body');
         const modalFooter = document.getElementById('modal-footer');
+        
+        // Aplicar clase de tamaño si se especifica
+        if (modalContainer) {
+            // Remover todas las clases de tamaño anteriores
+            modalContainer.classList.remove('modal-small', 'modal-medium', 'modal-large', 'modal-lg');
+            
+            // Aplicar nueva clase si se especifica
+            if (options.size) {
+                modalContainer.classList.add(`modal-${options.size}`);
+            } else if (options.large) {
+                // Compatibilidad: si se pasa large: true, usar modal-lg
+                modalContainer.classList.add('modal-lg');
+            }
+        }
         
         // Usar innerHTML para soportar íconos en el título
         if (modalTitle) modalTitle.innerHTML = title;
