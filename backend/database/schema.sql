@@ -198,8 +198,8 @@ CREATE TABLE IF NOT EXISTS inventory_logs (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_inventory_logs_item_id ON inventory_logs(item_id);
-CREATE INDEX idx_inventory_logs_created_at ON inventory_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_inventory_logs_item_id ON inventory_logs(item_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_logs_created_at ON inventory_logs(created_at);
 
 -- Transferencias entre Sucursales
 CREATE TABLE IF NOT EXISTS inventory_transfers (
@@ -214,9 +214,9 @@ CREATE TABLE IF NOT EXISTS inventory_transfers (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_inventory_transfers_from_branch ON inventory_transfers(from_branch_id);
-CREATE INDEX idx_inventory_transfers_to_branch ON inventory_transfers(to_branch_id);
-CREATE INDEX idx_inventory_transfers_status ON inventory_transfers(status);
+CREATE INDEX IF NOT EXISTS idx_inventory_transfers_from_branch ON inventory_transfers(from_branch_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_transfers_to_branch ON inventory_transfers(to_branch_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_transfers_status ON inventory_transfers(status);
 
 -- Items de Transferencias
 CREATE TABLE IF NOT EXISTS inventory_transfer_items (
@@ -227,8 +227,8 @@ CREATE TABLE IF NOT EXISTS inventory_transfer_items (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_inventory_transfer_items_transfer_id ON inventory_transfer_items(transfer_id);
-CREATE INDEX idx_inventory_transfer_items_item_id ON inventory_transfer_items(item_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_transfer_items_transfer_id ON inventory_transfer_items(transfer_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_transfer_items_item_id ON inventory_transfer_items(item_id);
 
 -- Cost Entries (Costos y Gastos)
 CREATE TABLE IF NOT EXISTS cost_entries (
@@ -247,10 +247,10 @@ CREATE TABLE IF NOT EXISTS cost_entries (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_cost_entries_branch_id ON cost_entries(branch_id);
-CREATE INDEX idx_cost_entries_date ON cost_entries(date);
-CREATE INDEX idx_cost_entries_type ON cost_entries(type);
-CREATE INDEX idx_cost_entries_category ON cost_entries(category);
+CREATE INDEX IF NOT EXISTS idx_cost_entries_branch_id ON cost_entries(branch_id);
+CREATE INDEX IF NOT EXISTS idx_cost_entries_date ON cost_entries(date);
+CREATE INDEX IF NOT EXISTS idx_cost_entries_type ON cost_entries(type);
+CREATE INDEX IF NOT EXISTS idx_cost_entries_category ON cost_entries(category);
 
 -- Repairs (Reparaciones)
 CREATE TABLE IF NOT EXISTS repairs (
@@ -270,10 +270,10 @@ CREATE TABLE IF NOT EXISTS repairs (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_repairs_folio ON repairs(folio);
-CREATE INDEX idx_repairs_branch_id ON repairs(branch_id);
-CREATE INDEX idx_repairs_status ON repairs(status);
-CREATE INDEX idx_repairs_customer_id ON repairs(customer_id);
+CREATE INDEX IF NOT EXISTS idx_repairs_folio ON repairs(folio);
+CREATE INDEX IF NOT EXISTS idx_repairs_branch_id ON repairs(branch_id);
+CREATE INDEX IF NOT EXISTS idx_repairs_status ON repairs(status);
+CREATE INDEX IF NOT EXISTS idx_repairs_customer_id ON repairs(customer_id);
 
 -- Repair Photos (Fotos de Reparaciones)
 CREATE TABLE IF NOT EXISTS repair_photos (
@@ -284,7 +284,7 @@ CREATE TABLE IF NOT EXISTS repair_photos (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_repair_photos_repair_id ON repair_photos(repair_id);
+CREATE INDEX IF NOT EXISTS idx_repair_photos_repair_id ON repair_photos(repair_id);
 
 -- Cash Sessions (Aperturas/Cierres de Caja)
 CREATE TABLE IF NOT EXISTS cash_sessions (
@@ -304,10 +304,10 @@ CREATE TABLE IF NOT EXISTS cash_sessions (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_cash_sessions_branch_id ON cash_sessions(branch_id);
-CREATE INDEX idx_cash_sessions_user_id ON cash_sessions(user_id);
-CREATE INDEX idx_cash_sessions_date ON cash_sessions(date);
-CREATE INDEX idx_cash_sessions_status ON cash_sessions(status);
+CREATE INDEX IF NOT EXISTS idx_cash_sessions_branch_id ON cash_sessions(branch_id);
+CREATE INDEX IF NOT EXISTS idx_cash_sessions_user_id ON cash_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_cash_sessions_date ON cash_sessions(date);
+CREATE INDEX IF NOT EXISTS idx_cash_sessions_status ON cash_sessions(status);
 
 -- Cash Movements (Movimientos de Efectivo)
 CREATE TABLE IF NOT EXISTS cash_movements (
@@ -320,9 +320,9 @@ CREATE TABLE IF NOT EXISTS cash_movements (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_cash_movements_session_id ON cash_movements(session_id);
-CREATE INDEX idx_cash_movements_type ON cash_movements(type);
-CREATE INDEX idx_cash_movements_created_at ON cash_movements(created_at);
+CREATE INDEX IF NOT EXISTS idx_cash_movements_session_id ON cash_movements(session_id);
+CREATE INDEX IF NOT EXISTS idx_cash_movements_type ON cash_movements(type);
+CREATE INDEX IF NOT EXISTS idx_cash_movements_created_at ON cash_movements(created_at);
 
 -- ============================================
 -- TABLAS DE VENTAS
@@ -347,13 +347,13 @@ CREATE TABLE IF NOT EXISTS sales (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_sales_folio ON sales(folio);
-CREATE INDEX idx_sales_branch_id ON sales(branch_id);
-CREATE INDEX idx_sales_created_at ON sales(created_at);
-CREATE INDEX idx_sales_status ON sales(status);
-CREATE INDEX idx_sales_seller_id ON sales(seller_id);
-CREATE INDEX idx_sales_guide_id ON sales(guide_id);
-CREATE INDEX idx_sales_agency_id ON sales(agency_id);
+CREATE INDEX IF NOT EXISTS idx_sales_folio ON sales(folio);
+CREATE INDEX IF NOT EXISTS idx_sales_branch_id ON sales(branch_id);
+CREATE INDEX IF NOT EXISTS idx_sales_created_at ON sales(created_at);
+CREATE INDEX IF NOT EXISTS idx_sales_status ON sales(status);
+CREATE INDEX IF NOT EXISTS idx_sales_seller_id ON sales(seller_id);
+CREATE INDEX IF NOT EXISTS idx_sales_guide_id ON sales(guide_id);
+CREATE INDEX IF NOT EXISTS idx_sales_agency_id ON sales(agency_id);
 
 -- Items de Venta
 CREATE TABLE IF NOT EXISTS sale_items (
@@ -371,8 +371,8 @@ CREATE TABLE IF NOT EXISTS sale_items (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_sale_items_sale_id ON sale_items(sale_id);
-CREATE INDEX idx_sale_items_item_id ON sale_items(item_id);
+CREATE INDEX IF NOT EXISTS idx_sale_items_sale_id ON sale_items(sale_id);
+CREATE INDEX IF NOT EXISTS idx_sale_items_item_id ON sale_items(item_id);
 
 -- Pagos
 CREATE TABLE IF NOT EXISTS payments (
@@ -386,8 +386,8 @@ CREATE TABLE IF NOT EXISTS payments (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_payments_sale_id ON payments(sale_id);
-CREATE INDEX idx_payments_method ON payments(method);
+CREATE INDEX IF NOT EXISTS idx_payments_sale_id ON payments(sale_id);
+CREATE INDEX IF NOT EXISTS idx_payments_method ON payments(method);
 
 -- ============================================
 -- TABLAS DE REPORTES Y ANALÍTICAS
@@ -408,8 +408,8 @@ CREATE TABLE IF NOT EXISTS daily_profit_reports (
     UNIQUE(date, branch_id)
 );
 
-CREATE INDEX idx_daily_profit_reports_date ON daily_profit_reports(date);
-CREATE INDEX idx_daily_profit_reports_branch_id ON daily_profit_reports(branch_id);
+CREATE INDEX IF NOT EXISTS idx_daily_profit_reports_date ON daily_profit_reports(date);
+CREATE INDEX IF NOT EXISTS idx_daily_profit_reports_branch_id ON daily_profit_reports(branch_id);
 
 -- Tipos de Cambio Diarios
 CREATE TABLE IF NOT EXISTS exchange_rates_daily (
@@ -421,7 +421,7 @@ CREATE TABLE IF NOT EXISTS exchange_rates_daily (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_exchange_rates_daily_date ON exchange_rates_daily(date);
+CREATE INDEX IF NOT EXISTS idx_exchange_rates_daily_date ON exchange_rates_daily(date);
 
 -- Arrival Rate Rules (Tabulador maestro de llegadas)
 CREATE TABLE IF NOT EXISTS arrival_rate_rules (
@@ -442,10 +442,10 @@ CREATE TABLE IF NOT EXISTS arrival_rate_rules (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_arrival_rate_rules_agency_id ON arrival_rate_rules(agency_id);
-CREATE INDEX idx_arrival_rate_rules_branch_id ON arrival_rate_rules(branch_id);
-CREATE INDEX idx_arrival_rate_rules_active_from ON arrival_rate_rules(active_from);
-CREATE INDEX idx_arrival_rate_rules_active_until ON arrival_rate_rules(active_until);
+CREATE INDEX IF NOT EXISTS idx_arrival_rate_rules_agency_id ON arrival_rate_rules(agency_id);
+CREATE INDEX IF NOT EXISTS idx_arrival_rate_rules_branch_id ON arrival_rate_rules(branch_id);
+CREATE INDEX IF NOT EXISTS idx_arrival_rate_rules_active_from ON arrival_rate_rules(active_from);
+CREATE INDEX IF NOT EXISTS idx_arrival_rate_rules_active_until ON arrival_rate_rules(active_until);
 
 -- Agregar columnas faltantes a arrival_rate_rules si la tabla ya existe con estructura antigua
 DO $$ 
@@ -558,10 +558,10 @@ CREATE TABLE IF NOT EXISTS agency_arrivals (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_agency_arrivals_date ON agency_arrivals(date);
-CREATE INDEX idx_agency_arrivals_branch_id ON agency_arrivals(branch_id);
-CREATE INDEX idx_agency_arrivals_agency_id ON agency_arrivals(agency_id);
-CREATE INDEX idx_agency_arrivals_guide_id ON agency_arrivals(guide_id);
+CREATE INDEX IF NOT EXISTS idx_agency_arrivals_date ON agency_arrivals(date);
+CREATE INDEX IF NOT EXISTS idx_agency_arrivals_branch_id ON agency_arrivals(branch_id);
+CREATE INDEX IF NOT EXISTS idx_agency_arrivals_agency_id ON agency_arrivals(agency_id);
+CREATE INDEX IF NOT EXISTS idx_agency_arrivals_guide_id ON agency_arrivals(guide_id);
 
 -- Tourist Reports (Reportes Turísticos Diarios)
 CREATE TABLE IF NOT EXISTS tourist_reports (
@@ -577,9 +577,9 @@ CREATE TABLE IF NOT EXISTS tourist_reports (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_tourist_reports_date ON tourist_reports(date);
-CREATE INDEX idx_tourist_reports_branch_id ON tourist_reports(branch_id);
-CREATE INDEX idx_tourist_reports_status ON tourist_reports(status);
+CREATE INDEX IF NOT EXISTS idx_tourist_reports_date ON tourist_reports(date);
+CREATE INDEX IF NOT EXISTS idx_tourist_reports_branch_id ON tourist_reports(branch_id);
+CREATE INDEX IF NOT EXISTS idx_tourist_reports_status ON tourist_reports(status);
 
 -- Reportes Guardados (Saved Reports)
 CREATE TABLE IF NOT EXISTS saved_reports (
@@ -597,11 +597,11 @@ CREATE TABLE IF NOT EXISTS saved_reports (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_saved_reports_report_type ON saved_reports(report_type);
-CREATE INDEX idx_saved_reports_branch_id ON saved_reports(branch_id);
-CREATE INDEX idx_saved_reports_created_by ON saved_reports(created_by);
-CREATE INDEX idx_saved_reports_created_at ON saved_reports(created_at);
-CREATE INDEX idx_saved_reports_date_range ON saved_reports(date_from, date_to);
+CREATE INDEX IF NOT EXISTS idx_saved_reports_report_type ON saved_reports(report_type);
+CREATE INDEX IF NOT EXISTS idx_saved_reports_branch_id ON saved_reports(branch_id);
+CREATE INDEX IF NOT EXISTS idx_saved_reports_created_by ON saved_reports(created_by);
+CREATE INDEX IF NOT EXISTS idx_saved_reports_created_at ON saved_reports(created_at);
+CREATE INDEX IF NOT EXISTS idx_saved_reports_date_range ON saved_reports(date_from, date_to);
 
 -- Capturas Rápidas (Quick Captures)
 CREATE TABLE IF NOT EXISTS quick_captures (
@@ -745,8 +745,8 @@ CREATE TABLE IF NOT EXISTS tourist_report_lines (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_tourist_report_lines_report_id ON tourist_report_lines(report_id);
-CREATE INDEX idx_tourist_report_lines_sale_id ON tourist_report_lines(sale_id);
+CREATE INDEX IF NOT EXISTS idx_tourist_report_lines_report_id ON tourist_report_lines(report_id);
+CREATE INDEX IF NOT EXISTS idx_tourist_report_lines_sale_id ON tourist_report_lines(sale_id);
 
 -- ============================================
 -- TABLAS DE PROVEEDORES
@@ -844,8 +844,8 @@ CREATE TABLE IF NOT EXISTS supplier_contacts (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_supplier_contacts_supplier_id ON supplier_contacts(supplier_id);
-CREATE INDEX idx_supplier_contacts_is_primary ON supplier_contacts(is_primary);
+CREATE INDEX IF NOT EXISTS idx_supplier_contacts_supplier_id ON supplier_contacts(supplier_id);
+CREATE INDEX IF NOT EXISTS idx_supplier_contacts_is_primary ON supplier_contacts(is_primary);
 
 -- ============================================
 -- TABLAS AVANZADAS DE PROVEEDORES (FASE 2+)
@@ -891,10 +891,10 @@ CREATE TABLE IF NOT EXISTS supplier_contracts (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_supplier_contracts_supplier_id ON supplier_contracts(supplier_id);
-CREATE INDEX idx_supplier_contracts_status ON supplier_contracts(status);
-CREATE INDEX idx_supplier_contracts_end_date ON supplier_contracts(end_date);
-CREATE INDEX idx_supplier_contracts_renewal_date ON supplier_contracts(renewal_date);
+CREATE INDEX IF NOT EXISTS idx_supplier_contracts_supplier_id ON supplier_contracts(supplier_id);
+CREATE INDEX IF NOT EXISTS idx_supplier_contracts_status ON supplier_contracts(status);
+CREATE INDEX IF NOT EXISTS idx_supplier_contracts_end_date ON supplier_contracts(end_date);
+CREATE INDEX IF NOT EXISTS idx_supplier_contracts_renewal_date ON supplier_contracts(renewal_date);
 
 -- Documentos de Proveedores
 CREATE TABLE IF NOT EXISTS supplier_documents (
@@ -931,10 +931,10 @@ CREATE TABLE IF NOT EXISTS supplier_documents (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_supplier_documents_supplier_id ON supplier_documents(supplier_id);
-CREATE INDEX idx_supplier_documents_contract_id ON supplier_documents(contract_id);
-CREATE INDEX idx_supplier_documents_type ON supplier_documents(document_type);
-CREATE INDEX idx_supplier_documents_expiration_date ON supplier_documents(expiration_date);
+CREATE INDEX IF NOT EXISTS idx_supplier_documents_supplier_id ON supplier_documents(supplier_id);
+CREATE INDEX IF NOT EXISTS idx_supplier_documents_contract_id ON supplier_documents(contract_id);
+CREATE INDEX IF NOT EXISTS idx_supplier_documents_type ON supplier_documents(document_type);
+CREATE INDEX IF NOT EXISTS idx_supplier_documents_expiration_date ON supplier_documents(expiration_date);
 
 -- Órdenes de Compra
 CREATE TABLE IF NOT EXISTS purchase_orders (
@@ -982,11 +982,11 @@ CREATE TABLE IF NOT EXISTS purchase_orders (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_purchase_orders_supplier_id ON purchase_orders(supplier_id);
-CREATE INDEX idx_purchase_orders_order_number ON purchase_orders(order_number);
-CREATE INDEX idx_purchase_orders_status ON purchase_orders(status);
-CREATE INDEX idx_purchase_orders_order_date ON purchase_orders(order_date);
-CREATE INDEX idx_purchase_orders_expected_delivery_date ON purchase_orders(expected_delivery_date);
+CREATE INDEX IF NOT EXISTS idx_purchase_orders_supplier_id ON purchase_orders(supplier_id);
+CREATE INDEX IF NOT EXISTS idx_purchase_orders_order_number ON purchase_orders(order_number);
+CREATE INDEX IF NOT EXISTS idx_purchase_orders_status ON purchase_orders(status);
+CREATE INDEX IF NOT EXISTS idx_purchase_orders_order_date ON purchase_orders(order_date);
+CREATE INDEX IF NOT EXISTS idx_purchase_orders_expected_delivery_date ON purchase_orders(expected_delivery_date);
 
 -- Items de Órdenes de Compra
 CREATE TABLE IF NOT EXISTS purchase_order_items (
@@ -1022,9 +1022,9 @@ CREATE TABLE IF NOT EXISTS purchase_order_items (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_purchase_order_items_po_id ON purchase_order_items(purchase_order_id);
-CREATE INDEX idx_purchase_order_items_inventory_id ON purchase_order_items(inventory_item_id);
-CREATE INDEX idx_purchase_order_items_status ON purchase_order_items(status);
+CREATE INDEX IF NOT EXISTS idx_purchase_order_items_po_id ON purchase_order_items(purchase_order_id);
+CREATE INDEX IF NOT EXISTS idx_purchase_order_items_inventory_id ON purchase_order_items(inventory_item_id);
+CREATE INDEX IF NOT EXISTS idx_purchase_order_items_status ON purchase_order_items(status);
 
 -- Cuentas por Pagar
 CREATE TABLE IF NOT EXISTS supplier_payments (
@@ -1074,11 +1074,11 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_supplier_payments_supplier_id ON supplier_payments(supplier_id);
-CREATE INDEX idx_supplier_payments_po_id ON supplier_payments(purchase_order_id);
-CREATE INDEX idx_supplier_payments_status ON supplier_payments(status);
-CREATE INDEX idx_supplier_payments_due_date ON supplier_payments(due_date);
-CREATE INDEX idx_supplier_payments_reference_number ON supplier_payments(reference_number);
+CREATE INDEX IF NOT EXISTS idx_supplier_payments_supplier_id ON supplier_payments(supplier_id);
+CREATE INDEX IF NOT EXISTS idx_supplier_payments_po_id ON supplier_payments(purchase_order_id);
+CREATE INDEX IF NOT EXISTS idx_supplier_payments_status ON supplier_payments(status);
+CREATE INDEX IF NOT EXISTS idx_supplier_payments_due_date ON supplier_payments(due_date);
+CREATE INDEX IF NOT EXISTS idx_supplier_payments_reference_number ON supplier_payments(reference_number);
 
 -- Historial de Pagos (Desglose)
 CREATE TABLE IF NOT EXISTS payment_invoices (
@@ -1099,8 +1099,8 @@ CREATE TABLE IF NOT EXISTS payment_invoices (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_payment_invoices_payment_id ON payment_invoices(supplier_payment_id);
-CREATE INDEX idx_payment_invoices_payment_date ON payment_invoices(payment_date);
+CREATE INDEX IF NOT EXISTS idx_payment_invoices_payment_id ON payment_invoices(supplier_payment_id);
+CREATE INDEX IF NOT EXISTS idx_payment_invoices_payment_date ON payment_invoices(payment_date);
 
 -- Historial de Precios
 CREATE TABLE IF NOT EXISTS supplier_price_history (
@@ -1124,10 +1124,10 @@ CREATE TABLE IF NOT EXISTS supplier_price_history (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_supplier_price_history_supplier_id ON supplier_price_history(supplier_id);
-CREATE INDEX idx_supplier_price_history_item_id ON supplier_price_history(inventory_item_id);
-CREATE INDEX idx_supplier_price_history_po_id ON supplier_price_history(purchase_order_id);
-CREATE INDEX idx_supplier_price_history_date ON supplier_price_history(price_date);
+CREATE INDEX IF NOT EXISTS idx_supplier_price_history_supplier_id ON supplier_price_history(supplier_id);
+CREATE INDEX IF NOT EXISTS idx_supplier_price_history_item_id ON supplier_price_history(inventory_item_id);
+CREATE INDEX IF NOT EXISTS idx_supplier_price_history_po_id ON supplier_price_history(purchase_order_id);
+CREATE INDEX IF NOT EXISTS idx_supplier_price_history_date ON supplier_price_history(price_date);
 
 -- Calificaciones Avanzadas de Proveedores
 CREATE TABLE IF NOT EXISTS supplier_ratings (
@@ -1158,9 +1158,9 @@ CREATE TABLE IF NOT EXISTS supplier_ratings (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_supplier_ratings_supplier_id ON supplier_ratings(supplier_id);
-CREATE INDEX idx_supplier_ratings_po_id ON supplier_ratings(purchase_order_id);
-CREATE INDEX idx_supplier_ratings_date ON supplier_ratings(created_at);
+CREATE INDEX IF NOT EXISTS idx_supplier_ratings_supplier_id ON supplier_ratings(supplier_id);
+CREATE INDEX IF NOT EXISTS idx_supplier_ratings_po_id ON supplier_ratings(purchase_order_id);
+CREATE INDEX IF NOT EXISTS idx_supplier_ratings_date ON supplier_ratings(created_at);
 
 -- Interacciones con Proveedores
 CREATE TABLE IF NOT EXISTS supplier_interactions (
@@ -1194,10 +1194,10 @@ CREATE TABLE IF NOT EXISTS supplier_interactions (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_supplier_interactions_supplier_id ON supplier_interactions(supplier_id);
-CREATE INDEX idx_supplier_interactions_type ON supplier_interactions(interaction_type);
-CREATE INDEX idx_supplier_interactions_date ON supplier_interactions(interaction_date);
-CREATE INDEX idx_supplier_interactions_contact_id ON supplier_interactions(contact_id);
+CREATE INDEX IF NOT EXISTS idx_supplier_interactions_supplier_id ON supplier_interactions(supplier_id);
+CREATE INDEX IF NOT EXISTS idx_supplier_interactions_type ON supplier_interactions(interaction_type);
+CREATE INDEX IF NOT EXISTS idx_supplier_interactions_date ON supplier_interactions(interaction_date);
+CREATE INDEX IF NOT EXISTS idx_supplier_interactions_contact_id ON supplier_interactions(contact_id);
 
 -- Agregar supplier_id a inventory_items si no existe
 DO $$ 
@@ -1243,9 +1243,9 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_audit_logs_user_id ON audit_logs(user_id);
-CREATE INDEX idx_audit_logs_created_at ON audit_logs(created_at);
-CREATE INDEX idx_audit_logs_entity ON audit_logs(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_entity ON audit_logs(entity_type, entity_id);
 
 -- ============================================
 -- TRIGGERS PARA UPDATED_AT
