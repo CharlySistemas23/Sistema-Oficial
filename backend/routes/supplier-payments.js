@@ -226,7 +226,7 @@ router.post('/', requireBranchAccess, async (req, res) => {
         payment_type, reference_number,
         finalAmount, finalTaxAmount, finalDiscountAmount, finalTotalAmount, currency || 'MXN',
         issue_date, due_date,
-        status || 'pending', notes || null, document_urls || ARRAY[]::TEXT[],
+        status || 'pending', notes || null, document_urls || [],
         finalBranchId, req.user.id || null
       ]
     );
