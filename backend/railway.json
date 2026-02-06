@@ -1,12 +1,11 @@
 {
   "$schema": "https://railway.app/railway.schema.json",
-  "$comment": "Este archivo debe estar en backend/ y Railway debe tener Root Directory = backend configurado",
   "build": {
     "builder": "NIXPACKS",
-    "buildCommand": "npm install"
+    "buildCommand": "cd backend && npm install"
   },
   "deploy": {
-    "startCommand": "npm start",
+    "startCommand": "cd backend && npm start",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
   }
