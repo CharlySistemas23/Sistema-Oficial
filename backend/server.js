@@ -298,6 +298,111 @@ app.use((req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
+// Función helper para ejecutar schema.sql de forma segura
+async function executeSchemaSafely(pool) {
+  const { readFileSync } = await import('fs');
+  const { join } = await import('path');
+  const schemaPath = join(__dirname, 'database', 'schema.sql');
+  const schemaSQL = readFileSync(schemaPath, 'utf8');
+  
+  // Dividir el schema en statements individuales
+  // Separar por punto y coma, pero mantener bloques de funciones/triggers intactos
+  const statements = [];
+  let currentStatement = '';
+  let inFunction = false;
+  let inTrigger = false;
+  let dollarQuote = null;
+  
+  for (let i = 0; i < schemaSQL.length; i++) {
+    const char = schemaSQL[i];
+    const nextChar = schemaSQL[i + 1] || '';
+    const prevChar = schemaSQL[i - 1] || '';
+    
+    // Detectar inicio de función ($$ o $tag$)
+    if (char === '$' && !dollarQuote) {
+      const match = schemaSQL.substring(i).match(/^\$([^$]*)\$/);
+      if (match) {
+        dollarQuote = match[0];
+        inFunction = true;
+        currentStatement += dollarQuote;
+        i += dollarQuote.length - 1;
+        continue;
+      }
+    }
+    
+    // Detectar fin de función
+    if (dollarQuote && schemaSQL.substring(i).startsWith(dollarQuote)) {
+      currentStatement += dollarQuote;
+      i += dollarQuote.length - 1;
+      dollarQuote = null;
+      inFunction = false;
+      continue;
+    }
+    
+    currentStatement += char;
+    
+    // Si no estamos en una función y encontramos punto y coma, es el fin de un statement
+    if (!inFunction && char === ';' && (nextChar === '\n' || nextChar === '\r' || nextChar === ' ' || nextChar === '')) {
+      const trimmed = currentStatement.trim();
+      if (trimmed.length > 0 && !trimmed.startsWith('--')) {
+        statements.push(trimmed);
+      }
+      currentStatement = '';
+    }
+  }
+  
+  // Agregar el último statement si existe
+  if (currentStatement.trim().length > 0) {
+    statements.push(currentStatement.trim());
+  }
+  
+  console.log(`📋 Schema.sql dividido en ${statements.length} statements`);
+  
+  let executed = 0;
+  let skipped = 0;
+  let errors = 0;
+  
+  // Ejecutar cada statement individualmente
+  for (let i = 0; i < statements.length; i++) {
+    const statement = statements[i].trim();
+    
+    // Saltar comentarios y líneas vacías
+    if (!statement || statement.startsWith('--') || statement.length < 5) {
+      skipped++;
+      continue;
+    }
+    
+    try {
+      await pool.query(statement);
+      executed++;
+      
+      // Log cada 50 statements para no saturar
+      if (executed % 50 === 0) {
+        console.log(`   ✅ ${executed} statements ejecutados...`);
+      }
+    } catch (stmtError) {
+      // Ignorar errores de "already exists" - es normal y esperado
+      const errorMsg = stmtError.message.toLowerCase();
+      const errorCode = stmtError.code;
+      
+      if (errorCode === '42P07' || errorCode === '42710' || 
+          errorMsg.includes('already exists') ||
+          errorMsg.includes('duplicate') ||
+          (errorMsg.includes('relation') && errorMsg.includes('already exists'))) {
+        skipped++;
+        // No loguear estos errores para no saturar
+      } else {
+        // Solo loguear errores reales
+        console.warn(`⚠️  Error en statement ${i + 1}: ${stmtError.message.substring(0, 100)}`);
+        errors++;
+      }
+    }
+  }
+  
+  console.log(`✅ Schema ejecutado: ${executed} creados, ${skipped} ya existían, ${errors} errores`);
+  return { executed, skipped, errors };
+}
+
 // Función para verificar si la base de datos necesita migración
 async function checkAndMigrate() {
   if (process.env.SKIP_AUTO_MIGRATE === 'true') {
@@ -312,356 +417,80 @@ async function checkAndMigrate() {
       ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
     });
 
-    // Verificar si existen las tablas principales (branches, quick_captures, suppliers)
+    console.log('🔄 Iniciando verificación y migración de base de datos...');
+    
+    // SIEMPRE ejecutar schema.sql completo al inicio (es seguro porque usa IF NOT EXISTS)
+    console.log('📦 Ejecutando schema.sql completo para asegurar que todas las tablas existan...');
+    try {
+      await executeSchemaSafely(pool);
+      console.log('✅ Schema.sql ejecutado correctamente');
+    } catch (schemaError) {
+      console.error('❌ Error ejecutando schema.sql:', schemaError.message);
+      // Continuar para verificar qué tablas existen
+    }
+
+    // Verificar todas las tablas relacionadas con suppliers
+    const allRequiredTables = [
+      'branches', 
+      'quick_captures', 
+      'archived_quick_capture_reports', 
+      'historical_quick_capture_reports', 
+      'suppliers',
+      'supplier_contacts',
+      'supplier_contracts',
+      'supplier_documents',
+      'supplier_payments',
+      'supplier_price_history',
+      'supplier_ratings',
+      'supplier_interactions'
+    ];
+    
     const checkTables = await pool.query(`
       SELECT table_name 
       FROM information_schema.tables 
       WHERE table_schema = 'public' 
-      AND table_name IN ('branches', 'quick_captures', 'archived_quick_capture_reports', 'historical_quick_capture_reports', 'suppliers')
+      AND table_name = ANY($1::text[])
       ORDER BY table_name;
-    `);
+    `, [allRequiredTables]);
     
     const existingTables = checkTables.rows.map(r => r.table_name);
-    const requiredTables = ['branches', 'quick_captures', 'archived_quick_capture_reports', 'historical_quick_capture_reports', 'suppliers'];
-    const missingTables = requiredTables.filter(t => !existingTables.includes(t));
+    const missingTables = allRequiredTables.filter(t => !existingTables.includes(t));
     
-    // Si falta alguna tabla importante, crear directamente primero (más confiable)
     if (missingTables.length > 0) {
-      console.log(`🔄 Faltan tablas en la base de datos: ${missingTables.join(', ')}`);
-      console.log('🔄 Creando tablas faltantes directamente...');
+      console.log(`⚠️  Aún faltan ${missingTables.length} tablas después de ejecutar schema: ${missingTables.join(', ')}`);
+      console.log('🔄 Intentando ejecutar schema.sql nuevamente para crear tablas faltantes...');
       
       try {
-        // Crear tablas faltantes directamente (más confiable que ejecutar todo el schema)
-        for (const tableName of missingTables) {
-          try {
-          if (tableName === 'quick_captures') {
-            console.log('🔨 Creando tabla quick_captures...');
-            
-            // Verificar si la tabla ya existe (por si acaso)
-            const tableExists = await pool.query(`
-              SELECT EXISTS (
-                SELECT FROM information_schema.tables 
-                WHERE table_schema = 'public' 
-                AND table_name = 'quick_captures'
-              );
-            `);
-            
-            if (tableExists.rows[0].exists) {
-              console.log('ℹ️  Tabla quick_captures ya existe, saltando creación');
-              continue;
-            }
-            
-            // Crear tabla primero
-            await pool.query(`
-              CREATE TABLE quick_captures (
-                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-                branch_id UUID REFERENCES branches(id) ON DELETE SET NULL,
-                seller_id UUID REFERENCES catalog_sellers(id) ON DELETE SET NULL,
-                guide_id UUID REFERENCES catalog_guides(id) ON DELETE SET NULL,
-                agency_id UUID REFERENCES catalog_agencies(id) ON DELETE SET NULL,
-                product VARCHAR(255) NOT NULL,
-                quantity INTEGER NOT NULL DEFAULT 1,
-                currency VARCHAR(3) NOT NULL DEFAULT 'MXN',
-                total DECIMAL(12, 2) NOT NULL DEFAULT 0,
-                merchandise_cost DECIMAL(12, 2) DEFAULT 0,
-                notes TEXT,
-                is_street BOOLEAN DEFAULT false,
-                payment_method VARCHAR(50),
-                payments JSONB,
-                date DATE NOT NULL,
-                original_report_date DATE,
-                created_by UUID REFERENCES users(id) ON DELETE SET NULL,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                sync_status VARCHAR(50) DEFAULT 'synced'
-              );
-            `);
-            console.log('✅ Tabla quick_captures creada');
-            
-            // Crear índices por separado para mejor manejo de errores
-            const indexes = [
-              'CREATE INDEX idx_quick_captures_date ON quick_captures(date)',
-              'CREATE INDEX idx_quick_captures_branch_id ON quick_captures(branch_id)',
-              'CREATE INDEX idx_quick_captures_seller_id ON quick_captures(seller_id)',
-              'CREATE INDEX idx_quick_captures_guide_id ON quick_captures(guide_id)',
-              'CREATE INDEX idx_quick_captures_agency_id ON quick_captures(agency_id)',
-              'CREATE INDEX idx_quick_captures_created_at ON quick_captures(created_at)',
-              'CREATE INDEX idx_quick_captures_original_report_date ON quick_captures(original_report_date)'
-            ];
-            
-            for (const indexSQL of indexes) {
-              try {
-                await pool.query(indexSQL);
-              } catch (idxError) {
-                // Si el índice ya existe, no es un error crítico
-                if (idxError.code === '42P07' || idxError.message.includes('already exists')) {
-                  console.log(`ℹ️  Índice ya existe, saltando: ${indexSQL.substring(0, 50)}...`);
-                } else {
-                  console.warn(`⚠️  Error creando índice: ${idxError.message}`);
-                }
-              }
-            }
-            
-            // Crear trigger para updated_at
-            try {
-              // Verificar si la función existe
-              const functionExists = await pool.query(`
-                SELECT EXISTS (
-                  SELECT FROM pg_proc 
-                  WHERE proname = 'update_updated_at_column'
-                );
-              `);
-              
-              if (!functionExists.rows[0].exists) {
-                await pool.query(`
-                  CREATE OR REPLACE FUNCTION update_updated_at_column()
-                  RETURNS TRIGGER AS $$
-                  BEGIN
-                      NEW.updated_at = CURRENT_TIMESTAMP;
-                      RETURN NEW;
-                  END;
-                  $$ language 'plpgsql';
-                `);
-                console.log('✅ Función update_updated_at_column creada');
-              }
-              
-              await pool.query(`
-                DROP TRIGGER IF EXISTS update_quick_captures_updated_at ON quick_captures;
-                CREATE TRIGGER update_quick_captures_updated_at BEFORE UPDATE ON quick_captures
-                    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-              `);
-              console.log('✅ Trigger update_quick_captures_updated_at creado');
-            } catch (triggerError) {
-              console.warn(`⚠️  Error creando trigger (no crítico): ${triggerError.message}`);
-            }
-            
-            console.log('✅ Tabla quick_captures, índices y trigger creados correctamente');
-          } else if (tableName === 'archived_quick_capture_reports') {
-                await pool.query(`
-                  CREATE TABLE IF NOT EXISTS archived_quick_capture_reports (
-                    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-                    report_date DATE NOT NULL,
-                    period_type VARCHAR(50) DEFAULT 'daily',
-                    branch_id UUID REFERENCES branches(id) ON DELETE SET NULL,
-                    branch_ids UUID[],
-                    total_days INTEGER DEFAULT 1,
-                    total_captures INTEGER DEFAULT 0,
-                    total_quantity INTEGER DEFAULT 0,
-                    total_sales_mxn DECIMAL(12, 2) DEFAULT 0,
-                    total_cogs DECIMAL(12, 2) DEFAULT 0,
-                    total_commissions DECIMAL(12, 2) DEFAULT 0,
-                    total_arrival_costs DECIMAL(12, 2) DEFAULT 0,
-                    total_operating_costs DECIMAL(12, 2) DEFAULT 0,
-                    variable_costs_daily DECIMAL(12, 2) DEFAULT 0,
-                    fixed_costs_prorated DECIMAL(12, 2) DEFAULT 0,
-                    bank_commissions DECIMAL(12, 2) DEFAULT 0,
-                    gross_profit DECIMAL(12, 2) DEFAULT 0,
-                    net_profit DECIMAL(12, 2) DEFAULT 0,
-                    exchange_rates JSONB,
-                    metrics JSONB,
-                    captures JSONB,
-                    arrivals JSONB,
-                    seller_commissions JSONB,
-                    guide_commissions JSONB,
-                    archived_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                    archived_by UUID REFERENCES users(id) ON DELETE SET NULL,
-                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-                  );
-                  CREATE INDEX IF NOT EXISTS idx_archived_qc_reports_date ON archived_quick_capture_reports(report_date);
-                  CREATE INDEX IF NOT EXISTS idx_archived_qc_reports_branch_id ON archived_quick_capture_reports(branch_id);
-                `);
-                console.log('✅ Tabla archived_quick_capture_reports creada directamente');
-              } else if (tableName === 'historical_quick_capture_reports') {
-                await pool.query(`
-                  CREATE TABLE IF NOT EXISTS historical_quick_capture_reports (
-                    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-                    period_type VARCHAR(50) NOT NULL,
-                    period_name VARCHAR(255) NOT NULL,
-                    date_from DATE NOT NULL,
-                    date_to DATE NOT NULL,
-                    branch_id UUID REFERENCES branches(id) ON DELETE SET NULL,
-                    branch_ids UUID[],
-                    total_days INTEGER DEFAULT 0,
-                    total_captures INTEGER DEFAULT 0,
-                    total_quantity INTEGER DEFAULT 0,
-                    total_sales_mxn DECIMAL(12, 2) DEFAULT 0,
-                    total_cogs DECIMAL(12, 2) DEFAULT 0,
-                    total_commissions DECIMAL(12, 2) DEFAULT 0,
-                    total_arrival_costs DECIMAL(12, 2) DEFAULT 0,
-                    total_operating_costs DECIMAL(12, 2) DEFAULT 0,
-                    variable_costs_daily DECIMAL(12, 2) DEFAULT 0,
-                    fixed_costs_prorated DECIMAL(12, 2) DEFAULT 0,
-                    bank_commissions DECIMAL(12, 2) DEFAULT 0,
-                    gross_profit DECIMAL(12, 2) DEFAULT 0,
-                    net_profit DECIMAL(12, 2) DEFAULT 0,
-                    exchange_rates JSONB,
-                    metrics JSONB,
-                    daily_summary JSONB,
-                    archived_report_ids UUID[],
-                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(period_type, date_from, date_to, branch_id)
-                  );
-                  CREATE INDEX IF NOT EXISTS idx_historical_qc_reports_period ON historical_quick_capture_reports(period_type, date_from, date_to);
-                  CREATE INDEX IF NOT EXISTS idx_historical_qc_reports_branch_id ON historical_quick_capture_reports(branch_id);
-                `);
-                console.log('✅ Tabla historical_quick_capture_reports creada directamente');
-              } else if (tableName === 'suppliers') {
-                console.log('🔨 Creando tabla suppliers...');
-                
-                // Verificar si la tabla ya existe
-                const tableExists = await pool.query(`
-                  SELECT EXISTS (
-                    SELECT FROM information_schema.tables 
-                    WHERE table_schema = 'public' 
-                    AND table_name = 'suppliers'
-                  );
-                `);
-                
-                if (tableExists.rows[0].exists) {
-                  console.log('ℹ️  Tabla suppliers ya existe, saltando creación');
-                  continue;
-                }
-                
-                // Cargar y ejecutar schema.sql completo para crear suppliers y todas sus dependencias
-                try {
-                  const { readFileSync } = await import('fs');
-                  const { join } = await import('path');
-                  const schemaPath = join(__dirname, 'database', 'schema.sql');
-                  const schemaSQL = readFileSync(schemaPath, 'utf8');
-                  
-                  // Ejecutar schema completo (usa IF NOT EXISTS, así que es seguro)
-                  await pool.query(schemaSQL);
-                  console.log('✅ Tabla suppliers y dependencias creadas desde schema.sql');
-                } catch (schemaError) {
-                  console.error('❌ Error ejecutando schema.sql para suppliers:', schemaError.message);
-                  // Intentar crear la tabla directamente como fallback
-                  try {
-                    await pool.query(`
-                      CREATE TABLE IF NOT EXISTS suppliers (
-                        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-                        code VARCHAR(50) UNIQUE NOT NULL,
-                        name VARCHAR(255) NOT NULL,
-                        legal_name VARCHAR(255),
-                        tax_id VARCHAR(50),
-                        barcode VARCHAR(100) UNIQUE,
-                        contact_person VARCHAR(255),
-                        email VARCHAR(255),
-                        phone VARCHAR(50),
-                        mobile VARCHAR(50),
-                        whatsapp VARCHAR(50),
-                        website VARCHAR(255),
-                        facebook VARCHAR(255),
-                        instagram VARCHAR(255),
-                        business_hours VARCHAR(255),
-                        address TEXT,
-                        city VARCHAR(100),
-                        state VARCHAR(100),
-                        country VARCHAR(100) DEFAULT 'México',
-                        postal_code VARCHAR(20),
-                        supplier_type VARCHAR(50),
-                        category VARCHAR(100),
-                        payment_terms VARCHAR(100),
-                        payment_methods VARCHAR(255),
-                        delivery_days INTEGER,
-                        credit_limit DECIMAL(12, 2),
-                        currency VARCHAR(3) DEFAULT 'MXN',
-                        relationship_start_date DATE,
-                        rating DECIMAL(3, 2) DEFAULT 0,
-                        total_purchases DECIMAL(12, 2) DEFAULT 0,
-                        total_items INTEGER DEFAULT 0,
-                        last_purchase_date DATE,
-                        average_delivery_days INTEGER,
-                        status VARCHAR(50) DEFAULT 'active',
-                        notes TEXT,
-                        tags TEXT[],
-                        branch_id UUID REFERENCES branches(id) ON DELETE SET NULL,
-                        is_shared BOOLEAN DEFAULT true,
-                        bank_name VARCHAR(255),
-                        bank_account VARCHAR(100),
-                        clabe VARCHAR(18),
-                        account_holder VARCHAR(255),
-                        bank_references TEXT,
-                        created_by UUID REFERENCES users(id) ON DELETE SET NULL,
-                        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-                      );
-                    `);
-                    console.log('✅ Tabla suppliers creada directamente (fallback)');
-                  } catch (directError) {
-                    console.error('❌ Error creando tabla suppliers directamente:', directError.message);
-                    throw directError;
-                  }
-                }
-              }
-            } catch (tableError) {
-              console.error(`❌ Error creando tabla ${tableName}:`, tableError.message);
-              console.error('   Detalles:', tableError);
-            }
-          }
-          
-          // Verificar nuevamente que las tablas se crearon
-          const finalCheck = await pool.query(`
-            SELECT table_name 
-            FROM information_schema.tables 
-            WHERE table_schema = 'public' 
-            AND table_name = ANY($1::text[])
-          `, [missingTables]);
-          
-          const finalExisting = finalCheck.rows.map(r => r.table_name);
-          const finalMissing = missingTables.filter(t => !finalExisting.includes(t));
-          
-          // Si aún faltan tablas (como suppliers), ejecutar schema.sql completo
-          if (finalMissing.length > 0) {
-            console.log(`⚠️  Aún faltan tablas: ${finalMissing.join(', ')}`);
-            console.log('🔄 Ejecutando schema.sql completo para crear tablas faltantes...');
-            
-            try {
-              const { readFileSync } = await import('fs');
-              const { join } = await import('path');
-              const schemaPath = join(__dirname, 'database', 'schema.sql');
-              const schemaSQL = readFileSync(schemaPath, 'utf8');
-              
-              // Ejecutar schema completo (usa IF NOT EXISTS, así que es seguro)
-              await pool.query(schemaSQL);
-              console.log(`✅ Schema ejecutado. Tablas faltantes deberían estar creadas: ${finalMissing.join(', ')}`);
-              
-              // Verificar una vez más
-              const verifyCheck = await pool.query(`
-                SELECT table_name 
-                FROM information_schema.tables 
-                WHERE table_schema = 'public' 
-                AND table_name = ANY($1::text[])
-              `, [finalMissing]);
-              
-              const verifyExisting = verifyCheck.rows.map(r => r.table_name);
-              const stillMissing = finalMissing.filter(t => !verifyExisting.includes(t));
-              
-              if (stillMissing.length > 0) {
-                console.error(`❌ Aún faltan tablas después de ejecutar schema: ${stillMissing.join(', ')}`);
-                console.log('💡 Revisa los logs anteriores para ver los errores específicos');
-              } else {
-                console.log(`✅ Todas las tablas requeridas están presentes: ${requiredTables.join(', ')}`);
-              }
-            } catch (schemaError) {
-              console.error('❌ Error ejecutando schema.sql:', schemaError.message);
-              if (schemaError.code === '42P07' || schemaError.code === '42710' || 
-                  schemaError.message.includes('already exists')) {
-                console.log('⚠️  Algunos objetos ya existen, continuando...');
-              } else {
-                console.error('   Detalles:', schemaError);
-              }
-            }
-          } else {
-            console.log(`✅ Todas las tablas requeridas están presentes: ${requiredTables.join(', ')}`);
-          }
-      } catch (error) {
-        console.error('❌ Error crítico en migración:', error.message);
-        console.error('   Stack:', error.stack);
-        // No lanzar error, permitir que el servidor inicie
-        console.log('💡 El servidor continuará, pero algunas tablas pueden no estar disponibles');
+        // Ejecutar schema.sql nuevamente para asegurar que se creen las tablas faltantes
+        await executeSchemaSafely(pool);
+        
+        // Verificar nuevamente
+        const recheckTables = await pool.query(`
+          SELECT table_name 
+          FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = ANY($1::text[])
+          ORDER BY table_name;
+        `, [allRequiredTables]);
+        
+        const recheckExisting = recheckTables.rows.map(r => r.table_name);
+        const stillMissing = allRequiredTables.filter(t => !recheckExisting.includes(t));
+        
+        if (stillMissing.length > 0) {
+          console.warn(`⚠️  Aún faltan ${stillMissing.length} tablas: ${stillMissing.join(', ')}`);
+          console.log('💡 El servidor continuará, pero estas funcionalidades pueden no estar disponibles');
+        } else {
+          console.log('✅ Todas las tablas requeridas están presentes después del segundo intento');
+        }
+      } catch (retryError) {
+        console.error('❌ Error en segundo intento de ejecutar schema:', retryError.message);
       }
+    } else {
+      console.log('✅ Todas las tablas requeridas están presentes');
+    }
+    
+    // Continuar con migraciones adicionales (columnas, usuarios, etc.)
+    try {
       
       // Crear usuario admin manualmente (solo si no existe)
       try {
