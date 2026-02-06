@@ -1207,9 +1207,16 @@ const Suppliers = {
                 UserManager.currentUser?.is_master_admin
             );
 
+            const code = document.getElementById('supplier-code').value.trim();
+            const barcodeInput = document.getElementById('supplier-barcode');
+            const barcodeValue = barcodeInput ? barcodeInput.value.trim() : '';
+            
+            // Si no hay barcode, usar el código del proveedor
+            const finalBarcode = barcodeValue || code;
+            
             const supplierData = {
-                code: document.getElementById('supplier-code').value.trim(),
-                barcode: document.getElementById('supplier-barcode').value.trim() || document.getElementById('supplier-code').value.trim(),
+                code: code,
+                barcode: finalBarcode,
                 name: document.getElementById('supplier-name').value.trim(),
                 legal_name: document.getElementById('supplier-legal-name').value.trim() || null,
                 tax_id: document.getElementById('supplier-tax-id').value.trim() || null,
