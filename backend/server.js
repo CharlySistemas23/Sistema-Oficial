@@ -71,12 +71,7 @@ import { setupSocketIO } from './socket/socketHandler.js';
 // Hacer io disponible globalmente para las rutas
 app.set('io', io);
 
-// Middleware de seguridad
-app.use(helmet({
-  crossOriginResourcePolicy: { policy: "cross-origin" }
-}));
-
-// Configurar CORS con manejo mejorado
+// Configurar CORS con manejo mejorado (ANTES de helmet)
 const corsOptions = {
   origin: (origin, callback) => {
     const raw = (process.env.ALLOWED_ORIGINS || process.env.CORS_ORIGIN || '').split(',').map(o => o.trim()).filter(Boolean);
@@ -109,12 +104,46 @@ const corsOptions = {
   preflightContinue: false
 };
 
-// Aplicar CORS middleware
+// Aplicar CORS middleware ANTES de cualquier otra cosa
 app.use(cors(corsOptions));
 
-// El middleware CORS ya maneja OPTIONS automáticamente, pero podemos agregar un handler explícito si es necesario
-// Este handler solo se ejecutará si el middleware CORS no lo maneja
-app.options('*', cors(corsOptions));
+// Middleware para asegurar headers CORS en todas las respuestas
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  const raw = (process.env.ALLOWED_ORIGINS || process.env.CORS_ORIGIN || '').split(',').map(o => o.trim()).filter(Boolean);
+  const allowAll = raw.length === 0 || raw.includes('*');
+  
+  if (allowAll || !origin || raw.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin || '*');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-username, x-branch-id');
+  }
+  next();
+});
+
+// Handler explícito para OPTIONS (preflight) - debe estar antes de las rutas
+app.options('*', (req, res) => {
+  const origin = req.headers.origin;
+  const raw = (process.env.ALLOWED_ORIGINS || process.env.CORS_ORIGIN || '').split(',').map(o => o.trim()).filter(Boolean);
+  const allowAll = raw.length === 0 || raw.includes('*');
+  
+  if (allowAll || !origin || raw.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin || '*');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-username, x-branch-id');
+    res.header('Access-Control-Max-Age', '86400'); // 24 horas
+    return res.status(200).end();
+  }
+  
+  res.status(403).json({ error: 'CORS: Origen no permitido' });
+});
+
+// Middleware de seguridad (después de CORS para no interferir)
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+}));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
