@@ -934,7 +934,7 @@ router.post('/:id/contracts', requireBranchAccess, async (req, res) => {
         start_date, end_date || null, renewal_date || null, auto_renew || false,
         terms_and_conditions || null, payment_terms || null, delivery_terms || null,
         minimum_order_amount || null, discount_percentage || null,
-        status || 'active', is_exclusive || false, document_urls || ARRAY[]::TEXT[], finalBranchId, req.user.id || null
+        status || 'active', is_exclusive || false, document_urls || [], finalBranchId, req.user.id || null
       ]
     );
 
