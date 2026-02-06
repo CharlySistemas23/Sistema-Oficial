@@ -519,27 +519,28 @@ router.get('/receipts/list', requireBranchAccess, async (req, res) => {
       SELECT pi.*, 
              sp.reference_number as payment_reference_number,
              sp.supplier_id,
+             sp.branch_id as payment_branch_id,
              s.name as supplier_name,
              s.code as supplier_code,
              b.name as branch_name
       FROM payment_invoices pi
       LEFT JOIN supplier_payments sp ON pi.supplier_payment_id = sp.id
       LEFT JOIN suppliers s ON sp.supplier_id = s.id
-      LEFT JOIN branches b ON pi.branch_id = b.id
+      LEFT JOIN branches b ON COALESCE(pi.branch_id, sp.branch_id) = b.id
       WHERE 1=1
     `;
     const params = [];
     let paramCount = 1;
 
-    // Filtro por sucursal
+    // Filtro por sucursal (usar pi.branch_id si existe, sino sp.branch_id)
     if (req.user.isMasterAdmin) {
       if (branchId) {
-        sql += ` AND pi.branch_id = $${paramCount}`;
+        sql += ` AND COALESCE(pi.branch_id, sp.branch_id) = $${paramCount}`;
         params.push(branchId);
         paramCount++;
       }
     } else {
-      sql += ` AND pi.branch_id = $${paramCount}`;
+      sql += ` AND COALESCE(pi.branch_id, sp.branch_id) = $${paramCount}`;
       params.push(req.user.branchId);
       paramCount++;
     }
