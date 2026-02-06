@@ -1,12 +1,7 @@
 // Barcodes Module - Gestión Avanzada de Códigos de Barras
 
-// Verificar si ya está declarado para evitar errores de redeclaración
-let BarcodesModule;
-if (typeof window.BarcodesModule !== 'undefined') {
-    console.warn('⚠️ BarcodesModule ya está declarado. Usando la instancia existente.');
-    BarcodesModule = window.BarcodesModule;
-} else {
-    BarcodesModule = {
+// Declarar el módulo (usar var para evitar errores de redeclaración)
+var BarcodesModule = {
     initialized: false,
     isExporting: false, // Flag para prevenir múltiples exportaciones simultáneas
     currentTab: 'overview',
@@ -3183,11 +3178,14 @@ if (typeof window.BarcodesModule !== 'undefined') {
             console.error('Error generando códigos de barras de proveedores:', error);
             Utils.showNotification('Error al generar códigos de barras', 'error');
         }
-    };
-
-    // Solo exponer si no existe ya
-    if (typeof window.BarcodesModule === 'undefined') {
-        window.BarcodesModule = BarcodesModule;
     }
+};
+
+// Exponer el módulo globalmente (solo si no existe ya)
+if (typeof window.BarcodesModule === 'undefined') {
+    window.BarcodesModule = BarcodesModule;
+} else {
+    // Si ya existe, usar el existente pero actualizar métodos si es necesario
+    console.warn('⚠️ BarcodesModule ya existe. Usando la instancia existente.');
 }
 
