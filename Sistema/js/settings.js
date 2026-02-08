@@ -46,25 +46,81 @@ const Settings = {
         if (!content) return;
 
         content.innerHTML = `
-            <div id="settings-tabs" class="tabs-container" style="margin-bottom: var(--spacing-lg);">
-                <button class="tab-btn active" data-tab="general"><i class="fas fa-cog"></i> General</button>
-                <button class="tab-btn" data-tab="printing"><i class="fas fa-print"></i> Impresión</button>
-                <button class="tab-btn" data-tab="financial"><i class="fas fa-dollar-sign"></i> Financiero</button>
-                <button class="tab-btn" data-tab="catalogs"><i class="fas fa-book"></i> Catálogos</button>
-                <button class="tab-btn" data-tab="arrival-rates"><i class="fas fa-table"></i> Tabulador Llegadas</button>
-                <button class="tab-btn" data-tab="sync"><i class="fas fa-sync"></i> Sincronización</button>
-                <button class="tab-btn" data-tab="security"><i class="fas fa-shield-alt"></i> Seguridad</button>
-                <button class="tab-btn" data-tab="system"><i class="fas fa-server"></i> Sistema</button>
+            <div class="settings-module-wrapper">
+                <!-- Header del módulo -->
+                <div class="settings-header">
+                    <h2 class="settings-title">
+                        <i class="fas fa-cog"></i> Configuración del Sistema
+                    </h2>
+                    <p class="settings-subtitle">Administra todas las configuraciones del sistema desde un solo lugar</p>
+                </div>
+
+                <!-- Pestañas organizadas por categorías -->
+                <div id="settings-tabs" class="settings-tabs-container">
+                    <div class="settings-tabs-group">
+                        <span class="settings-tabs-group-label">Básico</span>
+                        <div class="settings-tabs-row">
+                            <button class="settings-tab-btn active" data-tab="general">
+                                <i class="fas fa-sliders-h"></i>
+                                <span>General</span>
+                            </button>
+                            <button class="settings-tab-btn" data-tab="printing">
+                                <i class="fas fa-print"></i>
+                                <span>Impresión</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="settings-tabs-group">
+                        <span class="settings-tabs-group-label">Operaciones</span>
+                        <div class="settings-tabs-row">
+                            <button class="settings-tab-btn" data-tab="financial">
+                                <i class="fas fa-dollar-sign"></i>
+                                <span>Financiero</span>
+                            </button>
+                            <button class="settings-tab-btn" data-tab="catalogs">
+                                <i class="fas fa-book"></i>
+                                <span>Catálogos</span>
+                            </button>
+                            <button class="settings-tab-btn" data-tab="arrival-rates">
+                                <i class="fas fa-table"></i>
+                                <span>Tabulador Llegadas</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="settings-tabs-group">
+                        <span class="settings-tabs-group-label">Sistema</span>
+                        <div class="settings-tabs-row">
+                            <button class="settings-tab-btn" data-tab="sync">
+                                <i class="fas fa-sync-alt"></i>
+                                <span>Sincronización</span>
+                            </button>
+                            <button class="settings-tab-btn" data-tab="security">
+                                <i class="fas fa-shield-alt"></i>
+                                <span>Seguridad</span>
+                            </button>
+                            <button class="settings-tab-btn" data-tab="system">
+                                <i class="fas fa-server"></i>
+                                <span>Sistema</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Contenido de las pestañas -->
+                <div id="settings-content" class="settings-content-wrapper"></div>
             </div>
-            <div id="settings-content"></div>
         `;
 
         // Event listeners para tabs
-        document.querySelectorAll('#settings-tabs .tab-btn').forEach(btn => {
+        document.querySelectorAll('#settings-tabs .settings-tab-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
-                document.querySelectorAll('#settings-tabs .tab-btn').forEach(b => b.classList.remove('active'));
-                e.target.classList.add('active');
-                const tab = e.target.dataset.tab;
+                // Remover active de todos los botones
+                document.querySelectorAll('#settings-tabs .settings-tab-btn').forEach(b => b.classList.remove('active'));
+                // Agregar active al botón clickeado
+                btn.classList.add('active');
+                const tab = btn.dataset.tab;
                 this.loadTab(tab);
             });
         });
@@ -188,68 +244,107 @@ const Settings = {
 
     getGeneralTab() {
         return `
-            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--spacing-md);">
-                <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light);">
-                    <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
-                        <i class="fas fa-palette"></i> Apariencia
-                    </h3>
-                    <div class="form-group">
-                        <label>Tema</label>
-                        <select id="setting-theme" class="form-select">
-                            <option value="light">Claro</option>
-                            <option value="dark">Oscuro</option>
-                            <option value="auto">Automático</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Idioma</label>
-                        <select id="setting-language" class="form-select">
-                            <option value="es">Español</option>
-                            <option value="en">English</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Formato de Fecha</label>
-                        <select id="setting-date-format" class="form-select">
-                            <option value="DD/MM/YYYY">DD/MM/YYYY</option>
-                            <option value="MM/DD/YYYY">MM/DD/YYYY</option>
-                            <option value="YYYY-MM-DD">YYYY-MM-DD</option>
-                        </select>
-                </div>
-                    <button class="btn-primary btn-sm" onclick="window.Settings.saveAppearance()" style="width: 100%; margin-top: var(--spacing-xs);">
-                        <i class="fas fa-save"></i> Guardar Apariencia
-                        </button>
+            <div class="settings-tab-content">
+                <div class="settings-cards-grid">
+                    <!-- Tarjeta de Apariencia -->
+                    <div class="settings-card">
+                        <div class="settings-card-header">
+                            <div class="settings-card-icon" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                                <i class="fas fa-palette"></i>
+                            </div>
+                            <div>
+                                <h3 class="settings-card-title">Apariencia</h3>
+                                <p class="settings-card-subtitle">Personaliza el tema y visualización</p>
+                            </div>
+                        </div>
+                        <div class="settings-card-body">
+                            <div class="form-group">
+                                <label><i class="fas fa-moon"></i> Tema</label>
+                                <select id="setting-theme" class="form-select">
+                                    <option value="light">Claro</option>
+                                    <option value="dark">Oscuro</option>
+                                    <option value="auto">Automático</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label><i class="fas fa-language"></i> Idioma</label>
+                                <select id="setting-language" class="form-select">
+                                    <option value="es">Español</option>
+                                    <option value="en">English</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label><i class="fas fa-calendar"></i> Formato de Fecha</label>
+                                <select id="setting-date-format" class="form-select">
+                                    <option value="DD/MM/YYYY">DD/MM/YYYY</option>
+                                    <option value="MM/DD/YYYY">MM/DD/YYYY</option>
+                                    <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="settings-card-footer">
+                            <button class="btn-primary" onclick="window.Settings.saveAppearance()">
+                                <i class="fas fa-save"></i> Guardar Apariencia
+                            </button>
+                        </div>
                     </div>
 
-                <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light);">
-                    <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
-                        <i class="fas fa-bell"></i> Notificaciones
-                    </h3>
-                    <div class="form-group">
-                        <label style="display: flex; align-items: center; gap: var(--spacing-xs);">
-                            <input type="checkbox" id="setting-notify-sales" checked>
-                            <span>Notificar nuevas ventas</span>
-                        </label>
+                    <!-- Tarjeta de Notificaciones -->
+                    <div class="settings-card">
+                        <div class="settings-card-header">
+                            <div class="settings-card-icon" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                                <i class="fas fa-bell"></i>
+                            </div>
+                            <div>
+                                <h3 class="settings-card-title">Notificaciones</h3>
+                                <p class="settings-card-subtitle">Configura alertas y avisos</p>
+                            </div>
+                        </div>
+                        <div class="settings-card-body">
+                            <div class="settings-checkbox-group">
+                                <label class="settings-checkbox-label">
+                                    <input type="checkbox" id="setting-notify-sales" checked>
+                                    <span class="settings-checkbox-custom"></span>
+                                    <div class="settings-checkbox-content">
+                                        <span class="settings-checkbox-title">Notificar nuevas ventas</span>
+                                        <span class="settings-checkbox-desc">Recibe alertas cuando se complete una venta</span>
+                                    </div>
+                                </label>
+                            </div>
+                            <div class="settings-checkbox-group">
+                                <label class="settings-checkbox-label">
+                                    <input type="checkbox" id="setting-notify-low-stock" checked>
+                                    <span class="settings-checkbox-custom"></span>
+                                    <div class="settings-checkbox-content">
+                                        <span class="settings-checkbox-title">Alertar inventario bajo</span>
+                                        <span class="settings-checkbox-desc">Notificaciones cuando el stock esté bajo</span>
+                                    </div>
+                                </label>
+                            </div>
+                            <div class="settings-checkbox-group">
+                                <label class="settings-checkbox-label">
+                                    <input type="checkbox" id="setting-notify-sync" checked>
+                                    <span class="settings-checkbox-custom"></span>
+                                    <div class="settings-checkbox-content">
+                                        <span class="settings-checkbox-title">Notificar sincronizaciones</span>
+                                        <span class="settings-checkbox-desc">Avisos sobre el estado de sincronización</span>
+                                    </div>
+                                </label>
+                            </div>
+                            <div class="form-group" style="margin-top: var(--spacing-md);">
+                                <label><i class="fas fa-exclamation-triangle"></i> Umbral de Inventario Bajo</label>
+                                <input type="number" id="setting-low-stock-threshold" class="form-input" value="10" step="1" min="1">
+                                <small style="color: var(--color-text-secondary); font-size: 11px; display: block; margin-top: 4px;">
+                                    Cantidad mínima antes de alertar
+                                </small>
+                            </div>
+                        </div>
+                        <div class="settings-card-footer">
+                            <button class="btn-primary" onclick="window.Settings.saveNotifications()">
+                                <i class="fas fa-save"></i> Guardar Notificaciones
+                            </button>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label style="display: flex; align-items: center; gap: var(--spacing-xs);">
-                            <input type="checkbox" id="setting-notify-low-stock" checked>
-                            <span>Alertar inventario bajo</span>
-                        </label>
-                    </div>
-                    <div class="form-group">
-                        <label style="display: flex; align-items: center; gap: var(--spacing-xs);">
-                            <input type="checkbox" id="setting-notify-sync" checked>
-                            <span>Notificar sincronizaciones</span>
-                        </label>
-                    </div>
-                    <div class="form-group">
-                        <label>Umbral de Inventario Bajo</label>
-                        <input type="number" id="setting-low-stock-threshold" class="form-input" value="10" step="1">
-                    </div>
-                    <button class="btn-primary btn-sm" onclick="window.Settings.saveNotifications()" style="width: 100%; margin-top: var(--spacing-xs);">
-                        <i class="fas fa-save"></i> Guardar Notificaciones
-                    </button>
                 </div>
             </div>
         `;
@@ -525,52 +620,81 @@ const Settings = {
 
     getSyncTab() {
         return `
-            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--spacing-md);">
-                <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light);">
-                    <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
-                        <i class="fas fa-server"></i> Servidor Centralizado (Railway)
-                    </h3>
-                    
-                    <!-- Campo de URL del Servidor -->
-                    <div class="form-group" style="margin-bottom: var(--spacing-sm);">
-                        <label style="font-size: 12px; font-weight: 600; margin-bottom: var(--spacing-xs); display: block;">URL del Servidor</label>
-                        <input type="url" id="server-url-input" class="form-input" 
-                               placeholder="https://tu-app.railway.app" 
-                               style="width: 100%; margin-bottom: var(--spacing-xs);">
-                        <small style="color: var(--color-text-secondary); font-size: 11px; display: block; margin-top: 4px;">
-                            Ejemplo: https://sistema-oficial-production.up.railway.app
-                        </small>
+            <div class="settings-tab-content">
+                <div class="settings-cards-grid">
+                    <!-- Tarjeta de Servidor -->
+                    <div class="settings-card">
+                        <div class="settings-card-header">
+                            <div class="settings-card-icon" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                                <i class="fas fa-server"></i>
+                            </div>
+                            <div>
+                                <h3 class="settings-card-title">Servidor Centralizado</h3>
+                                <p class="settings-card-subtitle">Configuración de conexión Railway</p>
+                            </div>
+                        </div>
+                        <div class="settings-card-body">
+                            <div class="form-group">
+                                <label><i class="fas fa-link"></i> URL del Servidor</label>
+                                <input type="url" id="server-url-input" class="form-input" 
+                                       placeholder="https://tu-app.railway.app">
+                                <small style="color: var(--color-text-secondary); font-size: 11px; display: block; margin-top: 6px;">
+                                    <i class="fas fa-info-circle"></i> Ejemplo: https://sistema-oficial-production.up.railway.app
+                                </small>
+                            </div>
+                            
+                            <div style="display: flex; gap: var(--spacing-sm); margin-top: var(--spacing-md);">
+                                <button class="btn-primary" id="save-server-url-btn" style="flex: 1;">
+                                    <i class="fas fa-save"></i> Guardar
+                                </button>
+                                <button class="btn-secondary" id="test-server-connection-btn" style="flex: 1;">
+                                    <i class="fas fa-plug"></i> Probar Conexión
+                                </button>
+                            </div>
+                            
+                            <div id="server-config-status" class="settings-status-box" style="margin-top: var(--spacing-md);">
+                                <div style="display: flex; align-items: center; gap: var(--spacing-xs);">
+                                    <i class="fas fa-circle-notch fa-spin"></i>
+                                    <span>Cargando estado...</span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    
-                    <!-- Botones de Acción -->
-                    <div style="display: flex; gap: var(--spacing-xs); margin-bottom: var(--spacing-md);">
-                        <button class="btn-primary btn-sm" id="save-server-url-btn" style="flex: 1;">
-                            <i class="fas fa-save"></i> Guardar
-                        </button>
-                        <button class="btn-secondary btn-sm" id="test-server-connection-btn" style="flex: 1;">
-                            <i class="fas fa-plug"></i> Probar
-                        </button>
-                    </div>
-                    
-                    <!-- Estado del Servidor -->
-                    <div id="server-config-status" style="padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm); margin-bottom: var(--spacing-sm); font-size: 11px;">
-                        <div>Cargando estado...</div>
-                    </div>
-                </div>
 
-                <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light);">
-                    <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
-                        <i class="fas fa-sync"></i> Estado de Sincronización
-                    </h3>
-                    <div id="sync-status-info" style="padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm); margin-bottom: var(--spacing-sm); font-size: 11px;">
-                        <div style="font-size: 11px; color: var(--color-text-secondary);">Cargando...</div>
+                    <!-- Tarjeta de Estado de Sincronización -->
+                    <div class="settings-card">
+                        <div class="settings-card-header">
+                            <div class="settings-card-icon" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
+                                <i class="fas fa-sync-alt"></i>
+                            </div>
+                            <div>
+                                <h3 class="settings-card-title">Estado de Sincronización</h3>
+                                <p class="settings-card-subtitle">Monitorea y gestiona la sincronización</p>
+                            </div>
+                        </div>
+                        <div class="settings-card-body">
+                            <div id="sync-status-info" class="settings-status-box">
+                                <div style="display: flex; align-items: center; gap: var(--spacing-xs); color: var(--color-text-secondary);">
+                                    <i class="fas fa-circle-notch fa-spin"></i>
+                                    <span>Cargando...</span>
+                                </div>
+                            </div>
+                            
+                            <div id="sync-queue-status" class="settings-queue-box" style="margin-top: var(--spacing-md);">
+                                <div style="display: flex; align-items: center; justify-content: space-between;">
+                                    <span style="font-weight: 600; color: var(--color-text);">
+                                        <i class="fas fa-list"></i> Elementos Pendientes
+                                    </span>
+                                    <span id="sync-queue-count" style="font-size: 18px; font-weight: 700; color: var(--color-primary);">0</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="settings-card-footer">
+                            <button class="btn-primary" onclick="if(typeof window.SyncManager !== 'undefined') window.SyncManager.syncPending(); else alert('Sync Manager no disponible');" style="width: 100%;">
+                                <i class="fas fa-sync-alt"></i> Sincronizar Ahora
+                            </button>
+                        </div>
                     </div>
-                    <div id="sync-queue-status" style="font-size: 11px; color: var(--color-text-secondary); margin-bottom: var(--spacing-xs); padding: var(--spacing-xs); background: var(--color-bg-secondary); border-radius: var(--radius-sm);">
-                        Pendientes: <span id="sync-queue-count">0</span>
-                    </div>
-                    <button class="btn-primary btn-sm" onclick="if(typeof window.SyncManager !== 'undefined') window.SyncManager.syncPending(); else alert('Sync Manager no disponible');" style="width: 100%;">
-                        <i class="fas fa-sync-alt"></i> Sincronizar Ahora
-                    </button>
                 </div>
             </div>
         `;
