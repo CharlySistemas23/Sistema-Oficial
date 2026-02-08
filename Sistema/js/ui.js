@@ -189,10 +189,29 @@ const UI = {
         });
     },
 
-    showModule(moduleName) {
+    showModule(moduleName, subPage = null, subCategory = null) {
         // Si es el mismo módulo y no se está cargando, no hacer nada
         if (this.currentModule === moduleName && !this.loadingModule) {
             return;
+        }
+
+        // Guardar estado de navegación en localStorage
+        try {
+            localStorage.setItem('current_module', moduleName);
+            if (subPage) {
+                localStorage.setItem('current_subpage', subPage);
+            } else {
+                localStorage.removeItem('current_subpage');
+            }
+            if (subCategory) {
+                localStorage.setItem('current_subcategory', subCategory);
+            } else {
+                localStorage.removeItem('current_subcategory');
+            }
+            // Guardar timestamp para validar que el estado es reciente
+            localStorage.setItem('navigation_timestamp', Date.now().toString());
+        } catch (e) {
+            console.warn('Error guardando estado de navegación:', e);
         }
 
         // Mapeo de módulos a secciones
@@ -254,11 +273,22 @@ const UI = {
             moduleEl.style.display = 'block';
             this.currentModule = moduleName;
             
-            // Guardar módulo actual en localStorage
+            // Guardar estado completo de navegación en localStorage
             localStorage.setItem('current_module', moduleName);
+            if (subPage) {
+                localStorage.setItem('current_subpage', subPage);
+            } else {
+                localStorage.removeItem('current_subpage');
+            }
+            if (subCategory) {
+                localStorage.setItem('current_subcategory', subCategory);
+            } else {
+                localStorage.removeItem('current_subcategory');
+            }
+            localStorage.setItem('navigation_timestamp', Date.now().toString());
             
             // Trigger module load event
-            window.dispatchEvent(new CustomEvent('module-loaded', { detail: { module: moduleName } }));
+            window.dispatchEvent(new CustomEvent('module-loaded', { detail: { module: moduleName, subPage, subCategory } }));
         } else {
             // Use placeholder for dynamic modules
             const title = document.getElementById('module-title');
