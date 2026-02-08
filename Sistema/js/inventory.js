@@ -1914,27 +1914,7 @@ const Inventory = {
             return { ...item, photo: photos[0]?.thumbnail_blob || null };
         }));
 
-        return `
-            <div style="overflow-x: auto;">
-                <table style="width: 100%; border-collapse: collapse;">
-                    <thead>
-                        <tr style="background: var(--color-bg-secondary); border-bottom: 2px solid var(--color-border);">
-                            <th style="padding: 8px; text-align: left; font-size: 11px; font-weight: 600; width: 30px;">
-                                <input type="checkbox" onchange="window.Inventory.toggleSelectAll()" style="cursor: pointer;">
-                            </th>
-                            <th style="padding: 8px; text-align: left; font-size: 11px; font-weight: 600; width: 60px;">Foto</th>
-                            <th style="padding: 8px; text-align: left; font-size: 11px; font-weight: 600; min-width: 100px;">SKU</th>
-                            <th style="padding: 8px; text-align: left; font-size: 11px; font-weight: 600; min-width: 150px;">Nombre</th>
-                            <th style="padding: 8px; text-align: left; font-size: 11px; font-weight: 600; min-width: 100px;">Categoría</th>
-                            <th style="padding: 8px; text-align: left; font-size: 11px; font-weight: 600; min-width: 80px;">Metal</th>
-                            <th style="padding: 8px; text-align: center; font-size: 11px; font-weight: 600; min-width: 60px;">Stock</th>
-                            <th style="padding: 8px; text-align: right; font-size: 11px; font-weight: 600; min-width: 80px;">Costo</th>
-                            <th style="padding: 8px; text-align: left; font-size: 11px; font-weight: 600; min-width: 80px;">Estado</th>
-                            <th style="padding: 8px; text-align: center; font-size: 11px; font-weight: 600; min-width: 100px;">Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${itemsWithPhotos.map(item => {
+        return itemsWithPhotos.map(item => {
                             const isSelected = this.selectedItems.has(item.id);
                             const stockStatus = this.getStockStatus(item);
                             const stockBadgeClass = this.getStockBadgeClass(stockStatus);
@@ -1943,43 +1923,52 @@ const Inventory = {
                             const stockMax = item.stock_max ?? 10;
                             
                             return `
-                            <tr class="inventory-list-row ${isSelected ? 'inventory-list-row-selected' : ''}" data-item-id="${item.id}" style="border-bottom: 1px solid var(--color-border-light);">
-                                <td style="padding: 8px;">
+                            <tr class="inventory-list-row ${isSelected ? 'inventory-list-row-selected' : ''}" data-item-id="${item.id}" style="border-bottom: 1px solid var(--color-border-light); transition: background 0.2s;">
+                                <td style="padding: 12px;">
                                     <input type="checkbox" class="inventory-checkbox" 
                                            ${isSelected ? 'checked' : ''} 
                                            onchange="window.Inventory.toggleItemSelection('${item.id}', this.checked)"
                                            style="cursor: pointer;">
                                 </td>
-                                <td style="padding: 8px;">
+                                <td style="padding: 12px;">
                                     ${item.photo ? 
-                                        `<img src="${item.photo}" alt="${item.name}" style="width: 40px; height: 40px; object-fit: cover; border-radius: 4px;">` : 
-                                        '<div style="width: 40px; height: 40px; background: var(--color-bg-secondary); border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #999;"><i class="fas fa-gem" style="font-size: 16px; opacity: 0.3;"></i></div>'
+                                        `<img src="${item.photo}" alt="${item.name}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px;">` : 
+                                        '<div style="width: 50px; height: 50px; background: var(--color-bg-secondary); border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #999;"><i class="fas fa-gem" style="font-size: 20px; opacity: 0.3;"></i></div>'
                                     }
                                 </td>
-                                <td style="padding: 8px; font-size: 11px; font-weight: 600;">${item.sku || 'N/A'}</td>
-                                <td style="padding: 8px; font-size: 12px;">${item.name || 'Sin nombre'}</td>
-                                <td style="padding: 8px; font-size: 11px;">${item.category || 'N/A'}</td>
-                                <td style="padding: 8px; font-size: 11px;">${item.metal || 'N/A'}</td>
-                                <td style="padding: 8px; text-align: center;">
-                                    <span class="stock-badge ${stockBadgeClass}" style="font-size: 10px; padding: 2px 6px; border-radius: 3px;">${stockActual} / ${stockMax}</span>
+                                <td style="padding: 12px; font-size: 12px; font-weight: 600; color: var(--color-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${item.sku || 'N/A'}">${item.sku || 'N/A'}</td>
+                                <td style="padding: 12px; font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${item.name || 'Sin nombre'}">${item.name || 'Sin nombre'}</td>
+                                <td style="padding: 12px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${item.category || 'N/A'}">${item.category || 'N/A'}</td>
+                                <td style="padding: 12px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${item.metal || 'N/A'}">${item.metal || 'N/A'}</td>
+                                <td style="padding: 12px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${item.stone_type || item.stone || 'N/A'}">${item.stone_type || item.stone || 'N/A'}</td>
+                                <td style="padding: 12px; text-align: center;">
+                                    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
+                                        <span style="font-size: 12px; font-weight: 600;">${stockActual} / ${stockMax}</span>
+                                        <span class="stock-badge ${stockBadgeClass}" style="font-size: 10px; padding: 2px 6px; border-radius: 3px;">${stockStatusText}</span>
+                                    </div>
                                 </td>
-                                <td style="padding: 8px; text-align: right; font-size: 12px; font-weight: 600; color: var(--color-primary);">${Utils.formatCurrency(item.cost || 0)}</td>
-                                <td style="padding: 8px;">
-                                    <span class="status-badge status-${item.status}" style="font-size: 10px; padding: 4px 8px; border-radius: 4px;">${item.status || 'disponible'}</span>
+                                <td style="padding: 12px; text-align: right; font-size: 13px; font-weight: 600; color: var(--color-primary);">${Utils.formatCurrency(item.cost || 0)}</td>
+                                <td style="padding: 12px;">
+                                    <span class="status-badge status-${item.status}" style="font-size: 11px; padding: 4px 8px; border-radius: 4px;">${item.status || 'disponible'}</span>
                                 </td>
-                                <td style="padding: 8px; text-align: center;">
-                                    <div style="display: flex; gap: 4px; justify-content: center;">
-                                        <button class="btn-secondary btn-sm" onclick="window.Inventory.showItemDetails('${item.id}')" title="Ver" style="padding: 4px 8px; font-size: 10px;"><i class="fas fa-eye"></i></button>
-                                        <button class="btn-secondary btn-sm" onclick="window.Inventory.showAddForm('${item.id}')" title="Editar" style="padding: 4px 8px; font-size: 10px;"><i class="fas fa-edit"></i></button>
+                                <td style="padding: 12px; text-align: center;">
+                                    <div style="display: flex; gap: 4px; justify-content: center; flex-wrap: nowrap;">
+                                        <button class="btn-secondary btn-sm" onclick="window.Inventory.showItemDetails('${item.id}')" title="Ver Detalles" style="padding: 4px 8px; font-size: 11px; min-width: auto;">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                        <button class="btn-secondary btn-sm" onclick="window.Inventory.showAddForm('${item.id}')" title="Editar" style="padding: 4px 8px; font-size: 11px; min-width: auto;">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        ${typeof PermissionManager !== 'undefined' && PermissionManager.hasPermission('inventory.update_stock') ? `
+                                            <button class="btn-secondary btn-sm" onclick="window.Inventory.showStockModal('${item.id}')" title="Ajustar Stock" style="padding: 4px 8px; font-size: 11px; min-width: auto;">
+                                                <i class="fas fa-cubes"></i>
+                                            </button>
+                                        ` : ''}
                                     </div>
                                 </td>
                             </tr>
                             `;
-                        }).join('')}
-                    </tbody>
-                </table>
-            </div>
-        `;
+                        }).join('');
     },
 
     // Función principal que decide qué vista mostrar
@@ -2052,30 +2041,30 @@ const Inventory = {
                         `<img src="${item.photo}" alt="${item.name}" style="width: 50px; height: 50px; object-fit: cover; border-radius: var(--radius-sm);">` : 
                         '<div style="width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; color: #999; background: var(--color-bg-secondary); border-radius: var(--radius-sm);"><i class="fas fa-gem"></i></div>'}
                 </td>
-                <td style="padding: 12px; font-size: 12px; font-weight: 600;">${item.sku || 'N/A'}</td>
-                <td style="padding: 12px; font-size: 12px;">
-                    <div style="font-weight: 600; margin-bottom: 4px;">${item.name || 'Sin nombre'}</div>
-                    ${item.description ? `<div style="font-size: 11px; color: var(--color-text-secondary);">${item.description.substring(0, 50)}${item.description.length > 50 ? '...' : ''}</div>` : ''}
+                <td style="padding: 12px; font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${item.sku || 'N/A'}">${item.sku || 'N/A'}</td>
+                <td style="padding: 12px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${item.name || 'Sin nombre'}">
+                    <div style="font-weight: 600; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${item.name || 'Sin nombre'}</div>
+                    ${item.description ? `<div style="font-size: 11px; color: var(--color-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${item.description}">${item.description.substring(0, 30)}${item.description.length > 30 ? '...' : ''}</div>` : ''}
                 </td>
-                <td style="padding: 12px; font-size: 12px;">
-                    <div>${item.category || 'N/A'}</div>
-                    ${item.subcategory ? `<div style="font-size: 11px; color: var(--color-text-secondary);">${item.subcategory}</div>` : ''}
+                <td style="padding: 12px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${item.category || 'N/A'}">
+                    <div style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${item.category || 'N/A'}</div>
+                    ${item.subcategory ? `<div style="font-size: 11px; color: var(--color-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${item.subcategory}">${item.subcategory}</div>` : ''}
                 </td>
-                <td style="padding: 12px; font-size: 12px;">
-                    <div>${item.metal || item.material || 'N/A'}</div>
-                    ${item.purity ? `<div style="font-size: 11px; color: var(--color-text-secondary);">${item.purity}</div>` : ''}
+                <td style="padding: 12px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${item.metal || item.material || 'N/A'}">
+                    <div style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${item.metal || item.material || 'N/A'}</div>
+                    ${item.purity ? `<div style="font-size: 11px; color: var(--color-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${item.purity}">${item.purity}</div>` : ''}
                 </td>
-                <td style="padding: 12px; font-size: 12px;">${stoneInfo}</td>
-                <td style="padding: 12px; font-size: 12px;">${item.weight ? `${item.weight}g` : 'N/A'}</td>
-                <td style="padding: 12px; font-size: 12px; font-weight: 600;">${item.cost ? `$${parseFloat(item.cost).toLocaleString('es-MX', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : 'N/A'}</td>
-                <td style="padding: 12px; font-size: 12px; font-weight: 600; color: var(--color-primary);">
+                <td style="padding: 12px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${stoneInfo}">${stoneInfo}</td>
+                <td style="padding: 12px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${item.weight ? `${item.weight}g` : 'N/A'}">${item.weight ? `${item.weight}g` : 'N/A'}</td>
+                <td style="padding: 12px; font-size: 12px; font-weight: 600; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${item.cost ? `$${parseFloat(item.cost).toLocaleString('es-MX', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : 'N/A'}</td>
+                <td style="padding: 12px; font-size: 12px; font-weight: 600; color: var(--color-primary); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                     ${item.sale_price ? `$${parseFloat(item.sale_price).toLocaleString('es-MX', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : (item.price ? `$${parseFloat(item.price).toLocaleString('es-MX', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : 'N/A')}
                 </td>
-                <td style="padding: 12px; font-size: 12px;">
+                <td style="padding: 12px; font-size: 12px; text-align: center;">
                     <span class="stock-badge ${stockBadgeClass}" title="Stock: ${stockActual} (Mín: ${stockMin}, Máx: ${stockMax})">${stockActual}</span>
                     ${hasCertificate ? '<span class="cert-badge" title="Certificado"><i class="fas fa-certificate"></i></span>' : ''}
                 </td>
-                <td style="padding: 12px; font-size: 12px;">
+                <td style="padding: 12px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                     <span style="padding: 4px 8px; background: var(--color-bg-secondary); border-radius: var(--radius-sm); font-size: 11px;">
                         ${item.status === 'disponible' ? 'Disponible' : 
                           item.status === 'vendida' ? 'Vendida' : 
@@ -2085,15 +2074,13 @@ const Inventory = {
                           item.status || 'N/A'}
                     </span>
                 </td>
-                <td style="padding: 12px; font-size: 12px;">
-                    <div>${item.location_detail || item.location || 'N/A'}</div>
-                    ${item.location && item.location_detail && item.location !== item.location_detail ? 
-                        `<div style="font-size: 11px; color: var(--color-text-secondary);">${item.location}</div>` : ''}
+                <td style="padding: 12px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${item.location_detail || item.location || 'N/A'}">
+                    <div style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${item.location_detail || item.location || 'N/A'}</div>
                 </td>
-                <td style="padding: 12px;">
-                    <div style="display: flex; gap: 4px;">
-                        <button class="btn-secondary btn-sm" onclick="window.Inventory.showAddForm('${item.id}')" title="Editar" style="padding: 4px 8px; font-size: 10px;"><i class="fas fa-edit"></i></button>
-                        <button class="btn-danger btn-sm" onclick="window.Inventory.deleteItem('${item.id}')" title="Eliminar" style="padding: 4px 8px; font-size: 10px;"><i class="fas fa-trash"></i></button>
+                <td style="padding: 12px; text-align: center;">
+                    <div style="display: flex; gap: 4px; justify-content: center; flex-wrap: nowrap;">
+                        <button class="btn-secondary btn-sm" onclick="window.Inventory.showAddForm('${item.id}')" title="Editar" style="padding: 4px 8px; font-size: 10px; min-width: auto;"><i class="fas fa-edit"></i></button>
+                        <button class="btn-secondary btn-sm" onclick="window.Inventory.showItemDetails('${item.id}')" title="Ver Detalles" style="padding: 4px 8px; font-size: 10px; min-width: auto;"><i class="fas fa-eye"></i></button>
                     </div>
                 </td>
             </tr>
@@ -2211,28 +2198,28 @@ const Inventory = {
         // Usar función helper para obtener HTML de las filas
         const rowsHTML = await this.getInventoryListHTML(items);
 
-        // Construir tabla completa con thead
+        // Construir tabla completa con thead - Ajustada al 100% del ancho disponible
         const tableHTML = `
-            <div style="overflow-x: auto !important; overflow-y: visible !important; width: 100% !important; max-width: 100% !important; -webkit-overflow-scrolling: touch;">
-                <table style="width: 100%; min-width: 1200px; border-collapse: collapse; background: var(--color-bg-card); border-radius: var(--radius-md); overflow: hidden; table-layout: auto;">
+            <div style="width: 100%; max-width: 100%; overflow-x: visible; overflow-y: visible;">
+                <table style="width: 100%; border-collapse: collapse; background: var(--color-bg-card); border-radius: var(--radius-md); overflow: hidden; table-layout: fixed;">
                     <thead>
                         <tr style="background: var(--color-bg-secondary); border-bottom: 2px solid var(--color-border);">
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 40px;">
+                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 3%;">
                                 <input type="checkbox" id="inventory-select-all-list" onchange="window.Inventory.toggleSelectAll(this.checked)">
                             </th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 80px;">Foto</th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">SKU</th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Nombre</th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Categoría</th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Material</th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Piedra</th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Peso (g)</th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Costo</th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Precio Venta</th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Stock</th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Estado</th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Ubicación</th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 100px;">Acciones</th>
+                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 6%;">Foto</th>
+                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 8%;">SKU</th>
+                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 15%;">Nombre</th>
+                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 8%;">Categoría</th>
+                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 8%;">Material</th>
+                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 8%;">Piedra</th>
+                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 6%;">Peso (g)</th>
+                            <th style="padding: 12px; text-align: right; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 8%;">Costo</th>
+                            <th style="padding: 12px; text-align: right; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 8%;">Precio Venta</th>
+                            <th style="padding: 12px; text-align: center; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 6%;">Stock</th>
+                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 8%;">Estado</th>
+                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 6%;">Ubicación</th>
+                            <th style="padding: 12px; text-align: center; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 10%;">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -2295,25 +2282,25 @@ const Inventory = {
             return { ...item, photo: photos[0]?.thumbnail_blob || null };
         }));
 
-        // Crear tabla
+        // Crear tabla - Ajustada al 100% del ancho disponible
         container.innerHTML = `
-            <div style="overflow-x: auto;">
-                <table style="width: 100%; border-collapse: collapse; background: white; border-radius: var(--radius-md); overflow: hidden;">
+            <div style="width: 100%; max-width: 100%; overflow-x: visible; overflow-y: visible;">
+                <table style="width: 100%; border-collapse: collapse; background: white; border-radius: var(--radius-md); overflow: hidden; table-layout: fixed;">
                     <thead>
                         <tr style="background: var(--color-bg-secondary); border-bottom: 2px solid var(--color-border);">
-                            <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; text-transform: uppercase; width: 40px;">
+                            <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; text-transform: uppercase; width: 3%;">
                                 <input type="checkbox" id="inventory-list-select-all" onchange="window.Inventory.toggleSelectAll()" style="cursor: pointer;">
                             </th>
-                            <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; text-transform: uppercase; width: 80px;">Foto</th>
-                            <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; text-transform: uppercase; min-width: 120px;">SKU</th>
-                            <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; text-transform: uppercase; min-width: 200px;">Nombre</th>
-                            <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; text-transform: uppercase; min-width: 120px;">Categoría</th>
-                            <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; text-transform: uppercase; min-width: 100px;">Metal</th>
-                            <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; text-transform: uppercase; min-width: 100px;">Piedra</th>
-                            <th style="padding: 12px; text-align: center; font-size: 12px; font-weight: 600; text-transform: uppercase; min-width: 80px;">Stock</th>
-                            <th style="padding: 12px; text-align: right; font-size: 12px; font-weight: 600; text-transform: uppercase; min-width: 100px;">Costo</th>
-                            <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; text-transform: uppercase; min-width: 100px;">Estado</th>
-                            <th style="padding: 12px; text-align: center; font-size: 12px; font-weight: 600; text-transform: uppercase; min-width: 120px;">Acciones</th>
+                            <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; text-transform: uppercase; width: 6%;">Foto</th>
+                            <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; text-transform: uppercase; width: 10%;">SKU</th>
+                            <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; text-transform: uppercase; width: 18%;">Nombre</th>
+                            <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; text-transform: uppercase; width: 10%;">Categoría</th>
+                            <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; text-transform: uppercase; width: 9%;">Metal</th>
+                            <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; text-transform: uppercase; width: 9%;">Piedra</th>
+                            <th style="padding: 12px; text-align: center; font-size: 12px; font-weight: 600; text-transform: uppercase; width: 7%;">Stock</th>
+                            <th style="padding: 12px; text-align: right; font-size: 12px; font-weight: 600; text-transform: uppercase; width: 9%;">Costo</th>
+                            <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; text-transform: uppercase; width: 9%;">Estado</th>
+                            <th style="padding: 12px; text-align: center; font-size: 12px; font-weight: 600; text-transform: uppercase; width: 9%;">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
