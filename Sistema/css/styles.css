@@ -2135,6 +2135,13 @@ button.btn-xs {
     box-sizing: border-box;
 }
 
+/* Cuando está en modo lista, remover el grid y usar display block */
+#inventory-list.inventory-grid:has(table) {
+    display: block !important;
+    grid-template-columns: none !important;
+    gap: 0 !important;
+}
+
 /* Contenedor de lista de inventario - Ajuste de altura */
 #inventory-list {
     width: 100%;
@@ -2145,6 +2152,17 @@ button.btn-xs {
     overflow-y: auto;
     overflow-x: auto;
     position: relative;
+}
+
+/* Cuando contiene una tabla (modo lista), remover estilos de grid */
+#inventory-list:has(> div > table),
+#inventory-list:has(table),
+#inventory-list.inventory-list-view {
+    display: block !important;
+    grid-template-columns: none !important;
+    gap: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
 }
 
 /* Asegurar que el módulo de inventario use toda la altura disponible */
