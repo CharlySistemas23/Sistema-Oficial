@@ -9579,156 +9579,103 @@ button.btn-xs {
    ============================================ */
 
 .settings-module-wrapper {
-    padding: var(--spacing-lg);
-    max-width: 1400px;
-    margin: 0 auto;
+    padding: var(--spacing-md);
 }
 
-/* Header del módulo */
-.settings-header {
-    margin-bottom: var(--spacing-xl);
-    padding-bottom: var(--spacing-lg);
+/* Pestañas principales - Diseño simple y limpio */
+.settings-main-tabs {
+    display: flex;
+    gap: var(--spacing-xs);
+    margin-bottom: var(--spacing-md);
     border-bottom: 2px solid var(--color-border-light);
+    overflow-x: auto;
+    padding-bottom: var(--spacing-xs);
 }
 
-.settings-title {
-    font-size: 28px;
-    font-weight: 700;
-    color: var(--color-text);
-    margin-bottom: var(--spacing-xs);
+.settings-main-tab {
     display: flex;
     align-items: center;
-    gap: var(--spacing-sm);
-}
-
-.settings-title i {
-    color: var(--color-primary);
-    font-size: 24px;
-}
-
-.settings-subtitle {
-    font-size: 14px;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
     color: var(--color-text-secondary);
-    margin: 0;
-    font-weight: 400;
-}
-
-/* Contenedor de pestañas mejorado */
-.settings-tabs-container {
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-lg);
-    margin-bottom: var(--spacing-xl);
-    padding: var(--spacing-lg);
-    background: var(--color-bg-card);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-sm);
-    border: 1px solid var(--color-border-light);
-}
-
-.settings-tabs-group {
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-sm);
-}
-
-.settings-tabs-group-label {
-    font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    color: var(--color-text-secondary);
-    margin-bottom: var(--spacing-xs);
-    padding: var(--spacing-xs) var(--spacing-sm);
-    background: var(--color-bg-secondary);
-    border-radius: var(--radius-xs);
-    display: inline-block;
-    width: fit-content;
-}
-
-.settings-tabs-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--spacing-sm);
-    padding-left: var(--spacing-md);
-}
-
-/* Botones de pestañas mejorados */
-.settings-tab-btn {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-sm);
-    padding: var(--spacing-md) var(--spacing-lg);
-    background: var(--color-bg-secondary);
-    border: 2px solid var(--color-border-light);
-    border-radius: var(--radius-md);
-    color: var(--color-text);
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
-    transition: all var(--transition-base);
-    position: relative;
-    overflow: hidden;
-    min-width: 140px;
-    justify-content: center;
+    transition: all var(--transition-fast);
+    white-space: nowrap;
+    margin-bottom: -2px;
 }
 
-.settings-tab-btn i {
-    font-size: 16px;
-    color: var(--color-text-secondary);
-    transition: all var(--transition-base);
+.settings-main-tab i {
+    font-size: 14px;
 }
 
-.settings-tab-btn span {
+.settings-main-tab:hover {
+    color: var(--color-text);
+    background: var(--color-bg-secondary);
+    border-radius: var(--radius-xs) var(--radius-xs) 0 0;
+}
+
+.settings-main-tab.active {
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
+    font-weight: 600;
+}
+
+/* Subcategorías */
+.settings-sub-tabs {
+    display: flex;
+    gap: var(--spacing-xs);
+    margin-bottom: var(--spacing-md);
+    padding: var(--spacing-sm);
+    background: var(--color-bg-secondary);
+    border-radius: var(--radius-sm);
+    overflow-x: auto;
+}
+
+.settings-sub-tabs:empty {
+    display: none;
+}
+
+.settings-sub-tab {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-xs) var(--spacing-md);
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-xs);
+    color: var(--color-text);
+    font-size: 12px;
     font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    white-space: nowrap;
 }
 
-.settings-tab-btn:hover {
+.settings-sub-tab i {
+    font-size: 12px;
+}
+
+.settings-sub-tab:hover {
     background: var(--color-bg-hover);
     border-color: var(--color-border);
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-sm);
 }
 
-.settings-tab-btn:hover i {
-    color: var(--color-primary);
-    transform: scale(1.1);
-}
-
-.settings-tab-btn.active {
+.settings-sub-tab.active {
     background: var(--color-primary);
     color: var(--color-text-light);
     border-color: var(--color-primary);
-    box-shadow: var(--shadow-md);
-    transform: translateY(-2px);
-}
-
-.settings-tab-btn.active i {
-    color: var(--color-text-light);
-}
-
-.settings-tab-btn.active::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 3px;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
-    animation: shimmer 2s infinite;
-}
-
-@keyframes shimmer {
-    0% { transform: translateX(-100%); }
-    100% { transform: translateX(100%); }
 }
 
 /* Contenedor de contenido */
 .settings-content-wrapper {
     background: var(--color-bg-card);
-    border-radius: var(--radius-lg);
-    padding: var(--spacing-xl);
-    box-shadow: var(--shadow-sm);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-lg);
     border: 1px solid var(--color-border-light);
     min-height: 400px;
     animation: fadeIn 0.3s ease-in;
@@ -9745,14 +9692,39 @@ button.btn-xs {
     }
 }
 
-/* Mejoras para las tarjetas dentro de las pestañas */
-.settings-content-wrapper .module {
-    transition: all var(--transition-base);
+/* Secciones de configuración */
+.settings-section {
+    max-width: 900px;
 }
 
-.settings-content-wrapper .module:hover {
-    box-shadow: var(--shadow-md);
-    transform: translateY(-2px);
+.settings-section-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--color-text);
+    margin-bottom: var(--spacing-lg);
+    padding-bottom: var(--spacing-sm);
+    border-bottom: 2px solid var(--color-border-light);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.settings-section-title i {
+    color: var(--color-primary);
+}
+
+.settings-form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-lg);
+}
+
+.settings-section-footer {
+    padding-top: var(--spacing-md);
+    border-top: 1px solid var(--color-border-light);
+    display: flex;
+    justify-content: flex-end;
 }
 
 /* Contenido de las pestañas */
