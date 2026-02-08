@@ -183,6 +183,21 @@ var BarcodesModule = {
                 }
             }
         });
+        
+        // Eventos de proveedores (para actualizar códigos de barras de proveedores)
+        window.addEventListener('supplier-updated', async (e) => {
+            if (this.initialized && this.currentTab === 'barcodes') {
+                const { supplier } = e.detail || {};
+                const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
+                // Solo actualizar si el proveedor es de la sucursal actual o es compartido
+                if (supplier && (!currentBranchId || supplier.branch_id === currentBranchId || supplier.is_shared === true)) {
+                    console.log(`🚚 Barcodes: Proveedor actualizado localmente`);
+                    setTimeout(async () => {
+                        await this.loadBarcodes();
+                    }, 300);
+                }
+            }
+        });
     },
 
     async loadTab(tab) {
@@ -2642,11 +2657,59 @@ var BarcodesModule = {
         
         this.isExporting = true;
         try {
-            const items = await DB.getAll('inventory_items') || [];
-            const employees = await DB.getAll('employees') || [];
-            const sellers = await DB.getAll('catalog_sellers') || [];
-            const guides = await DB.getAll('catalog_guides') || [];
-            const agencies = await DB.getAll('catalog_agencies') || [];
+            // Obtener filtros actuales para respetar el filtrado por sucursal
+            const branchFilter = document.getElementById('barcodes-branch-filter');
+            const selectedBranchId = branchFilter?.value === 'all' ? null : branchFilter?.value || null;
+            const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
+            const isMasterAdmin = typeof UserManager !== 'undefined' && (
+                UserManager.currentUser?.role === 'master_admin' ||
+                UserManager.currentUser?.is_master_admin ||
+                UserManager.currentUser?.isMasterAdmin ||
+                UserManager.currentEmployee?.role === 'master_admin'
+            );
+            
+            // Determinar qué sucursal usar para filtrar
+            let filterBranchId = null;
+            if (selectedBranchId) {
+                filterBranchId = selectedBranchId;
+            } else if (!isMasterAdmin) {
+                filterBranchId = currentBranchId;
+            }
+            
+            // Cargar todos los datos
+            let items = await DB.getAll('inventory_items') || [];
+            let employees = await DB.getAll('employees') || [];
+            let sellers = await DB.getAll('catalog_sellers') || [];
+            let guides = await DB.getAll('catalog_guides') || [];
+            let agencies = await DB.getAll('catalog_agencies') || [];
+            let suppliers = await DB.getAll('suppliers') || [];
+            
+            // Aplicar filtro de sucursal si aplica
+            if (filterBranchId) {
+                const normalizedBranchId = String(filterBranchId);
+                
+                items = items.filter(item => {
+                    if (!item.branch_id) return false;
+                    return String(item.branch_id) === normalizedBranchId;
+                });
+                
+                employees = employees.filter(emp => {
+                    if (emp.branch_id) {
+                        return String(emp.branch_id) === normalizedBranchId;
+                    }
+                    if (emp.branch_ids && Array.isArray(emp.branch_ids)) {
+                        return emp.branch_ids.some(id => String(id) === normalizedBranchId);
+                    }
+                    return false;
+                });
+                
+                suppliers = suppliers.filter(supplier => {
+                    if (supplier.branch_id) {
+                        return String(supplier.branch_id) === normalizedBranchId;
+                    }
+                    return supplier.is_shared === true;
+                });
+            }
 
             const exportData = [];
 
@@ -2696,6 +2759,23 @@ var BarcodesModule = {
                     });
                 }
             });
+
+            // Proveedores
+            for (const supplier of suppliers) {
+                if (!Utils.isBarcodeEmpty(supplier.barcode)) {
+                    const barcodeImg = await BarcodeManager.generateBarcodeImage(supplier.barcode);
+                    exportData.push({
+                        'Tipo': 'Proveedor',
+                        'SKU/Código': supplier.code || 'N/A',
+                        'Nombre': supplier.name || 'Sin nombre',
+                        'Código de Barras': supplier.barcode,
+                        'Tipo Proveedor': supplier.supplier_type || 'N/A',
+                        'Categoría': supplier.category || 'N/A',
+                        'Estado': supplier.status || 'N/A',
+                        'Imagen': barcodeImg
+                    });
+                }
+            }
 
             const date = Utils.formatDate(new Date(), 'YYYYMMDD');
             
@@ -3072,9 +3152,252 @@ var BarcodesModule = {
                 entity
             );
 
+            // Agregar a cola de sincronización para sincronización bidireccional
+            if (typeof SyncManager !== 'undefined') {
+                try {
+                    if (type === 'item') {
+                        await SyncManager.addToQueue('inventory_item', id);
+                    } else if (type === 'employee') {
+                        await SyncManager.addToQueue('employee', id);
+                    } else if (type === 'seller') {
+                        await SyncManager.addToQueue('catalog_seller', id);
+                    } else if (type === 'guide') {
+                        await SyncManager.addToQueue('catalog_guide', id);
+                    } else if (type === 'agency') {
+                        await SyncManager.addToQueue('catalog_agency', id);
+                    } else if (type === 'supplier') {
+                        await SyncManager.addToQueue('supplier', id);
+                    }
+                } catch (syncError) {
+                    console.warn('Error agregando a cola de sincronización:', syncError);
+                }
+            }
+
             Utils.showNotification('Código de barras actualizado', 'success');
             UI.closeModal();
             await this.loadBarcodes();
+        }
+    },
+
+    async viewDetails(id, type) {
+        let entity;
+        let storeName;
+        switch(type) {
+            case 'item':
+                entity = await DB.get('inventory_items', id);
+                storeName = 'Producto';
+                break;
+            case 'employee':
+                entity = await DB.get('employees', id);
+                storeName = 'Empleado';
+                break;
+            case 'seller':
+                entity = await DB.get('catalog_sellers', id);
+                storeName = 'Vendedor';
+                break;
+            case 'guide':
+                entity = await DB.get('catalog_guides', id);
+                storeName = 'Guía';
+                break;
+            case 'agency':
+                entity = await DB.get('catalog_agencies', id);
+                storeName = 'Agencia';
+                break;
+            case 'supplier':
+                entity = await DB.get('suppliers', id);
+                storeName = 'Proveedor';
+                break;
+            default:
+                Utils.showNotification('Tipo no válido', 'error');
+                return;
+        }
+
+        if (!entity) {
+            Utils.showNotification(`${storeName} no encontrado`, 'error');
+            return;
+        }
+
+        const barcode = entity.barcode || 'Sin código de barras';
+        const hasBarcode = !Utils.isBarcodeEmpty(barcode);
+        
+        let code = '';
+        if (type === 'item') {
+            code = entity.sku || 'N/A';
+        } else if (type === 'employee') {
+            code = entity.employee_code || 'N/A';
+        } else if (type === 'supplier') {
+            code = entity.code || 'N/A';
+        } else {
+            code = entity.id || 'N/A';
+        }
+
+        const body = `
+            <div style="padding: var(--spacing-md);">
+                <div style="margin-bottom: var(--spacing-md);">
+                    <h3 style="margin-bottom: var(--spacing-sm);">${entity.name || 'Sin nombre'}</h3>
+                    <p style="color: var(--color-text-secondary); font-size: 12px;">
+                        ${storeName} • ${code}
+                    </p>
+                </div>
+                ${hasBarcode ? `
+                    <div style="text-align: center; padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md); margin-bottom: var(--spacing-md);">
+                        <svg id="detail-barcode-preview" style="max-width: 100%;"></svg>
+                        <div style="margin-top: var(--spacing-sm); font-family: monospace; font-size: 12px;">${barcode}</div>
+                    </div>
+                ` : `
+                    <div style="text-align: center; padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md); margin-bottom: var(--spacing-md); color: var(--color-text-secondary);">
+                        Sin código de barras asignado
+                    </div>
+                `}
+                <div style="display: flex; gap: var(--spacing-sm); flex-wrap: wrap;">
+                    ${hasBarcode ? `
+                        <button class="btn-primary btn-sm" onclick="window.BarcodesModule.printBarcode('${id}', '${type}')">
+                            <i class="fas fa-print"></i> Imprimir
+                        </button>
+                        <button class="btn-secondary btn-sm" onclick="window.BarcodesModule.generateQR('${id}', '${type}')">
+                            <i class="fas fa-qrcode"></i> Generar QR
+                        </button>
+                    ` : ''}
+                    <button class="btn-secondary btn-sm" onclick="window.BarcodesModule.editBarcode('${id}', '${type}'); UI.closeModal();">
+                        <i class="fas fa-edit"></i> ${hasBarcode ? 'Editar' : 'Generar'} Código
+                    </button>
+                </div>
+            </div>
+        `;
+
+        const footer = `
+            <button class="btn-secondary" onclick="UI.closeModal()">Cerrar</button>
+        `;
+
+        UI.showModal(`Detalles - ${storeName}`, body, footer);
+
+        // Generar código de barras visual si existe
+        if (hasBarcode) {
+            setTimeout(async () => {
+                const settings = await this.getBarcodeSettings();
+                await BarcodeManager.generateBarcode(barcode, 'detail-barcode-preview', settings.format || 'CODE128', {
+                    width: settings.width || 2,
+                    height: settings.height || 50,
+                    displayValue: settings.displayValue !== false
+                });
+            }, 100);
+        }
+    },
+
+    async printBarcode(id, type) {
+        try {
+            let entity;
+            let entityName;
+            let code;
+            
+            switch(type) {
+                case 'item':
+                    entity = await DB.get('inventory_items', id);
+                    entityName = entity?.name || entity?.sku || 'Producto';
+                    code = entity?.sku || 'N/A';
+                    break;
+                case 'employee':
+                    entity = await DB.get('employees', id);
+                    entityName = entity?.name || 'Empleado';
+                    code = entity?.employee_code || 'N/A';
+                    break;
+                case 'seller':
+                    entity = await DB.get('catalog_sellers', id);
+                    entityName = entity?.name || 'Vendedor';
+                    code = entity?.id || 'N/A';
+                    break;
+                case 'guide':
+                    entity = await DB.get('catalog_guides', id);
+                    entityName = entity?.name || 'Guía';
+                    code = entity?.id || 'N/A';
+                    break;
+                case 'agency':
+                    entity = await DB.get('catalog_agencies', id);
+                    entityName = entity?.name || 'Agencia';
+                    code = entity?.id || 'N/A';
+                    break;
+                case 'supplier':
+                    entity = await DB.get('suppliers', id);
+                    entityName = entity?.name || 'Proveedor';
+                    code = entity?.code || 'N/A';
+                    break;
+                default:
+                    Utils.showNotification('Tipo no válido', 'error');
+                    return;
+            }
+
+            if (!entity) {
+                Utils.showNotification('Elemento no encontrado', 'error');
+                return;
+            }
+
+            const barcode = entity.barcode || code;
+            if (Utils.isBarcodeEmpty(barcode)) {
+                Utils.showNotification('No hay código de barras para imprimir', 'error');
+                return;
+            }
+
+            const settings = await this.getBarcodeSettings();
+            const barcodeImg = await BarcodeManager.generateBarcodeImage(barcode, settings.format || 'CODE128', {
+                width: settings.width || 2,
+                height: settings.height || 50,
+                displayValue: settings.displayValue !== false
+            });
+
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write(`
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Etiqueta ${code}</title>
+                    <style>
+                        body {
+                            margin: 0;
+                            padding: 10mm;
+                            font-family: Arial, sans-serif;
+                            font-size: 10pt;
+                        }
+                        .label {
+                            width: 58mm;
+                            text-align: center;
+                        }
+                        .label h3 {
+                            margin: 5mm 0;
+                            font-size: 12pt;
+                            word-wrap: break-word;
+                        }
+                        .label img {
+                            max-width: 100%;
+                            height: auto;
+                        }
+                        .label .code {
+                            margin-top: 5mm;
+                            font-size: 10pt;
+                            font-family: monospace;
+                        }
+                        @media print {
+                            @page {
+                                size: 58mm auto;
+                                margin: 0;
+                            }
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="label">
+                        <h3>${entityName}</h3>
+                        <img src="${barcodeImg}" alt="Barcode">
+                        <div class="code">${code}</div>
+                        <div class="code" style="font-size: 8pt; margin-top: 2mm;">${barcode}</div>
+                    </div>
+                </body>
+                </html>
+            `);
+            printWindow.document.close();
+            setTimeout(() => printWindow.print(), 500);
+        } catch (error) {
+            console.error('Error imprimiendo código de barras:', error);
+            Utils.showNotification('Error al imprimir código de barras', 'error');
         }
     },
 
