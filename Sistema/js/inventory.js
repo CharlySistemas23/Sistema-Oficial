@@ -214,10 +214,10 @@ const Inventory = {
                         <div class="form-group" style="margin-bottom: 0;">
                             <label style="font-size: 11px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 4px; display: block;">Vista</label>
                             <div class="inventory-view-toggle" style="display: flex; gap: 2px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); overflow: hidden; background: var(--color-bg-secondary); width: 100%; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                                <button type="button" class="inventory-view-btn ${this.currentView === 'grid' ? 'active' : ''}" data-view="grid" title="Vista de Tarjetas" style="border-radius: 0; margin: 0; border: none; padding: 10px 16px; font-weight: 600; cursor: pointer; transition: all 0.2s; flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 38px; ${this.currentView === 'grid' ? 'background: var(--color-primary) !important; color: white !important;' : 'background: transparent; color: var(--color-text);'}">
+                                <button type="button" id="inventory-view-grid-btn" class="inventory-view-btn ${this.currentView === 'grid' ? 'active' : ''}" data-view="grid" title="Vista de Tarjetas" style="border-radius: 0; margin: 0; border: none; padding: 10px 16px; font-weight: 600; cursor: pointer; transition: all 0.2s; flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 38px; ${this.currentView === 'grid' ? 'background: var(--color-primary) !important; color: white !important;' : 'background: transparent; color: var(--color-text);'}">
                                     <i class="fas fa-th"></i> <span>Tarjetas</span>
                                 </button>
-                                <button type="button" class="inventory-view-btn ${this.currentView === 'list' ? 'active' : ''}" data-view="list" title="Vista de Lista" style="border-radius: 0; margin: 0; border: none; padding: 10px 16px; font-weight: 600; cursor: pointer; transition: all 0.2s; flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 38px; ${this.currentView === 'list' ? 'background: var(--color-primary) !important; color: white !important;' : 'background: transparent; color: var(--color-text);'}">
+                                <button type="button" id="inventory-view-list-btn" class="inventory-view-btn ${this.currentView === 'list' ? 'active' : ''}" data-view="list" title="Vista de Lista" style="border-radius: 0; margin: 0; border: none; padding: 10px 16px; font-weight: 600; cursor: pointer; transition: all 0.2s; flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 38px; ${this.currentView === 'list' ? 'background: var(--color-primary) !important; color: white !important;' : 'background: transparent; color: var(--color-text);'}">
                                     <i class="fas fa-list"></i> <span>Lista</span>
                                 </button>
                             </div>
@@ -381,13 +381,43 @@ const Inventory = {
         document.getElementById('inventory-import-btn')?.addEventListener('click', () => this.importCSV());
         document.getElementById('inventory-export-btn')?.addEventListener('click', () => this.exportInventory());
         
-        // Toggle de vista (Grid/Lista) - Usar el mismo patrón que POS
+        // Toggle de vista (Grid/Lista) - Usar IDs específicos para mayor confiabilidad
+        const gridBtn = document.getElementById('inventory-view-grid-btn');
+        const listBtn = document.getElementById('inventory-view-list-btn');
+        
+        if (gridBtn) {
+            gridBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('🔄 Cambiando a vista GRID');
+                this.currentView = 'grid';
+                this.updateViewButtons();
+                this.loadInventory();
+            });
+        } else {
+            console.warn('⚠️ Botón de vista GRID no encontrado');
+        }
+        
+        if (listBtn) {
+            listBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('🔄 Cambiando a vista LISTA');
+                this.currentView = 'list';
+                this.updateViewButtons();
+                this.loadInventory();
+            });
+        } else {
+            console.warn('⚠️ Botón de vista LISTA no encontrado');
+        }
+        
+        // También mantener delegación de eventos como fallback
         const inventoryContainer = document.getElementById('module-content') || document.querySelector('.inventory-container');
         if (inventoryContainer) {
-            // Usar delegación de eventos exactamente como en POS
             inventoryContainer.addEventListener('click', (e) => {
                 const viewBtn = e.target.closest('.inventory-view-btn');
-                if (viewBtn) {
+                if (viewBtn && !viewBtn.id) {
+                    // Solo procesar si no tiene ID (botones sin ID específico)
                     e.preventDefault();
                     e.stopPropagation();
                     // Remover active de todos los botones
@@ -402,6 +432,8 @@ const Inventory = {
                     viewBtn.style.color = 'white';
                     // Cambiar vista
                     this.currentView = viewBtn.dataset.view;
+                    console.log(`🔄 Cambiando a vista ${this.currentView.toUpperCase()} (fallback)`);
+                    this.updateViewButtons();
                     this.loadInventory();
                 }
             });
