@@ -1393,7 +1393,75 @@ const App = {
     },
 
     async loadCatalogs() {
-        // Agencies
+        // ========== SINCRONIZACIÓN BIDIRECCCIONAL DE CATÁLOGOS ==========
+        // PASO 1: Intentar cargar desde el servidor si hay API disponible
+        if (typeof API !== 'undefined' && API.baseURL && API.token) {
+            try {
+                console.log('📥 [Catalogs] Sincronizando catálogos desde el servidor...');
+                
+                // Sincronizar agencias
+                if (typeof API.getAgencies === 'function') {
+                    try {
+                        const serverAgencies = await API.getAgencies() || [];
+                        console.log(`📥 [Catalogs] ${serverAgencies.length} agencias recibidas del servidor`);
+                        for (const serverAgency of serverAgencies) {
+                            const existing = await DB.get('catalog_agencies', serverAgency.id);
+                            const agencyData = {
+                                ...serverAgency,
+                                // Generar código de barras si no existe
+                                barcode: existing?.barcode || serverAgency.barcode || Utils.generateAgencyBarcode?.(serverAgency) || `AG${serverAgency.id.substring(0, 6)}`
+                            };
+                            await DB.put('catalog_agencies', agencyData);
+                        }
+                    } catch (e) {
+                        console.warn('⚠️ Error sincronizando agencias desde servidor:', e);
+                    }
+                }
+                
+                // Sincronizar guías
+                if (typeof API.getGuides === 'function') {
+                    try {
+                        const serverGuides = await API.getGuides() || [];
+                        console.log(`📥 [Catalogs] ${serverGuides.length} guías recibidos del servidor`);
+                        for (const serverGuide of serverGuides) {
+                            const existing = await DB.get('catalog_guides', serverGuide.id);
+                            const guideData = {
+                                ...serverGuide,
+                                // Generar código de barras si no existe
+                                barcode: existing?.barcode || serverGuide.barcode || Utils.generateGuideBarcode?.(serverGuide) || `GU${serverGuide.id.substring(0, 6)}`
+                            };
+                            await DB.put('catalog_guides', guideData);
+                        }
+                    } catch (e) {
+                        console.warn('⚠️ Error sincronizando guías desde servidor:', e);
+                    }
+                }
+                
+                // Sincronizar vendedores
+                if (typeof API.getSellers === 'function') {
+                    try {
+                        const serverSellers = await API.getSellers() || [];
+                        console.log(`📥 [Catalogs] ${serverSellers.length} vendedores recibidos del servidor`);
+                        for (const serverSeller of serverSellers) {
+                            const existing = await DB.get('catalog_sellers', serverSeller.id);
+                            const sellerData = {
+                                ...serverSeller,
+                                // Generar código de barras si no existe
+                                barcode: existing?.barcode || serverSeller.barcode || Utils.generateSellerBarcode?.(serverSeller) || `SE${serverSeller.id.substring(0, 6)}`
+                            };
+                            await DB.put('catalog_sellers', sellerData);
+                        }
+                    } catch (e) {
+                        console.warn('⚠️ Error sincronizando vendedores desde servidor:', e);
+                    }
+                }
+            } catch (e) {
+                console.warn('⚠️ Error general sincronizando catálogos (continuando con datos locales):', e);
+            }
+        }
+        
+        // PASO 2: Cargar datos locales como fallback/complemento
+        // Agencies (datos locales como fallback)
         const agencies = [
             { id: 'ag1', name: 'TRAVELEX', active: true },
             { id: 'ag2', name: 'VERANOS', active: true },
