@@ -44,13 +44,21 @@ const Inventory = {
                 await this.setupUI();
             }
 
-            await this.setupEventListeners();
-            await this.loadInventory();
+            // Esperar un momento para asegurar que el DOM esté completamente renderizado
+            console.log('⏳ Esperando renderizado del DOM...');
+            await new Promise(resolve => setTimeout(resolve, 150));
             
-            // Actualizar estado visual de los botones de vista (igual que POS)
+            console.log('🔧 Configurando event listeners...');
+            await this.setupEventListeners();
+            
+            // Actualizar estado visual de los botones de vista después de configurar listeners
             setTimeout(() => {
+                console.log('🔄 Actualizando botones de vista después de setupEventListeners');
                 this.updateViewButtons();
-            }, 100);
+            }, 200);
+            
+            console.log('📦 Cargando inventario...');
+            await this.loadInventory();
             this.initialized = true;
             
             // Escuchar cambios de sucursal para recargar inventario
@@ -100,7 +108,7 @@ const Inventory = {
                         <h3 style="font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin: 0;">
                             <i class="fas fa-box"></i> Inventario
                         </h3>
-                        <div style="display: flex; gap: var(--spacing-xs); flex-wrap: wrap;">
+                        <div style="display: flex; gap: var(--spacing-xs); flex-wrap: wrap; align-items: center;">
                             ${(() => {
                                 const hasPermission = typeof PermissionManager !== 'undefined' && PermissionManager.hasPermission('inventory.add');
                                 // #region agent log
@@ -121,6 +129,15 @@ const Inventory = {
                             <button class="btn-secondary btn-sm" id="inventory-print-labels-btn" style="display: none;">
                                 <i class="fas fa-gem"></i> Imprimir Etiquetas (<span id="inventory-print-labels-count">0</span>)
                             </button>
+                            <!-- Botones de Vista (Grid/Lista) - VISIBLES EN LA BARRA SUPERIOR -->
+                            <div id="inventory-view-toggle-container" style="display: flex; gap: 2px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); overflow: hidden; background: var(--color-bg-secondary); box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-left: var(--spacing-xs);">
+                                <button type="button" id="inventory-view-grid-btn" class="inventory-view-btn" data-view="grid" title="Vista de Tarjetas" style="border-radius: 0; margin: 0; border: none; padding: 8px 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; background: transparent; color: var(--color-text);">
+                                    <i class="fas fa-th"></i> <span style="font-size: 12px;">Tarjetas</span>
+                                </button>
+                                <button type="button" id="inventory-view-list-btn" class="inventory-view-btn" data-view="list" title="Vista de Lista" style="border-radius: 0; margin: 0; border: none; padding: 8px 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; background: transparent; color: var(--color-text);">
+                                    <i class="fas fa-list"></i> <span style="font-size: 12px;">Lista</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
                     
@@ -211,17 +228,7 @@ const Inventory = {
                         <div class="form-group" style="margin-bottom: 0;">
                             <input type="number" id="inventory-max-price" class="form-input" placeholder="Costo Máx" step="0.01">
                         </div>
-                        <div class="form-group" style="margin-bottom: 0;">
-                            <label style="font-size: 11px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 4px; display: block;">Vista</label>
-                            <div class="inventory-view-toggle" style="display: flex; gap: 2px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); overflow: hidden; background: var(--color-bg-secondary); width: 100%; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                                <button type="button" id="inventory-view-grid-btn" class="inventory-view-btn ${this.currentView === 'grid' ? 'active' : ''}" data-view="grid" title="Vista de Tarjetas" style="border-radius: 0; margin: 0; border: none; padding: 10px 16px; font-weight: 600; cursor: pointer; transition: all 0.2s; flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 38px; ${this.currentView === 'grid' ? 'background: var(--color-primary) !important; color: white !important;' : 'background: transparent; color: var(--color-text);'}">
-                                    <i class="fas fa-th"></i> <span>Tarjetas</span>
-                                </button>
-                                <button type="button" id="inventory-view-list-btn" class="inventory-view-btn ${this.currentView === 'list' ? 'active' : ''}" data-view="list" title="Vista de Lista" style="border-radius: 0; margin: 0; border: none; padding: 10px 16px; font-weight: 600; cursor: pointer; transition: all 0.2s; flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 38px; ${this.currentView === 'list' ? 'background: var(--color-primary) !important; color: white !important;' : 'background: transparent; color: var(--color-text);'}">
-                                    <i class="fas fa-list"></i> <span>Lista</span>
-                                </button>
-                            </div>
-                        </div>
+                        <!-- Botones de vista removidos de aquí - ahora están en la barra superior -->
                         <div class="form-group" style="margin-bottom: 0;">
                             <button class="btn-secondary btn-sm" id="inventory-advanced-filters-toggle" style="width: 100%;">
                                 <i class="fas fa-filter"></i> Filtros Avanzados
@@ -377,38 +384,84 @@ const Inventory = {
     },
 
     async setupEventListeners() {
+        console.log('🔧 [setupEventListeners] Iniciando configuración de event listeners...');
+        
         document.getElementById('inventory-add-btn')?.addEventListener('click', () => this.showAddForm());
         document.getElementById('inventory-import-btn')?.addEventListener('click', () => this.importCSV());
         document.getElementById('inventory-export-btn')?.addEventListener('click', () => this.exportInventory());
         
-        // Toggle de vista (Grid/Lista) - Usar IDs específicos para mayor confiabilidad
-        const gridBtn = document.getElementById('inventory-view-grid-btn');
-        const listBtn = document.getElementById('inventory-view-list-btn');
-        
-        if (gridBtn) {
-            gridBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log('🔄 Cambiando a vista GRID');
-                this.currentView = 'grid';
+        // Toggle de vista (Grid/Lista) - Función helper con múltiples intentos
+        const setupViewButtons = (attempt = 1) => {
+            console.log(`🔍 [setupViewButtons] Intento ${attempt}: Buscando botones de vista...`);
+            
+            const gridBtn = document.getElementById('inventory-view-grid-btn');
+            const listBtn = document.getElementById('inventory-view-list-btn');
+            
+            console.log(`🔍 [setupViewButtons] Grid encontrado:`, !!gridBtn, 'List encontrado:', !!listBtn);
+            
+            if (gridBtn && listBtn) {
+                console.log('✅ Botones de vista encontrados, configurando listeners...');
+                
+                // Remover listeners anteriores clonando los elementos
+                const gridParent = gridBtn.parentNode;
+                const listParent = listBtn.parentNode;
+                const newGridBtn = gridBtn.cloneNode(true);
+                const newListBtn = listBtn.cloneNode(true);
+                
+                gridParent.replaceChild(newGridBtn, gridBtn);
+                listParent.replaceChild(newListBtn, listBtn);
+                
+                // Agregar listeners a los nuevos elementos
+                const finalGridBtn = document.getElementById('inventory-view-grid-btn');
+                const finalListBtn = document.getElementById('inventory-view-list-btn');
+                
+                if (finalGridBtn) {
+                    finalGridBtn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        console.log('🔄 [CLICK] Cambiando a vista GRID');
+                        this.currentView = 'grid';
+                        this.updateViewButtons();
+                        this.loadInventory();
+                    });
+                    console.log('✅ Listener agregado a botón GRID');
+                }
+                
+                if (finalListBtn) {
+                    finalListBtn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        console.log('🔄 [CLICK] Cambiando a vista LISTA');
+                        this.currentView = 'list';
+                        this.updateViewButtons();
+                        this.loadInventory();
+                    });
+                    console.log('✅ Listener agregado a botón LISTA');
+                }
+                
+                // Actualizar estado visual inicial
                 this.updateViewButtons();
-                this.loadInventory();
-            });
-        } else {
-            console.warn('⚠️ Botón de vista GRID no encontrado');
-        }
+                console.log('✅ Botones de vista configurados correctamente');
+                return true;
+            } else {
+                console.warn(`⚠️ Botones de vista no encontrados en intento ${attempt}. Grid:`, !!gridBtn, 'List:', !!listBtn);
+                if (gridBtn) console.log('📍 Grid button location:', gridBtn.getBoundingClientRect());
+                if (listBtn) console.log('📍 List button location:', listBtn.getBoundingClientRect());
+                return false;
+            }
+        };
         
-        if (listBtn) {
-            listBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log('🔄 Cambiando a vista LISTA');
-                this.currentView = 'list';
-                this.updateViewButtons();
-                this.loadInventory();
-            });
-        } else {
-            console.warn('⚠️ Botón de vista LISTA no encontrado');
+        // Intentar configurar inmediatamente
+        if (!setupViewButtons(1)) {
+            // Si no se encuentran, intentar después de un pequeño delay
+            setTimeout(() => {
+                if (!setupViewButtons(2)) {
+                    // Último intento después de más tiempo
+                    setTimeout(() => {
+                        setupViewButtons(3);
+                    }, 500);
+                }
+            }, 100);
         }
         
         // También mantener delegación de eventos como fallback
@@ -416,27 +469,17 @@ const Inventory = {
         if (inventoryContainer) {
             inventoryContainer.addEventListener('click', (e) => {
                 const viewBtn = e.target.closest('.inventory-view-btn');
-                if (viewBtn && !viewBtn.id) {
-                    // Solo procesar si no tiene ID (botones sin ID específico)
+                if (viewBtn && (viewBtn.id === 'inventory-view-grid-btn' || viewBtn.id === 'inventory-view-list-btn')) {
                     e.preventDefault();
                     e.stopPropagation();
-                    // Remover active de todos los botones
-                    document.querySelectorAll('.inventory-view-btn').forEach(b => {
-                        b.classList.remove('active');
-                        b.style.background = 'transparent';
-                        b.style.color = 'var(--color-text)';
-                    });
-                    // Agregar active al botón clickeado
-                    viewBtn.classList.add('active');
-                    viewBtn.style.background = 'var(--color-primary)';
-                    viewBtn.style.color = 'white';
-                    // Cambiar vista
-                    this.currentView = viewBtn.dataset.view;
-                    console.log(`🔄 Cambiando a vista ${this.currentView.toUpperCase()} (fallback)`);
+                    const view = viewBtn.dataset.view || (viewBtn.id.includes('grid') ? 'grid' : 'list');
+                    console.log(`🔄 Cambiando a vista ${view.toUpperCase()} (delegación)`);
+                    this.currentView = view;
                     this.updateViewButtons();
                     this.loadInventory();
                 }
             });
+            console.log('✅ Delegación de eventos configurada como fallback');
         }
         
         // Escaneo de código de barras
@@ -770,6 +813,8 @@ const Inventory = {
                     }
                 }
             });
+        
+        console.log('✅ [setupEventListeners] Configuración completada');
     },
 
     async loadInventory() {
@@ -1653,24 +1698,36 @@ const Inventory = {
         const gridBtn = document.getElementById('inventory-view-grid-btn');
         const listBtn = document.getElementById('inventory-view-list-btn');
         
+        console.log('🎨 [updateViewButtons] Vista actual:', this.currentView, 'Grid:', !!gridBtn, 'List:', !!listBtn);
+        
         if (gridBtn) {
             if (this.currentView === 'grid') {
+                gridBtn.classList.add('active');
                 gridBtn.style.background = 'var(--color-primary)';
                 gridBtn.style.color = 'white';
+                console.log('✅ Botón GRID activado');
             } else {
-                gridBtn.style.background = '';
-                gridBtn.style.color = '';
+                gridBtn.classList.remove('active');
+                gridBtn.style.background = 'transparent';
+                gridBtn.style.color = 'var(--color-text)';
             }
+        } else {
+            console.warn('⚠️ Botón GRID no encontrado en updateViewButtons');
         }
         
         if (listBtn) {
             if (this.currentView === 'list') {
+                listBtn.classList.add('active');
                 listBtn.style.background = 'var(--color-primary)';
                 listBtn.style.color = 'white';
+                console.log('✅ Botón LISTA activado');
             } else {
-                listBtn.style.background = '';
-                listBtn.style.color = '';
+                listBtn.classList.remove('active');
+                listBtn.style.background = 'transparent';
+                listBtn.style.color = 'var(--color-text)';
             }
+        } else {
+            console.warn('⚠️ Botón LISTA no encontrado en updateViewButtons');
         }
     },
 
