@@ -2230,6 +2230,12 @@ const Inventory = {
         `;
 
         container.innerHTML = tableHTML;
+        
+        // Remover clase inventory-grid cuando está en modo lista para evitar limitaciones de grid
+        if (container.classList.contains('inventory-grid')) {
+            container.classList.remove('inventory-grid');
+            container.classList.add('inventory-list-view');
+        }
 
         // Actualizar estado de selección
         this.updateViewButtons();
@@ -2254,6 +2260,12 @@ const Inventory = {
         if (items.length === 0) {
             container.innerHTML = '<p style="text-align: center; padding: 40px;">No hay piezas en inventario</p>';
             return;
+        }
+
+        // Asegurar que tenga la clase inventory-grid para modo tarjetas
+        if (!container.classList.contains('inventory-grid')) {
+            container.classList.add('inventory-grid');
+            container.classList.remove('inventory-list-view');
         }
 
         // Usar función helper para obtener HTML de las tarjetas
