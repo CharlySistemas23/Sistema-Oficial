@@ -2213,8 +2213,8 @@ const Inventory = {
 
         // Construir tabla completa con thead
         const tableHTML = `
-            <div style="overflow-x: auto;">
-                <table style="width: 100%; border-collapse: collapse; background: var(--color-bg-card); border-radius: var(--radius-md); overflow: hidden;">
+            <div style="overflow-x: auto; width: 100%; max-width: 100%;">
+                <table style="width: 100%; min-width: 1200px; border-collapse: collapse; background: var(--color-bg-card); border-radius: var(--radius-md); overflow: hidden;">
                     <thead>
                         <tr style="background: var(--color-bg-secondary); border-bottom: 2px solid var(--color-border);">
                             <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 40px;">
