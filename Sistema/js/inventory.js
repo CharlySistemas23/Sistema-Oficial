@@ -2200,26 +2200,26 @@ const Inventory = {
 
         // Construir tabla completa con thead - Ajustada al mismo tamaño que el recuadro de filtros
         const tableHTML = `
-            <div style="width: 100%; max-width: 100%; padding: 16px; background: var(--color-bg-secondary); border-radius: var(--radius-lg); overflow-x: visible; overflow-y: visible;">
-                <table style="width: 100%; border-collapse: collapse; background: var(--color-bg-card); border-radius: var(--radius-md); overflow: hidden; table-layout: fixed;">
+            <div style="width: 100%; max-width: 100%; padding: 16px; background: var(--color-bg-secondary); border-radius: var(--radius-lg); overflow-x: auto; overflow-y: visible;">
+                <table style="width: 100%; min-width: 1400px; border-collapse: collapse; background: var(--color-bg-card); border-radius: var(--radius-md); overflow: hidden; table-layout: auto;">
                     <thead>
                         <tr style="background: var(--color-bg-secondary); border-bottom: 2px solid var(--color-border);">
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 3%;">
+                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); min-width: 40px; width: auto;">
                                 <input type="checkbox" id="inventory-select-all-list" onchange="window.Inventory.toggleSelectAll(this.checked)">
                             </th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 6%;">Foto</th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 8%;">SKU</th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 15%;">Nombre</th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 8%;">Categoría</th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 8%;">Material</th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 8%;">Piedra</th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 6%;">Peso (g)</th>
-                            <th style="padding: 12px; text-align: right; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 8%;">Costo</th>
-                            <th style="padding: 12px; text-align: right; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 8%;">Precio Venta</th>
-                            <th style="padding: 12px; text-align: center; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 6%;">Stock</th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 8%;">Estado</th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 6%;">Ubicación</th>
-                            <th style="padding: 12px; text-align: center; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 10%;">Acciones</th>
+                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); min-width: 80px; width: auto;">Foto</th>
+                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); min-width: 120px; width: auto;">SKU</th>
+                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); min-width: 200px; width: auto;">Nombre</th>
+                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); min-width: 120px; width: auto;">Categoría</th>
+                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); min-width: 120px; width: auto;">Material</th>
+                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); min-width: 120px; width: auto;">Piedra</th>
+                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); min-width: 80px; width: auto;">Peso (g)</th>
+                            <th style="padding: 12px; text-align: right; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); min-width: 100px; width: auto;">Costo</th>
+                            <th style="padding: 12px; text-align: right; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); min-width: 120px; width: auto;">Precio Venta</th>
+                            <th style="padding: 12px; text-align: center; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); min-width: 100px; width: auto;">Stock</th>
+                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); min-width: 120px; width: auto;">Estado</th>
+                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); min-width: 100px; width: auto;">Ubicación</th>
+                            <th style="padding: 12px; text-align: center; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); min-width: 150px; width: auto;">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -2284,23 +2284,23 @@ const Inventory = {
 
         // Crear tabla - Ajustada al mismo tamaño que el recuadro de filtros
         container.innerHTML = `
-            <div style="width: 100%; max-width: 100%; padding: 16px; background: var(--color-bg-secondary); border-radius: var(--radius-lg); overflow-x: visible; overflow-y: visible;">
-                <table style="width: 100%; border-collapse: collapse; background: var(--color-bg-card); border-radius: var(--radius-md); overflow: hidden; table-layout: fixed;">
+            <div style="width: 100%; max-width: 100%; padding: 16px; background: var(--color-bg-secondary); border-radius: var(--radius-lg); overflow-x: auto; overflow-y: visible;">
+                <table style="width: 100%; min-width: 1400px; border-collapse: collapse; background: var(--color-bg-card); border-radius: var(--radius-md); overflow: hidden; table-layout: auto;">
                     <thead>
                         <tr style="background: var(--color-bg-secondary); border-bottom: 2px solid var(--color-border);">
-                            <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; text-transform: uppercase; width: 3%;">
+                            <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; text-transform: uppercase; min-width: 40px; width: auto;">
                                 <input type="checkbox" id="inventory-list-select-all" onchange="window.Inventory.toggleSelectAll()" style="cursor: pointer;">
                             </th>
-                            <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; text-transform: uppercase; width: 6%;">Foto</th>
-                            <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; text-transform: uppercase; width: 10%;">SKU</th>
-                            <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; text-transform: uppercase; width: 18%;">Nombre</th>
-                            <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; text-transform: uppercase; width: 10%;">Categoría</th>
-                            <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; text-transform: uppercase; width: 9%;">Metal</th>
-                            <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; text-transform: uppercase; width: 9%;">Piedra</th>
-                            <th style="padding: 12px; text-align: center; font-size: 12px; font-weight: 600; text-transform: uppercase; width: 7%;">Stock</th>
-                            <th style="padding: 12px; text-align: right; font-size: 12px; font-weight: 600; text-transform: uppercase; width: 9%;">Costo</th>
-                            <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; text-transform: uppercase; width: 9%;">Estado</th>
-                            <th style="padding: 12px; text-align: center; font-size: 12px; font-weight: 600; text-transform: uppercase; width: 9%;">Acciones</th>
+                            <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; text-transform: uppercase; min-width: 80px; width: auto;">Foto</th>
+                            <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; text-transform: uppercase; min-width: 120px; width: auto;">SKU</th>
+                            <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; text-transform: uppercase; min-width: 200px; width: auto;">Nombre</th>
+                            <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; text-transform: uppercase; min-width: 120px; width: auto;">Categoría</th>
+                            <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; text-transform: uppercase; min-width: 120px; width: auto;">Metal</th>
+                            <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; text-transform: uppercase; min-width: 120px; width: auto;">Piedra</th>
+                            <th style="padding: 12px; text-align: center; font-size: 12px; font-weight: 600; text-transform: uppercase; min-width: 100px; width: auto;">Stock</th>
+                            <th style="padding: 12px; text-align: right; font-size: 12px; font-weight: 600; text-transform: uppercase; min-width: 100px; width: auto;">Costo</th>
+                            <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; text-transform: uppercase; min-width: 120px; width: auto;">Estado</th>
+                            <th style="padding: 12px; text-align: center; font-size: 12px; font-weight: 600; text-transform: uppercase; min-width: 150px; width: auto;">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
