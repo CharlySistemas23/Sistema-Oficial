@@ -1229,6 +1229,17 @@ const API = {
         return await this.delete(`/api/catalogs/agencies/${id}`);
     },
 
+    async getAgencies(search = '', active = null) {
+        const params = {};
+        if (search) params.search = search;
+        if (active !== null) params.active = active;
+        return await this.get('/api/catalogs/agencies', params);
+    },
+
+    async getAgencyByBarcode(barcode) {
+        return await this.get(`/api/catalogs/agencies/barcode/${barcode}`);
+    },
+
     async getGuides(search = '', agencyId = null, active = null) {
         const params = {};
         if (search) params.search = search;
@@ -1239,6 +1250,17 @@ const API = {
 
     async getGuideByBarcode(barcode) {
         return await this.get(`/api/catalogs/guides/barcode/${barcode}`);
+    },
+
+    async getSellers(search = '', active = null) {
+        const params = {};
+        if (search) params.search = search;
+        if (active !== null) params.active = active;
+        return await this.get('/api/catalogs/sellers', params);
+    },
+
+    async getSellerByBarcode(barcode) {
+        return await this.get(`/api/catalogs/sellers/barcode/${barcode}`);
     },
 
     async createGuide(guide) {
