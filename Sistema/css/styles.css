@@ -9573,3 +9573,399 @@ button.btn-xs {
     font-size: 11px;
     color: var(--color-text-secondary);
 }
+
+/* ============================================
+   ESTILOS PARA MÓDULO DE CONFIGURACIÓN
+   ============================================ */
+
+.settings-module-wrapper {
+    padding: var(--spacing-lg);
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+/* Header del módulo */
+.settings-header {
+    margin-bottom: var(--spacing-xl);
+    padding-bottom: var(--spacing-lg);
+    border-bottom: 2px solid var(--color-border-light);
+}
+
+.settings-title {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--color-text);
+    margin-bottom: var(--spacing-xs);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.settings-title i {
+    color: var(--color-primary);
+    font-size: 24px;
+}
+
+.settings-subtitle {
+    font-size: 14px;
+    color: var(--color-text-secondary);
+    margin: 0;
+    font-weight: 400;
+}
+
+/* Contenedor de pestañas mejorado */
+.settings-tabs-container {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-lg);
+    margin-bottom: var(--spacing-xl);
+    padding: var(--spacing-lg);
+    background: var(--color-bg-card);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--color-border-light);
+}
+
+.settings-tabs-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+
+.settings-tabs-group-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-xs);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    background: var(--color-bg-secondary);
+    border-radius: var(--radius-xs);
+    display: inline-block;
+    width: fit-content;
+}
+
+.settings-tabs-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-sm);
+    padding-left: var(--spacing-md);
+}
+
+/* Botones de pestañas mejorados */
+.settings-tab-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-md) var(--spacing-lg);
+    background: var(--color-bg-secondary);
+    border: 2px solid var(--color-border-light);
+    border-radius: var(--radius-md);
+    color: var(--color-text);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-base);
+    position: relative;
+    overflow: hidden;
+    min-width: 140px;
+    justify-content: center;
+}
+
+.settings-tab-btn i {
+    font-size: 16px;
+    color: var(--color-text-secondary);
+    transition: all var(--transition-base);
+}
+
+.settings-tab-btn span {
+    font-weight: 500;
+}
+
+.settings-tab-btn:hover {
+    background: var(--color-bg-hover);
+    border-color: var(--color-border);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-sm);
+}
+
+.settings-tab-btn:hover i {
+    color: var(--color-primary);
+    transform: scale(1.1);
+}
+
+.settings-tab-btn.active {
+    background: var(--color-primary);
+    color: var(--color-text-light);
+    border-color: var(--color-primary);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+}
+
+.settings-tab-btn.active i {
+    color: var(--color-text-light);
+}
+
+.settings-tab-btn.active::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+    animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+}
+
+/* Contenedor de contenido */
+.settings-content-wrapper {
+    background: var(--color-bg-card);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-xl);
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--color-border-light);
+    min-height: 400px;
+    animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Mejoras para las tarjetas dentro de las pestañas */
+.settings-content-wrapper .module {
+    transition: all var(--transition-base);
+}
+
+.settings-content-wrapper .module:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+}
+
+/* Contenido de las pestañas */
+.settings-tab-content {
+    animation: fadeIn 0.3s ease-in;
+}
+
+.settings-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: var(--spacing-lg);
+}
+
+/* Tarjetas de configuración mejoradas */
+.settings-card {
+    background: var(--color-bg-card);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--color-border-light);
+    box-shadow: var(--shadow-sm);
+    transition: all var(--transition-base);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.settings-card:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-4px);
+    border-color: var(--color-border);
+}
+
+.settings-card-header {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    padding: var(--spacing-lg);
+    background: linear-gradient(135deg, rgba(26, 26, 26, 0.02) 0%, rgba(26, 26, 26, 0.01) 100%);
+    border-bottom: 1px solid var(--color-border-light);
+}
+
+.settings-card-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 20px;
+    flex-shrink: 0;
+    box-shadow: var(--shadow-sm);
+}
+
+.settings-card-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--color-text);
+    margin: 0 0 4px 0;
+}
+
+.settings-card-subtitle {
+    font-size: 12px;
+    color: var(--color-text-secondary);
+    margin: 0;
+}
+
+.settings-card-body {
+    padding: var(--spacing-lg);
+    flex: 1;
+}
+
+.settings-card-footer {
+    padding: var(--spacing-md) var(--spacing-lg);
+    background: var(--color-bg-secondary);
+    border-top: 1px solid var(--color-border-light);
+    display: flex;
+    justify-content: flex-end;
+}
+
+.settings-card-footer .btn-primary {
+    width: 100%;
+}
+
+/* Checkboxes personalizados mejorados */
+.settings-checkbox-group {
+    margin-bottom: var(--spacing-md);
+}
+
+.settings-checkbox-label {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--spacing-sm);
+    cursor: pointer;
+    padding: var(--spacing-sm);
+    border-radius: var(--radius-sm);
+    transition: background var(--transition-fast);
+}
+
+.settings-checkbox-label:hover {
+    background: var(--color-bg-secondary);
+}
+
+.settings-checkbox-label input[type="checkbox"] {
+    display: none;
+}
+
+.settings-checkbox-custom {
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--color-border);
+    border-radius: var(--radius-xs);
+    background: var(--color-bg-card);
+    position: relative;
+    flex-shrink: 0;
+    margin-top: 2px;
+    transition: all var(--transition-fast);
+}
+
+.settings-checkbox-label input[type="checkbox"]:checked + .settings-checkbox-custom {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+}
+
+.settings-checkbox-label input[type="checkbox"]:checked + .settings-checkbox-custom::after {
+    content: '✓';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.settings-checkbox-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.settings-checkbox-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--color-text);
+}
+
+.settings-checkbox-desc {
+    font-size: 11px;
+    color: var(--color-text-secondary);
+    line-height: 1.4;
+}
+
+/* Cajas de estado y cola */
+.settings-status-box {
+    padding: var(--spacing-md);
+    background: var(--color-bg-secondary);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border-light);
+    font-size: 13px;
+    color: var(--color-text);
+}
+
+.settings-queue-box {
+    padding: var(--spacing-md);
+    background: linear-gradient(135deg, rgba(26, 26, 26, 0.03) 0%, rgba(26, 26, 26, 0.01) 100%);
+    border-radius: var(--radius-md);
+    border: 2px solid var(--color-border-light);
+}
+
+/* Responsive */
+@media (max-width: 1200px) {
+    .settings-tabs-row {
+        flex-direction: column;
+    }
+    
+    .settings-tab-btn {
+        width: 100%;
+        min-width: auto;
+    }
+    
+    .settings-cards-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .settings-module-wrapper {
+        padding: var(--spacing-md);
+    }
+    
+    .settings-header {
+        margin-bottom: var(--spacing-md);
+    }
+    
+    .settings-title {
+        font-size: 22px;
+    }
+    
+    .settings-tabs-container {
+        padding: var(--spacing-md);
+    }
+    
+    .settings-content-wrapper {
+        padding: var(--spacing-md);
+    }
+    
+    .settings-card-header {
+        flex-direction: column;
+        text-align: center;
+    }
+    
+    .settings-cards-grid {
+        grid-template-columns: 1fr;
+    }
+}
