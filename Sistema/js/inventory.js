@@ -1670,49 +1670,49 @@ const Inventory = {
             return;
         }
 
+        // Si es vista de lista, mostrar TODAS las piezas en una sola tabla
+        if (this.currentView === 'list') {
+            const rowsHTML = await this.getInventoryListHTML(allItems);
+            const html = `
+                <div style="overflow-x: auto; background: var(--color-bg-card); border-radius: var(--radius-md); overflow: hidden;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="background: var(--color-bg-secondary); border-bottom: 2px solid var(--color-border);">
+                                <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 40px;">
+                                    <input type="checkbox" class="inventory-select-all-collection" onchange="window.Inventory.toggleSelectAll(this.checked)">
+                                </th>
+                                <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 80px;">Foto</th>
+                                <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">SKU</th>
+                                <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Nombre</th>
+                                <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Categoría</th>
+                                <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Material</th>
+                                <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Piedra</th>
+                                <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Peso (g)</th>
+                                <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Costo</th>
+                                <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Precio Venta</th>
+                                <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Stock</th>
+                                <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Estado</th>
+                                <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Ubicación</th>
+                                <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 100px;">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rowsHTML}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            container.innerHTML = html;
+            return;
+        }
+
+        // Para vista de grid, mantener el agrupamiento por colecciones
         let html = '<div style="display: flex; flex-direction: column; gap: var(--spacing-lg);">';
 
         const sortedCollections = Object.keys(grouped).sort();
         for (const collection of sortedCollections) {
             const collectionItems = grouped[collection];
-            let collectionHTML;
-            
-            if (this.currentView === 'list') {
-                // Para vista de lista, envolver las filas en una tabla completa
-                const rowsHTML = await this.getInventoryListHTML(collectionItems);
-                collectionHTML = `
-                    <div style="overflow-x: auto;">
-                        <table style="width: 100%; border-collapse: collapse; background: var(--color-bg-card); border-radius: var(--radius-md); overflow: hidden;">
-                            <thead>
-                                <tr style="background: var(--color-bg-secondary); border-bottom: 2px solid var(--color-border);">
-                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 40px;">
-                                        <input type="checkbox" class="inventory-select-all-collection" onchange="window.Inventory.toggleSelectAll(this.checked)">
-                                    </th>
-                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 80px;">Foto</th>
-                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">SKU</th>
-                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Nombre</th>
-                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Categoría</th>
-                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Material</th>
-                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Piedra</th>
-                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Peso (g)</th>
-                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Costo</th>
-                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Precio Venta</th>
-                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Stock</th>
-                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Estado</th>
-                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Ubicación</th>
-                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 100px;">Acciones</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${rowsHTML}
-                            </tbody>
-                        </table>
-                    </div>
-                `;
-            } else {
-                // Para vista de grid, usar directamente el HTML de las tarjetas
-                collectionHTML = await this.getInventoryGridHTML(collectionItems);
-            }
+            const collectionHTML = await this.getInventoryGridHTML(collectionItems);
             
             html += `
                 <div style="background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light); overflow: hidden;">
@@ -1730,44 +1730,7 @@ const Inventory = {
         }
 
         if (noCollection.length > 0) {
-            let noCollectionHTML;
-            
-            if (this.currentView === 'list') {
-                // Para vista de lista, envolver las filas en una tabla completa
-                const rowsHTML = await this.getInventoryListHTML(noCollection);
-                noCollectionHTML = `
-                    <div style="overflow-x: auto;">
-                        <table style="width: 100%; border-collapse: collapse; background: var(--color-bg-card); border-radius: var(--radius-md); overflow: hidden;">
-                            <thead>
-                                <tr style="background: var(--color-bg-secondary); border-bottom: 2px solid var(--color-border);">
-                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 40px;">
-                                        <input type="checkbox" class="inventory-select-all-collection" onchange="window.Inventory.toggleSelectAll(this.checked)">
-                                    </th>
-                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 80px;">Foto</th>
-                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">SKU</th>
-                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Nombre</th>
-                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Categoría</th>
-                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Material</th>
-                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Piedra</th>
-                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Peso (g)</th>
-                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Costo</th>
-                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Precio Venta</th>
-                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Stock</th>
-                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Estado</th>
-                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary);">Ubicación</th>
-                                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); width: 100px;">Acciones</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${rowsHTML}
-                            </tbody>
-                        </table>
-                    </div>
-                `;
-            } else {
-                // Para vista de grid, usar directamente el HTML de las tarjetas
-                noCollectionHTML = await this.getInventoryGridHTML(noCollection);
-            }
+            const noCollectionHTML = await this.getInventoryGridHTML(noCollection);
             
             html += `
                 <div style="background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light); overflow: hidden;">
