@@ -600,6 +600,7 @@ body {
 .content-area {
     flex: 1;
     overflow-y: auto;
+    overflow-x: auto;
     padding: var(--spacing-xl);
     background: transparent;
     width: 100%;
@@ -640,7 +641,17 @@ body {
     overflow: visible;
     width: 100%;
     max-width: 100%;
+    min-width: 0;
     align-self: flex-start;
+}
+
+/* Específico para módulo de inventario */
+#module-inventory {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: visible;
+    overflow-y: visible;
 }
 
 #module-content {
@@ -2142,6 +2153,11 @@ button.btn-xs {
     flex-direction: column;
     height: 100%;
     min-height: 0;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow-x: visible !important;
+    overflow-y: visible !important;
 }
 
 #module-inventory .module-header {
@@ -2159,10 +2175,12 @@ button.btn-xs {
 #module-inventory #inventory-list {
     flex: 1;
     min-height: 0;
-    overflow-y: auto;
-    overflow-x: auto;
-    width: 100%;
-    max-width: 100%;
+    overflow-y: auto !important;
+    overflow-x: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    position: relative !important;
 }
 
 /* Estilos para la tabla de inventario en vista de lista */
@@ -2173,9 +2191,32 @@ button.btn-xs {
 }
 
 #inventory-list > div {
-    width: 100%;
-    max-width: 100%;
-    overflow-x: auto;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+    -webkit-overflow-scrolling: touch !important;
+    position: relative !important;
+}
+
+/* Asegurar que el wrapper de la tabla permita scroll horizontal */
+#inventory-list > div[style*="overflow-x"] {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+    -webkit-overflow-scrolling: touch !important;
+}
+
+/* Forzar scroll horizontal en todos los niveles del módulo de inventario */
+#module-inventory,
+#module-inventory .module-header,
+#module-inventory #inventory-stats,
+#module-inventory .inventory-filters {
+    overflow-x: visible !important;
+    min-width: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
 }
 
 /* Tourist Report - Responsive Styles */
