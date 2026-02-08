@@ -2198,9 +2198,9 @@ const Inventory = {
         // Usar función helper para obtener HTML de las filas
         const rowsHTML = await this.getInventoryListHTML(items);
 
-        // Construir tabla completa con thead - Ajustada al 100% del ancho disponible
+        // Construir tabla completa con thead - Ajustada al mismo tamaño que el recuadro de filtros
         const tableHTML = `
-            <div style="width: 100%; max-width: 100%; overflow-x: visible; overflow-y: visible;">
+            <div style="width: 100%; max-width: 100%; padding: 16px; background: var(--color-bg-secondary); border-radius: var(--radius-lg); overflow-x: visible; overflow-y: visible;">
                 <table style="width: 100%; border-collapse: collapse; background: var(--color-bg-card); border-radius: var(--radius-md); overflow: hidden; table-layout: fixed;">
                     <thead>
                         <tr style="background: var(--color-bg-secondary); border-bottom: 2px solid var(--color-border);">
@@ -2282,10 +2282,10 @@ const Inventory = {
             return { ...item, photo: photos[0]?.thumbnail_blob || null };
         }));
 
-        // Crear tabla - Ajustada al 100% del ancho disponible
+        // Crear tabla - Ajustada al mismo tamaño que el recuadro de filtros
         container.innerHTML = `
-            <div style="width: 100%; max-width: 100%; overflow-x: visible; overflow-y: visible;">
-                <table style="width: 100%; border-collapse: collapse; background: white; border-radius: var(--radius-md); overflow: hidden; table-layout: fixed;">
+            <div style="width: 100%; max-width: 100%; padding: 16px; background: var(--color-bg-secondary); border-radius: var(--radius-lg); overflow-x: visible; overflow-y: visible;">
+                <table style="width: 100%; border-collapse: collapse; background: var(--color-bg-card); border-radius: var(--radius-md); overflow: hidden; table-layout: fixed;">
                     <thead>
                         <tr style="background: var(--color-bg-secondary); border-bottom: 2px solid var(--color-border);">
                             <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; text-transform: uppercase; width: 3%;">
