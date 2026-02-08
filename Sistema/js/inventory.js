@@ -1447,9 +1447,11 @@ const Inventory = {
             items = this.sortInventoryItems(items, sortBy);
 
             // ========== AGRUPACIÓN POR COLECCIÓN (OPCIONAL) ==========
+            // IMPORTANTE: En modo lista, NO agrupar por colección para mostrar todas las piezas juntas
             const groupByCollection = document.getElementById('inventory-group-by-collection')?.checked || false;
             
-            if (groupByCollection && items.length > 0) {
+            if (groupByCollection && items.length > 0 && this.currentView !== 'list') {
+                // Solo agrupar si NO estamos en modo lista
                 const grouped = {};
                 const noCollection = [];
                 
@@ -1467,16 +1469,14 @@ const Inventory = {
                 
                 this.groupedItems = { grouped, noCollection };
             } else {
+                // En modo lista, siempre mostrar sin agrupación
                 this.groupedItems = null;
             }
 
             // Decidir qué vista mostrar según currentView
             console.log(`📊 Mostrando inventario en vista: ${this.currentView} (${items.length} items)`);
-            if (this.currentView === 'list') {
-                await this.displayInventoryList(items);
-            } else {
-                await this.displayInventoryGrid(items);
-            }
+            // Usar displayInventory que verifica si hay agrupación
+            await this.displayInventory(items);
             
             // Actualizar filtro de ubicación con ubicaciones disponibles
             await this.updateLocationFilter();
@@ -1670,8 +1670,11 @@ const Inventory = {
             return;
         }
 
+        console.log(`📋 [displayInventoryGrouped] Vista actual: ${this.currentView}, Total items: ${allItems.length}`);
+
         // Si es vista de lista, mostrar TODAS las piezas en una sola tabla
         if (this.currentView === 'list') {
+            console.log(`📋 [displayInventoryGrouped] Mostrando ${allItems.length} items en modo LISTA (tabla única)`);
             const rowsHTML = await this.getInventoryListHTML(allItems);
             const html = `
                 <div style="overflow-x: auto; background: var(--color-bg-card); border-radius: var(--radius-md); overflow: hidden;">
