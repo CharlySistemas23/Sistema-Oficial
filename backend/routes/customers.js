@@ -33,9 +33,9 @@ router.get('/', authenticateOptional, async (req, res) => {
         sql += ` AND 1=0`; // No mostrar ningún cliente
       }
     } else if (branch_id) {
-      // Master admin puede filtrar por sucursal específica (incluyendo sin branch_id para compatibilidad)
+      // Master admin puede filtrar por sucursal específica (sin incluir NULL para evitar mezclas)
       paramCount++;
-      sql += ` AND (branch_id = $${paramCount} OR branch_id IS NULL)`;
+      sql += ` AND branch_id = $${paramCount}`;
       params.push(branch_id);
     }
     // Si es master admin y no hay branch_id, no filtrar (mostrar todos)
