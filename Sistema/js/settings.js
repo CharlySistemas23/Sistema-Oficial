@@ -47,77 +47,47 @@ const Settings = {
 
         content.innerHTML = `
             <div class="settings-module-wrapper">
-                <!-- Header del módulo -->
-                <div class="settings-header">
-                    <h2 class="settings-title">
-                        <i class="fas fa-cog"></i> Configuración del Sistema
-                    </h2>
-                    <p class="settings-subtitle">Administra todas las configuraciones del sistema desde un solo lugar</p>
+                <!-- Pestañas principales -->
+                <div id="settings-main-tabs" class="settings-main-tabs">
+                    <button class="settings-main-tab active" data-tab="general">
+                        <i class="fas fa-cog"></i> General
+                    </button>
+                    <button class="settings-main-tab" data-tab="printing">
+                        <i class="fas fa-print"></i> Impresión
+                    </button>
+                    <button class="settings-main-tab" data-tab="financial">
+                        <i class="fas fa-dollar-sign"></i> Financiero
+                    </button>
+                    <button class="settings-main-tab" data-tab="catalogs">
+                        <i class="fas fa-book"></i> Catálogos
+                    </button>
+                    <button class="settings-main-tab" data-tab="arrival-rates">
+                        <i class="fas fa-table"></i> Tabulador Llegadas
+                    </button>
+                    <button class="settings-main-tab" data-tab="sync">
+                        <i class="fas fa-sync-alt"></i> Sincronización
+                    </button>
+                    <button class="settings-main-tab" data-tab="security">
+                        <i class="fas fa-shield-alt"></i> Seguridad
+                    </button>
+                    <button class="settings-main-tab" data-tab="system">
+                        <i class="fas fa-server"></i> Sistema
+                    </button>
                 </div>
 
-                <!-- Pestañas organizadas por categorías -->
-                <div id="settings-tabs" class="settings-tabs-container">
-                    <div class="settings-tabs-group">
-                        <span class="settings-tabs-group-label">Básico</span>
-                        <div class="settings-tabs-row">
-                            <button class="settings-tab-btn active" data-tab="general">
-                                <i class="fas fa-sliders-h"></i>
-                                <span>General</span>
-                            </button>
-                            <button class="settings-tab-btn" data-tab="printing">
-                                <i class="fas fa-print"></i>
-                                <span>Impresión</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="settings-tabs-group">
-                        <span class="settings-tabs-group-label">Operaciones</span>
-                        <div class="settings-tabs-row">
-                            <button class="settings-tab-btn" data-tab="financial">
-                                <i class="fas fa-dollar-sign"></i>
-                                <span>Financiero</span>
-                            </button>
-                            <button class="settings-tab-btn" data-tab="catalogs">
-                                <i class="fas fa-book"></i>
-                                <span>Catálogos</span>
-                            </button>
-                            <button class="settings-tab-btn" data-tab="arrival-rates">
-                                <i class="fas fa-table"></i>
-                                <span>Tabulador Llegadas</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="settings-tabs-group">
-                        <span class="settings-tabs-group-label">Sistema</span>
-                        <div class="settings-tabs-row">
-                            <button class="settings-tab-btn" data-tab="sync">
-                                <i class="fas fa-sync-alt"></i>
-                                <span>Sincronización</span>
-                            </button>
-                            <button class="settings-tab-btn" data-tab="security">
-                                <i class="fas fa-shield-alt"></i>
-                                <span>Seguridad</span>
-                            </button>
-                            <button class="settings-tab-btn" data-tab="system">
-                                <i class="fas fa-server"></i>
-                                <span>Sistema</span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                <!-- Subcategorías (se actualizan dinámicamente) -->
+                <div id="settings-sub-tabs" class="settings-sub-tabs"></div>
 
                 <!-- Contenido de las pestañas -->
                 <div id="settings-content" class="settings-content-wrapper"></div>
             </div>
         `;
 
-        // Event listeners para tabs
-        document.querySelectorAll('#settings-tabs .settings-tab-btn').forEach(btn => {
+        // Event listeners para pestañas principales
+        document.querySelectorAll('#settings-main-tabs .settings-main-tab').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 // Remover active de todos los botones
-                document.querySelectorAll('#settings-tabs .settings-tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('#settings-main-tabs .settings-main-tab').forEach(b => b.classList.remove('active'));
                 // Agregar active al botón clickeado
                 btn.classList.add('active');
                 const tab = btn.dataset.tab;
@@ -129,45 +99,152 @@ const Settings = {
         this.loadTab('general');
     },
 
+    // Definir subcategorías para cada pestaña
+    getSubCategories(tab) {
+        const subCategories = {
+            'general': [
+                { id: 'appearance', label: 'Apariencia', icon: 'fa-palette' },
+                { id: 'notifications', label: 'Notificaciones', icon: 'fa-bell' }
+            ],
+            'printing': [
+                { id: 'tickets', label: 'Tickets / Recibos', icon: 'fa-receipt' },
+                { id: 'jewelry-labels', label: 'Etiquetas de Joyas', icon: 'fa-gem' }
+            ],
+            'financial': [
+                { id: 'taxes', label: 'Impuestos', icon: 'fa-receipt' },
+                { id: 'exchange-rates', label: 'Tipos de Cambio', icon: 'fa-exchange-alt' },
+                { id: 'payment-methods', label: 'Métodos de Pago', icon: 'fa-credit-card' }
+            ],
+            'catalogs': [
+                { id: 'metals', label: 'Metales', icon: 'fa-gem' },
+                { id: 'stones', label: 'Piedras', icon: 'fa-diamond' },
+                { id: 'categories', label: 'Categorías', icon: 'fa-tags' }
+            ],
+            'arrival-rates': [],
+            'sync': [
+                { id: 'server', label: 'Servidor', icon: 'fa-server' },
+                { id: 'status', label: 'Estado', icon: 'fa-sync-alt' }
+            ],
+            'security': [
+                { id: 'company-code', label: 'Código de Empresa', icon: 'fa-key' },
+                { id: 'users', label: 'Usuarios', icon: 'fa-users' }
+            ],
+            'system': [
+                { id: 'backups', label: 'Respaldo', icon: 'fa-database' },
+                { id: 'maintenance', label: 'Mantenimiento', icon: 'fa-tools' }
+            ]
+        };
+        return subCategories[tab] || [];
+    },
+
+    // Actualizar subcategorías
+    updateSubCategories(tab) {
+        const subTabsContainer = document.getElementById('settings-sub-tabs');
+        if (!subTabsContainer) return;
+
+        const subCategories = this.getSubCategories(tab);
+        
+        if (subCategories.length === 0) {
+            subTabsContainer.innerHTML = '';
+            subTabsContainer.style.display = 'none';
+            return;
+        }
+
+        subTabsContainer.style.display = 'flex';
+        subTabsContainer.innerHTML = subCategories.map((sub, index) => `
+            <button class="settings-sub-tab ${index === 0 ? 'active' : ''}" data-sub-tab="${sub.id}">
+                <i class="fas ${sub.icon}"></i> ${sub.label}
+            </button>
+        `).join('');
+
+        // Event listeners para subcategorías
+        document.querySelectorAll('#settings-sub-tabs .settings-sub-tab').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('#settings-sub-tabs .settings-sub-tab').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                const subTab = btn.dataset.subTab;
+                this.loadSubTab(tab, subTab);
+            });
+        });
+
+        // Cargar primera subcategoría por defecto
+        if (subCategories.length > 0) {
+            this.loadSubTab(tab, subCategories[0].id);
+        }
+    },
+
     async loadTab(tab) {
         const content = document.getElementById('settings-content');
         if (!content) return;
 
-        switch(tab) {
+        // Actualizar subcategorías
+        this.updateSubCategories(tab);
+
+        // Si no hay subcategorías, cargar contenido directamente
+        const subCategories = this.getSubCategories(tab);
+        if (subCategories.length === 0) {
+            await this.loadTabContent(tab, null);
+        }
+
+        await this.loadSettings();
+    },
+
+    async loadSubTab(mainTab, subTab) {
+        await this.loadTabContent(mainTab, subTab);
+    },
+
+    async loadTabContent(mainTab, subTab) {
+        const content = document.getElementById('settings-content');
+        if (!content) return;
+
+        switch(mainTab) {
             case 'general':
-                content.innerHTML = this.getGeneralTab();
+                if (subTab === 'appearance') {
+                    content.innerHTML = this.getGeneralAppearanceTab();
+                } else if (subTab === 'notifications') {
+                    content.innerHTML = this.getGeneralNotificationsTab();
+                } else {
+                    content.innerHTML = this.getGeneralTab();
+                }
                 break;
             case 'printing':
-                content.innerHTML = this.getPrintingTab();
-                await this.updateJewelryLabelStatus();
+                if (subTab === 'tickets') {
+                    content.innerHTML = this.getPrintingTicketsTab();
+                    await this.updateJewelryLabelStatus();
+                } else if (subTab === 'jewelry-labels') {
+                    content.innerHTML = this.getPrintingJewelryLabelsTab();
+                    await this.updateJewelryLabelStatus();
+                } else {
+                    content.innerHTML = this.getPrintingTab();
+                    await this.updateJewelryLabelStatus();
+                }
                 break;
             case 'sync':
-                content.innerHTML = this.getSyncTab();
-                await this.loadSyncTab();
-                // Configurar eventos de los botones después de cargar el HTML
+                if (subTab === 'server') {
+                    content.innerHTML = this.getSyncServerTab();
+                    await this.loadSyncTab();
+                } else if (subTab === 'status') {
+                    content.innerHTML = this.getSyncStatusTab();
+                    await this.loadSyncTab();
+                } else {
+                    content.innerHTML = this.getSyncTab();
+                    await this.loadSyncTab();
+                }
+                // Configurar eventos
                 setTimeout(() => {
                     const saveBtn = document.getElementById('save-server-url-btn');
                     const testBtn = document.getElementById('test-server-connection-btn');
                     const urlInput = document.getElementById('server-url-input');
                     
                     if (saveBtn) {
-                        saveBtn.addEventListener('click', () => {
-                            this.saveServerURL();
-                        });
+                        saveBtn.addEventListener('click', () => this.saveServerURL());
                     }
-                    
                     if (testBtn) {
-                        testBtn.addEventListener('click', () => {
-                            this.testServerConnection();
-                        });
+                        testBtn.addEventListener('click', () => this.testServerConnection());
                     }
-                    
-                    // Permitir guardar con Enter
                     if (urlInput) {
                         urlInput.addEventListener('keypress', (e) => {
-                            if (e.key === 'Enter') {
-                                this.saveServerURL();
-                            }
+                            if (e.key === 'Enter') this.saveServerURL();
                         });
                     }
                 }, 100);
@@ -189,9 +266,7 @@ const Settings = {
             case 'system':
                 content.innerHTML = this.getSystemTab();
                 await this.loadBackupsList();
-                // Cargar información del directorio de backups
                 this.loadBackupDirectoryInfo();
-                // Configurar eventos de los botones después de cargar el HTML
                 setTimeout(() => {
                     const saveBtn = document.getElementById('save-server-url-btn');
                     const testBtn = document.getElementById('test-server-connection-btn');
@@ -201,158 +276,110 @@ const Settings = {
                     const selectBtn = document.getElementById('backup-select-folder-btn');
                     const clearBtn = document.getElementById('backup-clear-folder-btn');
                     
-                    if (saveBtn) {
-                        saveBtn.addEventListener('click', () => {
-                            this.saveServerURL();
-                        });
-                    }
-                    
-                    if (testBtn) {
-                        testBtn.addEventListener('click', () => {
-                            this.testServerConnection();
-                        });
-                    }
-                    
-                    // Permitir guardar con Enter
+                    if (saveBtn) saveBtn.addEventListener('click', () => this.saveServerURL());
+                    if (testBtn) testBtn.addEventListener('click', () => this.testServerConnection());
                     if (urlInput) {
                         urlInput.addEventListener('keypress', (e) => {
-                            if (e.key === 'Enter') {
-                                this.saveServerURL();
-                            }
+                            if (e.key === 'Enter') this.saveServerURL();
                         });
                     }
-                    
-                    // Event listeners para botones de backup
-                    if (createBtn) {
-                        createBtn.onclick = () => this.createBackupManually();
-                    }
-                    if (importBtn) {
-                        importBtn.onclick = () => this.importBackupManually();
-                    }
-                    if (selectBtn) {
-                        selectBtn.onclick = () => this.selectBackupFolder();
-                    }
-                    if (clearBtn) {
-                        clearBtn.onclick = () => this.clearBackupFolder();
-                    }
+                    if (createBtn) createBtn.onclick = () => this.createBackupManually();
+                    if (importBtn) importBtn.onclick = () => this.importBackupManually();
+                    if (selectBtn) selectBtn.onclick = () => this.selectBackupFolder();
+                    if (clearBtn) clearBtn.onclick = () => this.clearBackupFolder();
                 }, 100);
                 break;
         }
-
-        await this.loadSettings();
     },
 
     getGeneralTab() {
-        return `
-            <div class="settings-tab-content">
-                <div class="settings-cards-grid">
-                    <!-- Tarjeta de Apariencia -->
-                    <div class="settings-card">
-                        <div class="settings-card-header">
-                            <div class="settings-card-icon" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
-                                <i class="fas fa-palette"></i>
-                            </div>
-                            <div>
-                                <h3 class="settings-card-title">Apariencia</h3>
-                                <p class="settings-card-subtitle">Personaliza el tema y visualización</p>
-                            </div>
-                        </div>
-                        <div class="settings-card-body">
-                            <div class="form-group">
-                                <label><i class="fas fa-moon"></i> Tema</label>
-                                <select id="setting-theme" class="form-select">
-                                    <option value="light">Claro</option>
-                                    <option value="dark">Oscuro</option>
-                                    <option value="auto">Automático</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label><i class="fas fa-language"></i> Idioma</label>
-                                <select id="setting-language" class="form-select">
-                                    <option value="es">Español</option>
-                                    <option value="en">English</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label><i class="fas fa-calendar"></i> Formato de Fecha</label>
-                                <select id="setting-date-format" class="form-select">
-                                    <option value="DD/MM/YYYY">DD/MM/YYYY</option>
-                                    <option value="MM/DD/YYYY">MM/DD/YYYY</option>
-                                    <option value="YYYY-MM-DD">YYYY-MM-DD</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="settings-card-footer">
-                            <button class="btn-primary" onclick="window.Settings.saveAppearance()">
-                                <i class="fas fa-save"></i> Guardar Apariencia
-                            </button>
-                        </div>
-                    </div>
+        return this.getGeneralAppearanceTab();
+    },
 
-                    <!-- Tarjeta de Notificaciones -->
-                    <div class="settings-card">
-                        <div class="settings-card-header">
-                            <div class="settings-card-icon" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
-                                <i class="fas fa-bell"></i>
-                            </div>
-                            <div>
-                                <h3 class="settings-card-title">Notificaciones</h3>
-                                <p class="settings-card-subtitle">Configura alertas y avisos</p>
-                            </div>
-                        </div>
-                        <div class="settings-card-body">
-                            <div class="settings-checkbox-group">
-                                <label class="settings-checkbox-label">
-                                    <input type="checkbox" id="setting-notify-sales" checked>
-                                    <span class="settings-checkbox-custom"></span>
-                                    <div class="settings-checkbox-content">
-                                        <span class="settings-checkbox-title">Notificar nuevas ventas</span>
-                                        <span class="settings-checkbox-desc">Recibe alertas cuando se complete una venta</span>
-                                    </div>
-                                </label>
-                            </div>
-                            <div class="settings-checkbox-group">
-                                <label class="settings-checkbox-label">
-                                    <input type="checkbox" id="setting-notify-low-stock" checked>
-                                    <span class="settings-checkbox-custom"></span>
-                                    <div class="settings-checkbox-content">
-                                        <span class="settings-checkbox-title">Alertar inventario bajo</span>
-                                        <span class="settings-checkbox-desc">Notificaciones cuando el stock esté bajo</span>
-                                    </div>
-                                </label>
-                            </div>
-                            <div class="settings-checkbox-group">
-                                <label class="settings-checkbox-label">
-                                    <input type="checkbox" id="setting-notify-sync" checked>
-                                    <span class="settings-checkbox-custom"></span>
-                                    <div class="settings-checkbox-content">
-                                        <span class="settings-checkbox-title">Notificar sincronizaciones</span>
-                                        <span class="settings-checkbox-desc">Avisos sobre el estado de sincronización</span>
-                                    </div>
-                                </label>
-                            </div>
-                            <div class="form-group" style="margin-top: var(--spacing-md);">
-                                <label><i class="fas fa-exclamation-triangle"></i> Umbral de Inventario Bajo</label>
-                                <input type="number" id="setting-low-stock-threshold" class="form-input" value="10" step="1" min="1">
-                                <small style="color: var(--color-text-secondary); font-size: 11px; display: block; margin-top: 4px;">
-                                    Cantidad mínima antes de alertar
-                                </small>
-                            </div>
-                        </div>
-                        <div class="settings-card-footer">
-                            <button class="btn-primary" onclick="window.Settings.saveNotifications()">
-                                <i class="fas fa-save"></i> Guardar Notificaciones
-                            </button>
-                        </div>
+    getGeneralAppearanceTab() {
+        return `
+            <div class="settings-section">
+                <h3 class="settings-section-title"><i class="fas fa-palette"></i> Apariencia</h3>
+                <div class="settings-form-grid">
+                    <div class="form-group">
+                        <label>Tema</label>
+                        <select id="setting-theme" class="form-select">
+                            <option value="light">Claro</option>
+                            <option value="dark">Oscuro</option>
+                            <option value="auto">Automático</option>
+                        </select>
                     </div>
+                    <div class="form-group">
+                        <label>Idioma</label>
+                        <select id="setting-language" class="form-select">
+                            <option value="es">Español</option>
+                            <option value="en">English</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Formato de Fecha</label>
+                        <select id="setting-date-format" class="form-select">
+                            <option value="DD/MM/YYYY">DD/MM/YYYY</option>
+                            <option value="MM/DD/YYYY">MM/DD/YYYY</option>
+                            <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="settings-section-footer">
+                    <button class="btn-primary" onclick="window.Settings.saveAppearance()">
+                        <i class="fas fa-save"></i> Guardar Apariencia
+                    </button>
+                </div>
+            </div>
+        `;
+    },
+
+    getGeneralNotificationsTab() {
+        return `
+            <div class="settings-section">
+                <h3 class="settings-section-title"><i class="fas fa-bell"></i> Notificaciones</h3>
+                <div class="settings-form-grid">
+                    <div class="form-group">
+                        <label style="display: flex; align-items: center; gap: var(--spacing-sm);">
+                            <input type="checkbox" id="setting-notify-sales" checked>
+                            <span>Notificar nuevas ventas</span>
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label style="display: flex; align-items: center; gap: var(--spacing-sm);">
+                            <input type="checkbox" id="setting-notify-low-stock" checked>
+                            <span>Alertar inventario bajo</span>
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label style="display: flex; align-items: center; gap: var(--spacing-sm);">
+                            <input type="checkbox" id="setting-notify-sync" checked>
+                            <span>Notificar sincronizaciones</span>
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label>Umbral de Inventario Bajo</label>
+                        <input type="number" id="setting-low-stock-threshold" class="form-input" value="10" step="1" min="1">
+                    </div>
+                </div>
+                <div class="settings-section-footer">
+                    <button class="btn-primary" onclick="window.Settings.saveNotifications()">
+                        <i class="fas fa-save"></i> Guardar Notificaciones
+                    </button>
                 </div>
             </div>
         `;
     },
 
     getPrintingTab() {
+        return this.getPrintingTicketsTab();
+    },
+
+    getPrintingTicketsTab() {
         return `
-            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--spacing-md);">
+            <div class="settings-section">
+                <h3 class="settings-section-title"><i class="fas fa-receipt"></i> Tickets / Recibos - GP-5838 SERIES</h3>
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--spacing-md);">
                 <!-- MÓDULO: TICKETS / RECIBOS -->
                 <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light);">
                     <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; justify-content: space-between;">
@@ -619,82 +646,65 @@ const Settings = {
     },
 
     getSyncTab() {
-        return `
-            <div class="settings-tab-content">
-                <div class="settings-cards-grid">
-                    <!-- Tarjeta de Servidor -->
-                    <div class="settings-card">
-                        <div class="settings-card-header">
-                            <div class="settings-card-icon" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
-                                <i class="fas fa-server"></i>
-                            </div>
-                            <div>
-                                <h3 class="settings-card-title">Servidor Centralizado</h3>
-                                <p class="settings-card-subtitle">Configuración de conexión Railway</p>
-                            </div>
-                        </div>
-                        <div class="settings-card-body">
-                            <div class="form-group">
-                                <label><i class="fas fa-link"></i> URL del Servidor</label>
-                                <input type="url" id="server-url-input" class="form-input" 
-                                       placeholder="https://tu-app.railway.app">
-                                <small style="color: var(--color-text-secondary); font-size: 11px; display: block; margin-top: 6px;">
-                                    <i class="fas fa-info-circle"></i> Ejemplo: https://sistema-oficial-production.up.railway.app
-                                </small>
-                            </div>
-                            
-                            <div style="display: flex; gap: var(--spacing-sm); margin-top: var(--spacing-md);">
-                                <button class="btn-primary" id="save-server-url-btn" style="flex: 1;">
-                                    <i class="fas fa-save"></i> Guardar
-                                </button>
-                                <button class="btn-secondary" id="test-server-connection-btn" style="flex: 1;">
-                                    <i class="fas fa-plug"></i> Probar Conexión
-                                </button>
-                            </div>
-                            
-                            <div id="server-config-status" class="settings-status-box" style="margin-top: var(--spacing-md);">
-                                <div style="display: flex; align-items: center; gap: var(--spacing-xs);">
-                                    <i class="fas fa-circle-notch fa-spin"></i>
-                                    <span>Cargando estado...</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+        return this.getSyncServerTab();
+    },
 
-                    <!-- Tarjeta de Estado de Sincronización -->
-                    <div class="settings-card">
-                        <div class="settings-card-header">
-                            <div class="settings-card-icon" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
-                                <i class="fas fa-sync-alt"></i>
-                            </div>
-                            <div>
-                                <h3 class="settings-card-title">Estado de Sincronización</h3>
-                                <p class="settings-card-subtitle">Monitorea y gestiona la sincronización</p>
-                            </div>
-                        </div>
-                        <div class="settings-card-body">
-                            <div id="sync-status-info" class="settings-status-box">
-                                <div style="display: flex; align-items: center; gap: var(--spacing-xs); color: var(--color-text-secondary);">
-                                    <i class="fas fa-circle-notch fa-spin"></i>
-                                    <span>Cargando...</span>
-                                </div>
-                            </div>
-                            
-                            <div id="sync-queue-status" class="settings-queue-box" style="margin-top: var(--spacing-md);">
-                                <div style="display: flex; align-items: center; justify-content: space-between;">
-                                    <span style="font-weight: 600; color: var(--color-text);">
-                                        <i class="fas fa-list"></i> Elementos Pendientes
-                                    </span>
-                                    <span id="sync-queue-count" style="font-size: 18px; font-weight: 700; color: var(--color-primary);">0</span>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="settings-card-footer">
-                            <button class="btn-primary" onclick="if(typeof window.SyncManager !== 'undefined') window.SyncManager.syncPending(); else alert('Sync Manager no disponible');" style="width: 100%;">
-                                <i class="fas fa-sync-alt"></i> Sincronizar Ahora
-                            </button>
-                        </div>
+    getSyncServerTab() {
+        return `
+            <div class="settings-section">
+                <h3 class="settings-section-title"><i class="fas fa-server"></i> Servidor Centralizado</h3>
+                <div class="settings-form-grid">
+                    <div class="form-group" style="grid-column: 1 / -1;">
+                        <label>URL del Servidor</label>
+                        <input type="url" id="server-url-input" class="form-input" 
+                               placeholder="https://tu-app.railway.app">
+                        <small style="color: var(--color-text-secondary); font-size: 11px; display: block; margin-top: 6px;">
+                            <i class="fas fa-info-circle"></i> Ejemplo: https://sistema-oficial-production.up.railway.app
+                        </small>
                     </div>
+                </div>
+                <div style="display: flex; gap: var(--spacing-sm); margin-bottom: var(--spacing-md);">
+                    <button class="btn-primary" id="save-server-url-btn">
+                        <i class="fas fa-save"></i> Guardar
+                    </button>
+                    <button class="btn-secondary" id="test-server-connection-btn">
+                        <i class="fas fa-plug"></i> Probar Conexión
+                    </button>
+                </div>
+                <div id="server-config-status" class="settings-status-box">
+                    <div style="display: flex; align-items: center; gap: var(--spacing-xs);">
+                        <i class="fas fa-circle-notch fa-spin"></i>
+                        <span>Cargando estado...</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    },
+
+    getSyncStatusTab() {
+        return `
+            <div class="settings-section">
+                <h3 class="settings-section-title"><i class="fas fa-sync-alt"></i> Estado de Sincronización</h3>
+                <div id="sync-status-info" class="settings-status-box" style="margin-bottom: var(--spacing-md);">
+                    <div style="display: flex; align-items: center; gap: var(--spacing-xs); color: var(--color-text-secondary);">
+                        <i class="fas fa-circle-notch fa-spin"></i>
+                        <span>Cargando...</span>
+                    </div>
+                </div>
+                
+                <div id="sync-queue-status" class="settings-queue-box" style="margin-bottom: var(--spacing-md);">
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <span style="font-weight: 600; color: var(--color-text);">
+                            <i class="fas fa-list"></i> Elementos Pendientes
+                        </span>
+                        <span id="sync-queue-count" style="font-size: 18px; font-weight: 700; color: var(--color-primary);">0</span>
+                    </div>
+                </div>
+                
+                <div class="settings-section-footer">
+                    <button class="btn-primary" onclick="if(typeof window.SyncManager !== 'undefined') window.SyncManager.syncPending(); else alert('Sync Manager no disponible');">
+                        <i class="fas fa-sync-alt"></i> Sincronizar Ahora
+                    </button>
                 </div>
             </div>
         `;
