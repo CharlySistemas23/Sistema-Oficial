@@ -463,12 +463,17 @@ const Dashboard = {
                 todayPassengers = todayArrivals.reduce((sum, a) => sum + (a.passengers || 0), 0);
             }
             
-            const todaySales = allSales.filter(s => s.created_at && s.created_at.startsWith(todayStr));
-            const thisMonthSales = allSales.filter(s => {
+            // Filtrar ventas completadas (aceptar tanto 'completed' como 'completada')
+            const completedSales = allSales.filter(s => 
+                s.status === 'completed' || s.status === 'completada' || s.status === 'completado'
+            );
+            
+            const todaySales = completedSales.filter(s => s.created_at && s.created_at.startsWith(todayStr));
+            const thisMonthSales = completedSales.filter(s => {
                 const saleDate = new Date(s.created_at);
                 return saleDate.getMonth() === today.getMonth() && saleDate.getFullYear() === today.getFullYear();
             });
-            const lastMonthSales = allSales.filter(s => {
+            const lastMonthSales = completedSales.filter(s => {
                 const saleDate = new Date(s.created_at);
                 const lastMonth = new Date(today);
                 lastMonth.setMonth(lastMonth.getMonth() - 1);
@@ -661,13 +666,13 @@ const Dashboard = {
             const lastMonthTotal = lastMonthSales.reduce((sum, s) => sum + (s.total || 0), 0);
             const monthGrowth = lastMonthTotal > 0 ? ((monthTotal - lastMonthTotal) / lastMonthTotal * 100) : 0;
             
-            // Ventas últimos 30 días
+            // Ventas últimos 30 días (solo completadas)
             const last30Days = [];
             for (let i = 29; i >= 0; i--) {
                 const date = new Date(today);
                 date.setDate(date.getDate() - i);
                 const dateStr = date.toISOString().split('T')[0];
-                const daySales = allSales.filter(s => s.created_at && s.created_at.startsWith(dateStr));
+                const daySales = completedSales.filter(s => s.created_at && s.created_at.startsWith(dateStr));
                 const dayTotal = daySales.reduce((sum, s) => sum + (s.total || 0), 0);
                 last30Days.push({
                     date: Utils.formatDate(date, 'DD/MM'),
