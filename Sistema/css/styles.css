@@ -2131,8 +2131,9 @@ button.btn-xs {
     box-sizing: border-box;
     min-height: 400px;
     flex: 1;
-    overflow-y: visible;
-    overflow-x: hidden;
+    overflow-y: auto;
+    overflow-x: auto;
+    position: relative;
 }
 
 /* Asegurar que el módulo de inventario use toda la altura disponible */
@@ -2159,7 +2160,22 @@ button.btn-xs {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
-    overflow-x: hidden;
+    overflow-x: auto;
+    width: 100%;
+    max-width: 100%;
+}
+
+/* Estilos para la tabla de inventario en vista de lista */
+#inventory-list table {
+    width: 100%;
+    min-width: 1200px;
+    table-layout: auto;
+}
+
+#inventory-list > div {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
 }
 
 /* Tourist Report - Responsive Styles */
