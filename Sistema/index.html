@@ -702,26 +702,47 @@
             <div id="module-inventory" class="module" style="display: none;">
                 <div class="module-header">
                     <h2><i class="fas fa-boxes"></i> Inventario</h2>
-                    <div class="module-actions">
-                        <span id="inventory-selected-count" style="font-size: 12px; color: var(--color-text-secondary); margin-right: 8px;"></span>
-                        <button class="btn-danger" id="inventory-delete-selected-btn" style="display: none;">
-                            <i class="fas fa-trash"></i> Eliminar
-                        </button>
-                        <button class="btn-secondary" id="inventory-select-all-btn">
-                            <i class="fas fa-check-square"></i> Seleccionar todo
-                        </button>
-                        <button class="btn-secondary" onclick="window.Inventory.showStockAlertsSummary()">
-                            <i class="fas fa-bell"></i> Alertas Stock
-                        </button>
-                        <button class="btn-primary" id="inventory-add-btn">
-                            <i class="fas fa-plus"></i> Nueva Pieza
-                        </button>
-                        <button class="btn-secondary" id="inventory-import-btn">
-                            <i class="fas fa-file-import"></i> Importar
-                        </button>
-                        <button class="btn-secondary" id="inventory-export-btn">
-                            <i class="fas fa-file-export"></i> Exportar
-                        </button>
+                    <div class="module-actions" style="display: flex; align-items: center; gap: var(--spacing-sm); flex-wrap: wrap;">
+                        <!-- Grupo 1: Selección -->
+                        <div style="display: flex; align-items: center; gap: var(--spacing-xs); padding-right: var(--spacing-sm); border-right: 1px solid var(--color-border);">
+                            <span id="inventory-selected-count" style="font-size: 12px; color: var(--color-text-secondary); margin-right: 4px;"></span>
+                            <button class="btn-secondary btn-sm" id="inventory-select-all-btn" style="min-width: auto;">
+                                <i class="fas fa-check-square"></i> <span style="font-size: 11px;">Todo</span>
+                            </button>
+                            <button class="btn-danger btn-sm" id="inventory-delete-selected-btn" style="display: none; min-width: auto;">
+                                <i class="fas fa-trash"></i> <span style="font-size: 11px;">Eliminar</span>
+                            </button>
+                        </div>
+                        
+                        <!-- Grupo 2: Acciones Principales -->
+                        <div style="display: flex; align-items: center; gap: var(--spacing-xs); padding-right: var(--spacing-sm); border-right: 1px solid var(--color-border);">
+                            <button class="btn-primary btn-sm" id="inventory-add-btn">
+                                <i class="fas fa-plus"></i> Nueva Pieza
+                            </button>
+                            <button class="btn-secondary btn-sm" onclick="window.Inventory.showStockAlertsSummary()">
+                                <i class="fas fa-bell"></i> Alertas
+                            </button>
+                        </div>
+                        
+                        <!-- Grupo 3: Importar/Exportar -->
+                        <div style="display: flex; align-items: center; gap: var(--spacing-xs); padding-right: var(--spacing-sm); border-right: 1px solid var(--color-border);">
+                            <button class="btn-secondary btn-sm" id="inventory-import-btn">
+                                <i class="fas fa-file-import"></i> Importar
+                            </button>
+                            <button class="btn-secondary btn-sm" id="inventory-export-btn">
+                                <i class="fas fa-file-export"></i> Exportar
+                            </button>
+                        </div>
+                        
+                        <!-- Grupo 4: Vista (Grid/Lista) -->
+                        <div id="inventory-view-toggle-container" style="display: flex; gap: 2px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); overflow: hidden; background: var(--color-bg-secondary); box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                            <button type="button" id="inventory-view-grid-btn" class="inventory-view-btn" data-view="grid" title="Vista de Tarjetas" style="border-radius: 0; margin: 0; border: none; padding: 8px 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; background: var(--color-primary); color: white;">
+                                <i class="fas fa-th"></i> <span style="font-size: 12px;">Tarjetas</span>
+                            </button>
+                            <button type="button" id="inventory-view-list-btn" class="inventory-view-btn" data-view="list" title="Vista de Lista" style="border-radius: 0; margin: 0; border: none; padding: 8px 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; background: transparent; color: var(--color-text);">
+                                <i class="fas fa-list"></i> <span style="font-size: 12px;">Lista</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
                 
