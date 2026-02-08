@@ -2200,8 +2200,8 @@ const Inventory = {
 
         // Construir tabla completa con thead - Ajustada al mismo tamaño que el recuadro de filtros
         const tableHTML = `
-            <div style="width: 100%; max-width: 100%; padding: 16px; background: var(--color-bg-secondary); border-radius: var(--radius-lg); overflow-x: auto; overflow-y: visible;">
-                <table style="width: 100%; min-width: 1400px; border-collapse: collapse; background: var(--color-bg-card); border-radius: var(--radius-md); overflow: hidden; table-layout: auto;">
+            <div style="width: 100%; max-width: 100%; padding: 16px; background: var(--color-bg-secondary); border-radius: var(--radius-lg); overflow-x: auto; overflow-y: visible; box-sizing: border-box;">
+                <table style="width: 100%; min-width: calc(100vw - 400px); border-collapse: collapse; background: var(--color-bg-card); border-radius: var(--radius-md); overflow: hidden; table-layout: auto;">
                     <thead>
                         <tr style="background: var(--color-bg-secondary); border-bottom: 2px solid var(--color-border);">
                             <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); min-width: 40px; width: auto;">
@@ -2284,8 +2284,8 @@ const Inventory = {
 
         // Crear tabla - Ajustada al mismo tamaño que el recuadro de filtros
         container.innerHTML = `
-            <div style="width: 100%; max-width: 100%; padding: 16px; background: var(--color-bg-secondary); border-radius: var(--radius-lg); overflow-x: auto; overflow-y: visible;">
-                <table style="width: 100%; min-width: 1400px; border-collapse: collapse; background: var(--color-bg-card); border-radius: var(--radius-md); overflow: hidden; table-layout: auto;">
+            <div style="width: 100%; max-width: 100%; padding: 16px; background: var(--color-bg-secondary); border-radius: var(--radius-lg); overflow-x: auto; overflow-y: visible; box-sizing: border-box;">
+                <table style="width: 100%; min-width: calc(100vw - 400px); border-collapse: collapse; background: var(--color-bg-card); border-radius: var(--radius-md); overflow: hidden; table-layout: auto;">
                     <thead>
                         <tr style="background: var(--color-bg-secondary); border-bottom: 2px solid var(--color-border);">
                             <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; text-transform: uppercase; min-width: 40px; width: auto;">
