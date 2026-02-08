@@ -10,6 +10,15 @@ const App = {
     COMPANY_ACCESS_CODE: 'OPAL2024', // Cambia este código por el que quieras
     
     async initCompanyCodeAccess() {
+        // Verificar si el usuario ya está autenticado (evitar mostrar diálogos si ya hay sesión)
+        if (typeof UserManager !== 'undefined' && UserManager.currentUser) {
+            const codeScreen = document.getElementById('company-code-screen');
+            const loginScreen = document.getElementById('login-screen');
+            if (codeScreen) codeScreen.style.display = 'none';
+            if (loginScreen) loginScreen.style.display = 'none';
+            return;
+        }
+        
         // Verificar si el código ya fue validado (guardado en localStorage)
         const savedCodeHash = localStorage.getItem('company_code_validated');
         const codeInput = document.getElementById('company-code-input');
@@ -31,9 +40,13 @@ const App = {
             }
         }
         
-        // Mostrar pantalla de código y ocultar login
-        if (codeScreen) codeScreen.style.display = 'flex';
-        if (loginScreen) loginScreen.style.display = 'none';
+        // Mostrar pantalla de código y ocultar login (asegurar que solo uno esté visible)
+        if (codeScreen) {
+            codeScreen.style.display = 'flex';
+        }
+        if (loginScreen) {
+            loginScreen.style.display = 'none';
+        }
         
         // Handler para el botón de verificar código
         if (codeBtn) {
@@ -460,7 +473,10 @@ const App = {
             // await this.loadDemoData();
             
             // SIEMPRE cargar datos básicos del sistema (vendedores, guías, reglas de llegadas, costos)
-            await this.loadSystemData();
+            // Hacerlo en background para no bloquear la inicialización
+            this.loadSystemData().catch(e => {
+                console.error('Error cargando datos del sistema en background:', e);
+            });
             
             // Inicializar ProfitCalculator para escuchar eventos
             if (typeof ProfitCalculator !== 'undefined' && ProfitCalculator.init) {
@@ -488,11 +504,21 @@ const App = {
             // Restaurar módulo guardado si el usuario está autenticado
             if (UserManager.currentUser) {
                 const savedModule = localStorage.getItem('current_module');
-                if (savedModule && UI && UI.showModule) {
+                const savedSubPage = localStorage.getItem('current_subpage');
+                const savedSubCategory = localStorage.getItem('current_subcategory');
+                const navTimestamp = localStorage.getItem('navigation_timestamp');
+                
+                // Validar que el estado no sea muy antiguo (más de 24 horas)
+                const isStateValid = navTimestamp && (Date.now() - parseInt(navTimestamp)) < 24 * 60 * 60 * 1000;
+                
+                if (savedModule && isStateValid && UI && UI.showModule) {
                     // Esperar un momento para que todo esté listo
                     setTimeout(async () => {
+                        // Mostrar el módulo primero
+                        UI.showModule(savedModule, savedSubPage || null, savedSubCategory || null);
+                        // Luego cargar los datos del módulo
                         await this.loadModule(savedModule);
-                    }, 100);
+                    }, 200);
                 }
             }
         } catch (e) {
@@ -1393,66 +1419,74 @@ const App = {
     },
 
     async loadCatalogs() {
-        // ========== SINCRONIZACIÓN BIDIRECCCIONAL DE CATÁLOGOS ==========
-        // PASO 1: Intentar cargar desde el servidor si hay API disponible
+        // ========== SINCRONIZACIÓN BIDIRECCCIONAL DE CATÁLOGOS (OPTIMIZADA) ==========
+        // PASO 1: Intentar cargar desde el servidor si hay API disponible (PARALELIZADO)
         if (typeof API !== 'undefined' && API.baseURL && API.token) {
             try {
-                console.log('📥 [Catalogs] Sincronizando catálogos desde el servidor...');
+                console.log('📥 [Catalogs] Sincronizando catálogos desde el servidor (paralelo)...');
                 
-                // Sincronizar agencias
-                if (typeof API.getAgencies === 'function') {
+                // Paralelizar todas las llamadas al servidor
+                const [serverAgenciesResult, serverGuidesResult, serverSellersResult] = await Promise.allSettled([
+                    typeof API.getAgencies === 'function' ? API.getAgencies() : Promise.resolve([]),
+                    typeof API.getGuides === 'function' ? API.getGuides() : Promise.resolve([]),
+                    typeof API.getSellers === 'function' ? API.getSellers() : Promise.resolve([])
+                ]);
+                
+                // Procesar agencias
+                if (serverAgenciesResult.status === 'fulfilled') {
                     try {
-                        const serverAgencies = await API.getAgencies() || [];
+                        const serverAgencies = serverAgenciesResult.value || [];
                         console.log(`📥 [Catalogs] ${serverAgencies.length} agencias recibidas del servidor`);
-                        for (const serverAgency of serverAgencies) {
+                        // Procesar en batch para mejor rendimiento
+                        const agencyPromises = serverAgencies.map(async (serverAgency) => {
                             const existing = await DB.get('catalog_agencies', serverAgency.id);
                             const agencyData = {
                                 ...serverAgency,
-                                // Generar código de barras si no existe
                                 barcode: existing?.barcode || serverAgency.barcode || Utils.generateAgencyBarcode?.(serverAgency) || `AG${serverAgency.id.substring(0, 6)}`
                             };
-                            await DB.put('catalog_agencies', agencyData);
-                        }
+                            return DB.put('catalog_agencies', agencyData);
+                        });
+                        await Promise.all(agencyPromises);
                     } catch (e) {
-                        console.warn('⚠️ Error sincronizando agencias desde servidor:', e);
+                        console.warn('⚠️ Error procesando agencias:', e);
                     }
                 }
                 
-                // Sincronizar guías
-                if (typeof API.getGuides === 'function') {
+                // Procesar guías
+                if (serverGuidesResult.status === 'fulfilled') {
                     try {
-                        const serverGuides = await API.getGuides() || [];
+                        const serverGuides = serverGuidesResult.value || [];
                         console.log(`📥 [Catalogs] ${serverGuides.length} guías recibidos del servidor`);
-                        for (const serverGuide of serverGuides) {
+                        const guidePromises = serverGuides.map(async (serverGuide) => {
                             const existing = await DB.get('catalog_guides', serverGuide.id);
                             const guideData = {
                                 ...serverGuide,
-                                // Generar código de barras si no existe
                                 barcode: existing?.barcode || serverGuide.barcode || Utils.generateGuideBarcode?.(serverGuide) || `GU${serverGuide.id.substring(0, 6)}`
                             };
-                            await DB.put('catalog_guides', guideData);
-                        }
+                            return DB.put('catalog_guides', guideData);
+                        });
+                        await Promise.all(guidePromises);
                     } catch (e) {
-                        console.warn('⚠️ Error sincronizando guías desde servidor:', e);
+                        console.warn('⚠️ Error procesando guías:', e);
                     }
                 }
                 
-                // Sincronizar vendedores
-                if (typeof API.getSellers === 'function') {
+                // Procesar vendedores
+                if (serverSellersResult.status === 'fulfilled') {
                     try {
-                        const serverSellers = await API.getSellers() || [];
+                        const serverSellers = serverSellersResult.value || [];
                         console.log(`📥 [Catalogs] ${serverSellers.length} vendedores recibidos del servidor`);
-                        for (const serverSeller of serverSellers) {
+                        const sellerPromises = serverSellers.map(async (serverSeller) => {
                             const existing = await DB.get('catalog_sellers', serverSeller.id);
                             const sellerData = {
                                 ...serverSeller,
-                                // Generar código de barras si no existe
                                 barcode: existing?.barcode || serverSeller.barcode || Utils.generateSellerBarcode?.(serverSeller) || `SE${serverSeller.id.substring(0, 6)}`
                             };
-                            await DB.put('catalog_sellers', sellerData);
-                        }
+                            return DB.put('catalog_sellers', sellerData);
+                        });
+                        await Promise.all(sellerPromises);
                     } catch (e) {
-                        console.warn('⚠️ Error sincronizando vendedores desde servidor:', e);
+                        console.warn('⚠️ Error procesando vendedores:', e);
                     }
                 }
             } catch (e) {
