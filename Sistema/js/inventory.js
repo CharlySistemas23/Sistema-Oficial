@@ -4274,6 +4274,12 @@ const Inventory = {
         }
 
         // Guardar historial de precio si cambió
+        // ⚠️ IMPORTANTE: NO crear costos automáticamente en cost_entries cuando se crea o actualiza un item de inventario.
+        // El campo "cost" del inventario es solo para referencia del costo de adquisición del producto,
+        // NO debe registrarse automáticamente como un costo operativo en el módulo de costos.
+        // Los costos operativos deben registrarse MANUALMENTE en el módulo de Costos.
+        // NO llamar a: Costs.registerCost(), API.createCost(), DB.add('cost_entries', ...), etc.
+        // Solo guardar historial de precios en inventory_price_history para referencia.
         if (itemId) {
             const oldItem = await DB.get('inventory_items', itemId);
             if (oldItem && oldItem.cost !== item.cost) {
@@ -4285,6 +4291,7 @@ const Inventory = {
                     date: new Date().toISOString(),
                     notes: 'Actualización de costo'
                 });
+                // ⚠️ NO crear costo en cost_entries aquí - solo historial de precios
             }
         }
 
