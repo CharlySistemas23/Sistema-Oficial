@@ -2186,7 +2186,20 @@ button.btn-xs {
 /* Estilos para la tabla de inventario en vista de lista */
 #inventory-list table {
     width: 100% !important;
-    min-width: 1400px !important;
+    min-width: calc(100vw - 400px) !important;
+    table-layout: auto !important;
+}
+
+/* Asegurar que el contenedor de la tabla se extienda completamente */
+#inventory-list > div {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+}
+
+#inventory-list > div > table {
+    width: 100% !important;
+    min-width: calc(100vw - 400px) !important;
     table-layout: auto !important;
 }
 
