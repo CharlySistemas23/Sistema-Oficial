@@ -368,7 +368,30 @@ const BarcodeManager = {
                 return;
             }
             
-            // Si es CODE128, buscar primero en guías/vendedores, luego en inventario
+            // Si es CODE128, buscar primero en agencias/guías/vendedores, luego en inventario
+            // PASO 0: Verificar si es una agencia (ANTES de guías, para que tenga prioridad)
+            const agency = await DB.getByIndex('catalog_agencies', 'barcode', barcode);
+            if (agency && agency.active) {
+                // Es una agencia, establecerla en el POS si tiene función setAgency
+                if (window.POS && window.POS.setAgency) {
+                    await window.POS.setAgency(agency);
+                    Utils.showNotification(`Agencia establecida: ${agency.name}`, 'success');
+                    return;
+                } else if (window.POS && window.POS.setGuide) {
+                    // Si no hay setAgency, buscar el primer guía activo de esta agencia
+                    const allGuides = await DB.getAll('catalog_guides') || [];
+                    const agencyGuide = allGuides.find(g => g.agency_id === agency.id && g.active);
+                    if (agencyGuide) {
+                        await window.POS.setGuide(agencyGuide);
+                        Utils.showNotification(`Agencia ${agency.name} establecida (vía guía)`, 'success');
+                        return;
+                    } else {
+                        Utils.showNotification(`Agencia ${agency.name} encontrada, pero no hay guías activos asociados`, 'warning');
+                        return;
+                    }
+                }
+            }
+
             // PASO 1: Verificar si es un guía
             const guide = await DB.getByIndex('catalog_guides', 'barcode', barcode);
             if (guide && guide.active) {
@@ -410,13 +433,55 @@ const BarcodeManager = {
                     Utils.showNotification(`Pieza ${item.status}`, 'error');
                 }
             } else {
-                // Si no es guía, vendedor ni producto, mostrar mensaje informativo
-                if (window.POS && !window.POS.currentGuide) {
-                    Utils.showNotification('💡 Tip: Escanea primero el GUÍA, luego el VENDEDOR, y después los productos. O agrega productos manualmente desde la lista.', 'info');
-                } else if (window.POS && !window.POS.currentSeller) {
-                    Utils.showNotification('💡 Tip: Escanea el VENDEDOR o agrega productos manualmente desde la lista.', 'info');
+                // Si no es agencia, guía, vendedor ni producto, mostrar mensaje informativo
+                // Intentar búsqueda más amplia (por si el índice no está funcionando)
+                console.log('🔍 Código no encontrado en índices, buscando en todos los catálogos...', barcode);
+                
+                // Búsqueda alternativa: buscar en todos los catálogos sin índice
+                const allAgencies = await DB.getAll('catalog_agencies') || [];
+                const allGuides = await DB.getAll('catalog_guides') || [];
+                const allSellers = await DB.getAll('catalog_sellers') || [];
+                
+                const foundAgency = allAgencies.find(a => a.barcode === barcode && a.active);
+                const foundGuide = allGuides.find(g => g.barcode === barcode && g.active);
+                const foundSeller = allSellers.find(s => s.barcode === barcode && s.active !== false);
+                
+                if (foundAgency) {
+                    console.log('✅ Agencia encontrada en búsqueda alternativa:', foundAgency.name);
+                    if (window.POS && window.POS.setAgency) {
+                        await window.POS.setAgency(foundAgency);
+                        Utils.showNotification(`Agencia establecida: ${foundAgency.name}`, 'success');
+                        return;
+                    } else if (window.POS && window.POS.setGuide) {
+                        const agencyGuide = allGuides.find(g => g.agency_id === foundAgency.id && g.active);
+                        if (agencyGuide) {
+                            await window.POS.setGuide(agencyGuide);
+                            Utils.showNotification(`Agencia ${foundAgency.name} establecida (vía guía)`, 'success');
+                            return;
+                        }
+                    }
+                } else if (foundGuide) {
+                    console.log('✅ Guía encontrado en búsqueda alternativa:', foundGuide.name);
+                    if (window.POS && window.POS.setGuide) {
+                        await window.POS.setGuide(foundGuide);
+                        return;
+                    }
+                } else if (foundSeller) {
+                    console.log('✅ Vendedor encontrado en búsqueda alternativa:', foundSeller.name);
+                    if (window.POS && window.POS.setSeller) {
+                        await window.POS.setSeller(foundSeller);
+                        return;
+                    }
                 } else {
-                    Utils.showNotification('Código no reconocido. Escanea un producto o agrégalo manualmente desde la lista.', 'warning');
+                    // No se encontró en ninguna búsqueda
+                    console.warn('❌ Código no encontrado en ningún catálogo:', barcode);
+                    if (window.POS && !window.POS.currentGuide) {
+                        Utils.showNotification('💡 Tip: Escanea primero la AGENCIA o GUÍA, luego el VENDEDOR, y después los productos. O agrega productos manualmente desde la lista.', 'info');
+                    } else if (window.POS && !window.POS.currentSeller) {
+                        Utils.showNotification('💡 Tip: Escanea el VENDEDOR o agrega productos manualmente desde la lista.', 'info');
+                    } else {
+                        Utils.showNotification('Código no reconocido. Escanea una agencia, guía, vendedor o producto, o agrégalo manualmente desde la lista.', 'warning');
+                    }
                 }
             }
         } catch (e) {
