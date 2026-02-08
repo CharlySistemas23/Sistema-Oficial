@@ -2124,6 +2124,44 @@ button.btn-xs {
     box-sizing: border-box;
 }
 
+/* Contenedor de lista de inventario - Ajuste de altura */
+#inventory-list {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    min-height: 400px;
+    flex: 1;
+    overflow-y: visible;
+    overflow-x: hidden;
+}
+
+/* Asegurar que el módulo de inventario use toda la altura disponible */
+#module-inventory {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+}
+
+#module-inventory .module-header {
+    flex-shrink: 0;
+}
+
+#module-inventory #inventory-stats {
+    flex-shrink: 0;
+}
+
+#module-inventory .inventory-filters {
+    flex-shrink: 0;
+}
+
+#module-inventory #inventory-list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
 /* Tourist Report - Responsive Styles */
 .tourist-report-container {
     width: 100%;
