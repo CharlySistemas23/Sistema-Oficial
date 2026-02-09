@@ -26,6 +26,13 @@ router.get('/', requireBranchAccess, async (req, res) => {
     } else if (!req.user.isMasterAdmin) {
       // Usuarios normales usan su branch_id
       branchId = req.user.branchId;
+      if (!branchId) {
+        return res.status(400).json({
+          error: 'Usuario sin sucursal asignada',
+          code: 'NO_BRANCH_ASSIGNED',
+          message: 'Asigne una sucursal al empleado en Administración para ver el inventario.'
+        });
+      }
     }
 
     let sql = `
@@ -42,8 +49,9 @@ router.get('/', requireBranchAccess, async (req, res) => {
     // Filtro por sucursal
     if (req.user.isMasterAdmin) {
       // Master admin: si branchId es null, mostrar todos los items (incluyendo sin branch_id)
+      // Si branchId está especificado, mostrar solo items de esa sucursal (sin incluir NULL)
       if (branchId) {
-        sql += ` AND (i.branch_id = $${paramCount} OR i.branch_id IS NULL)`;
+        sql += ` AND i.branch_id = $${paramCount}`;
         params.push(branchId);
         paramCount++;
       }
