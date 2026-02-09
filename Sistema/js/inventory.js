@@ -1091,7 +1091,7 @@ const Inventory = {
                 try {
                     console.log('📦 Cargando inventario desde API...');
                     const filters = {
-                        branch_id: filterBranchId,
+                        branch_id: filterBranchId != null ? String(filterBranchId).trim() || undefined : undefined,
                         status: document.getElementById('inventory-status-filter')?.value || undefined
                     };
                     
