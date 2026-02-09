@@ -33,22 +33,25 @@ export const authenticateOptional = async (req, res, next) => {
 
         if (userResult.rows.length > 0) {
           const user = userResult.rows[0];
+          const role = user.role || user.employee_role;
+          const isMasterAdmin = role === 'master_admin';
           // Si es master admin y el frontend envía x-branch-id, usarlo como sucursal "actual" (para filtros)
-          const headerBranchId = req.headers['x-branch-id'];
-          const isUUID = (v) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v || ''));
+          const headerBranchId = (req.headers['x-branch-id'] || '').trim();
+          const isUUID = (v) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v || '').trim());
+          const rawBranchId = user.branch_id != null ? String(user.branch_id).trim() : null;
           const effectiveBranchId =
-            (user.role === 'master_admin' && headerBranchId && isUUID(headerBranchId))
+            (isMasterAdmin && headerBranchId && isUUID(headerBranchId))
               ? headerBranchId
-              : user.branch_id;
+              : rawBranchId;
 
           req.user = {
             id: user.id,
             username: user.username,
             employeeId: user.employee_id,
-            role: user.role || user.employee_role,
+            role,
             branchId: effectiveBranchId,
-            branchIds: user.branch_ids || (user.branch_id ? [user.branch_id] : []),
-            isMasterAdmin: user.role === 'master_admin',
+            branchIds: user.branch_ids || (user.branch_id ? [String(user.branch_id).trim()] : []),
+            isMasterAdmin,
             authenticated: true // Indica que fue autenticado con token
           };
           return next();
@@ -75,12 +78,16 @@ export const authenticateOptional = async (req, res, next) => {
 
       if (userResult.rows.length > 0) {
         const user = userResult.rows[0];
-        const userBranchId = branchId || user.branch_id;
-        const userBranchIds = user.branch_ids || (user.branch_id ? [user.branch_id] : []);
+        const role = user.role || user.employee_role;
+        const isMasterAdmin = role === 'master_admin';
+        const rawUserBranchId = user.branch_id != null ? String(user.branch_id).trim() : null;
+        const userBranchId = (branchId && String(branchId).trim()) || rawUserBranchId;
+        const userBranchIds = user.branch_ids || (user.branch_id ? [String(user.branch_id).trim()] : []);
         
         // Si se envió branch_id, verificar que el usuario tenga acceso
-        if (branchId && user.role !== 'master_admin') {
-          if (!userBranchIds.includes(branchId)) {
+        if (branchId && !isMasterAdmin) {
+          const bid = String(branchId).trim();
+          if (!userBranchIds.includes(bid)) {
             return res.status(403).json({ error: 'Usuario no tiene acceso a esta sucursal' });
           }
         }
@@ -89,10 +96,10 @@ export const authenticateOptional = async (req, res, next) => {
           id: user.id,
           username: user.username,
           employeeId: user.employee_id,
-          role: user.role || user.employee_role,
-          branchId: userBranchId, // Usar el branch_id enviado o el del usuario
+          role,
+          branchId: userBranchId,
           branchIds: userBranchIds,
-          isMasterAdmin: user.role === 'master_admin',
+          isMasterAdmin,
           authenticated: false // Indica que fue autenticado sin token
         };
         return next();
