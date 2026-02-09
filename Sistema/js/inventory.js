@@ -1150,8 +1150,37 @@ const Inventory = {
                     
                     console.log(`✅ [Paso 2 Inventory] Sincronización servidor→local completada: ${savedCount} nuevos, ${updatedCount} actualizados`);
                     console.log(`✅ ${allItemsRaw.length} items cargados desde API`);
+                    // Si la API devolvió 0 items, intentar mostrar datos en caché (IndexedDB) para que el usuario vea algo
+                    if (allItemsRaw.length === 0) {
+                        try {
+                            const fromIdb = await DB.getAll('inventory_items', null, null, { filterByBranch: false }) || [];
+                            if (fromIdb.length > 0) {
+                                if (filterBranchId) {
+                                    allItemsRaw = fromIdb.filter(item => item.branch_id && String(item.branch_id) === String(filterBranchId));
+                                } else if (viewAllBranches && isMasterAdmin) {
+                                    allItemsRaw = fromIdb;
+                                } else if (currentBranchId) {
+                                    allItemsRaw = fromIdb.filter(item => item.branch_id && String(item.branch_id) === String(currentBranchId));
+                                }
+                                if (allItemsRaw.length > 0) {
+                                    console.log('📦 API devolvió 0 items. Mostrando datos en caché (IndexedDB):', allItemsRaw.length);
+                                    if (typeof Utils !== 'undefined' && Utils.showNotification) {
+                                        Utils.showNotification('Mostrando datos en caché. Verifique la sucursal seleccionada y la conexión con el servidor.', 'info');
+                                    }
+                                }
+                            }
+                        } catch (e) {
+                            console.warn('Fallback IndexedDB tras 0 de API:', e);
+                        }
+                    }
                 } catch (apiError) {
                     console.warn('Error cargando inventario desde API, usando modo local:', apiError);
+                    const errMsg = (apiError && (apiError.message || apiError.details?.message || apiError.details?.error || apiError.error)) || '';
+                    if (errMsg && (errMsg.includes('sucursal') || errMsg.includes('branch') || (apiError && (apiError.code === 'NO_BRANCH_ASSIGNED' || apiError.details?.code === 'NO_BRANCH_ASSIGNED')))) {
+                        if (typeof Utils !== 'undefined' && Utils.showNotification) {
+                            Utils.showNotification(errMsg, 'warning');
+                        }
+                    }
                     // Fallback a IndexedDB
                     allItemsRaw = await DB.getAll('inventory_items', null, null, { 
                         filterByBranch: false
