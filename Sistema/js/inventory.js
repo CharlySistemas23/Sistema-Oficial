@@ -4155,6 +4155,8 @@ const Inventory = {
         
         // Guardar formSku original para comparaciones posteriores
         const originalFormSku = formSku;
+        // SKU final a usar (puede cambiar si detectamos duplicado de barcode/SKU)
+        let finalSku = formSku || formBarcode;
         
         // Generar código de barras automáticamente si no existe
         let finalBarcode = formBarcode;
@@ -4183,20 +4185,44 @@ const Inventory = {
                     const timestamp = Date.now().toString(36).toUpperCase();
                     const random = Math.random().toString(36).substring(2, 8).toUpperCase();
                     finalBarcode = `${formBarcode || formSku || 'ITEM'}${timestamp}${random}`.substring(0, 20);
-                    console.log(`✅ Nuevo código de barras generado: ${finalBarcode}`);
+                    // Usar el mismo valor como SKU para evitar 400 del backend y ConstraintError en IndexedDB
+                    finalSku = finalBarcode;
+                    console.log(`✅ Nuevo código de barras/SKU generado: ${finalBarcode}`);
                     
-                    // Actualizar el campo en el formulario para que el usuario vea el nuevo código
+                    // Actualizar ambos campos en el formulario (barcode y SKU) para API e IndexedDB
                     const barcodeInput = document.getElementById('inv-barcode');
-                    if (barcodeInput) {
-                        barcodeInput.value = finalBarcode;
-                    }
+                    if (barcodeInput) barcodeInput.value = finalBarcode;
+                    const skuInput = document.getElementById('inv-sku');
+                    if (skuInput) skuInput.value = finalSku;
                     
                     // Mostrar notificación informativa
-                    Utils.showNotification(`Código de barras duplicado detectado. Se generó uno nuevo: ${finalBarcode}`, 'info');
+                    Utils.showNotification(`Código duplicado detectado. Se generó uno nuevo: ${finalBarcode}`, 'info');
                 }
             } catch (queryError) {
                 // Si hay error al consultar, continuar (puede ser que el índice no exista aún)
                 console.warn('⚠️ Error verificando código de barras duplicado:', queryError);
+            }
+        }
+        
+        // VALIDAR SKU DUPLICADO (backend e IndexedDB exigen SKU único)
+        if (finalSku && !itemId) {
+            try {
+                const existingSkuItems = await DB.query('inventory_items', 'sku', finalSku);
+                if (existingSkuItems && existingSkuItems.length > 0) {
+                    console.warn(`⚠️ El SKU "${finalSku}" ya existe, generando uno nuevo...`);
+                    const timestamp = Date.now().toString(36).toUpperCase();
+                    const random = Math.random().toString(36).substring(2, 8).toUpperCase();
+                    finalSku = `${finalSku}${timestamp}${random}`.substring(0, 30);
+                    finalBarcode = finalBarcode || finalSku;
+                    console.log(`✅ Nuevo SKU generado: ${finalSku}`);
+                    const skuInput = document.getElementById('inv-sku');
+                    if (skuInput) skuInput.value = finalSku;
+                    const barcodeInput = document.getElementById('inv-barcode');
+                    if (barcodeInput && !barcodeInput.value.trim()) barcodeInput.value = finalSku;
+                    Utils.showNotification(`SKU duplicado. Se generó uno nuevo: ${finalSku}`, 'info');
+                }
+            } catch (queryError) {
+                console.warn('⚠️ Error verificando SKU duplicado:', queryError);
             }
         }
         
@@ -4239,7 +4265,7 @@ const Inventory = {
         
         let item = {
             id: itemId || newId,
-            sku: formSku,
+            sku: finalSku,
             barcode: finalBarcode,
             name: nameValue,
             // Campos requeridos por el backend
@@ -4563,23 +4589,23 @@ const Inventory = {
                         // Definir mergedItem para consistencia
                         mergedItem = itemForLocal;
                     } catch (error) {
-                        // Manejar error de código de barras duplicado
-                        if (error.message && error.message.includes('BARCODE') && error.message.includes('UNIQUENESS')) {
-                            console.warn('⚠️ Código de barras duplicado detectado al guardar, generando uno nuevo...');
-                            // Generar nuevo código de barras único
+                        const isBarcodeConstraint = error.message && (error.message.includes('BARCODE') && error.message.includes('UNIQUENESS'));
+                        const isSkuConstraint = error.message && (error.message.includes("index 'sku'") || error.message.includes('sku') && error.message.includes('uniqueness'));
+                        if (isBarcodeConstraint || isSkuConstraint) {
+                            console.warn('⚠️ Código/SKU duplicado al guardar, generando uno nuevo...');
                             const timestamp = Date.now().toString(36).toUpperCase();
                             const random = Math.random().toString(36).substring(2, 8).toUpperCase();
-                            itemForLocal.barcode = `${itemForLocal.barcode || 'ITEM'}${timestamp}${random}`.substring(0, 20);
-                            // Actualizar en el formulario
+                            const nuevo = `${(itemForLocal.sku || itemForLocal.barcode || 'ITEM')}${timestamp}${random}`.substring(0, 30);
+                            itemForLocal.sku = nuevo;
+                            itemForLocal.barcode = itemForLocal.barcode || nuevo;
                             const barcodeInput = document.getElementById('inv-barcode');
-                            if (barcodeInput) {
-                                barcodeInput.value = itemForLocal.barcode;
-                            }
-                            // Reintentar guardar
+                            if (barcodeInput) barcodeInput.value = itemForLocal.barcode;
+                            const skuInput = document.getElementById('inv-sku');
+                            if (skuInput) skuInput.value = itemForLocal.sku;
                             await DB.put('inventory_items', itemForLocal, { autoBranchId: false });
-                            console.log(`✅ Item guardado con nuevo código de barras: ${itemForLocal.barcode}`);
+                            console.log(`✅ Item guardado con nuevo SKU/código: ${itemForLocal.sku}`);
                             mergedItem = itemForLocal;
-                            Utils.showNotification(`Código de barras duplicado. Se generó uno nuevo: ${itemForLocal.barcode}`, 'info');
+                            Utils.showNotification(`Código duplicado. Se generó uno nuevo: ${itemForLocal.sku}`, 'info');
                         } else {
                             throw error;
                         }
