@@ -4420,6 +4420,7 @@ const Inventory = {
         }
         
         let savedWithAPI = false;
+        let mergedItem = null;
         // Intentar guardar con API si está disponible
         if (typeof API !== 'undefined' && API.baseURL && API.token) {
             try {
@@ -4723,69 +4724,59 @@ const Inventory = {
             }
         }
 
-        // Log inventory change
-        const logId = Utils.generateId();
-        await DB.add('inventory_logs', {
-            id: logId,
-            item_id: item.id,
-            action: itemId ? 'actualizada' : 'alta',
-            quantity: 1,
-            notes: itemId ? 'Pieza actualizada' : 'Nueva pieza',
-            created_at: new Date().toISOString()
-        });
-        
-        // Agregar a cola de sincronización
-        if (typeof SyncManager !== 'undefined') {
-            try {
-                await SyncManager.addToQueue('inventory_log', logId);
-            } catch (syncError) {
-                console.error('Error agregando inventory_log a cola:', syncError);
-            }
-        }
-
-        // IMPORTANTE: Siempre agregar a cola de sincronización para asegurar sincronización bidireccional
-        // Incluso si se guardó con API, agregar a la cola para que se sincronice con otros clientes
-        const itemToSync = savedWithAPI ? mergedItem : item;
-        if (typeof SyncManager !== 'undefined') {
-            try {
-                // Si ya se guardó con API, marcar como sincronizado pero mantener en cola para otros clientes
-                if (savedWithAPI) {
-                    // El item ya está en el servidor, pero otros clientes necesitan recibirlo
-                    // El socket.io ya lo emite, pero por si acaso, mantener en cola
-                    await SyncManager.addToQueue('inventory_item', itemToSync.id);
-                } else {
-                    // Si no se guardó con API, agregar a cola para sincronización
-                    await SyncManager.addToQueue('inventory_item', itemToSync.id);
+        // Pasos posteriores al guardado (no deben impedir cerrar modal ni recargar lista)
+        try {
+            const logId = Utils.generateId();
+            await DB.add('inventory_logs', {
+                id: logId,
+                item_id: item.id,
+                action: itemId ? 'actualizada' : 'alta',
+                quantity: 1,
+                notes: itemId ? 'Pieza actualizada' : 'Nueva pieza',
+                created_at: new Date().toISOString()
+            });
+            if (typeof SyncManager !== 'undefined') {
+                try {
+                    await SyncManager.addToQueue('inventory_log', logId);
+                } catch (syncError) {
+                    console.warn('Error agregando inventory_log a cola:', syncError);
                 }
-            } catch (syncError) {
-                console.error('Error agregando inventory_item a cola:', syncError);
             }
-        }
 
-            // Emitir evento de actualización de inventario
+            const itemToSync = savedWithAPI && mergedItem ? mergedItem : item;
+            if (typeof SyncManager !== 'undefined') {
+                try {
+                    await SyncManager.addToQueue('inventory_item', itemToSync.id);
+                } catch (syncError) {
+                    console.warn('Error agregando inventory_item a cola:', syncError);
+                }
+            }
+
             if (typeof Utils !== 'undefined' && Utils.EventBus) {
                 Utils.EventBus.emit('inventory-updated', { item, isNew: !itemId });
             }
 
-            // Guardar ubicación para autocompletado
             const locationDetail = document.getElementById('inv-location-detail')?.value?.trim();
             if (locationDetail) {
-                await this.saveLocation(locationDetail);
+                try {
+                    await this.saveLocation(locationDetail);
+                } catch (e) {
+                    console.warn('Error guardando ubicación:', e);
+                }
             }
-            
-            Utils.showNotification(itemId ? 'Pieza actualizada' : 'Pieza agregada', 'success');
-            UI.closeModal();
-            
-            // Esperar un momento para asegurar que el item se guardó correctamente
-            await new Promise(resolve => setTimeout(resolve, 200));
-            
-            // Forzar recarga completa
-            await this.loadInventory();
-        } catch (error) {
-            console.error('❌ Error guardando pieza:', error);
-            Utils.showNotification(`Error al guardar pieza: ${error.message || 'Error desconocido'}`, 'error');
-            // No cerrar el modal si hay error para que el usuario pueda corregir
+        } catch (postError) {
+            console.warn('Error en pasos posteriores al guardado (la pieza ya se guardó):', postError);
         }
+
+        // Siempre cerrar modal, notificar y recargar lista (la pieza ya está guardada)
+        Utils.showNotification(itemId ? 'Pieza actualizada' : 'Pieza agregada', 'success');
+        UI.closeModal();
+        await new Promise(resolve => setTimeout(resolve, 150));
+        await this.loadInventory();
+    } catch (error) {
+        console.error('❌ Error guardando pieza:', error);
+        Utils.showNotification(`Error al guardar pieza: ${error.message || 'Error desconocido'}`, 'error');
+    }
     },
 
     async editItem(itemId) {
