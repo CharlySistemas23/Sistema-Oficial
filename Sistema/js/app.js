@@ -612,6 +612,18 @@ const App = {
                                 await Inventory.loadInventory();
                             }
                         }
+                    } else {
+                        // El script inventory.js no cargó (ej. error de sintaxis "import outside module" por caché)
+                        const listEl = document.getElementById('inventory-list');
+                        if (listEl) {
+                            listEl.innerHTML = `
+                                <div style="padding: 24px; text-align: center; background: var(--color-bg-secondary); border-radius: var(--radius-lg); margin: 16px;">
+                                    <p style="color: var(--color-danger); font-weight: 600; margin-bottom: 8px;">No se pudo cargar el módulo de inventario</p>
+                                    <p style="color: var(--color-text-secondary); font-size: 14px; margin-bottom: 16px;">Es posible que el navegador esté usando una versión en caché. Recarga la página con <kbd>Ctrl+F5</kbd> (o <kbd>Cmd+Shift+R</kbd> en Mac) para forzar la actualización.</p>
+                                    <button type="button" class="btn-primary" onclick="window.location.reload(true)">Recargar página</button>
+                                </div>`;
+                        }
+                        console.error('Inventory no está definido. ¿inventory.js cargó correctamente? Si ves "import outside a module" en consola, recarga con Ctrl+F5.');
                     }
                     break;
                 case 'tourist-report':
