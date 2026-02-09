@@ -18,14 +18,20 @@ router.get('/', requireBranchAccess, async (req, res) => {
       branch_id, status, search, category, metal, stone_type, min_price, max_price,
       material, purity, plating, style, finish, theme, condition, location_detail, collection
     } = req.query;
-    
+
+    const normalizeBranchId = (id) => {
+      if (id == null || id === '' || id === 'null' || id === 'undefined') return null;
+      const s = String(id).trim();
+      return s || null;
+    };
+
     // Manejar branch_id cuando viene como string "null" desde el frontend
     let branchId = null;
     if (branch_id && branch_id !== 'null' && branch_id !== 'undefined') {
-      branchId = branch_id;
+      branchId = normalizeBranchId(branch_id);
     } else if (!req.user.isMasterAdmin) {
-      // Usuarios normales usan su branch_id
-      branchId = req.user.branchId;
+      // Usuarios normales usan su branch_id (del empleado)
+      branchId = normalizeBranchId(req.user.branchId);
       if (!branchId) {
         return res.status(400).json({
           error: 'Usuario sin sucursal asignada',
@@ -46,22 +52,20 @@ router.get('/', requireBranchAccess, async (req, res) => {
     const params = [];
     let paramCount = 1;
 
-    // Filtro por sucursal
+    // Filtro por sucursal: comparar como UUID para evitar fallos por formato/case
     if (req.user.isMasterAdmin) {
-      // Master admin: si branchId es null, mostrar todos los items (incluyendo sin branch_id)
-      // Si branchId está especificado, mostrar solo items de esa sucursal (sin incluir NULL)
       if (branchId) {
-        sql += ` AND i.branch_id = $${paramCount}`;
+        sql += ` AND i.branch_id = $${paramCount}::uuid`;
         params.push(branchId);
         paramCount++;
       }
-      // Si branchId es null, no agregar filtro (mostrar todos, incluyendo sin branch_id)
     } else {
-      // Usuarios normales: SOLO ven items de su sucursal (NO incluir items sin branch_id)
-      // Esto previene mezclar datos entre sucursales
-      sql += ` AND i.branch_id = $${paramCount}`;
-      params.push(req.user.branchId);
-      paramCount++;
+      const userBranchId = normalizeBranchId(req.user.branchId);
+      if (userBranchId) {
+        sql += ` AND i.branch_id = $${paramCount}::uuid`;
+        params.push(userBranchId);
+        paramCount++;
+      }
     }
 
     // Filtros adicionales
