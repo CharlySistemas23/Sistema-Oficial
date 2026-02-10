@@ -1044,17 +1044,17 @@ Object.assign(POS, {
                 items = items.filter(item => item.stone === stoneFilter);
             }
 
-            // Filtro de precio (por precio de venta mostrado al cliente)
+            // Filtro de precio: primer valor numérico > 0 entre sale_price, price, cost (0 = no definido, usar siguiente)
             items = items.filter(item => {
-                const price = (item.sale_price ?? item.price ?? item.cost) || 0;
+                const price = (parseFloat(item.sale_price) || parseFloat(item.price) || parseFloat(item.cost)) || 0;
                 return price >= minPrice && price <= maxPrice;
             });
 
             // Ordenar
             items.sort((a, b) => {
                 switch (sortBy) {
-                    case 'price-asc': return ((a.sale_price ?? a.price ?? a.cost) || 0) - ((b.sale_price ?? b.price ?? b.cost) || 0);
-                    case 'price-desc': return ((b.sale_price ?? b.price ?? b.cost) || 0) - ((a.sale_price ?? a.price ?? a.cost) || 0);
+                    case 'price-asc': return ((parseFloat(a.sale_price) || parseFloat(a.price) || parseFloat(a.cost)) || 0) - ((parseFloat(b.sale_price) || parseFloat(b.price) || parseFloat(b.cost)) || 0);
+                    case 'price-desc': return ((parseFloat(b.sale_price) || parseFloat(b.price) || parseFloat(b.cost)) || 0) - ((parseFloat(a.sale_price) || parseFloat(a.price) || parseFloat(a.cost)) || 0);
                     case 'recent': return new Date(b.created_at || 0) - new Date(a.created_at || 0);
                     default: return (a.name || '').localeCompare(b.name || '');
                 }
@@ -1248,7 +1248,7 @@ Object.assign(POS, {
                         `;
                     })()}
                     <div class="pos-product-card-price">
-                        ${Utils.formatCurrency((item.sale_price ?? item.price ?? item.cost) || 0)}
+                        ${Utils.formatCurrency((parseFloat(item.sale_price) || parseFloat(item.price) || parseFloat(item.cost)) || 0)}
                         <small>precio</small>
                     </div>
                     <div class="pos-product-card-actions">
@@ -1317,8 +1317,8 @@ Object.assign(POS, {
                 photo = photos && photos.length > 0 ? photos[0]?.thumbnail_blob || photos[0]?.photo_blob : null;
             } catch (e) {}
 
-            // Precio de venta para el cliente (sale_price > price > cost)
-            const salePrice = (item.sale_price ?? item.price ?? item.cost) || 0;
+            // Precio para el cliente: primer valor > 0 entre sale_price, price, cost (si sale_price es 0, usar price o cost; no eliminar cost del inventario)
+            const salePrice = (parseFloat(item.sale_price) || parseFloat(item.price) || parseFloat(item.cost)) || 0;
             // Agregar al carrito
             const cartItem = {
                 ...item,
@@ -2800,7 +2800,7 @@ Object.assign(POS, {
                             <div style="font-size: 12px; font-weight: 600; margin-bottom: 4px;">${item.name || 'Sin nombre'}</div>
                             <div style="font-size: 10px; color: var(--color-text-secondary);">${item.sku || 'N/A'}</div>
                             <div style="font-size: 14px; font-weight: 700; color: var(--color-primary); margin-top: 8px;">
-                                ${Utils.formatCurrency((item.sale_price ?? item.price ?? item.cost) || 0)}
+                                ${Utils.formatCurrency((parseFloat(item.sale_price) || parseFloat(item.price) || parseFloat(item.cost)) || 0)}
                             </div>
                         </div>
                     `).join('')}
@@ -2862,7 +2862,7 @@ Object.assign(POS, {
                             </div>
                             
                             <div style="font-size: 28px; font-weight: 700; color: #1a1a1a; margin-bottom: 24px;">
-                                ${Utils.formatCurrency((item.sale_price ?? item.price ?? item.cost) || 0)}
+                                ${Utils.formatCurrency((parseFloat(item.sale_price) || parseFloat(item.price) || parseFloat(item.cost)) || 0)}
                             </div>
                             
                             <div style="display: flex; gap: 12px;">
