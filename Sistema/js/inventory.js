@@ -845,37 +845,37 @@ const Inventory = {
 
         try {
             // Obtener items filtrados por sucursal - FORZAR RECARGA SIN CACHE
-            const currentBranchId = typeof BranchManager !== 'undefined' 
-                ? BranchManager.getCurrentBranchId() 
+            let currentBranchId = typeof BranchManager !== 'undefined'
+                ? BranchManager.getCurrentBranchId()
                 : localStorage.getItem('current_branch_id');
-            
             const isMasterAdmin = typeof UserManager !== 'undefined' && (
                 UserManager.currentUser?.role === 'master_admin' ||
                 UserManager.currentUser?.is_master_admin ||
                 UserManager.currentUser?.isMasterAdmin ||
                 UserManager.currentEmployee?.role === 'master_admin'
             );
-            
+            // Para usuarios no master: asegurar branch desde empleado si no hay en BranchManager/localStorage
+            if (!isMasterAdmin && !currentBranchId && typeof UserManager !== 'undefined') {
+                const emp = UserManager.currentEmployee;
+                if (emp?.branch_id) currentBranchId = String(emp.branch_id).trim();
+                else if (Array.isArray(emp?.branch_ids) && emp.branch_ids.length) currentBranchId = String(emp.branch_ids[0]).trim();
+            }
+            if (!currentBranchId) currentBranchId = localStorage.getItem('current_branch_id');
+
             // Si es master_admin y no hay filtro de sucursal específico, puede ver todos los items
             const inventoryBranchFilterEl = document.getElementById('inventory-branch-filter');
             const branchFilterValue = inventoryBranchFilterEl?.value;
-            
+
             // Determinar qué branch_id usar para el filtro
-            // 1. Si hay un filtro específico en el dropdown (diferente de "all"), usarlo
-            // 2. Si es master_admin y el filtro es "all" o está vacío, mostrar todos (null)
-            // 3. Si NO es master_admin, siempre usar currentBranchId (filtrar estrictamente)
             let filterBranchId = null;
             if (branchFilterValue && branchFilterValue !== 'all' && branchFilterValue !== '') {
-                // Hay un filtro específico seleccionado en el dropdown
                 filterBranchId = branchFilterValue;
             } else if (isMasterAdmin && branchFilterValue === 'all') {
-                // Master admin seleccionó explícitamente "Todas las sucursales"
                 filterBranchId = null;
             } else if (isMasterAdmin && (!branchFilterValue || branchFilterValue === '')) {
-                // Master admin sin selección en dropdown = usar sucursal actual del header
                 filterBranchId = currentBranchId;
             } else {
-                // Usuario normal = siempre filtrar por currentBranchId
+                // Usuario normal = siempre filtrar por currentBranchId (nunca "all")
                 filterBranchId = currentBranchId;
             }
             
