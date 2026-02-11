@@ -927,13 +927,16 @@ const UserManager = {
                             try {
                                 const employee = await DB.get('employees', user.employeeId);
                                 if (employee && employee.active) {
-                                    this.currentEmployee = employee;
+                                    // Asegurar branch_id/branch_ids para BranchManager y API (desde user guardado si el empleado local no los tiene)
+                                    const branch_id = employee.branch_id ?? user.branchId ?? null;
+                                    const branch_ids = (Array.isArray(employee.branch_ids) && employee.branch_ids.length) ? employee.branch_ids : (user.branchIds && user.branchIds.length ? user.branchIds : (user.branchId ? [user.branchId] : []));
+                                    this.currentEmployee = { ...employee, branch_id, branch_ids };
                                     
                                     if (UI && UI.updateUserInfo) {
-                                        UI.updateUserInfo(employee);
+                                        UI.updateUserInfo(this.currentEmployee);
                                     }
                                     
-                                    // Inicializar BranchManager
+                                    // Inicializar BranchManager (usa currentEmployee.branch_id / branch_ids)
                                     if (typeof BranchManager !== 'undefined') {
                                         await BranchManager.init();
                                         await BranchManager.updateBranchSelector();
@@ -1012,10 +1015,13 @@ const UserManager = {
                         const employee = await DB.get('employees', user.employee_id);
                         if (employee && employee.active) {
                             this.currentUser = user;
-                            this.currentEmployee = employee;
+                            // Asegurar branch_id/branch_ids para BranchManager y API (desde user si el empleado local no los tiene)
+                            const branch_id = employee.branch_id ?? user.branch_id ?? user.branchId ?? null;
+                            const branch_ids = (Array.isArray(employee.branch_ids) && employee.branch_ids.length) ? employee.branch_ids : (user.branch_ids && user.branch_ids.length ? user.branch_ids : (user.branchIds && user.branchIds.length ? user.branchIds : (user.branchId || user.branch_id ? [user.branchId || user.branch_id] : [])));
+                            this.currentEmployee = { ...employee, branch_id, branch_ids };
                             
                             if (UI && UI.updateUserInfo) {
-                                UI.updateUserInfo(employee);
+                                UI.updateUserInfo(this.currentEmployee);
                             }
                             
                             if (typeof BranchManager !== 'undefined') {
