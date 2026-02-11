@@ -22,16 +22,16 @@ router.get('/', requireBranchAccess, async (req, res) => {
     const normalizeBranchId = (id) => {
       if (id == null || id === '' || id === 'null' || id === 'undefined') return null;
       const s = String(id).trim();
-      return s || null;
+      return s ? s.toLowerCase() : null;
     };
 
-    // Manejar branch_id: query (master o usuario con varias sucursales) o req.user.branchId
+    // Manejar branch_id: query (master o usuario con varias sucursales) o req.user.branchId (ya normalizado en auth)
     let branchId = null;
     if (branch_id && branch_id !== 'null' && branch_id !== 'undefined') {
       branchId = normalizeBranchId(branch_id);
     }
     if (!req.user.isMasterAdmin) {
-      const allowedBranchIds = req.user.branchIds || [];
+      const allowedBranchIds = (req.user.branchIds || []).map(b => normalizeBranchId(b)).filter(Boolean);
       const queryBranchOk = branchId && allowedBranchIds.includes(branchId);
       if (!queryBranchOk) {
         branchId = normalizeBranchId(req.user.branchId);
