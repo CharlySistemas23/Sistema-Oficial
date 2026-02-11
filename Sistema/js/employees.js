@@ -2075,10 +2075,19 @@ const Employees = {
         if (!content) return;
 
         try {
+            const isMasterAdmin = typeof UserManager !== 'undefined' && (
+                UserManager.currentUser?.role === 'master_admin' ||
+                UserManager.currentUser?.is_master_admin ||
+                UserManager.currentUser?.isMasterAdmin ||
+                UserManager.currentEmployee?.role === 'master_admin'
+            );
             // ========== SINCRONIZACIÓN BIDIRECCIONAL ==========
-            // PASO 1: Subir vendedores locales que NO están en el servidor
+            // PASO 1: Subir vendedores locales que NO están en el servidor (solo master_admin; el backend rechaza 403 a otros roles)
             try {
-                if (typeof API !== 'undefined' && API.baseURL && API.token && API.createSeller && API.updateSeller) {
+                if (!isMasterAdmin && typeof API !== 'undefined' && API.baseURL) {
+                    console.log('📋 [Paso 1 Sellers] Omitido (solo master_admin puede subir vendedores al servidor). Se descargarán del servidor.');
+                }
+                if (isMasterAdmin && typeof API !== 'undefined' && API.baseURL && API.token && API.createSeller && API.updateSeller) {
                     console.log('📤 [Paso 1 Sellers] Buscando vendedores locales que no están en el servidor...');
                     
                     const allLocalSellers = await DB.getAll('catalog_sellers') || [];
@@ -2487,10 +2496,19 @@ const Employees = {
         if (!content) return;
 
         try {
+            const isMasterAdmin = typeof UserManager !== 'undefined' && (
+                UserManager.currentUser?.role === 'master_admin' ||
+                UserManager.currentUser?.is_master_admin ||
+                UserManager.currentUser?.isMasterAdmin ||
+                UserManager.currentEmployee?.role === 'master_admin'
+            );
             // ========== SINCRONIZACIÓN BIDIRECCIONAL ==========
-            // PASO 1: Subir guías locales que NO están en el servidor
+            // PASO 1: Subir guías locales que NO están en el servidor (solo master_admin; el backend rechaza 403 a otros roles)
             try {
-                if (typeof API !== 'undefined' && API.baseURL && API.token && API.createGuide && API.updateGuide) {
+                if (!isMasterAdmin && typeof API !== 'undefined' && API.baseURL) {
+                    console.log('📋 [Paso 1 Guides] Omitido (solo master_admin puede subir guías al servidor). Se descargarán del servidor.');
+                }
+                if (isMasterAdmin && typeof API !== 'undefined' && API.baseURL && API.token && API.createGuide && API.updateGuide) {
                     console.log('📤 [Paso 1 Guides] Buscando guías locales que no están en el servidor...');
                     
                     const allLocalGuides = await DB.getAll('catalog_guides') || [];
@@ -2944,10 +2962,19 @@ const Employees = {
         if (!content) return;
 
         try {
+            const isMasterAdmin = typeof UserManager !== 'undefined' && (
+                UserManager.currentUser?.role === 'master_admin' ||
+                UserManager.currentUser?.is_master_admin ||
+                UserManager.currentUser?.isMasterAdmin ||
+                UserManager.currentEmployee?.role === 'master_admin'
+            );
             // ========== SINCRONIZACIÓN BIDIRECCIONAL ==========
-            // PASO 1: Subir agencias locales que NO están en el servidor
+            // PASO 1: Subir agencias locales que NO están en el servidor (solo master_admin; el backend rechaza 403 a otros roles)
             try {
-                if (typeof API !== 'undefined' && API.baseURL && API.token && API.createAgency && API.updateAgency) {
+                if (!isMasterAdmin && typeof API !== 'undefined' && API.baseURL) {
+                    console.log('📋 [Paso 1 Agencies] Omitido (solo master_admin puede subir agencias al servidor). Se descargarán del servidor.');
+                }
+                if (isMasterAdmin && typeof API !== 'undefined' && API.baseURL && API.token && API.createAgency && API.updateAgency) {
                     console.log('📤 [Paso 1 Agencies] Buscando agencias locales que no están en el servidor...');
                     
                     const allLocalAgencies = await DB.getAll('catalog_agencies') || [];
