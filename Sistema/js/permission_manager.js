@@ -131,6 +131,14 @@ const PermissionManager = {
             'customers.view', 'customers.add',
             // REPORTES Y ANÁLISIS
             'cash.view_reports', 'dashboard.view'
+        ],
+        // Usuarios de sucursal (empleados sin rol específico): al menos ver inventario, POS y dashboard
+        employee: [
+            'pos.view', 'pos.create_sale', 'pos.apply_discount',
+            'inventory.view',
+            'customers.view', 'customers.add',
+            'repairs.view',
+            'reports.view', 'dashboard.view'
         ]
     },
 
