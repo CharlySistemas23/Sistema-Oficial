@@ -1539,9 +1539,10 @@ const App = {
             }
         }
         
-        // PASO 2: Cargar datos locales como fallback/complemento
-        // Agencies (datos locales como fallback)
-        const agencies = [
+        // PASO 2: Cargar datos locales como fallback (solo si no existe ya una agencia con el mismo nombre)
+        // Así evitamos duplicados: servidor devuelve 7 con UUID, no insertar ag1..ag7 si ya hay TRAVELEX, etc.
+        const isUUID = (v) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v || ''));
+        const fallbackAgencies = [
             { id: 'ag1', name: 'TRAVELEX', active: true },
             { id: 'ag2', name: 'VERANOS', active: true },
             { id: 'ag3', name: 'TANITOURS', active: true },
@@ -1550,24 +1551,76 @@ const App = {
             { id: 'ag6', name: 'TTF', active: true },
             { id: 'ag7', name: 'TROPICAL ADVENTURE', active: true }
         ];
+        const existingAgenciesByName = new Map();
+        try {
+            const allExisting = await DB.getAll('catalog_agencies') || [];
+            for (const a of allExisting) {
+                if (a && a.name) {
+                    const key = a.name.trim().toUpperCase();
+                    const current = existingAgenciesByName.get(key);
+                    // Preferir el que tiene UUID (viene del servidor)
+                    if (!current || (isUUID(a.id) && !isUUID(current.id))) {
+                        existingAgenciesByName.set(key, a);
+                    }
+                }
+            }
+        } catch (e) { /* ignore */ }
 
-        for (const agency of agencies) {
+        for (const agency of fallbackAgencies) {
             try {
-                const existing = await DB.get('catalog_agencies', agency.id);
-                if (existing) {
-                    // Si existe pero no tiene código de barras, generarlo
-                    if (!existing.barcode || Utils.isBarcodeEmpty(existing.barcode)) {
-                        existing.barcode = Utils.generateAgencyBarcode(existing);
-                        await DB.put('catalog_agencies', existing);
+                const existingById = await DB.get('catalog_agencies', agency.id);
+                const existingByName = existingAgenciesByName.get((agency.name || '').trim().toUpperCase());
+                if (existingById) {
+                    if (!existingById.barcode || Utils.isBarcodeEmpty(existingById.barcode)) {
+                        existingById.barcode = Utils.generateAgencyBarcode(existingById);
+                        await DB.put('catalog_agencies', existingById);
+                    }
+                } else if (existingByName) {
+                    // Ya hay una agencia con este nombre (p. ej. del servidor con UUID): no insertar ag1..ag7
+                    if (!existingByName.barcode || Utils.isBarcodeEmpty(existingByName.barcode)) {
+                        existingByName.barcode = Utils.generateAgencyBarcode(existingByName);
+                        await DB.put('catalog_agencies', existingByName);
                     }
                 } else {
-                    // Nuevo registro: generar código de barras
                     agency.barcode = Utils.generateAgencyBarcode(agency);
                     await DB.put('catalog_agencies', agency);
                 }
             } catch (e) {
                 // Already exists
             }
+        }
+
+        // PASO 2b: Limpiar duplicados por nombre (quedarse con UUID, eliminar legacy ag1..ag7 si hay mismo nombre con UUID)
+        try {
+            const allAgencies = await DB.getAll('catalog_agencies') || [];
+            const byName = new Map();
+            for (const a of allAgencies) {
+                if (!a || !a.name) continue;
+                const key = a.name.trim().toUpperCase();
+                const prev = byName.get(key);
+                if (!prev) {
+                    byName.set(key, a);
+                } else {
+                    let keep = prev;
+                    let remove = a;
+                    if (isUUID(a.id) && !isUUID(prev.id)) {
+                        keep = a;
+                        remove = prev;
+                    } else if (!isUUID(a.id) && isUUID(prev.id)) {
+                        keep = prev;
+                        remove = a;
+                    } else {
+                        keep = (new Date(a.updated_at || 0) >= new Date(prev.updated_at || 0)) ? a : prev;
+                        remove = keep === a ? prev : a;
+                    }
+                    if (remove.id !== keep.id && !isUUID(remove.id) && /^ag\d+$/i.test(remove.id)) {
+                        await DB.delete('catalog_agencies', remove.id);
+                    }
+                    byName.set(key, keep);
+                }
+            }
+        } catch (e) {
+            console.warn('⚠️ Limpieza de agencias duplicadas:', e);
         }
 
         // Sellers
