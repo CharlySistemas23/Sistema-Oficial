@@ -1183,11 +1183,16 @@ const Inventory = {
                     }
                 } catch (apiError) {
                     console.warn('Error cargando inventario desde API, usando modo local:', apiError);
+                    const code = apiError?.code || apiError?.details?.code;
                     const errMsg = (apiError && (apiError.message || apiError.details?.message || apiError.details?.error || apiError.error)) || '';
-                    if (errMsg && (errMsg.includes('sucursal') || errMsg.includes('branch') || (apiError && (apiError.code === 'NO_BRANCH_ASSIGNED' || apiError.details?.code === 'NO_BRANCH_ASSIGNED')))) {
-                        if (typeof Utils !== 'undefined' && Utils.showNotification) {
-                            Utils.showNotification(errMsg, 'warning');
-                        }
+                    const isNoBranch = code === 'NO_BRANCH_ASSIGNED' || (errMsg && (errMsg.includes('sucursal asignada') || errMsg.includes('sucursal al empleado')));
+                    if (isNoBranch && typeof Utils !== 'undefined' && Utils.showNotification) {
+                        const userMsg = code === 'NO_BRANCH_ASSIGNED'
+                            ? 'No tienes sucursal asignada. Pide al administrador que te asigne una en Administración > Empleados.'
+                            : (apiError?.details?.message || errMsg);
+                        Utils.showNotification(userMsg, 'warning');
+                    } else if (errMsg && (errMsg.includes('sucursal') || errMsg.includes('branch')) && typeof Utils !== 'undefined' && Utils.showNotification) {
+                        Utils.showNotification(errMsg, 'warning');
                     }
                     // Fallback a IndexedDB
                     allItemsRaw = await DB.getAll('inventory_items', null, null, { 
