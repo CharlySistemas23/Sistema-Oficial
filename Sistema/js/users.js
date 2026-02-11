@@ -932,6 +932,12 @@ const UserManager = {
                                     const branch_ids = (Array.isArray(employee.branch_ids) && employee.branch_ids.length) ? employee.branch_ids : (user.branchIds && user.branchIds.length ? user.branchIds : (user.branchId ? [user.branchId] : []));
                                     this.currentEmployee = { ...employee, branch_id, branch_ids };
                                     
+                                    // Rellenar permisos desde el rol si vienen vacíos (igual que al cargar desde servidor)
+                                    if (typeof PermissionManager !== 'undefined') {
+                                        const updatedUser = await PermissionManager.ensureUserPermissions(this.currentUser);
+                                        this.currentUser = updatedUser;
+                                    }
+                                    
                                     if (UI && UI.updateUserInfo) {
                                         UI.updateUserInfo(this.currentEmployee);
                                     }
@@ -951,19 +957,18 @@ const UserManager = {
                                     }
                                     
                                     // Establecer is_master_admin
-                                    const isMasterAdmin = user.role === 'master_admin' || 
-                                                         user.is_master_admin || 
-                                                         user.isMasterAdmin ||
+                                    const isMasterAdmin = this.currentUser.role === 'master_admin' ||
+                                                         this.currentUser.is_master_admin ||
+                                                         this.currentUser.isMasterAdmin ||
                                                          (employee && employee.role === 'master_admin');
-                                    user.is_master_admin = isMasterAdmin;
-                                    user.isMasterAdmin = isMasterAdmin;
-                                    this.currentUser = user;
+                                    this.currentUser.is_master_admin = isMasterAdmin;
+                                    this.currentUser.isMasterAdmin = isMasterAdmin;
                                     
                                     // Mostrar navegación de admin
                                     if (UI && UI.updateAdminNavigation) {
-                                        const isAdmin = user.role === 'admin' || 
-                                                       user.role === 'master_admin' ||
-                                                       user.permissions?.includes('all') ||
+                                        const isAdmin = this.currentUser.role === 'admin' ||
+                                                       this.currentUser.role === 'master_admin' ||
+                                                       this.currentUser.permissions?.includes('all') ||
                                                        isMasterAdmin;
                                         UI.updateAdminNavigation(isAdmin);
                                     }
@@ -1015,6 +1020,11 @@ const UserManager = {
                         const employee = await DB.get('employees', user.employee_id);
                         if (employee && employee.active) {
                             this.currentUser = user;
+                            // Rellenar permisos desde el rol si vienen vacíos
+                            if (typeof PermissionManager !== 'undefined') {
+                                const updatedUser = await PermissionManager.ensureUserPermissions(this.currentUser);
+                                this.currentUser = updatedUser;
+                            }
                             // Asegurar branch_id/branch_ids para BranchManager y API (desde user si el empleado local no los tiene)
                             const branch_id = employee.branch_id ?? user.branch_id ?? user.branchId ?? null;
                             const branch_ids = (Array.isArray(employee.branch_ids) && employee.branch_ids.length) ? employee.branch_ids : (user.branch_ids && user.branch_ids.length ? user.branch_ids : (user.branchIds && user.branchIds.length ? user.branchIds : (user.branchId || user.branch_id ? [user.branchId || user.branch_id] : [])));
@@ -1037,18 +1047,17 @@ const UserManager = {
                                 }
                             }
                             
-                            const isMasterAdmin = user.role === 'master_admin' || 
-                                                 user.is_master_admin || 
-                                                 user.isMasterAdmin ||
+                            const isMasterAdmin = this.currentUser.role === 'master_admin' ||
+                                                 this.currentUser.is_master_admin ||
+                                                 this.currentUser.isMasterAdmin ||
                                                  (employee && employee.role === 'master_admin');
-                            user.is_master_admin = isMasterAdmin;
-                            user.isMasterAdmin = isMasterAdmin;
-                            this.currentUser = user;
+                            this.currentUser.is_master_admin = isMasterAdmin;
+                            this.currentUser.isMasterAdmin = isMasterAdmin;
                             
                             if (UI && UI.updateAdminNavigation) {
-                                const isAdmin = user.role === 'admin' || 
-                                               user.role === 'master_admin' ||
-                                               user.permissions?.includes('all') ||
+                                const isAdmin = this.currentUser.role === 'admin' ||
+                                               this.currentUser.role === 'master_admin' ||
+                                               this.currentUser.permissions?.includes('all') ||
                                                isMasterAdmin;
                                 UI.updateAdminNavigation(isAdmin);
                             }
