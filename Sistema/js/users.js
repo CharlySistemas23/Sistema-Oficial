@@ -762,8 +762,17 @@ const UserManager = {
                         
                         const permissions = user.permissions != null && Array.isArray(user.permissions) ? user.permissions : [];
                         const permissionsByBranch = user.permissions_by_branch != null && typeof user.permissions_by_branch === 'object' ? user.permissions_by_branch : {};
+                        // Rol: si no es admin/master_admin y el rol no está en perfiles predefinidos, usar 'employee' para tener al menos inventario.view, pos, etc.
+                        let employeeRole = user.role || 'master_admin';
+                        if (!isMasterAdmin && typeof PermissionManager !== 'undefined') {
+                            const knownRoles = Object.keys(PermissionManager.ROLE_PROFILES || {});
+                            if (!employeeRole || !knownRoles.includes(employeeRole)) {
+                                employeeRole = 'employee';
+                            }
+                        }
                         this.currentUser = {
                             ...user,
+                            role: employeeRole,
                             is_master_admin: isMasterAdmin,
                             isMasterAdmin: isMasterAdmin,
                             permissions,
@@ -772,7 +781,6 @@ const UserManager = {
                         
                         // Construir currentEmployee desde los datos del servidor
                         // Asegurar que el rol se preserve correctamente
-                        const employeeRole = user.role || 'master_admin'; // Si viene del servidor y es master_admin, preservar
                         this.currentEmployee = {
                             id: user.employeeId,
                             name: user.name || 'Administrador Maestro',
@@ -785,13 +793,19 @@ const UserManager = {
                         user.role = employeeRole;
                         this.currentUser.role = employeeRole;
 
+                        // Si el servidor devolvió permisos vacíos, rellenar según el rol (employee, seller, etc.)
+                        if (typeof PermissionManager !== 'undefined') {
+                            const updatedUser = await PermissionManager.ensureUserPermissions(this.currentUser);
+                            this.currentUser = updatedUser;
+                        }
+
                         localStorage.setItem('current_user', JSON.stringify({
-                            ...user,
+                            ...this.currentUser,
                             role: employeeRole,
                             is_master_admin: isMasterAdmin,
                             isMasterAdmin: isMasterAdmin,
-                            permissions,
-                            permissions_by_branch: permissionsByBranch
+                            permissions: this.currentUser.permissions,
+                            permissions_by_branch: this.currentUser.permissions_by_branch || permissionsByBranch
                         }));
                         
                         // Inicializar socket si no está ya conectado
