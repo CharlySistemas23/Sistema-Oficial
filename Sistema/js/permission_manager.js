@@ -166,7 +166,8 @@ const PermissionManager = {
             return branchPerms.includes(permission);
         }
 
-        if (user.permissions && Array.isArray(user.permissions)) {
+        // Si tiene permisos explícitos (array no vacío), usarlos; si está vacío, usar rol
+        if (user.permissions && Array.isArray(user.permissions) && user.permissions.length > 0) {
             return user.permissions.includes(permission);
         }
 
