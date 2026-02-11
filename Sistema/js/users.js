@@ -762,7 +762,7 @@ const UserManager = {
                         
                         const permissions = user.permissions != null && Array.isArray(user.permissions) ? user.permissions : [];
                         const permissionsByBranch = user.permissions_by_branch != null && typeof user.permissions_by_branch === 'object' ? user.permissions_by_branch : {};
-                        // Rol: si no es admin/master_admin y el rol no está en perfiles predefinidos, usar 'employee' para tener al menos inventario.view, pos, etc.
+                        // Preservar rol del servidor (manager, admin, etc.). Solo usar fallback 'employee' si el rol viene vacío o no está en ROLE_PROFILES.
                         let employeeRole = user.role || 'master_admin';
                         if (!isMasterAdmin && typeof PermissionManager !== 'undefined') {
                             const knownRoles = Object.keys(PermissionManager.ROLE_PROFILES || {});
