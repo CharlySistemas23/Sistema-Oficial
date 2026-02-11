@@ -161,7 +161,9 @@ const PermissionManager = {
         const pbb = user.permissions_by_branch && typeof user.permissions_by_branch === 'object' ? user.permissions_by_branch : {};
         const branchPerms = (branchId && pbb[branchId] && Array.isArray(pbb[branchId])) ? pbb[branchId] : null;
 
-        if (branchPerms !== null) {
+        // Solo usar permissions_by_branch cuando hay un override explícito (array no vacío).
+        // Si branchPerms es [] (vacío), no denegar todo: usar user.permissions o perfil del rol.
+        if (branchPerms !== null && branchPerms.length > 0) {
             if (branchPerms.includes('all')) return true;
             return branchPerms.includes(permission);
         }
