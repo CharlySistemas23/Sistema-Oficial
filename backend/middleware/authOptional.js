@@ -49,13 +49,20 @@ export const authenticateOptional = async (req, res, next) => {
           } else if (rawBranchId) {
             effectiveBranchId = rawBranchId;
           } else if (headerBranchId && isUUID(headerBranchId) && branchIds.includes(headerBranchId)) {
-            // Usuario asignado a sucursal: usar x-branch-id si está en sus sucursales permitidas
             effectiveBranchId = headerBranchId;
           } else if (branchIds.length > 0) {
             effectiveBranchId = branchIds[0];
+          } else if (!isMasterAdmin && headerBranchId && isUUID(headerBranchId)) {
+            // Fallback: empleado sin branch_id/branch_ids en BD — confiar en x-branch-id del front
+            effectiveBranchId = headerBranchId;
           } else {
             effectiveBranchId = null;
           }
+
+          const finalBranchIds = branchIds.length ? branchIds : (rawBranchId ? [rawBranchId] : []);
+          const allowedBranchIds = effectiveBranchId && !finalBranchIds.includes(effectiveBranchId)
+            ? [...finalBranchIds, effectiveBranchId]
+            : finalBranchIds;
 
           req.user = {
             id: user.id,
@@ -63,7 +70,7 @@ export const authenticateOptional = async (req, res, next) => {
             employeeId: user.employee_id,
             role,
             branchId: effectiveBranchId,
-            branchIds: branchIds.length ? branchIds : (rawBranchId ? [rawBranchId] : []),
+            branchIds: allowedBranchIds.length ? allowedBranchIds : (effectiveBranchId ? [effectiveBranchId] : []),
             isMasterAdmin,
             authenticated: true
           };
@@ -182,9 +189,10 @@ export const requireBranchAccess = (req, res, next) => {
     return next();
   }
 
-  // Verificar que el usuario tenga acceso a esta sucursal
-  const userBranchIds = req.user.branchIds || [];
-  if (!userBranchIds.includes(branchId)) {
+  // Verificar que el usuario tenga acceso a esta sucursal (comparar como string normalizado)
+  const userBranchIds = (req.user.branchIds || []).map(b => String(b).trim());
+  const bid = String(branchId).trim();
+  if (!userBranchIds.includes(bid)) {
     return res.status(403).json({ error: 'No tienes acceso a esta sucursal' });
   }
 
