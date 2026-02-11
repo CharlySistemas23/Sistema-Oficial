@@ -1605,8 +1605,27 @@ const Settings = {
         }
     },
 
+    /** Devuelve agencias sin duplicados por nombre (prefiere id UUID sobre ag1..ag7) */
+    async getAgenciesDeduplicated() {
+        const all = await DB.getAll('catalog_agencies') || [];
+        const isUUID = (v) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v || ''));
+        const byName = new Map();
+        for (const a of all) {
+            if (!a || !a.name) continue;
+            const key = a.name.trim().toUpperCase();
+            const prev = byName.get(key);
+            if (!prev) {
+                byName.set(key, a);
+            } else {
+                const keep = (isUUID(a.id) && !isUUID(prev.id)) ? a : (isUUID(prev.id) ? prev : (new Date(a.updated_at || 0) >= new Date(prev.updated_at || 0) ? a : prev));
+                byName.set(key, keep);
+            }
+        }
+        return Array.from(byName.values());
+    },
+
     async manageAgencies() {
-        const agencies = await DB.getAll('catalog_agencies') || [];
+        const agencies = await this.getAgenciesDeduplicated();
         const body = `
             <div style="margin-bottom: var(--spacing-md);">
                 <div style="display: flex; gap: var(--spacing-sm); margin-bottom: var(--spacing-sm); flex-wrap: wrap;">
@@ -2062,7 +2081,7 @@ const Settings = {
 
     async manageGuides() {
         const guides = await DB.getAll('catalog_guides') || [];
-        const agencies = await DB.getAll('catalog_agencies') || [];
+        const agencies = await this.getAgenciesDeduplicated();
         const body = `
             <div style="margin-bottom: var(--spacing-md);">
                 <div style="display: flex; gap: var(--spacing-sm); margin-bottom: var(--spacing-sm); flex-wrap: wrap;">
@@ -2175,7 +2194,7 @@ const Settings = {
     },
 
     async addGuide() {
-        const agencies = await DB.getAll('catalog_agencies') || [];
+        const agencies = await this.getAgenciesDeduplicated();
         
         if (agencies.length === 0) {
             Utils.showNotification('Debes crear al menos una agencia primero', 'error');
@@ -2296,7 +2315,7 @@ const Settings = {
             return;
         }
 
-        const agencies = await DB.getAll('catalog_agencies') || [];
+        const agencies = await this.getAgenciesDeduplicated();
 
         const body = `
             <form id="guide-form" style="max-width: 500px;">
