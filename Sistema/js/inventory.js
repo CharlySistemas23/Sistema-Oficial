@@ -17,6 +17,13 @@ const Inventory = {
         stock_actual: 1,
         alert_enabled: true
     },
+
+    // Lista única de categorías (reutilizada en barra de filtros y formulario de pieza)
+    INVENTORY_CATEGORIES: [
+        'Anillos', 'Collares', 'Cadenas', 'Pulseras', 'Esclavas', 'Brazaletes', 'Aretes',
+        'Arracadas', 'Broqueles', 'Dijes / Charms', 'Sets / Juegos', 'Tobilleras',
+        'Piercings', 'Relojería', 'Accesorios'
+    ],
     
     async init() {
         try {
@@ -495,6 +502,18 @@ const Inventory = {
         
         // Filtro de alertas de stock
         document.getElementById('inventory-stock-alert-filter')?.addEventListener('change', () => this.loadInventory());
+        
+        // Delegación: clic en chips de categoría (barra generada en displayInventoryStats)
+        const statsContainer = document.getElementById('inventory-stats');
+        if (statsContainer) {
+            statsContainer.addEventListener('click', (e) => {
+                const chip = e.target.closest('.inventory-category-chip');
+                if (!chip) return;
+                statsContainer.querySelectorAll('.inventory-category-bar .inventory-category-chip').forEach(b => b.classList.remove('active'));
+                chip.classList.add('active');
+                this.loadInventory();
+            });
+        }
         
         // Listen for demo data loaded event
         window.addEventListener('demo-data-loaded', () => {
@@ -1091,9 +1110,12 @@ const Inventory = {
             if (typeof API !== 'undefined' && API.baseURL && API.token && API.getInventoryItems) {
                 try {
                     console.log('📦 Cargando inventario desde API...');
+                    const categoryChip = document.querySelector('.inventory-category-bar .inventory-category-chip.active')?.dataset.category;
+                    const categoryFilter = (categoryChip && categoryChip !== 'all') ? categoryChip : undefined;
                     const filters = {
                         branch_id: filterBranchId != null ? String(filterBranchId).trim() || undefined : undefined,
-                        status: document.getElementById('inventory-status-filter')?.value || undefined
+                        status: document.getElementById('inventory-status-filter')?.value || undefined,
+                        category: categoryFilter
                     };
                     
                     allItemsRaw = await API.getInventoryItems(filters);
@@ -1497,6 +1519,12 @@ const Inventory = {
                 items = items.filter(item => this.getStockStatus(item) === 'over');
             } else if (stockAlertFilter === 'ok') {
                 items = items.filter(item => this.getStockStatus(item) === 'ok');
+            }
+
+            // Apply category filter (barra debajo de alertas de stock)
+            const selectedCategory = document.querySelector('.inventory-category-bar .inventory-category-chip.active')?.dataset.category;
+            if (selectedCategory && selectedCategory !== 'all') {
+                items = items.filter(item => (item.category || '') === selectedCategory);
             }
 
             // ========== FILTROS AVANZADOS ==========
@@ -3192,21 +3220,7 @@ const Inventory = {
                             <label>Categoría *</label>
                             <select id="inv-category" class="form-select" required>
                                 <option value="">Seleccionar...</option>
-                                <option value="Anillos" ${item?.category === 'Anillos' ? 'selected' : ''}>Anillos</option>
-                                <option value="Collares" ${item?.category === 'Collares' ? 'selected' : ''}>Collares</option>
-                                <option value="Cadenas" ${item?.category === 'Cadenas' ? 'selected' : ''}>Cadenas</option>
-                                <option value="Pulseras" ${item?.category === 'Pulseras' ? 'selected' : ''}>Pulseras</option>
-                                <option value="Esclavas" ${item?.category === 'Esclavas' ? 'selected' : ''}>Esclavas</option>
-                                <option value="Brazaletes" ${item?.category === 'Brazaletes' ? 'selected' : ''}>Brazaletes</option>
-                                <option value="Aretes" ${item?.category === 'Aretes' ? 'selected' : ''}>Aretes</option>
-                                <option value="Arracadas" ${item?.category === 'Arracadas' ? 'selected' : ''}>Arracadas</option>
-                                <option value="Broqueles" ${item?.category === 'Broqueles' ? 'selected' : ''}>Broqueles</option>
-                                <option value="Dijes / Charms" ${item?.category === 'Dijes / Charms' ? 'selected' : ''}>Dijes / Charms</option>
-                                <option value="Sets / Juegos" ${item?.category === 'Sets / Juegos' ? 'selected' : ''}>Sets / Juegos</option>
-                                <option value="Tobilleras" ${item?.category === 'Tobilleras' ? 'selected' : ''}>Tobilleras</option>
-                                <option value="Piercings" ${item?.category === 'Piercings' ? 'selected' : ''}>Piercings</option>
-                                <option value="Relojería" ${item?.category === 'Relojería' ? 'selected' : ''}>Relojería</option>
-                                <option value="Accesorios" ${item?.category === 'Accesorios' ? 'selected' : ''}>Accesorios</option>
+                                ${this.INVENTORY_CATEGORIES.map(cat => `<option value="${cat.replace(/"/g, '&quot;')}" ${item?.category === cat ? 'selected' : ''}>${cat}</option>`).join('')}
                             </select>
                         </div>
                         <div class="form-group">
@@ -5198,6 +5212,12 @@ const Inventory = {
         
         const statsContainer = document.getElementById('inventory-stats');
         if (statsContainer) {
+            const activeCategory = document.querySelector('.inventory-category-bar .inventory-category-chip.active')?.dataset.category ?? '';
+            const categoryChipsHTML = [
+                `<button type="button" class="inventory-category-chip ${activeCategory === '' || activeCategory === 'all' ? 'active' : ''}" data-category="">Todas</button>`
+            ].concat(this.INVENTORY_CATEGORIES.map(cat =>
+                `<button type="button" class="inventory-category-chip ${activeCategory === cat ? 'active' : ''}" data-category="${cat.replace(/"/g, '&quot;')}">${cat}</button>`
+            )).join('');
             statsContainer.innerHTML = `
                 <div class="inventory-stats-grid">
                     <div class="inventory-stat-card">
@@ -5248,6 +5268,11 @@ const Inventory = {
                         <i class="fas fa-check"></i>
                         <span>${stats.stockOk} Normal</span>
                     </div>
+                </div>
+                
+                <!-- Filtro por categoría -->
+                <div class="inventory-category-bar">
+                    ${categoryChipsHTML}
                 </div>
                 
             `;
