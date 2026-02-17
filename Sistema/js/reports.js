@@ -6,7 +6,17 @@ const Reports = {
     pendingCaptures: [], // Lista de capturas pendientes antes de guardar
     editingPendingCaptureId: null, // ID de la captura pendiente que se está editando
     isExporting: false, // Flag para prevenir múltiples exportaciones simultáneas
-    
+
+    // Mapa guía (nombre normalizado) -> agencia (nombre) para comisiones cuando catalog_guides.agency_id no está
+    GUIDE_TO_AGENCY: {
+        'CARLOS SIS': 'VERANOS', 'MARIO RENDON': 'VERANOS', 'CHAVA': 'VERANOS', 'FREDY': 'VERANOS', 'NETO': 'VERANOS', 'EMMANUEL': 'VERANOS',
+        'MARINA': 'TANITOURS', 'GLORIA': 'TANITOURS', 'DANIELA': 'TANITOURS',
+        'RAMON': 'DISCOVERY', 'GUSTAVO SIS': 'DISCOVERY', 'GUSTAVO LEPE': 'DISCOVERY', 'NOVOA': 'DISCOVERY', 'ERIK': 'DISCOVERY', 'CHILO': 'DISCOVERY', 'FERMIN': 'DISCOVERY', 'EMMA': 'DISCOVERY', 'HERASMO': 'DISCOVERY',
+        'MIGUEL SUAREZ': 'TRAVELEX', 'SANTA': 'TRAVELEX', 'MIGUEL DELGADILLO': 'TRAVELEX', 'ANDRES CHAVEZ': 'TRAVELEX', 'SAREM': 'TRAVELEX', 'ZAVALA': 'TRAVELEX', 'TEMO': 'TRAVELEX', 'ROCIO': 'TRAVELEX', 'SEBASTIAN S': 'TRAVELEX',
+        'MIGUEL IBARRA': 'TB', 'ADAN': 'TB', 'MIGUEL RAGA': 'TB', 'GABINO': 'TB', 'HECTOR SUAREZ': 'TB', 'OSCAR': 'TB', 'JOSE AVILES': 'TB',
+        'HUGO': 'TTF', 'HILBERTO': 'TTF', 'JOSE MASIAS': 'TTF', 'DAVID BUSTOS': 'TTF', 'ALFONSO': 'TTF', 'DANIEL RIVERA': 'TTF', 'EDUARDO LEAL': 'TTF'
+    },
+
     /**
      * Calcular comisiones basadas en reglas reales de negocio (agencias/guías y vendedores).
      * Guías: -18% * 10% por agencia (VERANOS, TANITOURS, DISCOVERY, TRAVELEX, TB, TTF); excepción TANITOURS+MARINA = 10% directo.
@@ -4667,15 +4677,17 @@ const Reports = {
                         guideComm = sumFromItems.guide;
                     } else {
                         // Usar reglas por nombre: calculateCommissionByRules(totalMXN, agencyName, sellerName, guideName)
-                        let agencyName = sale.agency_id ? (agencies.find(a => a.id === sale.agency_id)?.name || null) : null;
-                        if (!agencyName && sale.guide_id) {
-                            const guideRecord = guides.find(g => g.id === sale.guide_id);
-                            if (guideRecord?.agency_id) {
-                                agencyName = agencies.find(a => a.id === guideRecord.agency_id)?.name || null;
-                            }
+                        let agencyName = sale.agency_id ? (agencies.find(a => this.compareIds(a.id, sale.agency_id))?.name || null) : null;
+                        const guideRecord = sale.guide_id ? guides.find(g => this.compareIds(g.id, sale.guide_id)) : null;
+                        if (!agencyName && guideRecord?.agency_id) {
+                            agencyName = agencies.find(a => this.compareIds(a.id, guideRecord.agency_id))?.name || null;
                         }
-                        const sellerName = sale.seller_id ? (sellers.find(s => s.id === sale.seller_id)?.name || null) : null;
-                        const guideName = sale.guide_id ? (guides.find(g => g.id === sale.guide_id)?.name || null) : null;
+                        const sellerName = sale.seller_id ? (sellers.find(s => this.compareIds(s.id, sale.seller_id))?.name || null) : null;
+                        const guideName = guideRecord?.name || null;
+                        if (!agencyName && guideName) {
+                            const guideNorm = guideName.trim().toUpperCase();
+                            agencyName = this.GUIDE_TO_AGENCY[guideNorm] || null;
+                        }
                         const totalMXN = parseFloat(sale.total) || 0;
                         const { sellerCommission, guideCommission } = this.calculateCommissionByRules(totalMXN, agencyName, sellerName, guideName);
                         sellerComm = sellerCommission;
