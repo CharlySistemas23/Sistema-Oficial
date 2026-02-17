@@ -8,7 +8,9 @@ const Reports = {
     isExporting: false, // Flag para prevenir múltiples exportaciones simultáneas
     
     /**
-     * Calcular comisiones basadas en reglas de agencia, vendedor (Sebastian) o guía (Gloria)
+     * Calcular comisiones basadas en reglas reales de negocio (agencias/guías y vendedores).
+     * Guías: -18% * 10% por agencia (VERANOS, TANITOURS, DISCOVERY, TRAVELEX, TB, TTF); excepción TANITOURS+MARINA = 10% directo.
+     * Vendedores: SEBASTIAN 10% directo; OMAR/JUAN CARLOS -20%*7%; resto de la lista -5%*9%.
      * @param {number} totalMXN - Total en MXN
      * @param {string} agencyName - Nombre de la agencia (opcional)
      * @param {string} sellerName - Nombre del vendedor (opcional)
@@ -17,50 +19,42 @@ const Reports = {
      */
     calculateCommissionByRules(totalMXN, agencyName = null, sellerName = null, guideName = null) {
         if (!totalMXN || totalMXN <= 0) return { sellerCommission: 0, guideCommission: 0 };
-        
-        // Normalizar nombres para comparación
+
         const normalizeName = (name) => name ? name.trim().toUpperCase() : '';
         const agency = normalizeName(agencyName);
         const seller = normalizeName(sellerName);
         const guide = normalizeName(guideName);
-        
+
+        const AGENCIES_GUIDE = new Set(['VERANOS', 'TANITOURS', 'DISCOVERY', 'TRAVELEX', 'TB', 'TTF', 'TROPICAL ADVENTURE']);
+        const SELLERS_OMAR_JUANCARLOS = new Set(['OMAR', 'JUAN CARLOS']);
+        const SELLERS_RESTO = new Set([
+            'CALI', 'SAULA', 'ANDRES', 'ANGEL', 'SR ANGEL', 'RAMSES', 'ISAURA', 'CARLOS', 'PACO', 'FRANCISCO',
+            'PANDA', 'KARLA', 'NADIA', 'JASON', 'ROBERTO', 'PEDRO', 'ANA', 'JOVA', 'EDITH', 'VERO', 'POCHIS',
+            'RAMON', 'ALDAIR', 'CLAUDIA', 'SERGIO', 'MANUEL'
+        ]);
+
         let sellerCommission = 0;
         let guideCommission = 0;
-        
-        // REGLAS PARA GUÍA:
-        // PRIORIDAD 1: Reglas por AGENCIA (aplican al guía)
-        if (agency) {
-            if (agency === 'TROPICAL ADVENTURE') {
-                // (total - 18%) * 9% = (total * 0.82) * 0.09
-                guideCommission = (totalMXN * 0.82) * 0.09;
-            } else if (agency === 'TRAVELEX') {
-                // (total - 18%) * 10% = (total * 0.82) * 0.10
-                guideCommission = (totalMXN * 0.82) * 0.10;
-            } else if (agency === 'TANI TOURS' || agency === 'TANITOURS') {
-                // (total - 18%) * 9% = (total * 0.82) * 0.09
-                guideCommission = (totalMXN * 0.82) * 0.09;
-            } else if (agency === 'VERANOS') {
-                // (total - 18%) * 9% = (total * 0.82) * 0.09
-                guideCommission = (totalMXN * 0.82) * 0.09;
-            } else if (agency === 'DISCOVERY') {
-                // (total - 18%) * 10% = (total * 0.82) * 0.10
+
+        // Guía: solo si la agencia está en la lista; fórmula -18% * 10%. Excepción TANITOURS + MARINA = 10% directo
+        const agencyNorm = agency === 'TANI TOURS' ? 'TANITOURS' : agency;
+        if (agencyNorm && AGENCIES_GUIDE.has(agencyNorm)) {
+            if (agencyNorm === 'TANITOURS' && guide === 'MARINA') {
+                guideCommission = totalMXN * 0.10;
+            } else {
                 guideCommission = (totalMXN * 0.82) * 0.10;
             }
-        } else if (guide === 'GLORIA') {
-            // PRIORIDAD 2: Regla especial para guía Gloria (solo si NO hay agencia)
-            // total * 10% directo
-            guideCommission = totalMXN * 0.10;
         }
-        // Si no hay regla de agencia ni Gloria, se calculará con reglas normales más abajo
-        
-        // REGLAS PARA VENDEDOR:
-        // PRIORIDAD 1: Regla especial para vendedor Sebastian
+
+        // Vendedor: SEBASTIAN 10% directo; OMAR/JUAN CARLOS -20%*7%; resto de lista -5%*9%; otro = 0
         if (seller === 'SEBASTIAN') {
-            // total * 10% directo
             sellerCommission = totalMXN * 0.10;
+        } else if (SELLERS_OMAR_JUANCARLOS.has(seller)) {
+            sellerCommission = (totalMXN * 0.80) * 0.07;
+        } else if (SELLERS_RESTO.has(seller)) {
+            sellerCommission = (totalMXN * 0.95) * 0.09;
         }
-        // Si no es Sebastian, se calculará con reglas normales más abajo
-        
+
         return { sellerCommission, guideCommission };
     },
     
