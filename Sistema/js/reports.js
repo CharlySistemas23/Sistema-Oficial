@@ -4667,7 +4667,13 @@ const Reports = {
                         guideComm = sumFromItems.guide;
                     } else {
                         // Usar reglas por nombre: calculateCommissionByRules(totalMXN, agencyName, sellerName, guideName)
-                        const agencyName = sale.agency_id ? (agencies.find(a => a.id === sale.agency_id)?.name || null) : null;
+                        let agencyName = sale.agency_id ? (agencies.find(a => a.id === sale.agency_id)?.name || null) : null;
+                        if (!agencyName && sale.guide_id) {
+                            const guideRecord = guides.find(g => g.id === sale.guide_id);
+                            if (guideRecord?.agency_id) {
+                                agencyName = agencies.find(a => a.id === guideRecord.agency_id)?.name || null;
+                            }
+                        }
                         const sellerName = sale.seller_id ? (sellers.find(s => s.id === sale.seller_id)?.name || null) : null;
                         const guideName = sale.guide_id ? (guides.find(g => g.id === sale.guide_id)?.name || null) : null;
                         const totalMXN = parseFloat(sale.total) || 0;
