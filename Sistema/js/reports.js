@@ -4645,44 +4645,46 @@ const Reports = {
             const sellerCommissions = {};
             const guideCommissions = {};
 
-            // Obtener todos los sale_items para calcular comisiones si no están en la venta
+            // Cargar catálogos antes del bucle para resolver nombres (agency, seller, guide) al calcular comisiones
+            const sellers = await DB.getAll('catalog_sellers') || [];
+            const guides = await DB.getAll('catalog_guides') || [];
+            const agencies = await DB.getAll('catalog_agencies') || [];
+            const branches = await DB.getAll('catalog_branches') || [];
             const allSaleItems = await DB.getAll('sale_items') || [];
 
             for (const sale of sales) {
-                let sellerComm = sale.seller_commission || 0;
-                let guideComm = sale.guide_commission || 0;
+                let sellerComm = sale.seller_commission != null && sale.seller_commission > 0 ? Number(sale.seller_commission) : 0;
+                let guideComm = sale.guide_commission != null && sale.guide_commission > 0 ? Number(sale.guide_commission) : 0;
 
-                // Si las comisiones no están en la venta o son 0, calcularlas desde los items
-                const needsCalculation = (!sale.seller_commission && sale.seller_id) || (!sale.guide_commission && sale.guide_id);
-                
+                const needsCalculation = (sellerComm === 0 && (sale.seller_id || sale.guide_id)) || (guideComm === 0 && (sale.seller_id || sale.guide_id));
+
                 if (needsCalculation) {
                     const saleItems = allSaleItems.filter(si => si.sale_id === sale.id);
-                    
-                    // Calcular comisiones desde los items si no están guardadas
-                    if (!sale.seller_commission && sale.seller_id) {
-                        sellerComm = 0;
-                        for (const item of saleItems) {
-                            if (item.subtotal > 0) {
-                                const itemSellerComm = await Utils.calculateCommission(item.subtotal, sale.seller_id, null);
-                                sellerComm += itemSellerComm;
-                            }
-                        }
-                    }
-                    
-                    if (!sale.guide_commission && sale.guide_id) {
-                        guideComm = 0;
-                        for (const item of saleItems) {
-                            if (item.subtotal > 0) {
-                                const itemGuideComm = await Utils.calculateCommission(item.subtotal, null, sale.guide_id);
-                                guideComm += itemGuideComm;
-                            }
-                        }
+
+                    // Opción A: primero intentar suma desde sale_items si tienen comisiones guardadas
+                    const sumFromItems = saleItems.reduce((acc, si) => {
+                        acc.seller += Number(si.seller_commission) || 0;
+                        acc.guide += Number(si.guide_commission) || 0;
+                        return acc;
+                    }, { seller: 0, guide: 0 });
+
+                    if (sumFromItems.seller > 0 || sumFromItems.guide > 0) {
+                        sellerComm = sumFromItems.seller;
+                        guideComm = sumFromItems.guide;
+                    } else {
+                        // Usar reglas por nombre: calculateCommissionByRules(totalMXN, agencyName, sellerName, guideName)
+                        const agencyName = sale.agency_id ? (agencies.find(a => a.id === sale.agency_id)?.name || null) : null;
+                        const sellerName = sale.seller_id ? (sellers.find(s => s.id === sale.seller_id)?.name || null) : null;
+                        const guideName = sale.guide_id ? (guides.find(g => g.id === sale.guide_id)?.name || null) : null;
+                        const totalMXN = parseFloat(sale.total) || 0;
+                        const { sellerCommission, guideCommission } = this.calculateCommissionByRules(totalMXN, agencyName, sellerName, guideName);
+                        sellerComm = sellerCommission;
+                        guideComm = guideCommission;
                     }
 
-                    // Actualizar la venta con las comisiones calculadas si no las tenía
-                    if ((sellerComm > 0 || guideComm > 0) && (!sale.seller_commission && !sale.guide_commission)) {
-                        sale.seller_commission = sellerComm;
-                        sale.guide_commission = guideComm;
+                    sale.seller_commission = sellerComm;
+                    sale.guide_commission = guideComm;
+                    if (sellerComm > 0 || guideComm > 0) {
                         await DB.put('sales', sale);
                     }
                 }
@@ -4709,11 +4711,7 @@ const Reports = {
 
             commissionsBreakdown.total = commissionsBreakdown.sellers + commissionsBreakdown.guides;
 
-            // Obtener nombres
-            const sellers = await DB.getAll('catalog_sellers');
-            const guides = await DB.getAll('catalog_guides');
-            const branches = await DB.getAll('catalog_branches');
-
+            // Nombres ya cargados antes del bucle; asignar a comisiones por vendedor/guía
             Object.values(sellerCommissions).forEach(comm => {
                 const seller = sellers.find(s => s.id === comm.id);
                 comm.name = seller?.name || 'N/A';
