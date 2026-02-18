@@ -126,11 +126,27 @@ const App = {
         return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
     },
     
+    hideSessionRestoreOverlay() {
+        const overlay = document.getElementById('session-restore-overlay');
+        if (overlay) overlay.style.display = 'none';
+    },
+
     async init() {
         // Evitar doble inicialización (en este proyecto se cargaba 2 veces: auto-init en app.js + init en index.html).
         if (this._initDone) return;
         if (this._initInProgress) return;
         this._initInProgress = true;
+
+        // Si hay token, ocultar diálogos de acceso de inmediato y mostrar "Restaurando sesión..." (antes de cualquier await)
+        const hasToken = typeof localStorage !== 'undefined' && localStorage.getItem('api_token');
+        if (hasToken) {
+            const codeScreen = document.getElementById('company-code-screen');
+            const loginScreen = document.getElementById('login-screen');
+            const overlay = document.getElementById('session-restore-overlay');
+            if (codeScreen) codeScreen.style.display = 'none';
+            if (loginScreen) loginScreen.style.display = 'none';
+            if (overlay) overlay.style.display = 'flex';
+        }
         
         // Protección: Ocultar enlace de bypass en producción
         const isProduction = window.location.hostname.includes('vercel.app') || 
