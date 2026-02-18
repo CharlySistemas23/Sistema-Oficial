@@ -4168,7 +4168,28 @@ const Inventory = {
             // Validar formulario
             if (!form.checkValidity()) {
                 console.warn('⚠️ Formulario inválido, mostrando errores de validación');
-                form.reportValidity();
+                // Si el primer campo inválido está en una pestaña oculta, mostrar esa pestaña para que el usuario lo vea
+                const controls = form.querySelectorAll('input, select, textarea');
+                let invalidEl = null;
+                for (const el of controls) {
+                    if (el.required && !el.validity.valid) {
+                        invalidEl = el;
+                        break;
+                    }
+                }
+                if (invalidEl) {
+                    const tabContent = invalidEl.closest('.tab-content');
+                    if (tabContent && tabContent.id && tabContent.style.display === 'none') {
+                        const tabName = tabContent.id.replace('tab-', '');
+                        this.switchTab(tabName);
+                    }
+                    setTimeout(() => {
+                        invalidEl.focus();
+                        form.reportValidity();
+                    }, 80);
+                } else {
+                    form.reportValidity();
+                }
                 return;
             }
             
