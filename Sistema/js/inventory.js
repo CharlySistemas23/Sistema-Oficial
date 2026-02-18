@@ -2259,6 +2259,31 @@ const Inventory = {
         }).join('');
     },
 
+    /**
+     * Muestra la pieza recién guardada en la UI de inmediato (solo vista grid).
+     * Usado tras saveItem para feedback instantáneo; loadInventory se ejecuta en segundo plano.
+     */
+    async prependNewItemToUI(item) {
+        if (!item || !item.id) return;
+        const container = document.getElementById('inventory-list');
+        if (!container) return;
+        if (this.currentView !== 'grid') return;
+
+        const oneCardHtml = await this.getInventoryGridHTML([item]);
+        if (!oneCardHtml || oneCardHtml.includes('No hay items')) return;
+
+        const hasCards = container.querySelector('.inventory-card');
+        if (!hasCards) {
+            if (!container.classList.contains('inventory-grid')) {
+                container.classList.add('inventory-grid');
+                container.classList.remove('inventory-list-view');
+            }
+            container.innerHTML = oneCardHtml;
+        } else {
+            container.insertAdjacentHTML('afterbegin', oneCardHtml);
+        }
+    },
+
     // Vista de lista (tabla)
     async displayInventoryList(items) {
         const container = document.getElementById('inventory-list');
@@ -4829,8 +4854,9 @@ const Inventory = {
         UI.closeModal();
         await new Promise(resolve => setTimeout(resolve, 150));
         const itemToShow = (mergedItem || item);
-        if (savedWithAPI && itemToShow && itemToShow.id) {
-            await this.loadInventory({ ensureItemInList: itemToShow });
+        if (savedWithAPI && itemToShow?.id) {
+            await this.prependNewItemToUI(itemToShow);
+            this.loadInventory({ ensureItemInList: itemToShow });
         } else {
             await this.loadInventory();
         }
