@@ -675,28 +675,12 @@ const UserManager = {
     },
 
     async checkAuth() {
-        // IMPORTANTE: Verificar primero si el código de empresa ya fue validado
-        // Si no está validado, NO mostrar login-screen (App.initCompanyCodeAccess se encarga de eso)
         const companyCodeScreen = document.getElementById('company-code-screen');
         const companyCodeValidated = localStorage.getItem('company_code_validated');
-        
-        // Si la pantalla de código de empresa está visible, no hacer nada aquí
-        if (companyCodeScreen && companyCodeScreen.style.display === 'flex') {
-            console.log('checkAuth: Código de empresa pendiente, esperando validación...');
-            return;
-        }
-        
-        // Si no hay código validado y no estamos en producción con bypass, esperar
-        if (!companyCodeValidated) {
-            // Verificar si existe App.COMPANY_ACCESS_CODE (sistema de código habilitado)
-            if (typeof App !== 'undefined' && App.COMPANY_ACCESS_CODE) {
-                console.log('checkAuth: Código de empresa no validado aún, delegando a initCompanyCodeAccess');
-                return;
-            }
-        }
-        
-        // PRIORITARIO: Si hay token del servidor, verificar con el servidor primero
         const apiToken = localStorage.getItem('api_token');
+
+        // PRIORITARIO: Si hay sesión activa (token), verificar y restaurar antes de mostrar código/login.
+        // Así al recargar la página se muestra el contenido directamente sin pedir código ni usuario.
         if (apiToken && typeof API !== 'undefined') {
             // Asegurar que API.baseURL esté cargado
             if (!API.baseURL && typeof DB !== 'undefined') {
@@ -911,6 +895,18 @@ const UserManager = {
                         API.token = null;
                     }
                 }
+            }
+        }
+
+        // Si no se restauró sesión por token: respetar pantalla de código o login
+        if (companyCodeScreen && companyCodeScreen.style.display === 'flex') {
+            console.log('checkAuth: Código de empresa pendiente, esperando validación...');
+            return;
+        }
+        if (!companyCodeValidated) {
+            if (typeof App !== 'undefined' && App.COMPANY_ACCESS_CODE) {
+                console.log('checkAuth: Código de empresa no validado aún, delegando a initCompanyCodeAccess');
+                return;
             }
         }
         
