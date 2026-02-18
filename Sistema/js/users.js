@@ -856,7 +856,10 @@ const UserManager = {
                             }
                         }
                         
-                        // Ocultar AMBAS pantallas de autenticación
+                        // Ocultar overlay "Restaurando sesión..." y ambas pantallas de autenticación
+                        if (typeof App !== 'undefined' && App.hideSessionRestoreOverlay) {
+                            App.hideSessionRestoreOverlay();
+                        }
                         const loginScreen = document.getElementById('login-screen');
                         if (loginScreen) {
                             loginScreen.style.display = 'none';
@@ -889,10 +892,12 @@ const UserManager = {
                     }
                 } catch (error) {
                     console.warn('Error verificando token con servidor, intentando modo local:', error);
-                    // Si falla la verificación con el servidor, limpiar token y continuar con modo local
                     localStorage.removeItem('api_token');
                     if (typeof API !== 'undefined') {
                         API.token = null;
+                    }
+                    if (typeof App !== 'undefined' && App.hideSessionRestoreOverlay) {
+                        App.hideSessionRestoreOverlay();
                     }
                 }
             }
@@ -900,11 +905,17 @@ const UserManager = {
 
         // Si no se restauró sesión por token: respetar pantalla de código o login
         if (companyCodeScreen && companyCodeScreen.style.display === 'flex') {
+            if (typeof App !== 'undefined' && App.hideSessionRestoreOverlay) {
+                App.hideSessionRestoreOverlay();
+            }
             console.log('checkAuth: Código de empresa pendiente, esperando validación...');
             return;
         }
         if (!companyCodeValidated) {
             if (typeof App !== 'undefined' && App.COMPANY_ACCESS_CODE) {
+                if (typeof App !== 'undefined' && App.hideSessionRestoreOverlay) {
+                    App.hideSessionRestoreOverlay();
+                }
                 console.log('checkAuth: Código de empresa no validado aún, delegando a initCompanyCodeAccess');
                 return;
             }
@@ -969,6 +980,9 @@ const UserManager = {
                                         UI.updateAdminNavigation(isAdmin);
                                     }
                                     
+                                    if (typeof App !== 'undefined' && App.hideSessionRestoreOverlay) {
+                                        App.hideSessionRestoreOverlay();
+                                    }
                                     // Ocultar pantallas de autenticación
                                     const loginScreen = document.getElementById('login-screen');
                                     if (loginScreen) {
@@ -1058,6 +1072,9 @@ const UserManager = {
                                 UI.updateAdminNavigation(isAdmin);
                             }
                             
+                            if (typeof App !== 'undefined' && App.hideSessionRestoreOverlay) {
+                                App.hideSessionRestoreOverlay();
+                            }
                             const loginScreen = document.getElementById('login-screen');
                             if (loginScreen) {
                                 loginScreen.style.display = 'none';
@@ -1093,6 +1110,9 @@ const UserManager = {
             console.error('Error in checkAuth:', e);
         }
         
+        if (typeof App !== 'undefined' && App.hideSessionRestoreOverlay) {
+            App.hideSessionRestoreOverlay();
+        }
         // Solo mostrar login si el código de empresa ya fue validado
         if (companyCodeValidated) {
             const loginScreen = document.getElementById('login-screen');
