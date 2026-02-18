@@ -256,6 +256,18 @@
                 <button type="button" id="create-demo-users-btn" style="display: none;"></button>
             </div>
 
+            <!-- Overlay "Restaurando sesión..." (se muestra solo si hay api_token al recargar) -->
+            <div id="session-restore-overlay" class="login-screen" style="display: none; position: fixed; inset: 0; z-index: 10000; background: var(--color-bg-primary, #1a1a1a); align-items: center; justify-content: center;">
+                <div class="login-card" style="text-align: center; padding: 2rem;">
+                    <div class="login-logo" style="margin-bottom: 1rem;">
+                        <img src="assets/logo.png" alt="Opal & Co" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                        <span class="login-logo-text" style="display:none;">OPAL & CO</span>
+                    </div>
+                    <p style="margin: 0 0 1rem; font-size: 1rem; color: var(--color-text-secondary, #888);">Restaurando sesión...</p>
+                    <div style="width: 32px; height: 32px; margin: 0 auto; border: 3px solid var(--color-border, #333); border-top-color: var(--color-primary, #4a90d9); border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
+                </div>
+            </div>
+
             <!-- Dashboard Module -->
             <div id="module-dashboard" class="module" style="display: none;">
                 <div class="module-header">
