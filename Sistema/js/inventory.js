@@ -836,8 +836,9 @@ const Inventory = {
         console.log('✅ [setupEventListeners] Configuración completada');
     },
 
-    async loadInventory() {
+    async loadInventory(options) {
         this._lastLoadEmptyFromServer = false;
+        const ensureItemInList = options && options.ensureItemInList;
         // Verificar permiso
         if (typeof PermissionManager !== 'undefined' && !PermissionManager.hasPermission('inventory.view')) {
             const container = document.getElementById('inventory-list');
@@ -1361,6 +1362,20 @@ const Inventory = {
             }
             
             console.log(`✅ Items verificados: ${verifiedItems.length} válidos, ${ghostItems.length} fantasma`);
+
+            // Incluir pieza recién creada/actualizada si se pasó ensureItemInList (mismo cliente tras guardar)
+            if (ensureItemInList && ensureItemInList.id) {
+                const alreadyInList = verifiedItems.some(i => i.id === ensureItemInList.id);
+                if (!alreadyInList) {
+                    const matchesBranch = !filterBranchId ||
+                        (ensureItemInList.branch_id && String(ensureItemInList.branch_id) === String(filterBranchId)) ||
+                        (viewAllBranches && isMasterAdmin);
+                    if (matchesBranch) {
+                        verifiedItems.push(ensureItemInList);
+                        console.log(`📦 Item recién guardado incluido en lista: ${ensureItemInList.id}`);
+                    }
+                }
+            }
             
             // Si se detectaron items fantasma, mostrar advertencia
             if (ghostItems.length > 0) {
@@ -4792,7 +4807,12 @@ const Inventory = {
         Utils.showNotification(itemId ? 'Pieza actualizada' : 'Pieza agregada', 'success');
         UI.closeModal();
         await new Promise(resolve => setTimeout(resolve, 150));
-        await this.loadInventory();
+        const itemToShow = (mergedItem || item);
+        if (savedWithAPI && itemToShow && itemToShow.id) {
+            await this.loadInventory({ ensureItemInList: itemToShow });
+        } else {
+            await this.loadInventory();
+        }
     } catch (error) {
         console.error('❌ Error guardando pieza:', error);
         Utils.showNotification(`Error al guardar pieza: ${error.message || 'Error desconocido'}`, 'error');
