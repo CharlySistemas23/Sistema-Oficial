@@ -156,9 +156,6 @@ const App = {
             }, 100);
         }
         
-        // Inicializar sistema de código de acceso de empresa
-        await this.initCompanyCodeAccess();
-        
         try {
             // Initialize database
             await DB.init();
@@ -195,13 +192,16 @@ const App = {
                 console.log('Sync manager (Server) initialized');
             }
 
-            // Initialize User Manager
+            // Initialize User Manager (checkAuth restaura sesión si hay token; debe ir antes de código de empresa)
             if (typeof UserManager !== 'undefined' && UserManager.init) {
                 await UserManager.init();
                 console.log('User manager initialized');
             } else {
                 console.error('⚠️ UserManager no está disponible. Verifica que js/users.js se haya cargado correctamente.');
             }
+
+            // Inicializar sistema de código de acceso de empresa (tras UserManager para que, si hay sesión, oculte ambas pantallas)
+            await this.initCompanyCodeAccess();
             
             // Actualizar estado del topbar después de inicializar todo
             setTimeout(async () => {
