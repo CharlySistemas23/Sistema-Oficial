@@ -739,16 +739,13 @@ const Inventory = {
                     const { branchId, action, item } = e.detail;
                     if (this.initialized) {
                         console.log(`📦 Inventory: Actualizando por cambio en sucursal ${branchId} (${action})`);
-                        // Recargar inventario después de un pequeño delay
+                        // Recargar inventario con delay mínimo para tiempo real
                         setTimeout(async () => {
                             await this.loadInventory();
-                            // Resaltar el item actualizado si existe
                             if (item && item.id) {
-                                setTimeout(() => {
-                                    this.highlightItem(item.id);
-                                }, 300);
+                                setTimeout(() => this.highlightItem(item.id), 300);
                             }
-                        }, 300);
+                        }, 100);
                     }
                 });
             }
@@ -815,10 +812,11 @@ const Inventory = {
                                 pendingUpdates.delete(item.id);
                             }, 500);
                             
-                            // Debounce: Recargar inventario después de un delay (evitar múltiples recargas)
+                            // Debounce corto para tiempo real: recargar pronto sin saturar (400ms)
                             if (inventoryUpdateTimeout) {
                                 clearTimeout(inventoryUpdateTimeout);
                             }
+                            const debounceMs = (action === 'created') ? 150 : 400;
                             inventoryUpdateTimeout = setTimeout(async () => {
                                 await this.loadInventory();
                                 if (item && item.id && action !== 'deleted') {
@@ -826,7 +824,7 @@ const Inventory = {
                                         this.highlightItem(item.id);
                                     }, 300);
                                 }
-                            }, 2000); // Aumentado a 2 segundos para evitar loops y sobrecarga
+                            }, debounceMs);
                         } catch (error) {
                             console.error('Error actualizando IndexedDB desde servidor:', error);
                             pendingUpdates.delete(item.id); // Remover en caso de error
