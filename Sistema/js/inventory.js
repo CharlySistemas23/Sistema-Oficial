@@ -1104,9 +1104,40 @@ const Inventory = {
             syncPromise.catch(err => console.error('Error en sincronización en background:', err));
 
             // PASO 2: Descargar items del servidor
+            // CAMINO RÁPIDO: Si ensureItemInList (pieza recién creada), usar IndexedDB primero para mostrar al instante
+            // y luego sincronizar con API en segundo plano.
             let allItemsRaw = [];
-            
-            if (typeof API !== 'undefined' && API.baseURL && API.token && API.getInventoryItems) {
+            let useFastPath = !!(ensureItemInList && ensureItemInList.id);
+
+            if (useFastPath) {
+                console.log('⚡ [Camino rápido] Mostrando inventario desde IndexedDB + pieza nueva, API en background');
+                try {
+                    const fromIdb = await DB.getAll('inventory_items', null, null, { filterByBranch: false }) || [];
+                    if (filterBranchId) {
+                        allItemsRaw = fromIdb.filter(item => item.branch_id && String(item.branch_id) === String(filterBranchId));
+                    } else if (viewAllBranches && isMasterAdmin) {
+                        allItemsRaw = fromIdb;
+                    } else if (currentBranchId) {
+                        allItemsRaw = fromIdb.filter(item => item.branch_id && String(item.branch_id) === String(currentBranchId));
+                    } else {
+                        allItemsRaw = fromIdb;
+                    }
+                    const alreadyInRaw = allItemsRaw.some(i => i.id === ensureItemInList.id);
+                    if (!alreadyInRaw) {
+                        allItemsRaw = [ensureItemInList, ...allItemsRaw];
+                    }
+                    console.log(`⚡ [Camino rápido] ${allItemsRaw.length} items listos para mostrar`);
+                    // Ejecutar sync completo en segundo plano; al terminar refresca sin ensureItemInList
+                    Promise.resolve()
+                        .then(() => this.loadInventory())
+                        .catch(e => console.warn('Error en sync background tras camino rápido:', e));
+                } catch (fastErr) {
+                    console.warn('Error en camino rápido, usando carga normal:', fastErr);
+                    useFastPath = false;
+                }
+            }
+
+            if (!useFastPath && typeof API !== 'undefined' && API.baseURL && API.token && API.getInventoryItems) {
                 try {
                     console.log('📦 Cargando inventario desde API...');
                     const categoryChip = document.querySelector('.inventory-category-bar .inventory-category-chip.active')?.dataset.category;
@@ -1282,7 +1313,10 @@ const Inventory = {
             for (const item of allItemsRaw) {
                 try {
                     let isValid = false;
-                    
+                    // Pieza recién creada (ensureItemInList) siempre válida en camino rápido
+                    if (ensureItemInList && item.id === ensureItemInList.id) {
+                        isValid = true;
+                    } else
                     // Si tenemos lista del servidor, verificar contra ella
                     if (serverItems.size > 0) {
                         isValid = serverItems.has(item.id);
@@ -4855,6 +4889,10 @@ const Inventory = {
         await new Promise(resolve => setTimeout(resolve, 150));
         const itemToShow = (mergedItem || item);
         if (savedWithAPI && itemToShow?.id) {
+            try {
+                const toStore = { ...itemToShow, server_id: itemToShow.id, sync_status: 'synced' };
+                await DB.put('inventory_items', toStore, { autoBranchId: false });
+            } catch (e) { console.warn('Error guardando item en IndexedDB:', e); }
             await this.prependNewItemToUI(itemToShow);
             this.loadInventory({ ensureItemInList: itemToShow });
         } else {
