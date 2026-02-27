@@ -896,13 +896,16 @@ const Dashboard = {
                     profit = profitData.netProfit;
                     profitMargin = profitData.profitMargin;
                 } else {
-                    // Fallback al cálculo manual
                     profit = monthTotal - totalCosts;
                     profitMargin = monthTotal > 0 ? (profit / monthTotal * 100) : 0;
                 }
             } catch (error) {
                 console.error('Error calculando utilidad:', error);
-                // Fallback al cálculo manual
+                profit = monthTotal - totalCosts;
+                profitMargin = monthTotal > 0 ? (profit / monthTotal * 100) : 0;
+            }
+            // Si ProfitCalculator devolvió 0 pero hay ingresos y costos, usar fórmula simple para no mostrar 0 erróneo
+            if (profit === 0 && profitMargin === 0 && monthTotal > 0) {
                 profit = monthTotal - totalCosts;
                 profitMargin = monthTotal > 0 ? (profit / monthTotal * 100) : 0;
             }
@@ -1548,8 +1551,37 @@ const Dashboard = {
                 </div>
             </div>
         `;
+        // Delegar clics en botones de alerta (Ver Inventario / Ver Alertas)
+        const alertsContent = document.getElementById('dashboard-alerts-content');
+        if (alertsContent) {
+            alertsContent.addEventListener('click', (e) => {
+                const btn = e.target.closest('[data-alert-filter]');
+                if (!btn) return;
+                const filter = btn.getAttribute('data-alert-filter') || '';
+                this.openInventoryWithFilter(filter);
+            });
+        }
     },
-    
+
+    /**
+     * Abre el módulo Inventario y aplica el filtro de stock (out = agotados, low = bajo).
+     * Usado por los botones de las alertas del dashboard.
+     */
+    openInventoryWithFilter(filter) {
+        if (typeof UI !== 'undefined') UI.closeModal();
+        window.location.hash = '#inventory';
+        document.querySelector('[data-module="inventory"]')?.click();
+        setTimeout(() => {
+            const filterEl = document.getElementById('inventory-stock-alert-filter');
+            if (filterEl && filter) {
+                filterEl.value = filter;
+                if (window.Inventory && typeof window.Inventory.loadInventory === 'function') {
+                    window.Inventory.loadInventory();
+                }
+            }
+        }, 600);
+    },
+
     async refresh() {
         this.initialized = false;
         await this.loadDashboard(this.viewAllBranches);
@@ -1794,7 +1826,7 @@ const Dashboard = {
         
         // Alertas de Stock
         if (data.stockStats) {
-            // Productos agotados
+            // Productos agotados (botón usa openInventoryWithFilter para que el click funcione)
             if (data.stockStats.outOfStock > 0) {
                 alerts.push({
                     type: 'danger',
@@ -1802,11 +1834,7 @@ const Dashboard = {
                     title: 'Productos Agotados',
                     message: `${data.stockStats.outOfStock} producto(s) sin stock. Revisa el inventario urgentemente.`,
                     action: 'Ver Inventario',
-                    onclick: () => {
-                        UI.closeModal();
-                        window.location.hash = '#inventory';
-                        document.querySelector('[data-module="inventory"]')?.click();
-                    }
+                    actionFilter: 'out'
                 });
             }
             
@@ -1818,15 +1846,7 @@ const Dashboard = {
                     title: 'Stock Bajo',
                     message: `${data.stockStats.lowStock} producto(s) con stock por debajo del mínimo. Considera reabastecer.`,
                     action: 'Ver Alertas',
-                    onclick: () => {
-                        UI.closeModal();
-                        window.location.hash = '#inventory';
-                        document.querySelector('[data-module="inventory"]')?.click();
-                        setTimeout(() => {
-                            document.getElementById('inventory-stock-alert-filter').value = 'low';
-                            window.Inventory?.loadInventory();
-                        }, 500);
-                    }
+                    actionFilter: 'low'
                 });
             }
             
@@ -1873,7 +1893,7 @@ const Dashboard = {
                         <div style="font-weight: 600; font-size: 12px; margin-bottom: 4px;">${alert.title}</div>
                         <div style="font-size: 11px; color: var(--color-text-secondary);">${alert.message}</div>
                         ${alert.action ? `
-                            <button class="btn-secondary btn-sm" onclick="${alert.onclick ? alert.onclick.toString() : '() => {}'}" style="margin-top: 8px; font-size: 10px; padding: 4px 8px;">
+                            <button class="btn-secondary btn-sm" data-alert-filter="${alert.actionFilter || ''}" type="button" style="margin-top: 8px; font-size: 10px; padding: 4px 8px;">
                                 ${alert.action}
                             </button>
                         ` : ''}
@@ -1885,6 +1905,3 @@ const Dashboard = {
 };
 
 window.Dashboard = Dashboard;
-
-window.Dashboard = Dashboard;
-
