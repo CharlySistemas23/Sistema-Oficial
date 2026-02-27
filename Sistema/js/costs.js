@@ -36,17 +36,18 @@ const Costs = {
             // No filtrar por sucursal
         }
 
+        const toYYYYMMDD = (val) => {
+            if (!val) return '';
+            if (typeof val === 'string') return val.split('T')[0];
+            return new Date(val).toISOString().split('T')[0];
+        };
         if (dateFrom) {
-            costs = costs.filter(c => {
-                const costDate = c.date || c.created_at;
-                return costDate >= dateFrom;
-            });
+            const fromStr = toYYYYMMDD(dateFrom);
+            costs = costs.filter(c => toYYYYMMDD(c.date || c.created_at) >= fromStr);
         }
         if (dateTo) {
-            costs = costs.filter(c => {
-                const costDate = c.date || c.created_at;
-                return costDate <= dateTo + 'T23:59:59';
-            });
+            const toStr = toYYYYMMDD(dateTo);
+            costs = costs.filter(c => toYYYYMMDD(c.date || c.created_at) <= toStr);
         }
         if (type) {
             costs = costs.filter(c => c.type === type);
