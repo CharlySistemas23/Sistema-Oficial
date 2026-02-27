@@ -527,8 +527,13 @@ const Dashboard = {
                     (viewAllBranches || p.branch_id === branchId || !p.branch_id)
                 );
                 
-                if (todayProfit && !viewAllBranches) {
-                    // Usar reporte existente si está disponible
+                const revenue = (todayProfit?.revenue_sales_total ?? todayProfit?.revenue) || 0;
+                const operatingCosts = (todayProfit?.fixed_costs_daily || 0) + (todayProfit?.variable_costs_daily || 0);
+                const isReportAnomalous = (revenue === 0 && operatingCosts > 0) ||
+                    (revenue > 0 && operatingCosts > revenue * 3);
+                
+                if (todayProfit && !viewAllBranches && !isReportAnomalous) {
+                    // Usar reporte existente si está disponible y no es sospechoso
                     dailyProfit = {
                         revenue: todayProfit.revenue_sales_total || todayProfit.revenue || 0,
                         merchandise_cost: todayProfit.cogs_total || 0,
@@ -540,7 +545,8 @@ const Dashboard = {
                         net_profit: todayProfit.profit_before_taxes || todayProfit.net_profit || 0,
                         total_passengers: todayProfit.passengers_total || 0
                     };
-                } else if (typeof ProfitCalculator !== 'undefined' && ProfitCalculator.calculateDailyProfit && branchId) {
+                }
+                if (!dailyProfit && typeof ProfitCalculator !== 'undefined' && ProfitCalculator.calculateDailyProfit && branchId) {
                     // Calcular usando ProfitCalculator si no hay reporte
                     try {
                         const profitData = await ProfitCalculator.calculateDailyProfit(todayStr, branchId);
