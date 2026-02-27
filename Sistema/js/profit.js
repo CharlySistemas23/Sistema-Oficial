@@ -172,6 +172,7 @@ const ProfitCalculator = {
             if (!branch) {
                 throw new Error(`Sucursal ${branchId} no encontrada`);
             }
+            const branchIdStr = String(branchId || '').trim();
 
             // 1. REVENUE: Suma de ventas completadas del día (filtradas por sucursal)
             // NOTA: Usamos filterByBranch: false porque necesitamos todas las ventas para filtrar por fecha
@@ -184,7 +185,7 @@ const ProfitCalculator = {
                 if (!s.created_at) return false;
                 const saleDate = s.created_at.split('T')[0];
                 return saleDate === dateYYYYMMDD && 
-                       s.branch_id === branchId && 
+                       String(s.branch_id || '').trim() === branchIdStr && 
                        (typeof Utils !== 'undefined' && Utils.isSaleCompleted ? Utils.isSaleCompleted(s) : (s.status === 'completada' || s.status === 'completed'));
             });
             
@@ -251,7 +252,7 @@ const ProfitCalculator = {
                 filterByBranch: false, // Caso especial: necesitamos todas las llegadas para filtrar por fecha
                 branchIdField: 'branch_id' 
             }) || [];
-            const dayArrivals = arrivals.filter(a => a.branch_id === branchId);
+            const dayArrivals = arrivals.filter(a => String(a.branch_id || '').trim() === branchIdStr);
             
             // Validar que todas las llegadas tengan branch_id
             const arrivalsWithoutBranch = arrivals.filter(a => !a.branch_id && a.date === dateYYYYMMDD);
@@ -298,9 +299,10 @@ const ProfitCalculator = {
                 const arrivalCostEntries = allCosts.filter(c => {
                     const costDate = c.date || c.created_at;
                     const costDateStr = typeof costDate === 'string' ? costDate.split('T')[0] : new Date(costDate).toISOString().split('T')[0];
+                    const costBranch = String(c.branch_id || '').trim();
                     return c.category === 'pago_llegadas' && 
                            costDateStr === dateYYYYMMDD &&
-                           (c.branch_id === branchId || !c.branch_id);
+                           (costBranch === branchIdStr || !costBranch);
                 });
                 
                 if (arrivalCostEntries.length > 0) {
@@ -348,7 +350,7 @@ const ProfitCalculator = {
             const monthlyCosts = allCosts.filter(c => {
                 const costDate = new Date(c.date || c.created_at);
                 const targetDate = new Date(dateYYYYMMDD);
-                return c.branch_id === branchId && 
+                return String(c.branch_id || '').trim() === branchIdStr && 
                        c.period_type === 'monthly' && 
                        c.recurring === true &&
                        costDate.getMonth() === targetDate.getMonth() &&
@@ -365,7 +367,7 @@ const ProfitCalculator = {
             const weeklyCosts = allCosts.filter(c => {
                 const costDate = new Date(c.date || c.created_at);
                 const targetDate = new Date(dateYYYYMMDD);
-                return c.branch_id === branchId && 
+                return String(c.branch_id || '').trim() === branchIdStr && 
                        c.period_type === 'weekly' && 
                        c.recurring === true &&
                        this.isSameWeek(costDate, targetDate);
@@ -379,7 +381,7 @@ const ProfitCalculator = {
             const annualCosts = allCosts.filter(c => {
                 const costDate = new Date(c.date || c.created_at);
                 const targetDate = new Date(dateYYYYMMDD);
-                return c.branch_id === branchId && 
+                return String(c.branch_id || '').trim() === branchIdStr && 
                        c.period_type === 'annual' && 
                        c.recurring === true &&
                        costDate.getFullYear() === targetDate.getFullYear();
@@ -390,13 +392,14 @@ const ProfitCalculator = {
                 fixedCostsDaily += (cost.amount || 0) / daysInYear;
             }
 
-            // Costos variables/diarios del día específico
+            // Costos variables/diarios del día específico (excluir recurrentes: ya se prorratean en fixedCostsDaily)
             const variableCostsDaily = allCosts
                 .filter(c => {
                     const costDate = c.date || c.created_at;
-                    const costDateStr = costDate.split('T')[0];
+                    const costDateStr = typeof costDate === 'string' ? costDate.split('T')[0] : new Date(costDate).toISOString().split('T')[0];
                     return costDateStr === dateYYYYMMDD && 
-                           c.branch_id === branchId &&
+                           String(c.branch_id || '').trim() === branchIdStr &&
+                           !c.recurring &&
                            (c.period_type === 'one_time' || c.period_type === 'daily' || !c.period_type);
                 })
                 .reduce((sum, c) => sum + (c.amount || 0), 0);
