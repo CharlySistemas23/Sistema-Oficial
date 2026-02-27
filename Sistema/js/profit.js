@@ -205,11 +205,10 @@ const ProfitCalculator = {
                 const items = saleItems.filter(si => si.sale_id === sale.id);
                 for (const item of items) {
                     const invItem = inventoryItems.find(i => i.id === item.item_id);
-                    if (invItem && invItem.cost) {
-                        cogsTotal += (invItem.cost || 0) * (item.quantity || 1);
-                    } else {
-                        console.warn(`Costo faltante para item ${item.item_id} en venta ${sale.id}`);
-                    }
+                    const unitCost = (item.cost != null && item.cost !== '')
+                        ? Number(item.cost)
+                        : (invItem?.cost ?? 0);
+                    cogsTotal += unitCost * (item.quantity || 1);
                 }
             }
 
