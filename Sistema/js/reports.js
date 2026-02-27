@@ -1934,15 +1934,15 @@ const Reports = {
             });
         }
 
-        // Calcular COGS desde los items de venta (más preciso que desde cost_entries)
+        // Calcular COGS desde los items de venta (preferir cost en sale_item, fallback a inventario)
         let totalCOGS = 0;
         for (const sale of sales) {
-            const items = saleItems.filter(si => si.sale_id === sale.id);
-            for (const item of items) {
-                const invItem = items.find(i => i.id === item.item_id);
-                if (invItem && invItem.cost) {
-                    totalCOGS += (invItem.cost || 0) * (item.quantity || 1);
-                }
+            const saleItemsForSale = saleItems.filter(si => si.sale_id === sale.id);
+            for (const item of saleItemsForSale) {
+                const unitCost = (item.cost != null && item.cost !== '')
+                    ? Number(item.cost)
+                    : (items.find(i => i.id === item.item_id)?.cost ?? 0);
+                totalCOGS += unitCost * (item.quantity || 1);
             }
         }
 
@@ -2503,7 +2503,7 @@ const Reports = {
             dailyStats[date].passengers += sale.passengers || 1;
         }
         
-        // Calcular COGS y comisiones por día
+        // Calcular COGS y comisiones por día (preferir cost en sale_item, fallback a inventario)
         for (const sale of sales) {
             const date = sale.created_at.split('T')[0];
             const items = saleItems.filter(si => si.sale_id === sale.id);
@@ -2511,9 +2511,10 @@ const Reports = {
             // COGS
             for (const item of items) {
                 const invItem = inventoryItems.find(i => i.id === item.item_id);
-                if (invItem && invItem.cost) {
-                    dailyStats[date].cogs += (invItem.cost || 0) * (item.quantity || 1);
-                }
+                const unitCost = (item.cost != null && item.cost !== '')
+                    ? Number(item.cost)
+                    : (invItem?.cost ?? 0);
+                dailyStats[date].cogs += unitCost * (item.quantity || 1);
             }
             
             // Comisiones
