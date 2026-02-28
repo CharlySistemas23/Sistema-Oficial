@@ -7864,6 +7864,10 @@ button.btn-xs {
     border: 1px solid #86efac;
 }
 
+.inventory-alerts-bar .alert-item.active {
+    box-shadow: 0 0 0 2px var(--color-primary);
+}
+
 .inventory-alerts-bar .alert-ok {
     background: var(--color-bg-secondary);
     color: var(--color-text-tertiary);
