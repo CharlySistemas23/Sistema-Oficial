@@ -400,6 +400,15 @@ const UI = {
     },
 
     showModal(title, body, footer = '', options = {}) {
+        // Soportar formato objeto: { title, content, buttons } (costs.js, suppliers-integration.js)
+        if (title && typeof title === 'object' && !(title instanceof Node)) {
+            const opts = title;
+            title = opts.title || '';
+            body = opts.content ?? opts.body ?? '';
+            footer = opts.buttons ?? opts.footer ?? '';
+            if (opts.size) options = { ...options, size: opts.size };
+            if (opts.large) options = { ...options, large: opts.large };
+        }
         const overlay = document.getElementById('modal-overlay');
         const modalContainer = document.getElementById('modal-container');
         const modalTitle = document.getElementById('modal-title');
