@@ -3018,7 +3018,13 @@ const Costs = {
                 totalEl.textContent = prefix + (typeof Utils !== 'undefined' && Utils.formatCurrency ? Utils.formatCurrency(newTotal) : newTotal.toFixed(2));
             }
             const remaining = module.querySelectorAll('tbody tr, .cost-item');
-            if (remaining.length === 0) module.remove();
+            if (remaining.length === 0) {
+                module.remove();
+                const container = document.getElementById('costs-list');
+                if (container && container.querySelectorAll('.module').length === 0) {
+                    container.innerHTML = '<div class="empty-state">No hay costos registrados</div>';
+                }
+            }
         }
     },
 
