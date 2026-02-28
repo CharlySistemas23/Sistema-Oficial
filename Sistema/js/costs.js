@@ -3003,7 +3003,8 @@ const Costs = {
     },
 
     removeCostFromDOM(costId, amount) {
-        const el = document.querySelector(`[data-cost-id="${costId}"]`);
+        const safeId = (typeof CSS !== 'undefined' && CSS.escape) ? CSS.escape(String(costId)) : String(costId).replace(/"/g, '\\"');
+        const el = document.querySelector(`[data-cost-id="${safeId}"]`);
         if (!el) return;
         const amt = parseFloat(amount) || 0;
         const module = el.closest('.module');
@@ -3714,32 +3715,35 @@ const Costs = {
         // Eventos de costos de todas las sucursales (master_admin)
         if (typeof UserManager !== 'undefined' && UserManager.currentUser?.is_master_admin) {
             window.addEventListener('cost-updated-all-branches', async (e) => {
-                const { branchId, action, cost } = e.detail;
-                if (this.initialized) {
-                    console.log(`💵 Costs: Costo actualizado en sucursal ${branchId} (${action})`);
-                    // Recargar costos después de un pequeño delay
-                    setTimeout(async () => {
-                        const activeTab = document.querySelector('#costs-tabs .tab-btn.active')?.dataset.tab || 'costs';
-                        await this.loadTab(activeTab);
-                    }, 300);
+                const { branchId, action, cost } = e.detail || {};
+                if (!this.initialized) return;
+                const activeTab = document.querySelector('#costs-tabs .tab-btn.active')?.dataset.tab || 'costs';
+                if (activeTab !== 'costs') return;
+                console.log(`💵 Costs: Costo actualizado en sucursal ${branchId} (${action})`);
+                // Para deletes: actualizar DOM sin recargar pestaña (evita área vacía/parpadeo)
+                if (action === 'deleted' && cost?.id) {
+                    this.removeCostFromDOM(cost.id, cost.amount || 0);
+                    return;
                 }
+                setTimeout(async () => await this.loadTab(activeTab), 300);
             });
         }
         
         // Eventos de costos locales (para usuarios normales o master_admin viendo su sucursal)
         window.addEventListener('cost-updated', async (e) => {
-            if (this.initialized) {
-                const { cost } = e.detail || {};
-                const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
-                // Solo actualizar si el costo es de la sucursal actual
-                if (cost && (!currentBranchId || cost.branch_id === currentBranchId)) {
-                    console.log(`💵 Costs: Costo actualizado localmente`);
-                    setTimeout(async () => {
-                        const activeTab = document.querySelector('#costs-tabs .tab-btn.active')?.dataset.tab || 'costs';
-                        await this.loadTab(activeTab);
-                    }, 300);
-                }
+            if (!this.initialized) return;
+            const { action, cost } = e.detail || {};
+            const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
+            if (!cost || (currentBranchId && cost.branch_id !== currentBranchId)) return;
+            const activeTab = document.querySelector('#costs-tabs .tab-btn.active')?.dataset.tab || 'costs';
+            if (activeTab !== 'costs') return;
+            console.log(`💵 Costs: Costo actualizado localmente (${action})`);
+            // Para deletes: actualizar DOM sin recargar pestaña (evita área vacía/parpadeo)
+            if (action === 'deleted' && cost.id) {
+                this.removeCostFromDOM(cost.id, cost.amount || 0);
+                return;
             }
+            setTimeout(async () => await this.loadTab(activeTab), 300);
         });
     },
 
