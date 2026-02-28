@@ -531,7 +531,15 @@ const Dashboard = {
                 const operatingCosts = (todayProfit?.fixed_costs_daily || 0) + (todayProfit?.variable_costs_daily || 0);
                 const isReportAnomalous = (revenue === 0 && operatingCosts > 0) ||
                     (revenue > 0 && operatingCosts > revenue * 3);
-                
+
+                if (isReportAnomalous && todayProfit?.id) {
+                    try {
+                        await DB.delete('daily_profit_reports', todayProfit.id);
+                    } catch (e) {
+                        console.warn('Error eliminando reporte anómalo:', e);
+                    }
+                }
+
                 if (todayProfit && !viewAllBranches && !isReportAnomalous) {
                     // Usar reporte existente si está disponible y no es sospechoso
                     dailyProfit = {
