@@ -7019,6 +7019,26 @@ const Settings = {
                 clearFolderBtn.addEventListener('click', () => this.clearBackupFolder());
             }
 
+            const migrationBtn = document.getElementById('migration-backfill-sale-items-btn');
+            if (migrationBtn) {
+                migrationBtn.addEventListener('click', async () => {
+                    if (!confirm('¿Ejecutar migración para rellenar costos y comisiones en ventas antiguas?')) return;
+                    try {
+                        migrationBtn.disabled = true;
+                        if (typeof SystemAuditor !== 'undefined' && SystemAuditor.backfillSaleItemsCostAndCommission) {
+                            await SystemAuditor.backfillSaleItemsCostAndCommission();
+                        } else {
+                            Utils.showNotification('SystemAuditor no está disponible', 'error');
+                        }
+                    } catch (e) {
+                        console.error(e);
+                        Utils.showNotification('Error en migración: ' + (e.message || e), 'error');
+                    } finally {
+                        migrationBtn.disabled = false;
+                    }
+                });
+            }
+
             // Cargar información del directorio de backups
             this.loadBackupDirectoryInfo();
 
@@ -7284,6 +7304,19 @@ const Settings = {
                     <div id="backup-storage-info" style="margin-top: var(--spacing-md); padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm); font-size: 10px; color: var(--color-text-secondary);">
                         <i class="fas fa-hdd"></i> <span id="backup-storage-text">Cargando información...</span>
                     </div>
+                </div>
+
+                <!-- Migración de datos históricos -->
+                <div class="module" style="margin-top: var(--spacing-md); padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light);">
+                    <h3 style="margin: 0 0 var(--spacing-sm); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+                        <i class="fas fa-tools"></i> Migración de Datos
+                    </h3>
+                    <p style="font-size: 11px; color: var(--color-text-secondary); margin-bottom: var(--spacing-sm);">
+                        Rellena costo de mercancía y comisiones en ventas antiguas que no los tienen. Ejecutar una sola vez si el dashboard muestra $0 en Costo Mercancía o Comisiones.
+                    </p>
+                    <button class="btn-secondary btn-sm" id="migration-backfill-sale-items-btn">
+                        <i class="fas fa-sync-alt"></i> Rellenar costos y comisiones en ventas
+                    </button>
                 </div>
             </div>
         `;
