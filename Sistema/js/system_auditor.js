@@ -434,6 +434,59 @@ const SystemAuditor = {
         }
         
         console.log(`\n✅ Total de correcciones: ${fixed}`);
+    },
+
+    /**
+     * Migración: rellenar cost y commission_amount en sale_items que no los tienen.
+     * Corrige ventas antiguas o creadas por API sin esos campos.
+     * Ejecutar desde consola: SystemAuditor.backfillSaleItemsCostAndCommission()
+     */
+    async backfillSaleItemsCostAndCommission() {
+        console.log('🔄 Iniciando migración: backfill cost y commission en sale_items...\n');
+        let costUpdated = 0;
+        let commissionUpdated = 0;
+
+        const saleItems = await DB.getAll('sale_items') || [];
+        const inventoryItems = await DB.getAll('inventory_items', null, null, { filterByBranch: false }) || [];
+        const sales = await DB.getAll('sales') || [];
+
+        for (const item of saleItems) {
+            let changed = false;
+            const updates = { ...item };
+
+            if ((item.cost == null || item.cost === '') && item.item_id) {
+                const inv = inventoryItems.find(i => String(i.id) === String(item.item_id));
+                if (inv && (inv.cost != null && inv.cost !== '')) {
+                    updates.cost = Number(inv.cost) || 0;
+                    costUpdated++;
+                    changed = true;
+                }
+            }
+
+            if ((item.commission_amount == null || item.commission_amount === '') && typeof Utils !== 'undefined' && Utils.calculateCommission) {
+                const sale = sales.find(s => s.id === item.sale_id);
+                if (sale) {
+                    const commissionAmount = await Utils.calculateCommission(
+                        item.subtotal || 0,
+                        sale.seller_id || null,
+                        sale.guide_id || null
+                    );
+                    updates.commission_amount = commissionAmount;
+                    commissionUpdated++;
+                    changed = true;
+                }
+            }
+
+            if (changed) {
+                await DB.put('sale_items', updates);
+            }
+        }
+
+        console.log(`✅ Migración completada: ${costUpdated} con costo actualizado, ${commissionUpdated} con comisión actualizada`);
+        if (typeof Utils !== 'undefined' && Utils.showNotification) {
+            Utils.showNotification(`Migración: ${costUpdated} costos y ${commissionUpdated} comisiones actualizados`, 'success');
+        }
+        return { costUpdated, commissionUpdated };
     }
 };
 
