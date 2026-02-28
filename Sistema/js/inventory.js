@@ -1453,16 +1453,19 @@ const Inventory = {
             
             // Filtrado por sucursal - ESTRICTO: cuando hay un filtro específico, SOLO mostrar items de esa sucursal
             if (filterBranchId) {
-                // Si hay un filtro específico de sucursal, aplicar filtro ESTRICTO
-                const normalizedFilterBranchId = String(filterBranchId);
+                // Si hay un filtro específico de sucursal, aplicar filtro ESTRICTO (comparación robusta)
                 const beforeBranchFilter = items.length;
+                const matchBranch = (a, b) => {
+                    const sa = String(a || '').trim().toLowerCase();
+                    const sb = String(b || '').trim().toLowerCase();
+                    return !sa && !sb ? true : sa && sb && sa === sb;
+                };
                 items = items.filter(item => {
                     // CRÍTICO: Excluir items sin branch_id cuando se filtra por sucursal específica
                     if (!item.branch_id) {
                         return false; // NO mostrar items sin branch_id
                     }
-                    const itemBranchId = String(item.branch_id);
-                    return itemBranchId === normalizedFilterBranchId;
+                    return matchBranch(item.branch_id, filterBranchId);
                 });
                 console.log(`📍 Filtrado por sucursal: ${beforeBranchFilter} → ${items.length} items (sucursal: ${filterBranchId})`);
             } else if (viewAllBranches && isMasterAdmin) {
@@ -1526,16 +1529,16 @@ const Inventory = {
             const maxPrice = parseFloat(document.getElementById('inventory-max-price')?.value || '999999999');
             items = items.filter(item => (item.cost || 0) >= minPrice && (item.cost || 0) <= maxPrice);
 
-            // Apply metal filter
+            // Apply metal filter (case-insensitive)
             const metalFilter = document.getElementById('inventory-metal-filter')?.value;
             if (metalFilter) {
-                items = items.filter(item => item.metal === metalFilter);
+                items = items.filter(item => (item.metal || '').toLowerCase() === (metalFilter || '').toLowerCase());
             }
 
-            // Apply stone type filter
+            // Apply stone type filter (case-insensitive)
             const stoneTypeFilter = document.getElementById('inventory-stone-type-filter')?.value;
             if (stoneTypeFilter) {
-                items = items.filter(item => item.stone_type === stoneTypeFilter);
+                items = items.filter(item => (item.stone_type || '').toLowerCase() === (stoneTypeFilter || '').toLowerCase());
             }
 
             // Apply supplier filter
@@ -1568,31 +1571,33 @@ const Inventory = {
                 items = items.filter(item => this.getStockStatus(item) === 'ok');
             }
 
-            // Apply category filter (barra debajo de alertas de stock)
+            // Apply category filter (barra debajo de alertas de stock, case-insensitive)
             const selectedCategory = document.querySelector('.inventory-category-bar .inventory-category-chip.active')?.dataset.category;
             if (selectedCategory && selectedCategory !== 'all') {
-                items = items.filter(item => (item.category || '') === selectedCategory);
+                items = items.filter(item => (item.category || '').toLowerCase() === (selectedCategory || '').toLowerCase());
             }
 
             // ========== FILTROS AVANZADOS ==========
             const materialFilter = document.getElementById('inventory-material-filter')?.value;
             if (materialFilter) {
-                items = items.filter(item => item.material === materialFilter || item.metal?.includes(materialFilter));
+                const mf = (materialFilter || '').toLowerCase();
+                items = items.filter(item => (item.material || '').toLowerCase() === mf || (item.metal || '').toLowerCase().includes(mf));
             }
 
             const purityFilter = document.getElementById('inventory-purity-filter')?.value;
             if (purityFilter) {
-                items = items.filter(item => item.purity === purityFilter || item.metal?.includes(purityFilter));
+                const pf = (purityFilter || '').toLowerCase();
+                items = items.filter(item => (item.purity || '').toLowerCase() === pf || (item.metal || '').toLowerCase().includes(pf));
             }
 
             const platingFilter = document.getElementById('inventory-plating-filter')?.value;
             if (platingFilter) {
-                items = items.filter(item => item.plating === platingFilter);
+                items = items.filter(item => (item.plating || '').toLowerCase() === (platingFilter || '').toLowerCase());
             }
 
             const styleFilter = document.getElementById('inventory-style-filter')?.value;
             if (styleFilter) {
-                items = items.filter(item => item.style === styleFilter);
+                items = items.filter(item => (item.style || '').toLowerCase() === (styleFilter || '').toLowerCase());
             }
 
             const finishFilter = document.getElementById('inventory-finish-filter')?.value;
@@ -5277,6 +5282,7 @@ const Inventory = {
         
         const statsContainer = document.getElementById('inventory-stats');
         if (statsContainer) {
+            const currentStockFilter = document.getElementById('inventory-stock-alert-filter')?.value || '';
             const activeCategory = document.querySelector('.inventory-category-bar .inventory-category-chip.active')?.dataset.category ?? '';
             const categoryChipsHTML = [
                 `<button type="button" class="inventory-category-chip ${activeCategory === '' || activeCategory === 'all' ? 'active' : ''}" data-category="">Todas</button>`
@@ -5315,21 +5321,21 @@ const Inventory = {
                     </div>
                 </div>
                 
-                <!-- Alertas de Stock -->
+                <!-- Alertas de Stock (chip activo según filtro del dropdown) -->
                 <div class="inventory-alerts-bar">
-                    <div class="alert-item ${stats.stockOut > 0 ? 'alert-critical' : 'alert-ok'}" onclick="document.getElementById('inventory-stock-alert-filter').value='out'; window.Inventory.loadInventory();">
+                    <div class="alert-item ${stats.stockOut > 0 ? 'alert-critical' : 'alert-ok'} ${currentStockFilter === 'out' ? 'active' : ''}" data-value="out" onclick="document.getElementById('inventory-stock-alert-filter').value='out'; window.Inventory.loadInventory();">
                         <i class="fas fa-exclamation-circle"></i>
                         <span>${stats.stockOut} Agotado${stats.stockOut !== 1 ? 's' : ''}</span>
                     </div>
-                    <div class="alert-item ${stats.stockLow > 0 ? 'alert-warning' : 'alert-ok'}" onclick="document.getElementById('inventory-stock-alert-filter').value='low'; window.Inventory.loadInventory();">
+                    <div class="alert-item ${stats.stockLow > 0 ? 'alert-warning' : 'alert-ok'} ${currentStockFilter === 'low' ? 'active' : ''}" data-value="low" onclick="document.getElementById('inventory-stock-alert-filter').value='low'; window.Inventory.loadInventory();">
                         <i class="fas fa-arrow-down"></i>
                         <span>${stats.stockLow} Stock Bajo</span>
                     </div>
-                    <div class="alert-item ${stats.stockOver > 0 ? 'alert-info' : 'alert-ok'}" onclick="document.getElementById('inventory-stock-alert-filter').value='over'; window.Inventory.loadInventory();">
+                    <div class="alert-item ${stats.stockOver > 0 ? 'alert-info' : 'alert-ok'} ${currentStockFilter === 'over' ? 'active' : ''}" data-value="over" onclick="document.getElementById('inventory-stock-alert-filter').value='over'; window.Inventory.loadInventory();">
                         <i class="fas fa-arrow-up"></i>
                         <span>${stats.stockOver} Exceso</span>
                     </div>
-                    <div class="alert-item alert-success" onclick="document.getElementById('inventory-stock-alert-filter').value='ok'; window.Inventory.loadInventory();">
+                    <div class="alert-item alert-success ${currentStockFilter === 'ok' ? 'active' : ''}" data-value="ok" onclick="document.getElementById('inventory-stock-alert-filter').value='ok'; window.Inventory.loadInventory();">
                         <i class="fas fa-check"></i>
                         <span>${stats.stockOk} Normal</span>
                     </div>
