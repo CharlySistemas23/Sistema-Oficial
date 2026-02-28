@@ -1969,6 +1969,8 @@ Object.assign(POS, {
                 const existingLocalItems = await DB.query('sale_items', 'sale_id', sale.id) || [];
                 if (existingLocalItems.length === 0) {
                     for (const item of this.cart) {
+                        const currentItem = await DB.get('inventory_items', item.id);
+                        const itemCost = currentItem?.cost ?? item.cost ?? 0;
                         await DB.put('sale_items', {
                             id: Utils.generateId(),
                             sale_id: sale.id,
@@ -1977,6 +1979,7 @@ Object.assign(POS, {
                             name: item.name,
                             quantity: item.quantity,
                             unit_price: item.price,
+                            cost: itemCost,
                             discount_percent: item.discount || 0,
                             subtotal: item.subtotal,
                             created_at: new Date().toISOString()
