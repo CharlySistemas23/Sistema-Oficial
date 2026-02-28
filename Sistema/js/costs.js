@@ -529,7 +529,7 @@ const Costs = {
                 const timeStr = cost.created_at ? Utils.formatDate(cost.created_at, 'HH:mm') : '';
                 
                 html += `
-                    <div class="cost-item" style="display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm); border-left: 3px solid #667eea;">
+                    <div class="cost-item" data-cost-id="${cost.id}" data-cost-amount="${cost.amount || 0}" style="display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm); border-left: 3px solid #667eea;">
                         <div style="flex: 1;">
                             <div style="font-weight: 600; font-size: 13px; margin-bottom: 2px;">
                                 ${agencyName}
@@ -1032,7 +1032,7 @@ const Costs = {
                         <h3 style="margin: 0; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
                             <i class="fas fa-store"></i> ${branchName}
                         </h3>
-                        <div style="font-size: 16px; font-weight: 700;">
+                        <div style="font-size: 16px; font-weight: 700;" data-cost-total>
                             Total: ${Utils.formatCurrency(branchTotal)}
                         </div>
                     </div>
@@ -1069,7 +1069,7 @@ const Costs = {
                                     }
 
                                     return `
-                                        <tr>
+                                        <tr data-cost-id="${cost.id}" data-cost-amount="${cost.amount || 0}">
                                             <td><span class="status-badge status-${cost.period_type === 'monthly' ? 'disponible' : 'reservado'}">${periodLabels[cost.period_type] || 'Una Vez'}</span></td>
                                             <td>${cost.category || 'N/A'}</td>
                                             <td style="font-weight: 600;">${Utils.formatCurrency(cost.amount)}</td>
@@ -1835,7 +1835,7 @@ const Costs = {
                         <h3 style="margin: 0; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
                             <i class="fas fa-store"></i> ${branchName}
                         </h3>
-                        <div style="font-size: 16px; font-weight: 700;">
+                        <div style="font-size: 16px; font-weight: 700;" data-cost-total>
                             ${Utils.formatCurrency(total)}
                         </div>
                     </div>
@@ -1846,7 +1846,7 @@ const Costs = {
             costs.forEach(cost => {
                 const costDate = Utils.formatDate(cost.date || cost.created_at, 'DD/MM/YYYY');
                 html += `
-                    <div class="cost-item" style="display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm); border-left: 3px solid var(--color-primary);">
+                    <div class="cost-item" data-cost-id="${cost.id}" data-cost-amount="${cost.amount || 0}" style="display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm); border-left: 3px solid var(--color-primary);">
                         <div style="flex: 1;">
                             <div style="font-weight: 600; font-size: 13px; margin-bottom: 2px;">${cost.category || 'Sin categoría'}</div>
                             <div style="font-size: 11px; color: var(--color-text-secondary);">${costDate} • ${cost.type === 'fijo' ? 'Fijo' : 'Variable'}</div>
@@ -1923,7 +1923,7 @@ const Costs = {
                         <h3 style="margin: 0; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
                             <i class="fas fa-store"></i> ${branchName}
                         </h3>
-                        <div style="font-size: 16px; font-weight: 700;">
+                        <div style="font-size: 16px; font-weight: 700;" data-cost-total>
                             Total: ${Utils.formatCurrency(branchTotal)}
                         </div>
                     </div>
@@ -1942,7 +1942,7 @@ const Costs = {
                             <tbody>
                                 ${branchCosts.map(cost => {
                                     return `
-                                        <tr>
+                                        <tr data-cost-id="${cost.id}" data-cost-amount="${cost.amount || 0}">
                                             <td>${Utils.formatDate(cost.date || cost.created_at, 'DD/MM/YYYY')}</td>
                                             <td><span class="status-badge status-${cost.type === 'variable' ? 'reservado' : 'disponible'}">${cost.type === 'variable' ? 'Variable' : 'Fijo'}</span></td>
                                             <td>${cost.category || 'N/A'}</td>
@@ -3002,16 +3002,39 @@ const Costs = {
         await this.showAddForm(costId);
     },
 
+    removeCostFromDOM(costId, amount) {
+        const el = document.querySelector(`[data-cost-id="${costId}"]`);
+        if (!el) return;
+        const amt = parseFloat(amount) || 0;
+        const module = el.closest('.module');
+        el.remove();
+        if (module) {
+            const totalEl = module.querySelector('[data-cost-total]');
+            if (totalEl) {
+                const txt = totalEl.textContent || '';
+                const num = parseFloat(txt.replace(/[^0-9.-]/g, '')) || 0;
+                const newTotal = Math.max(0, num - amt);
+                const prefix = txt.includes('Total:') ? 'Total: ' : '';
+                totalEl.textContent = prefix + (typeof Utils !== 'undefined' && Utils.formatCurrency ? Utils.formatCurrency(newTotal) : newTotal.toFixed(2));
+            }
+            const remaining = module.querySelectorAll('tbody tr, .cost-item');
+            if (remaining.length === 0) module.remove();
+        }
+    },
+
     async deleteCost(costId) {
         if (!await Utils.confirm('¿Eliminar este costo?')) return;
 
+        const cost = await DB.get('cost_entries', costId);
+        if (!cost) {
+            Utils.showNotification('Costo no encontrado', 'error');
+            return;
+        }
+
+        this.removeCostFromDOM(costId, cost.amount || 0);
+        Utils.showNotification('Costo eliminado', 'success');
+
         try {
-            const cost = await DB.get('cost_entries', costId);
-            if (!cost) {
-                Utils.showNotification('Costo no encontrado', 'error');
-                return;
-            }
-            
             // Si es un costo de llegada, también eliminar la llegada asociada
             let arrivalApiDeleted = false;
             if (cost.category === 'pago_llegadas' && cost.arrival_id) {
@@ -3101,14 +3124,13 @@ const Costs = {
             } catch (deleteError) {
                 console.error('Error eliminando costo de la BD:', deleteError);
                 Utils.showNotification('Error al eliminar el costo de la base de datos: ' + deleteError.message, 'error');
+                await this.loadCosts();
                 return;
             }
-            
-            Utils.showNotification('Costo eliminado', 'success');
-            await this.loadCosts();
         } catch (e) {
             console.error('Error eliminando costo:', e);
             Utils.showNotification('Error al eliminar costo: ' + e.message, 'error');
+            await this.loadCosts();
         }
     },
 
@@ -4033,27 +4055,27 @@ const Costs = {
     async deleteCost(costId) {
         if (!confirm('¿Estás seguro de eliminar este costo?')) return;
 
-        try {
-            // Intentar eliminar en backend
-            try {
-                if (typeof API !== 'undefined' && API.baseURL && API.token && API.deleteCost) {
-                    await API.deleteCost(costId);
-                }
-            } catch (apiError) {
-                console.warn('⚠️ Error eliminando en API:', apiError);
-            }
-
-            // Eliminar de IndexedDB
-            await DB.delete('cost_entries', costId);
-
+        const cost = await DB.get('cost_entries', costId);
+        if (cost) {
+            this.removeCostFromDOM(costId, cost.amount || 0);
             Utils.showNotification('Costo eliminado correctamente', 'success');
-            
-            // Recargar la pestaña activa
-            const activeTab = document.querySelector('#costs-tabs .tab-btn.active')?.dataset.tab || 'costs';
-            await this.loadTab(activeTab);
+        }
+
+        try {
+            if (typeof API !== 'undefined' && API.baseURL && API.token && API.deleteCost) {
+                await API.deleteCost(costId);
+            }
+        } catch (apiError) {
+            console.warn('⚠️ Error eliminando en API:', apiError);
+        }
+
+        try {
+            await DB.delete('cost_entries', costId);
         } catch (error) {
             console.error('Error deleting cost:', error);
             Utils.showNotification(`Error al eliminar costo: ${error.message}`, 'error');
+            const activeTab = document.querySelector('#costs-tabs .tab-btn.active')?.dataset.tab || 'costs';
+            await this.loadTab(activeTab);
         }
     }
 };
