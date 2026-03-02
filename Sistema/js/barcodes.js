@@ -370,10 +370,16 @@ const BarcodeManager = {
                 }
                 // Si no es producto, intentar guía/vendedor/agencia (pueden usar códigos numéricos de 8 dígitos)
                 const norm = v => String(v || '').trim().replace(/\r?\n/g, '');
+                const matchesCode = (item, val) => {
+                    const b = norm(item.barcode);
+                    const c = norm(item.code);
+                    const v = norm(val);
+                    return b === v || c === v || b.toLowerCase() === v.toLowerCase() || c.toLowerCase() === v.toLowerCase();
+                };
                 let agency = await DB.getByIndex('catalog_agencies', 'barcode', barcodeClean);
                 if (!agency) {
                     const all = await DB.getAll('catalog_agencies', null, null, { filterByBranch: false }) || [];
-                    agency = all.find(a => norm(a.barcode) === barcodeClean && a.active);
+                    agency = all.find(a => matchesCode(a, barcodeClean) && a.active);
                 }
                 if (agency && window.POS?.setAgency) {
                     await window.POS.setAgency(agency);
@@ -383,7 +389,7 @@ const BarcodeManager = {
                 let guide = await DB.getByIndex('catalog_guides', 'barcode', barcodeClean);
                 if (!guide) {
                     const all = await DB.getAll('catalog_guides', null, null, { filterByBranch: false }) || [];
-                    guide = all.find(g => norm(g.barcode) === barcodeClean && g.active);
+                    guide = all.find(g => matchesCode(g, barcodeClean) && g.active);
                 }
                 if (guide && window.POS?.setGuide) {
                     await window.POS.setGuide(guide);
@@ -393,7 +399,7 @@ const BarcodeManager = {
                 let seller = await DB.getByIndex('catalog_sellers', 'barcode', barcodeClean);
                 if (!seller) {
                     const all = await DB.getAll('catalog_sellers', null, null, { filterByBranch: false }) || [];
-                    seller = all.find(s => norm(s.barcode) === barcodeClean && s.active !== false);
+                    seller = all.find(s => matchesCode(s, barcodeClean) && s.active !== false);
                 }
                 if (seller && window.POS?.setSeller) {
                     await window.POS.setSeller(seller);
@@ -406,11 +412,18 @@ const BarcodeManager = {
             
             // Si es CODE128, buscar primero en agencias/guías/vendedores, luego en inventario
             const norm = v => String(v || '').trim().replace(/\r?\n/g, '');
+            const matchesCode = (item, val) => {
+                const b = norm(item.barcode);
+                const c = norm(item.code);
+                const v = norm(val);
+                return b === v || c === v ||
+                    b.toLowerCase() === v.toLowerCase() || c.toLowerCase() === v.toLowerCase();
+            };
             const findByBarcode = async (store, indexVal) => {
                 let r = await DB.getByIndex(store, 'barcode', indexVal);
                 if (!r) {
                     const all = await DB.getAll(store, null, null, { filterByBranch: false }) || [];
-                    r = all.find(x => norm(x.barcode) === indexVal);
+                    r = all.find(x => matchesCode(x, indexVal));
                 }
                 return r;
             };
@@ -487,9 +500,9 @@ const BarcodeManager = {
                 const allGuides = await DB.getAll('catalog_guides', null, null, { filterByBranch: false }) || [];
                 const allSellers = await DB.getAll('catalog_sellers', null, null, { filterByBranch: false }) || [];
                 
-                const foundAgency = allAgencies.find(a => norm(a.barcode) === barcodeClean && a.active);
-                const foundGuide = allGuides.find(g => norm(g.barcode) === barcodeClean && g.active);
-                const foundSeller = allSellers.find(s => norm(s.barcode) === barcodeClean && s.active !== false);
+                const foundAgency = allAgencies.find(a => matchesCode(a, barcodeClean) && a.active);
+                const foundGuide = allGuides.find(g => matchesCode(g, barcodeClean) && g.active);
+                const foundSeller = allSellers.find(s => matchesCode(s, barcodeClean) && s.active !== false);
                 
                 if (foundAgency) {
                     console.log('✅ Agencia encontrada en búsqueda alternativa:', foundAgency.name);
