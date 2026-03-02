@@ -174,9 +174,10 @@ const BarcodeManager = {
                 return false;
             }
             
-            // Only process if not in input field (unless it's the barcode input)
+            // Solo ignorar inputs que NO son de escaneo. El POS search, barcode inputs, etc. SÍ deben procesar escaneos
             const isInput = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA';
             const isBarcodeInput = e.target.id === 'employee-barcode-input' || 
+                                   e.target.id === 'pos-product-search' ||
                                    e.target.classList.contains('barcode-input') || 
                                    e.target.classList.contains('pos-scan-input');
             
@@ -315,18 +316,23 @@ const BarcodeManager = {
     },
 
     // Buscar item por EAN8 (busca tanto el EAN8 directo como códigos originales convertidos)
+    // Las etiquetas de joyería imprimen toEAN8(item.barcode || item.sku), por eso buscamos en ambos
     async findItemByEAN8(ean8Code) {
         try {
-            // Primero buscar directamente por el EAN8
-            let item = await DB.getByIndex('inventory_items', 'barcode', ean8Code);
+            const code = String(ean8Code || '').trim().replace(/\r?\n/g, '');
+            if (!code || code.length !== 8 || !/^\d{8}$/.test(code)) return null;
+
+            // Primero buscar directamente por el EAN8 en barcode
+            let item = await DB.getByIndex('inventory_items', 'barcode', code);
             if (item) return item;
             
-            // Si no se encuentra, buscar todos los items y convertir sus códigos a EAN8
+            // Si no se encuentra, buscar todos los items y convertir barcode O sku a EAN8
             const allItems = await DB.getAll('inventory_items') || [];
             for (const invItem of allItems) {
-                if (invItem.barcode) {
-                    const convertedEAN8 = this.toEAN8(invItem.barcode);
-                    if (convertedEAN8 === ean8Code) {
+                const source = invItem.barcode || invItem.sku;
+                if (source) {
+                    const convertedEAN8 = this.toEAN8(source);
+                    if (convertedEAN8 === code) {
                         return invItem;
                     }
                 }
@@ -341,12 +347,12 @@ const BarcodeManager = {
 
     async handlePOSScan(barcode, format) {
         try {
-            // Si es EAN8, buscar SOLO en inventario (exclusivo para productos)
+            // Si es EAN8 (8 dígitos), buscar primero en inventario (productos), luego en guías/vendedores/agencias
+            const barcodeClean = String(barcode || '').trim().replace(/\r?\n/g, '');
             if (format === 'EAN8') {
-                const item = await this.findItemByEAN8(barcode);
+                const item = await this.findItemByEAN8(barcodeClean);
                 if (item) {
                     if (item.status === 'disponible') {
-                        // Verificar si ya está en el carrito
                         if (window.POS && window.POS.cart) {
                             const alreadyInCart = window.POS.cart.find(c => c.id === item.id);
                             if (alreadyInCart) {
@@ -354,23 +360,40 @@ const BarcodeManager = {
                                 return;
                             }
                         }
-                        
-                        // Agregar directamente al carrito
                         if (window.POS && window.POS.selectProduct) {
                             await window.POS.selectProduct(item.id);
                         }
                     } else {
                         Utils.showNotification(`Pieza ${item.status}`, 'error');
                     }
-                } else {
-                    Utils.showNotification('Producto no encontrado en inventario', 'warning');
+                    return;
                 }
+                // Si no es producto, intentar guía/vendedor/agencia (pueden usar códigos numéricos de 8 dígitos)
+                const agency = await DB.getByIndex('catalog_agencies', 'barcode', barcodeClean);
+                if (agency && agency.active && window.POS?.setAgency) {
+                    await window.POS.setAgency(agency);
+                    Utils.showNotification(`Agencia: ${agency.name}`, 'success');
+                    return;
+                }
+                const guide = await DB.getByIndex('catalog_guides', 'barcode', barcodeClean);
+                if (guide && guide.active && window.POS?.setGuide) {
+                    await window.POS.setGuide(guide);
+                    Utils.showNotification(`Guía: ${guide.name}`, 'success');
+                    return;
+                }
+                const seller = await DB.getByIndex('catalog_sellers', 'barcode', barcodeClean);
+                if (seller && seller.active !== false && window.POS?.setSeller) {
+                    await window.POS.setSeller(seller);
+                    Utils.showNotification(`Vendedor: ${seller.name}`, 'success');
+                    return;
+                }
+                Utils.showNotification('Producto no encontrado', 'warning');
                 return;
             }
             
             // Si es CODE128, buscar primero en agencias/guías/vendedores, luego en inventario
             // PASO 0: Verificar si es una agencia (ANTES de guías, para que tenga prioridad)
-            const agency = await DB.getByIndex('catalog_agencies', 'barcode', barcode);
+            const agency = await DB.getByIndex('catalog_agencies', 'barcode', barcodeClean);
             if (agency && agency.active) {
                 // Es una agencia, establecerla en el POS si tiene función setAgency
                 if (window.POS && window.POS.setAgency) {
@@ -393,7 +416,7 @@ const BarcodeManager = {
             }
 
             // PASO 1: Verificar si es un guía
-            const guide = await DB.getByIndex('catalog_guides', 'barcode', barcode);
+            const guide = await DB.getByIndex('catalog_guides', 'barcode', barcodeClean);
             if (guide && guide.active) {
                 // Es un guía, cargar agencia automáticamente
                 if (window.POS && window.POS.setGuide) {
@@ -403,7 +426,7 @@ const BarcodeManager = {
             }
 
             // PASO 2: Verificar si es un vendedor
-            const seller = await DB.getByIndex('catalog_sellers', 'barcode', barcode);
+            const seller = await DB.getByIndex('catalog_sellers', 'barcode', barcodeClean);
             if (seller && seller.active !== false) {
                 // Es un vendedor
                 if (window.POS && window.POS.setSeller) {
@@ -413,7 +436,7 @@ const BarcodeManager = {
             }
             
             // PASO 3: Buscar producto (CODE128 también puede ser producto)
-            const item = await DB.getByIndex('inventory_items', 'barcode', barcode);
+            const item = await DB.getByIndex('inventory_items', 'barcode', barcodeClean);
             if (item) {
                 if (item.status === 'disponible') {
                     // Verificar si ya está en el carrito
@@ -442,9 +465,9 @@ const BarcodeManager = {
                 const allGuides = await DB.getAll('catalog_guides') || [];
                 const allSellers = await DB.getAll('catalog_sellers') || [];
                 
-                const foundAgency = allAgencies.find(a => a.barcode === barcode && a.active);
-                const foundGuide = allGuides.find(g => g.barcode === barcode && g.active);
-                const foundSeller = allSellers.find(s => s.barcode === barcode && s.active !== false);
+                const foundAgency = allAgencies.find(a => a.barcode === barcodeClean && a.active);
+                const foundGuide = allGuides.find(g => g.barcode === barcodeClean && g.active);
+                const foundSeller = allSellers.find(s => s.barcode === barcodeClean && s.active !== false);
                 
                 if (foundAgency) {
                     console.log('✅ Agencia encontrada en búsqueda alternativa:', foundAgency.name);
