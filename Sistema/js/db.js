@@ -496,14 +496,16 @@ const DB = {
                     resolve(null);
                     return;
                 }
-                
-                // Verificar que el store existe antes de intentar acceder
+                // IndexedDB requiere key válida; null/undefined causa DataError
+                if (key === null || key === undefined || key === '') {
+                    resolve(null);
+                    return;
+                }
                 if (!this.db.objectStoreNames.contains(storeName)) {
                     console.warn(`Store ${storeName} no existe en la base de datos`);
                     resolve(null);
                     return;
                 }
-                
                 const tx = this.db.transaction([storeName], 'readonly');
                 const store = tx.objectStore(storeName);
                 const request = store.get(key);
