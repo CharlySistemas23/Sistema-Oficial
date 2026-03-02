@@ -710,24 +710,16 @@ const Inventory = {
                 }
             });
 
-            // Actualizar inventario cuando otro módulo actualiza un item
+            // Actualizar inventario cuando otro módulo actualiza un item (debounce 800ms para evitar trabarse)
             Utils.EventBus.on('inventory-updated', async (data) => {
                 if (this.initialized && data && data.item) {
-                    // Limpiar timeout anterior si existe
-                    if (inventoryUpdateTimeout) {
-                        clearTimeout(inventoryUpdateTimeout);
-                    }
-                    // Usar debounce de 300ms
+                    if (inventoryUpdateTimeout) clearTimeout(inventoryUpdateTimeout);
                     inventoryUpdateTimeout = setTimeout(async () => {
-                        // Recargar inventario
                         await this.loadInventory();
-                        // Resaltar el item actualizado si existe
                         if (data.item.id) {
-                            setTimeout(() => {
-                                this.highlightItem(data.item.id);
-                            }, 300);
+                            setTimeout(() => this.highlightItem(data.item.id), 300);
                         }
-                    }, 300);
+                    }, 800);
                 }
             });
         }
@@ -735,17 +727,17 @@ const Inventory = {
             // Escuchar eventos Socket.IO para actualización en tiempo real
             // Eventos de inventario de todas las sucursales (master_admin)
             if (UserManager.currentUser?.is_master_admin) {
+                let allBranchesUpdateTimer = null;
                 window.addEventListener('inventory-updated-all-branches', async (e) => {
                     const { branchId, action, item } = e.detail;
                     if (this.initialized) {
-                        console.log(`📦 Inventory: Actualizando por cambio en sucursal ${branchId} (${action})`);
-                        // Recargar inventario con delay mínimo para tiempo real
-                        setTimeout(async () => {
+                        clearTimeout(allBranchesUpdateTimer);
+                        allBranchesUpdateTimer = setTimeout(async () => {
                             await this.loadInventory();
                             if (item && item.id) {
                                 setTimeout(() => this.highlightItem(item.id), 300);
                             }
-                        }, 100);
+                        }, 800);
                     }
                 });
             }
@@ -765,14 +757,10 @@ const Inventory = {
                             return; // Ya se está procesando
                         }
                         pendingUpdates.add(item.id);
-                        
-                        console.log(`📦 Inventory: Actualizando IndexedDB con item del servidor (${action || 'updated'})`);
                         try {
                             // Actualizar o crear en IndexedDB según la acción
                             if (action === 'deleted') {
-                                // Eliminar de IndexedDB
                                 await DB.delete('inventory_items', item.id);
-                                console.log(`✅ Item eliminado de IndexedDB: ${item.id}`);
                             } else {
                                 // Obtener campos adicionales del item local si existe
                                 const localItem = await DB.get('inventory_items', item.id).catch(() => null);
@@ -837,6 +825,8 @@ const Inventory = {
     },
 
     async loadInventory(options) {
+        if (this._loadInventoryInProgress && !options?.force) return;
+        this._loadInventoryInProgress = true;
         this._lastLoadEmptyFromServer = false;
         const ensureItemInList = options && options.ensureItemInList;
         // Verificar permiso
@@ -1166,7 +1156,6 @@ const Inventory = {
                     }
                     
                     // PASO 2: Guardar/actualizar items en IndexedDB
-                    console.log(`📥 [Paso 2 Inventory] ${allItemsRaw.length} items recibidos del servidor`);
                     
                     let savedCount = 0;
                     let updatedCount = 0;
@@ -1192,18 +1181,17 @@ const Inventory = {
                             
                             if (existingItem) {
                                 updatedCount++;
-                                console.log(`🔄 [Paso 2 Inventory] Item actualizado: ${localItem.id} (${localItem.sku || localItem.name})`);
                             } else {
                                 savedCount++;
-                                console.log(`💾 [Paso 2 Inventory] Item guardado: ${localItem.id} (${localItem.sku || localItem.name})`);
                             }
                         } catch (error) {
                             console.warn(`⚠️ [Paso 2 Inventory] Error guardando item ${serverItem.id}:`, error);
                         }
                     }
                     
-                    console.log(`✅ [Paso 2 Inventory] Sincronización servidor→local completada: ${savedCount} nuevos, ${updatedCount} actualizados`);
-                    console.log(`✅ ${allItemsRaw.length} items cargados desde API`);
+                    if (savedCount + updatedCount > 0 && (typeof window === 'undefined' || localStorage.getItem('DEBUG_SYNC') === 'true')) {
+                        console.log(`[Paso 2 Inventory] Sync: ${savedCount} nuevos, ${updatedCount} actualizados`);
+                    }
                     // Si la API devolvió 0 items, intentar mostrar datos en caché (IndexedDB) para que el usuario vea algo
                     if (allItemsRaw.length === 0) {
                         try {
@@ -1687,9 +1675,11 @@ const Inventory = {
         } catch (e) {
             console.error('Error loading inventory:', e);
             Utils.showNotification('Error al cargar inventario', 'error');
+        } finally {
+            this._loadInventoryInProgress = false;
         }
     },
-    
+
     // Determinar el estado del stock de un item
     getStockStatus(item) {
         const actual = item.stock_actual ?? 1;
