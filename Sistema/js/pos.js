@@ -1345,35 +1345,70 @@ Object.assign(POS, {
     },
 
     async quickAddBySearch(query) {
-        if (!query) return;
+        const rawQuery = String(query || '').trim().replace(/\r?\n/g, '');
+        if (!rawQuery) return;
         
         try {
-            // Obtener items filtrados por sucursal
-            const items = await DB.getAll('inventory_items', null, null, { 
-                filterByBranch: true, 
-                branchIdField: 'branch_id' 
-            }) || [];
+            let match = null;
             
-            const match = items.find(item => {
-                if (item.status !== 'disponible') return false;
-                // Verificar stock disponible
-                const stockActual = item.stock_actual ?? 1;
-                if (stockActual <= 0) return false;
-                // Verificar match por SKU o código de barras
-                return (
-                    item.sku?.toLowerCase() === query.toLowerCase() ||
-                    item.barcode === query
-            );
-            });
+            // Si el código escaneado parece EAN8 (8 dígitos numéricos), usar búsqueda por EAN8
+            // Las etiquetas de joyería imprimen códigos EAN8 generados con toEAN8(barcode || sku)
+            const isEAN8 = /^\d{8}$/.test(rawQuery);
+            if (isEAN8 && typeof BarcodeManager !== 'undefined' && BarcodeManager.findItemByEAN8) {
+                match = await BarcodeManager.findItemByEAN8(rawQuery);
+                if (match) {
+                    // Verificar que el item esté en la sucursal actual
+                    const currentBranchId = typeof BranchManager !== 'undefined' 
+                        ? BranchManager.getCurrentBranchId() 
+                        : localStorage.getItem('current_branch_id') || null;
+                    const isMasterAdmin = typeof UserManager !== 'undefined' && (
+                        UserManager.currentUser?.role === 'master_admin' ||
+                        UserManager.currentUser?.is_master_admin ||
+                        UserManager.currentUser?.isMasterAdmin
+                    );
+                    if (currentBranchId && !isMasterAdmin && match.branch_id && match.branch_id !== currentBranchId) {
+                        match = null;
+                    }
+                }
+            }
+            
+            if (!match) {
+                // Búsqueda tradicional por SKU o barcode exacto
+                const items = await DB.getAll('inventory_items', null, null, { 
+                    filterByBranch: true, 
+                    branchIdField: 'branch_id' 
+                }) || [];
+                
+                match = items.find(item => {
+                    if (item.status !== 'disponible') return false;
+                    const stockActual = item.stock_actual ?? 1;
+                    if (stockActual <= 0) return false;
+                    return (
+                        item.sku?.toLowerCase() === rawQuery.toLowerCase() ||
+                        (item.barcode && String(item.barcode).trim() === rawQuery)
+                    );
+                });
+            }
 
             if (match) {
+                if (match.status !== 'disponible') {
+                    Utils.showNotification(`Producto ${match.status}`, 'warning');
+                    return;
+                }
+                const stockActual = match.stock_actual ?? 1;
+                if (stockActual <= 0) {
+                    Utils.showNotification('Sin stock disponible', 'warning');
+                    return;
+                }
                 await this.selectProduct(match.id);
-                document.getElementById('pos-product-search').value = '';
+                const searchEl = document.getElementById('pos-product-search');
+                if (searchEl) searchEl.value = '';
             } else {
                 Utils.showNotification('Producto no encontrado', 'warning');
             }
         } catch (e) {
             console.error('Error en búsqueda rápida:', e);
+            Utils.showNotification('Error al buscar producto', 'error');
         }
     },
 
@@ -2892,6 +2927,13 @@ Object.assign(POS, {
     },
 
     // ==================== GUÍA/AGENCIA/CLIENTE ====================
+
+    async setAgency(agency) {
+        this.currentAgency = agency;
+        this.currentGuide = null;
+        this.updateCustomerDisplay();
+        Utils.showNotification(`Agencia ${agency.name} establecida. Escanea el GUÍA.`, 'success');
+    },
 
     async setGuide(guide) {
         this.currentGuide = guide;
