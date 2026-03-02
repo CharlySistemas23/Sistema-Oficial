@@ -2672,8 +2672,10 @@ const TouristReport = {
             branchFilter.innerHTML = '<option value="all">Todas las sucursales</option>' + 
                 branches.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
             branchFilter.value = currentBranchId || 'all';
+            const parent = branchFilter.parentNode;
+            if (!parent) return;
             const newBranchFilter = branchFilter.cloneNode(true);
-            branchFilter.parentNode.replaceChild(newBranchFilter, branchFilter);
+            parent.replaceChild(newBranchFilter, branchFilter);
             newBranchFilter.addEventListener('change', async () => {
                 const date = document.getElementById('arrivals-date')?.value || Utils.formatDate(new Date(), 'YYYY-MM-DD');
                 await this.changeDate(date);
