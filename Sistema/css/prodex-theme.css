@@ -656,7 +656,7 @@ body {
 
 .content-area {
     background: var(--color-bg) !important;
-    padding: var(--spacing-lg) var(--spacing-xl) !important;
+    padding: 20px !important;
 }
 
 .content-area > [id^="module-"],
@@ -3785,9 +3785,9 @@ textarea::placeholder {
     border-bottom: 1px solid rgba(255,255,255,0.06) !important;
 }
 
-/* Área de contenido inyectada */
+/* Área de contenido inyectada — sin padding extra, las cards lo manejan */
 #module-content {
-    padding: 20px 24px !important;
+    padding: 0 !important;
 }
 
 /* ── Cabecera de módulo con botones de acción ── */
@@ -5160,6 +5160,121 @@ select.form-select,
         .content-area {
             padding-bottom: calc(68px + env(safe-area-inset-bottom)) !important;
         }
+    }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   ESCRITORIO — Homologación de módulos (≥ 769px)
+   Referencia visual: módulo Inventario
+   ════════════════════════════════════════════════════════════════ */
+@media (min-width: 769px) {
+
+    /* ── Container: sin padding extra (content-area provee los 20px) ── */
+    .container,
+    #app-container {
+        padding: 0 !important;
+    }
+
+    /* ── Módulos: 100% del ancho disponible ── */
+    .module.page {
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+
+    /* ── Module header: homologado para todos los módulos ── */
+    .page__header.module-header,
+    .module-header {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        padding: 14px 20px !important;
+        min-height: 56px !important;
+        margin-bottom: 12px !important;
+        border-radius: var(--radius-md) !important;
+        background: var(--gradient-card-premium) !important;
+        border: 1px solid var(--color-border) !important;
+        box-shadow: var(--shadow-sm) !important;
+        flex-wrap: wrap !important;
+        gap: 8px !important;
+    }
+
+    .module-header h2,
+    .page__header h2 {
+        font-size: 14px !important;
+        font-weight: 700 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.06em !important;
+        margin: 0 !important;
+        color: var(--color-text) !important;
+    }
+
+    /* ── Cards principales: padding y radio homologado ── */
+    .dashboard-card-prodex {
+        padding: 20px 24px !important;
+        border-radius: var(--radius-md) !important;
+    }
+
+    .module-section {
+        padding: 20px 24px !important;
+        border-radius: var(--radius-md) !important;
+    }
+
+    /* ── Gap entre secciones del módulo ── */
+    .module-content-prodex,
+    .page__body,
+    .page.module {
+        gap: 12px !important;
+    }
+
+    /* ── Módulo placeholder: sin padding extra ── */
+    #module-placeholder {
+        padding: 0 !important;
+    }
+
+    /* ── Cards internas de módulos dinámicos (repairs.js usa .module sin .page) ── */
+    #module-content .module {
+        padding: 20px 24px !important;
+        border-radius: var(--radius-md) !important;
+    }
+
+    /* ── Filtros/barras de módulo: estilo consistente ── */
+    .filters-bar,
+    .filter-row,
+    [id$="-filters-container"],
+    [id$="-filters"] {
+        padding: 12px 16px !important;
+        border-radius: var(--radius-md) !important;
+        gap: 10px !important;
+    }
+
+    /* ── Tablas: fuente y padding consistente ── */
+    table th {
+        font-size: 12px !important;
+        font-weight: 600 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.05em !important;
+        padding: 10px 14px !important;
+        color: var(--color-text-secondary) !important;
+    }
+
+    table td {
+        font-size: 13px !important;
+        padding: 10px 14px !important;
+    }
+
+    /* ── Botones del módulo: tamaño consistente ── */
+    .btn-sm,
+    .oc-btn-sm {
+        height: 34px !important;
+        padding: 0 14px !important;
+        font-size: 12px !important;
+    }
+
+    /* ── Acciones de la toolbar: alineación ── */
+    .module-actions,
+    .module-actions-bar {
+        gap: 8px !important;
+        flex-wrap: wrap !important;
     }
 }
 
