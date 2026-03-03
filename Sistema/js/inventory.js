@@ -528,14 +528,16 @@ const Inventory = {
             }
         });
         
+        const resetPage = () => { this.currentPage = 1; };
+
         const searchInput = document.getElementById('inventory-search');
         if (searchInput) {
-            searchInput.addEventListener('input', Utils.debounce(() => this.loadInventory(), 300));
+            searchInput.addEventListener('input', Utils.debounce(() => { resetPage(); this.loadInventory(); }, 300));
         }
 
         const statusFilter = document.getElementById('inventory-status-filter');
         if (statusFilter) {
-            statusFilter.addEventListener('change', () => this.loadInventory());
+            statusFilter.addEventListener('change', () => { resetPage(); this.loadInventory(); });
         }
 
         const branchFilter = document.getElementById('inventory-branch-filter');
@@ -597,39 +599,39 @@ const Inventory = {
                 }
             }
             
-            branchFilter.addEventListener('change', () => this.loadInventory());
+            branchFilter.addEventListener('change', () => { resetPage(); this.loadInventory(); });
         }
 
         const metalFilter = document.getElementById('inventory-metal-filter');
         if (metalFilter) {
-            metalFilter.addEventListener('change', () => this.loadInventory());
+            metalFilter.addEventListener('change', () => { resetPage(); this.loadInventory(); });
         }
 
         const stoneTypeFilter = document.getElementById('inventory-stone-type-filter');
         if (stoneTypeFilter) {
-            stoneTypeFilter.addEventListener('change', () => this.loadInventory());
+            stoneTypeFilter.addEventListener('change', () => { resetPage(); this.loadInventory(); });
         }
 
         const certificateFilter = document.getElementById('inventory-certificate-filter');
         if (certificateFilter) {
-            certificateFilter.addEventListener('change', () => this.loadInventory());
+            certificateFilter.addEventListener('change', () => { resetPage(); this.loadInventory(); });
         }
 
         const minPrice = document.getElementById('inventory-min-price');
         if (minPrice) {
-            minPrice.addEventListener('input', Utils.debounce(() => this.loadInventory(), 500));
+            minPrice.addEventListener('input', Utils.debounce(() => { resetPage(); this.loadInventory(); }, 500));
         }
 
         const maxPrice = document.getElementById('inventory-max-price');
         if (maxPrice) {
-            maxPrice.addEventListener('input', Utils.debounce(() => this.loadInventory(), 500));
+            maxPrice.addEventListener('input', Utils.debounce(() => { resetPage(); this.loadInventory(); }, 500));
         }
 
         // Filtro por proveedor
         const supplierFilter = document.getElementById('inventory-supplier-filter');
         if (supplierFilter) {
             await this.loadSupplierFilterDropdown();
-            supplierFilter.addEventListener('change', () => this.loadInventory());
+            supplierFilter.addEventListener('change', () => { resetPage(); this.loadInventory(); });
         }
 
         // Toggle de filtros avanzados
@@ -657,7 +659,7 @@ const Inventory = {
         advancedFilterIds.forEach(filterId => {
             const filter = document.getElementById(filterId);
             if (filter) {
-                filter.addEventListener('change', () => this.loadInventory());
+                filter.addEventListener('change', () => { resetPage(); this.loadInventory(); });
             }
         });
 
@@ -1160,22 +1162,28 @@ const Inventory = {
                         condition:       getVal('inventory-condition-filter'),
                         location_detail: getVal('inventory-location-filter'),
                         collection:      getVal('inventory-collection-filter'),
+                        page:            this.currentPage || 1,
+                        limit:           50,
                     };
                     // Limpiar claves con valor undefined/vacío
                     Object.keys(filters).forEach(k => (filters[k] === undefined || filters[k] === '') && delete filters[k]);
 
                     const apiResponse = await API.getInventoryItems(filters);
 
-                    // Manejar respuesta con stats { items, total, stats } o array plano (legacy)
+                    // Respuesta paginada { items, total, page, pages, stats } o array plano (legacy)
                     if (apiResponse && apiResponse.items && Array.isArray(apiResponse.items)) {
                         allItemsRaw = apiResponse.items;
                         this.totalItems = apiResponse.total || allItemsRaw.length;
-                        // Guardar stats globales para los KPIs
+                        this.totalPages  = apiResponse.pages || 1;
+                        this.currentPage = apiResponse.page  || 1;
+                        // Stats globales para KPIs (totales de TODAS las piezas filtradas)
                         this.globalStats = apiResponse.stats || null;
                         paginatedResponse = true;
                     } else {
                         allItemsRaw = Array.isArray(apiResponse) ? apiResponse : [];
-                        this.totalItems = allItemsRaw.length;
+                        this.totalItems  = allItemsRaw.length;
+                        this.totalPages  = 1;
+                        this.currentPage = 1;
                         this.globalStats = null;
                     }
                     const apiReturnedZero = (allItemsRaw.length === 0);
@@ -1720,8 +1728,12 @@ const Inventory = {
             // Usar displayInventory que verifica si hay agrupación
             await this.displayInventory(items);
 
-            // Quitar barra de paginación si existía de una versión anterior
-            document.getElementById('inventory-pagination-bar')?.remove();
+            // Barra de paginación (modo online paginado)
+            if (paginatedResponse && this.totalPages > 1) {
+                this.renderPaginationControls(this.totalItems, this.currentPage, this.totalPages);
+            } else {
+                document.getElementById('inventory-pagination-bar')?.remove();
+            }
 
             // Sync incremental en background (actualiza caché offline sin bloquear UI)
             if (paginatedResponse) {
