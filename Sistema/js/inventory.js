@@ -1696,19 +1696,6 @@ const Inventory = {
             const sortBy = document.getElementById('inventory-sort-by')?.value || 'newest';
             items = this.sortInventoryItems(items, sortBy);
 
-            // ========== PAGINACIÓN CLIENT-SIDE (cuando no viene paginado del servidor) ==========
-            const ITEMS_PER_PAGE = 50;
-            this._allItemsForStats = null;
-            if (!paginatedResponse && items.length > ITEMS_PER_PAGE) {
-                this._allItemsForStats = items;
-                this.totalItems = items.length;
-                this.totalPages = Math.ceil(items.length / ITEMS_PER_PAGE);
-                this.currentPage = Math.min(this.currentPage || 1, this.totalPages);
-                const start = (this.currentPage - 1) * ITEMS_PER_PAGE;
-                items = items.slice(start, start + ITEMS_PER_PAGE);
-                console.log(`📄 Paginación client-side: mostrando página ${this.currentPage}/${this.totalPages} (${items.length} de ${this.totalItems} piezas)`);
-            }
-
             // ========== AGRUPACIÓN POR COLECCIÓN (OPCIONAL) ==========
             // IMPORTANTE: En modo lista, NO agrupar por colección para mostrar todas las piezas juntas
             const groupByCollection = document.getElementById('inventory-group-by-collection')?.checked || false;
@@ -1741,8 +1728,8 @@ const Inventory = {
             // Usar displayInventory que verifica si hay agrupación
             await this.displayInventory(items);
 
-            // Barra de paginación (modo online o client-side)
-            if (this.totalPages > 1) {
+            // Barra de paginación (modo online paginado)
+            if (paginatedResponse && this.totalPages > 1) {
                 this.renderPaginationControls(this.totalItems, this.currentPage, this.totalPages);
             } else {
                 document.getElementById('inventory-pagination-bar')?.remove();
@@ -5427,8 +5414,7 @@ const Inventory = {
     },
 
     async displayInventoryStats(items) {
-        // Usar _allItemsForStats cuando hay paginación client-side (totales completos)
-        const itemsForStats = Array.isArray(this._allItemsForStats) ? this._allItemsForStats : (Array.isArray(items) ? items : []);
+        const filteredItems = Array.isArray(items) ? items : [];
 
         // Si tenemos stats globales del servidor, úsarlos para los KPIs principales
         // (muestran el total de TODO el inventario, no solo la página actual).
@@ -5436,20 +5422,20 @@ const Inventory = {
         // como indicadores de referencia visual.
         const gs = this.globalStats;
         const stats = {
-            total:           gs ? gs.total      : itemsForStats.length,
-            filteredCount:   itemsForStats.length,
-            disponible:      gs ? gs.disponible : itemsForStats.filter(i => i.status === 'disponible').length,
-            vendida:         gs ? gs.vendida    : itemsForStats.filter(i => i.status === 'vendida').length,
-            apartada:        gs ? gs.apartada   : itemsForStats.filter(i => i.status === 'apartada').length,
-            reparacion:      gs ? gs.reparacion : itemsForStats.filter(i => i.status === 'reparacion').length,
-            totalValue:      gs ? gs.totalValue : itemsForStats.reduce((sum, i) => sum + ((i.cost || 0) * (i.stock_actual || 1)), 0),
-            totalStock:      gs ? gs.totalStock : itemsForStats.reduce((sum, i) => sum + (i.stock_actual || 1), 0),
-            withCertificates: itemsForStats.filter(i => i.certificate_type && i.certificate_number).length,
-            // Alertas de stock (basadas en TODOS los items filtrados para indicadores globales)
-            stockOut:  itemsForStats.filter(i => this.getStockStatus(i) === 'out').length,
-            stockLow:  itemsForStats.filter(i => this.getStockStatus(i) === 'low').length,
-            stockOver: itemsForStats.filter(i => this.getStockStatus(i) === 'over').length,
-            stockOk:   itemsForStats.filter(i => this.getStockStatus(i) === 'ok').length,
+            total:           gs ? gs.total      : filteredItems.length,
+            filteredCount:   filteredItems.length,
+            disponible:      gs ? gs.disponible : filteredItems.filter(i => i.status === 'disponible').length,
+            vendida:         gs ? gs.vendida    : filteredItems.filter(i => i.status === 'vendida').length,
+            apartada:        gs ? gs.apartada   : filteredItems.filter(i => i.status === 'apartada').length,
+            reparacion:      gs ? gs.reparacion : filteredItems.filter(i => i.status === 'reparacion').length,
+            totalValue:      gs ? gs.totalValue : filteredItems.reduce((sum, i) => sum + ((i.cost || 0) * (i.stock_actual || 1)), 0),
+            totalStock:      gs ? gs.totalStock : filteredItems.reduce((sum, i) => sum + (i.stock_actual || 1), 0),
+            withCertificates: filteredItems.filter(i => i.certificate_type && i.certificate_number).length,
+            // Alertas de stock (basadas en la página actual como indicadores de referencia visual)
+            stockOut:  filteredItems.filter(i => this.getStockStatus(i) === 'out').length,
+            stockLow:  filteredItems.filter(i => this.getStockStatus(i) === 'low').length,
+            stockOver: filteredItems.filter(i => this.getStockStatus(i) === 'over').length,
+            stockOk:   filteredItems.filter(i => this.getStockStatus(i) === 'ok').length,
         };
         
         const statsContainer = document.getElementById('inventory-stats');
