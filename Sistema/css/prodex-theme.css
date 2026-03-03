@@ -4282,10 +4282,60 @@ textarea::placeholder {
     grid-template-columns: unset !important;
 }
 
+/* ── KPI stats cards de inventario ── */
 .inventory-stats-grid {
     display: grid !important;
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)) !important;
-    gap: 10px !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 24px !important;
+    margin-bottom: 20px !important;
+}
+
+.inventory-stat-card {
+    display: flex !important;
+    align-items: center !important;
+    gap: 14px !important;
+    padding: 16px 20px !important;
+    min-width: 0 !important;
+}
+
+.inventory-stat-card .stat-icon {
+    width: 48px !important;
+    min-width: 48px !important;
+    height: 48px !important;
+    border-radius: 12px !important;
+    background: var(--color-accent, #c9a14a) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 20px !important;
+    color: #fff !important;
+}
+
+.inventory-stat-card .stat-content {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 3px !important;
+    min-width: 0 !important;
+}
+
+.inventory-stat-card .stat-value {
+    font-size: 22px !important;
+    font-weight: 700 !important;
+    color: var(--color-text) !important;
+    letter-spacing: -0.02em !important;
+    line-height: 1.15 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+
+.inventory-stat-card .stat-label {
+    font-size: 10px !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.08em !important;
+    color: var(--color-text-secondary) !important;
+    white-space: nowrap !important;
 }
 
 /* ── Fix: category bar dark luxury ── */
