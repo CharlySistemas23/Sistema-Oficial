@@ -11,7 +11,7 @@ const Utils = {
         return this.delay(ms);
     },
 
-    // Formato de moneda
+    // Formato de moneda (con separador de miles)
     formatCurrency(amount, currency = 'MXN') {
         const symbols = {
             'MXN': '$',
@@ -20,7 +20,12 @@ const Utils = {
             'CAD': 'C$'
         };
         const symbol = symbols[currency] || '$';
-        return `${symbol}${parseFloat(amount || 0).toFixed(2)}`;
+        const num = parseFloat(amount || 0);
+        const formatted = num.toLocaleString('es-MX', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+        return `${symbol}${formatted}`;
     },
 
     // Formato de fecha
