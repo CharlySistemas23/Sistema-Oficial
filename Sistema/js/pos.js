@@ -2927,6 +2927,16 @@ Object.assign(POS, {
     },
 
     // ==================== GUÍA/AGENCIA/CLIENTE ====================
+    // Mapeo guía (nombre normalizado) -> agencia (cuando agency_id no está en el guía)
+    GUIDE_TO_AGENCY_MAP: {
+        'CARLOS SIS': 'VERANOS', 'MARIO RENDON': 'VERANOS', 'CHAVA': 'VERANOS', 'FREDY': 'VERANOS', 'NETO': 'VERANOS', 'EMMANUEL': 'VERANOS',
+        'MARINA': 'TANITOURS', 'MARINA *10 DIRECTO': 'TANITOURS', 'GLORIA': 'TANITOURS', 'DANIELA': 'TANITOURS',
+        'RAMON': 'DISCOVERY', 'GUSTAVO SIS': 'DISCOVERY', 'GUSTAVO LEPE': 'DISCOVERY', 'NOVOA': 'DISCOVERY', 'ERIK': 'DISCOVERY', 'CHILO': 'DISCOVERY', 'FERMIN': 'DISCOVERY', 'EMMA': 'DISCOVERY', 'HERASMO': 'DISCOVERY',
+        'MIGUEL SUAREZ': 'TRAVELEX', 'SANTA': 'TRAVELEX', 'MIGUEL DELGADILLO': 'TRAVELEX', 'ANDRES CHAVEZ': 'TRAVELEX', 'SAREM': 'TRAVELEX', 'ZAVALA': 'TRAVELEX', 'TEMO': 'TRAVELEX', 'ROCIO': 'TRAVELEX', 'SEBASTIAN S': 'TRAVELEX',
+        'MIGUEL IBARRA': 'TB', 'ADAN': 'TB', 'MIGUEL RAGA': 'TB', 'GABINO': 'TB', 'HECTOR SUAREZ': 'TB', 'OSCAR': 'TB', 'JOSE AVILES': 'TB',
+        'HUGO': 'TTF', 'HILBERTO': 'TTF', 'JOSE MASIAS': 'TTF', 'DAVID BUSTOS': 'TTF', 'ALFONSO': 'TTF', 'DANIEL RIVERA': 'TTF', 'EDUARDO LEAL': 'TTF',
+        'GEOVANNY': 'TROPICAL ADVENTURE', 'GINA': 'TROPICAL ADVENTURE', 'JAVIER': 'TROPICAL ADVENTURE', 'JULIAN': 'TROPICAL ADVENTURE', 'LUKE': 'TROPICAL ADVENTURE', 'NANCY': 'TROPICAL ADVENTURE', 'NEYRA': 'TROPICAL ADVENTURE', 'ROGER': 'TROPICAL ADVENTURE'
+    },
 
     async setAgency(agency) {
         this.currentAgency = agency;
@@ -2937,14 +2947,30 @@ Object.assign(POS, {
 
     async setGuide(guide) {
         this.currentGuide = guide;
+        this.currentAgency = null;
         
         if (guide.agency_id) {
             const agency = await DB.get('catalog_agencies', guide.agency_id);
-            this.currentAgency = agency;
+            if (agency) this.currentAgency = agency;
+        }
+        
+        if (!this.currentAgency && guide.name) {
+            const guideNameNorm = String(guide.name || '').trim().toUpperCase();
+            const agencyName = this.GUIDE_TO_AGENCY_MAP[guideNameNorm] ||
+                Object.entries(this.GUIDE_TO_AGENCY_MAP).find(([g]) => 
+                    guideNameNorm.includes(g) || g.includes(guideNameNorm)
+                )?.[1];
+            if (agencyName) {
+                const agencies = await DB.getAll('catalog_agencies', null, null, { filterByBranch: false }) || [];
+                this.currentAgency = agencies.find(a => 
+                    String(a.name || '').toUpperCase().includes(agencyName) ||
+                    agencyName.includes(String(a.name || '').toUpperCase())
+                ) || null;
+            }
         }
         
         this.updateCustomerDisplay();
-        Utils.showNotification(`Guía ${guide.name} cargado. Ahora escanea el VENDEDOR.`, 'success');
+        Utils.showNotification(`Guía ${guide.name} cargado${this.currentAgency ? ` (${this.currentAgency.name})` : ''}. Ahora escanea el VENDEDOR.`, 'success');
     },
 
     async setSeller(seller) {
