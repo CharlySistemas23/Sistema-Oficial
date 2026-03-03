@@ -656,7 +656,7 @@ body {
 
 .content-area {
     background: var(--color-bg) !important;
-    padding: 20px !important;
+    padding: 16px 20px !important;
 }
 
 .content-area > [id^="module-"],
@@ -5165,116 +5165,162 @@ select.form-select,
 
 /* ════════════════════════════════════════════════════════════════
    ESCRITORIO — Homologación de módulos (≥ 769px)
-   Referencia visual: módulo Inventario
+   Principio: compacto, funcional, consistente — sin aire desperdiciado
    ════════════════════════════════════════════════════════════════ */
 @media (min-width: 769px) {
 
-    /* ── Container: sin padding extra (content-area provee los 20px) ── */
+    /* ── Container: sin padding extra (content-area ya da el margen de 20px) ── */
     .container,
     #app-container {
         padding: 0 !important;
     }
 
-    /* ── Módulos: 100% del ancho disponible ── */
+    /* ── Módulos: ancho completo ── */
     .module.page {
         width: 100% !important;
         max-width: 100% !important;
+        gap: 10px !important;
     }
 
-    /* ── Module header: homologado para todos los módulos ── */
+    .module-content-prodex,
+    .page__body {
+        gap: 10px !important;
+    }
+
+    /* ── Module header: COMPACTO — el mismo en todos los módulos ── */
     .page__header.module-header,
     .module-header {
         display: flex !important;
         align-items: center !important;
         justify-content: space-between !important;
-        padding: 14px 20px !important;
-        min-height: 56px !important;
-        margin-bottom: 12px !important;
+        padding: 10px 16px !important;
+        min-height: 50px !important;
+        margin-bottom: 0 !important;
         border-radius: var(--radius-md) !important;
         background: var(--gradient-card-premium) !important;
         border: 1px solid var(--color-border) !important;
         box-shadow: var(--shadow-sm) !important;
         flex-wrap: wrap !important;
         gap: 8px !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
     }
 
     .module-header h2,
     .page__header h2 {
-        font-size: 14px !important;
+        font-size: 13px !important;
         font-weight: 700 !important;
         text-transform: uppercase !important;
-        letter-spacing: 0.06em !important;
+        letter-spacing: 0.07em !important;
         margin: 0 !important;
         color: var(--color-text) !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 8px !important;
     }
 
-    /* ── Cards principales: padding y radio homologado ── */
+    /* ── Acciones de la toolbar ── */
+    .module-actions,
+    .module-actions-bar {
+        display: flex !important;
+        align-items: center !important;
+        gap: 6px !important;
+        flex-wrap: wrap !important;
+    }
+
+    /* ── Cards principales: padding equilibrado ── */
     .dashboard-card-prodex {
-        padding: 20px 24px !important;
+        padding: 16px 20px !important;
         border-radius: var(--radius-md) !important;
     }
 
     .module-section {
-        padding: 20px 24px !important;
+        padding: 16px 20px !important;
         border-radius: var(--radius-md) !important;
     }
 
-    /* ── Gap entre secciones del módulo ── */
-    .module-content-prodex,
-    .page__body,
-    .page.module {
-        gap: 12px !important;
+    /* ── Cards internas de módulos dinámicos ── */
+    #module-content .module {
+        padding: 16px 20px !important;
+        border-radius: var(--radius-md) !important;
     }
 
-    /* ── Módulo placeholder: sin padding extra ── */
+    /* ── Placeholder: sin padding extra ── */
     #module-placeholder {
         padding: 0 !important;
     }
 
-    /* ── Cards internas de módulos dinámicos (repairs.js usa .module sin .page) ── */
-    #module-content .module {
-        padding: 20px 24px !important;
-        border-radius: var(--radius-md) !important;
-    }
-
-    /* ── Filtros/barras de módulo: estilo consistente ── */
+    /* ── Filtros: compactos, sin margin-bottom extra ── */
     .filters-bar,
     .filter-row,
     [id$="-filters-container"],
-    [id$="-filters"] {
+    [id$="-filters"],
+    .inventory-filters,
+    .page__subbar [style*="grid-template-columns"] {
         padding: 12px 16px !important;
         border-radius: var(--radius-md) !important;
         gap: 10px !important;
+        margin-bottom: 0 !important;
     }
 
-    /* ── Tablas: fuente y padding consistente ── */
+    /* ── Subbar: gap compacto ── */
+    .page__subbar {
+        gap: 10px !important;
+    }
+
+    /* ── Tablas ── */
     table th {
-        font-size: 12px !important;
-        font-weight: 600 !important;
+        font-size: 11px !important;
+        font-weight: 700 !important;
         text-transform: uppercase !important;
-        letter-spacing: 0.05em !important;
-        padding: 10px 14px !important;
+        letter-spacing: 0.06em !important;
+        padding: 9px 14px !important;
         color: var(--color-text-secondary) !important;
+        white-space: nowrap;
     }
 
     table td {
         font-size: 13px !important;
-        padding: 10px 14px !important;
+        padding: 9px 14px !important;
     }
 
-    /* ── Botones del módulo: tamaño consistente ── */
+    /* ── Botones sm: proporcionados ── */
     .btn-sm,
-    .oc-btn-sm {
-        height: 34px !important;
-        padding: 0 14px !important;
+    .oc-btn-sm,
+    button.btn-sm {
+        height: 32px !important;
+        padding: 0 12px !important;
         font-size: 12px !important;
+        border-radius: 8px !important;
+        min-width: auto !important;
     }
 
-    /* ── Acciones de la toolbar: alineación ── */
-    .module-actions,
-    .module-actions-bar {
-        gap: 8px !important;
-        flex-wrap: wrap !important;
+    /* ── Inputs en filtros: compactos ── */
+    .page__subbar input,
+    .page__subbar select,
+    .inventory-filters input,
+    .inventory-filters select,
+    .filters-bar input,
+    .filters-bar select {
+        height: 34px !important;
+        min-height: 34px !important;
+        font-size: 13px !important;
+        padding: 0 10px !important;
+    }
+
+    /* ── Labels de filtro: pequeños ── */
+    .page__subbar label,
+    .inventory-filters label,
+    .filters-bar label {
+        font-size: 10px !important;
+        margin-bottom: 3px !important;
+        display: block !important;
+    }
+
+    /* ── KPI cards: padding compacto ── */
+    .db-kpi-card,
+    .kpi-card {
+        padding: 14px 16px !important;
     }
 }
 
@@ -6399,4 +6445,62 @@ select.form-select,
         width: 100% !important;
         justify-content: center !important;
     }
+}
+
+/* ══════════════════════════════════════════════════════════
+   ACCIONES TARJETAS DE INVENTARIO
+   Sidebar expandido  → Ver Detalles arriba / iconos centrados abajo
+   Sidebar colapsado  → todo en una fila (solo "Ver" + iconos)
+   ══════════════════════════════════════════════════════════ */
+
+/* Base: sidebar expandido (o cualquier estado sin colapso) */
+.inv-card-actions {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.inv-btn-main {
+    width: 100% !important;
+    justify-content: center !important;
+    text-align: center !important;
+    padding: 7px 10px !important;
+    font-size: 11px !important;
+    letter-spacing: 0.03em !important;
+}
+
+.inv-btn-icons {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 5px;
+}
+
+.inv-btn-icons button {
+    padding: 6px 10px !important;
+    font-size: 12px !important;
+    min-width: 32px !important;
+}
+
+/* Sidebar colapsado: una sola fila */
+.sidebar.is-collapsed ~ .app-main .inv-card-actions {
+    flex-direction: row !important;
+    align-items: center !important;
+    flex-wrap: nowrap !important;
+    gap: 5px !important;
+}
+
+.sidebar.is-collapsed ~ .app-main .inv-btn-main {
+    flex: 1 !important;
+    width: auto !important;
+}
+
+.sidebar.is-collapsed ~ .app-main .inv-btn-icons {
+    flex-shrink: 0;
+}
+
+/* Ocultar " Detalles" cuando el sidebar está colapsado → solo "Ver" */
+.sidebar.is-collapsed ~ .app-main .inv-btn-detail {
+    display: none !important;
 }
