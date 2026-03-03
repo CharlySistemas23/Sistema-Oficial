@@ -2006,15 +2006,17 @@ const Inventory = {
                     </div>
                     <p style="font-size: 12px; font-weight: 600; color: var(--color-primary); margin: 8px 0;"><strong>Costo:</strong> ${Utils.formatCurrency(item.cost || 0)}</p>
                     <p style="margin-top: 8px;"><strong>Estado:</strong> <span class="status-badge status-${item.status}">${item.status}</span></p>
-                    <div style="margin-top: 10px; display: flex; gap: 5px; flex-wrap: wrap;">
-                        <button class="btn-secondary" onclick="window.Inventory.showItemDetails('${item.id}')" style="flex: 1; padding: 6px; font-size: 11px;">Ver Detalles</button>
-                        ${typeof PermissionManager !== 'undefined' && PermissionManager.hasPermission('inventory.update_stock') ? `
-                            <button class="btn-secondary" onclick="window.Inventory.showStockModal('${item.id}')" style="padding: 6px; font-size: 11px;" title="Ajustar Stock"><i class="fas fa-cubes"></i></button>
-                        ` : ''}
-                        <button class="btn-secondary" onclick="window.Inventory.printJewelryLabel('${item.id}')" style="padding: 6px; font-size: 11px;" title="Imprimir Etiqueta Joya"><i class="fas fa-gem"></i></button>
-                        ${typeof PermissionManager !== 'undefined' && PermissionManager.hasPermission('inventory.delete') ? `
-                            <button class="btn-danger-outline" onclick="window.Inventory.confirmDeleteItem('${item.id}')" style="padding: 6px; font-size: 11px;" title="Eliminar"><i class="fas fa-trash"></i></button>
-                        ` : ''}
+                    <div class="inv-card-actions">
+                        <button class="btn-secondary inv-btn-main" onclick="window.Inventory.showItemDetails('${item.id}')">Ver <span class="inv-btn-detail">Detalles</span></button>
+                        <div class="inv-btn-icons">
+                            ${typeof PermissionManager !== 'undefined' && PermissionManager.hasPermission('inventory.update_stock') ? `
+                                <button class="btn-secondary" onclick="window.Inventory.showStockModal('${item.id}')" title="Ajustar Stock"><i class="fas fa-cubes"></i></button>
+                            ` : ''}
+                            <button class="btn-secondary" onclick="window.Inventory.printJewelryLabel('${item.id}')" title="Imprimir Etiqueta Joya"><i class="fas fa-gem"></i></button>
+                            ${typeof PermissionManager !== 'undefined' && PermissionManager.hasPermission('inventory.delete') ? `
+                                <button class="btn-danger-outline" onclick="window.Inventory.confirmDeleteItem('${item.id}')" title="Eliminar"><i class="fas fa-trash"></i></button>
+                            ` : ''}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -2272,15 +2274,17 @@ const Inventory = {
                     <p style="font-size: 13px; font-weight: 600; color: var(--color-primary); margin: 8px 0;"><strong>Costo:</strong> ${Utils.formatCurrency(item.cost || 0)}</p>
                     ${item.collection ? `<p style="font-size: 11px; color: var(--color-text-secondary); margin-bottom: 4px;"><i class="fas fa-tag"></i> ${item.collection}</p>` : ''}
                     <p style="margin-top: 8px;"><strong>Estado:</strong> <span class="status-badge status-${item.status}">${item.status}</span></p>
-                    <div style="margin-top: 10px; display: flex; gap: 5px; flex-wrap: wrap;">
-                        <button class="btn-secondary" onclick="window.Inventory.showItemDetails('${item.id}')" style="flex: 1; padding: 6px; font-size: 11px;">Ver Detalles</button>
-                        ${typeof PermissionManager !== 'undefined' && PermissionManager.hasPermission('inventory.update_stock') ? `
-                            <button class="btn-secondary" onclick="window.Inventory.showStockModal('${item.id}')" style="padding: 6px; font-size: 11px;" title="Ajustar Stock"><i class="fas fa-cubes"></i></button>
-                        ` : ''}
-                        <button class="btn-secondary" onclick="window.Inventory.printJewelryLabel('${item.id}')" style="padding: 6px; font-size: 11px;" title="Imprimir Etiqueta Joya"><i class="fas fa-gem"></i></button>
-                        ${typeof PermissionManager !== 'undefined' && PermissionManager.hasPermission('inventory.delete') ? `
-                            <button class="btn-danger-outline" onclick="window.Inventory.confirmDeleteItem('${item.id}')" style="padding: 6px; font-size: 11px;" title="Eliminar"><i class="fas fa-trash"></i></button>
-                        ` : ''}
+                    <div class="inv-card-actions">
+                        <button class="btn-secondary inv-btn-main" onclick="window.Inventory.showItemDetails('${item.id}')">Ver <span class="inv-btn-detail">Detalles</span></button>
+                        <div class="inv-btn-icons">
+                            ${typeof PermissionManager !== 'undefined' && PermissionManager.hasPermission('inventory.update_stock') ? `
+                                <button class="btn-secondary" onclick="window.Inventory.showStockModal('${item.id}')" title="Ajustar Stock"><i class="fas fa-cubes"></i></button>
+                            ` : ''}
+                            <button class="btn-secondary" onclick="window.Inventory.printJewelryLabel('${item.id}')" title="Imprimir Etiqueta Joya"><i class="fas fa-gem"></i></button>
+                            ${typeof PermissionManager !== 'undefined' && PermissionManager.hasPermission('inventory.delete') ? `
+                                <button class="btn-danger-outline" onclick="window.Inventory.confirmDeleteItem('${item.id}')" title="Eliminar"><i class="fas fa-trash"></i></button>
+                            ` : ''}
+                        </div>
                     </div>
                 </div>
             </div>
