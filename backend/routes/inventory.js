@@ -182,13 +182,31 @@ router.get('/', requireBranchAccess, async (req, res) => {
       paramCount++;
     }
 
-    // COUNT total (misma cláusula WHERE, sin LIMIT/OFFSET)
-    const countSql = sql.replace(
+    // Estadísticas globales (misma cláusula WHERE, sin LIMIT/OFFSET)
+    // Se usan para los KPIs del módulo (Total Piezas, Disponibles, Valor, Stock)
+    const statsSql = sql.replace(
       /SELECT i\.\*,[\s\S]+?FROM inventory_items i/,
-      'SELECT COUNT(*) FROM inventory_items i'
+      `SELECT
+        COUNT(*) AS total,
+        COUNT(*) FILTER (WHERE i.status = 'disponible') AS disponible,
+        COUNT(*) FILTER (WHERE i.status = 'vendida')    AS vendida,
+        COUNT(*) FILTER (WHERE i.status = 'apartada')   AS apartada,
+        COUNT(*) FILTER (WHERE i.status = 'reparacion') AS reparacion,
+        COALESCE(SUM(COALESCE(i.cost,0) * GREATEST(COALESCE(i.stock_actual,0),1)),0) AS total_value,
+        COALESCE(SUM(GREATEST(COALESCE(i.stock_actual,0),0)),0) AS total_stock
+      FROM inventory_items i`
     );
-    const countResult = await query(countSql, params);
-    const total = parseInt(countResult.rows[0]?.count || '0', 10);
+    const statsResult = await query(statsSql, params);
+    const sr = statsResult.rows[0] || {};
+    const globalStats = {
+      total:      parseInt(sr.total      || '0', 10),
+      disponible: parseInt(sr.disponible || '0', 10),
+      vendida:    parseInt(sr.vendida    || '0', 10),
+      apartada:   parseInt(sr.apartada   || '0', 10),
+      reparacion: parseInt(sr.reparacion || '0', 10),
+      totalValue: parseFloat(sr.total_value || '0'),
+      totalStock: parseInt(sr.total_stock   || '0', 10),
+    };
 
     // Paginación
     sql += ` ORDER BY i.created_at DESC LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
@@ -197,10 +215,11 @@ router.get('/', requireBranchAccess, async (req, res) => {
     const result = await query(sql, params);
     res.json({
       items: result.rows,
-      total,
+      total: globalStats.total,
       page,
       limit,
-      pages: Math.ceil(total / limit) || 1
+      pages: Math.ceil(globalStats.total / limit) || 1,
+      stats: globalStats       // ← stats globales para los KPIs
     });
   } catch (error) {
     console.error('Error obteniendo inventario:', error);
