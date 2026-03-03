@@ -7810,8 +7810,8 @@ button.btn-xs {
 .inventory-stats-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: var(--spacing-md);
-    margin-bottom: var(--spacing-md);
+    gap: var(--spacing-lg, 24px);
+    margin-bottom: var(--spacing-lg, 24px);
 }
 
 .inventory-stat-card {
