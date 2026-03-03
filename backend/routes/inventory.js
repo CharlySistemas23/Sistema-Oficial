@@ -20,12 +20,10 @@ router.get('/', requireBranchAccess, async (req, res) => {
       updated_after
     } = req.query;
 
-    // Sin paginación: devolver todos los items que coincidan con los filtros.
-    // Para sync incremental (updated_after) sí se respeta el limit si se envía.
-    const isIncrementalSync = !!req.query.updated_after;
-    const limit = isIncrementalSync
-      ? Math.min(Math.max(1, parseInt(req.query.limit) || 500), 2000)
-      : null; // null = sin límite
+    // Paginación (default 50 por página, máx 500)
+    const page   = Math.max(1, parseInt(req.query.page)  || 1);
+    const limit  = Math.min(Math.max(1, parseInt(req.query.limit) || 50), 500);
+    const offset = (page - 1) * limit;
 
     const normalizeBranchId = (id) => {
       if (id == null || id === '' || id === 'null' || id === 'undefined') return null;
@@ -209,18 +207,18 @@ router.get('/', requireBranchAccess, async (req, res) => {
       totalStock: parseInt(sr.total_stock   || '0', 10),
     };
 
-    // Ordenar y limitar solo si es sync incremental
-    sql += ` ORDER BY i.created_at DESC`;
-    if (limit !== null) {
-      sql += ` LIMIT $${paramCount}`;
-      params.push(limit);
-    }
+    // Paginación
+    sql += ` ORDER BY i.created_at DESC LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
+    params.push(limit, offset);
 
     const result = await query(sql, params);
     res.json({
-      items: result.rows,
-      total: globalStats.total,
-      stats: globalStats
+      items:  result.rows,
+      total:  globalStats.total,
+      page,
+      limit,
+      pages:  Math.ceil(globalStats.total / limit) || 1,
+      stats:  globalStats        // KPIs siempre muestran totales globales
     });
   } catch (error) {
     console.error('Error obteniendo inventario:', error);
