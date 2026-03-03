@@ -13,6 +13,8 @@ const Inventory = {
     currentPage: 1,
     totalPages: 1,
     totalItems: 0,
+    // Stats globales del servidor (KPIs siempre muestran totales de todo el inventario)
+    globalStats: null,
     
     // Configuración de stock por defecto
     defaultStockConfig: {
@@ -1168,19 +1170,22 @@ const Inventory = {
 
                     const apiResponse = await API.getInventoryItems(filters);
 
-                    // Manejar tanto respuesta paginada { items, total, page, pages }
+                    // Manejar tanto respuesta paginada { items, total, page, pages, stats }
                     // como formato anterior (array directo, por compatibilidad)
                     if (apiResponse && apiResponse.items && Array.isArray(apiResponse.items)) {
                         allItemsRaw = apiResponse.items;
                         this.totalItems = apiResponse.total || allItemsRaw.length;
                         this.totalPages = apiResponse.pages || 1;
                         this.currentPage = apiResponse.page || 1;
+                        // Guardar stats globales para los KPIs (totales de TODO el inventario filtrado)
+                        this.globalStats = apiResponse.stats || null;
                         paginatedResponse = true;
                     } else {
                         allItemsRaw = Array.isArray(apiResponse) ? apiResponse : [];
                         this.totalItems = allItemsRaw.length;
                         this.totalPages = 1;
                         this.currentPage = 1;
+                        this.globalStats = null;
                     }
                     const apiReturnedZero = (allItemsRaw.length === 0);
                     
@@ -5411,26 +5416,28 @@ const Inventory = {
     },
 
     async displayInventoryStats(items) {
-        // Usar los items filtrados que se pasan como parámetro
-        // (ya están filtrados por sucursal si corresponde)
         const filteredItems = Array.isArray(items) ? items : [];
-        
-        // Estadísticas de stock basadas en los items filtrados
+
+        // Si tenemos stats globales del servidor, úsarlos para los KPIs principales
+        // (muestran el total de TODO el inventario, no solo la página actual).
+        // Las alertas de stock se calculan localmente sobre los items de la página actual
+        // como indicadores de referencia visual.
+        const gs = this.globalStats;
         const stats = {
-            total: filteredItems.length,
-            filteredCount: filteredItems.length,
-            disponible: filteredItems.filter(i => i.status === 'disponible').length,
-            vendida: filteredItems.filter(i => i.status === 'vendida').length,
-            apartada: filteredItems.filter(i => i.status === 'apartada').length,
-            reparacion: filteredItems.filter(i => i.status === 'reparacion').length,
-            totalValue: filteredItems.reduce((sum, i) => sum + ((i.cost || 0) * (i.stock_actual || 1)), 0),
-            totalStock: filteredItems.reduce((sum, i) => sum + (i.stock_actual || 1), 0),
+            total:           gs ? gs.total      : filteredItems.length,
+            filteredCount:   filteredItems.length,
+            disponible:      gs ? gs.disponible : filteredItems.filter(i => i.status === 'disponible').length,
+            vendida:         gs ? gs.vendida    : filteredItems.filter(i => i.status === 'vendida').length,
+            apartada:        gs ? gs.apartada   : filteredItems.filter(i => i.status === 'apartada').length,
+            reparacion:      gs ? gs.reparacion : filteredItems.filter(i => i.status === 'reparacion').length,
+            totalValue:      gs ? gs.totalValue : filteredItems.reduce((sum, i) => sum + ((i.cost || 0) * (i.stock_actual || 1)), 0),
+            totalStock:      gs ? gs.totalStock : filteredItems.reduce((sum, i) => sum + (i.stock_actual || 1), 0),
             withCertificates: filteredItems.filter(i => i.certificate_type && i.certificate_number).length,
-            // Alertas de stock basadas en items filtrados
-            stockOut: filteredItems.filter(i => this.getStockStatus(i) === 'out').length,
-            stockLow: filteredItems.filter(i => this.getStockStatus(i) === 'low').length,
+            // Alertas de stock (basadas en la página actual como indicadores)
+            stockOut:  filteredItems.filter(i => this.getStockStatus(i) === 'out').length,
+            stockLow:  filteredItems.filter(i => this.getStockStatus(i) === 'low').length,
             stockOver: filteredItems.filter(i => this.getStockStatus(i) === 'over').length,
-            stockOk: filteredItems.filter(i => this.getStockStatus(i) === 'ok').length
+            stockOk:   filteredItems.filter(i => this.getStockStatus(i) === 'ok').length,
         };
         
         const statsContainer = document.getElementById('inventory-stats');
