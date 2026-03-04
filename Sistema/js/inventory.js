@@ -1140,29 +1140,13 @@ const Inventory = {
                     console.log('📦 Cargando inventario desde API...');
                     const categoryChip = document.querySelector('.inventory-category-bar .inventory-category-chip.active')?.dataset.category;
                     const categoryFilter = (categoryChip && categoryChip !== 'all') ? categoryChip : undefined;
-                    const searchVal = document.getElementById('inventory-search')?.value?.trim();
-                    const minPriceVal = document.getElementById('inventory-min-price')?.value;
-                    const maxPriceVal = document.getElementById('inventory-max-price')?.value;
+                    // Solo enviar branch_id, status y category a la API (como en versión que funciona correctamente)
+                    // El resto de filtros se aplican client-side para no limitar resultados del servidor
                     const filters = {
                         branch_id: filterBranchId != null ? String(filterBranchId).trim() || undefined : undefined,
                         status: document.getElementById('inventory-status-filter')?.value || undefined,
-                        category: categoryFilter,
-                        search: searchVal || undefined,
-                        metal: document.getElementById('inventory-metal-filter')?.value || undefined,
-                        stone_type: document.getElementById('inventory-stone-type-filter')?.value || undefined,
-                        min_price: minPriceVal ? String(minPriceVal) : undefined,
-                        max_price: maxPriceVal ? String(maxPriceVal) : undefined,
-                        material: document.getElementById('inventory-material-filter')?.value || undefined,
-                        purity: document.getElementById('inventory-purity-filter')?.value || undefined,
-                        plating: document.getElementById('inventory-plating-filter')?.value || undefined,
-                        style: document.getElementById('inventory-style-filter')?.value || undefined,
-                        finish: document.getElementById('inventory-finish-filter')?.value || undefined,
-                        theme: document.getElementById('inventory-theme-filter')?.value || undefined,
-                        condition: document.getElementById('inventory-condition-filter')?.value || undefined,
-                        location_detail: document.getElementById('inventory-location-filter')?.value || undefined,
-                        collection: document.getElementById('inventory-collection-filter')?.value || undefined
+                        category: categoryFilter
                     };
-                    // Eliminar propiedades undefined para no enviar query params vacíos
                     Object.keys(filters).forEach(k => { if (filters[k] == null || filters[k] === '') delete filters[k]; });
 
                     allItemsRaw = await API.getInventoryItems(filters);
