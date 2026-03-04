@@ -61,7 +61,7 @@ const Employees = {
 
         this._catalogsContentId = null;
         content.innerHTML = `
-            <div id="employees-tabs" class="tabs-container dashboard-card-prodex" style="margin-bottom: var(--spacing-lg); padding: var(--spacing-md);">
+            <div id="employees-tabs" class="tabs-container" style="margin-bottom: var(--spacing-lg);">
                 <button class="tab-btn active" data-tab="employees"><i class="fas fa-user-tie"></i> Empleados</button>
                 <button class="tab-btn" data-tab="users"><i class="fas fa-user-shield"></i> Usuarios</button>
             </div>
@@ -1281,7 +1281,7 @@ const Employees = {
         UI.showModal(employeeId ? 'Editar Empleado' : 'Nuevo Empleado', body, [
             { text: 'Cancelar', class: 'btn-secondary', onclick: () => UI.closeModal() },
             { text: 'Guardar', class: 'btn-primary', onclick: () => this.saveEmployee(employeeId) }
-        ], { size: 'large' });
+        ]);
 
         // Configurar listener para mostrar/ocultar selectores según el rol
         setTimeout(() => {
@@ -1748,7 +1748,7 @@ const Employees = {
             <button class="btn-primary" onclick="window.Employees.saveUser('${userId || ''}')">Guardar</button>
         `;
 
-        UI.showModal(userId ? 'Editar Usuario' : 'Nuevo Usuario', body, footer, { size: 'large' });
+        UI.showModal(userId ? 'Editar Usuario' : 'Nuevo Usuario', body, footer);
         if (userId && document.getElementById('user-branch-for-perms')) {
             setTimeout(() => this.refreshBranchPermsCheckboxes(), 50);
         }
@@ -2121,14 +2121,23 @@ const Employees = {
                                 console.log(`📤 [Paso 1 Sellers] Subiendo vendedor local al servidor: ${localSeller.id}`);
                                 
                                 let serverSeller = null;
-                                if (localSeller.name) {
-                                    try {
+                                try {
+                                    if (localSeller.barcode && API.getSellerByBarcode) {
+                                        try { serverSeller = await API.getSellerByBarcode(localSeller.barcode); } catch (e) {}
+                                    }
+                                    if (!serverSeller && localSeller.code) {
+                                        const serverSellers = await API.getSellers();
+                                        if (serverSellers && serverSellers.length > 0) {
+                                            serverSeller = serverSellers.find(s => (s.code || '').toString().trim() === (localSeller.code || '').toString().trim());
+                                        }
+                                    }
+                                    if (!serverSeller && localSeller.name) {
                                         const serverSellers = await API.getSellers();
                                         if (serverSellers && serverSellers.length > 0) {
                                             serverSeller = serverSellers.find(s => s.name === localSeller.name);
                                         }
-                                    } catch (e) {}
-                                }
+                                    }
+                                } catch (e) {}
                                 
                                 if (serverSeller && serverSeller.id) {
                                     const updatedSeller = await API.updateSeller(serverSeller.id, localSeller);
@@ -2148,7 +2157,29 @@ const Employees = {
                                         uploadedCount++;
                                     }
                                 } else {
-                                    const createdSeller = await API.createSeller(localSeller);
+                                    let createdSeller = null;
+                                    try {
+                                        createdSeller = await API.createSeller(localSeller);
+                                    } catch (createErr) {
+                                        const msg = (createErr && createErr.message) ? String(createErr.message) : '';
+                                        if (msg.includes('código') && msg.includes('ya existe') && (localSeller.barcode || localSeller.code)) {
+                                            try {
+                                                if (localSeller.barcode && API.getSellerByBarcode) {
+                                                    serverSeller = await API.getSellerByBarcode(localSeller.barcode);
+                                                }
+                                                if (!serverSeller && localSeller.code) {
+                                                    const serverSellers = await API.getSellers();
+                                                    if (serverSellers && serverSellers.length > 0) {
+                                                        serverSeller = serverSellers.find(s => (s.code || '').toString().trim() === (localSeller.code || '').toString().trim());
+                                                    }
+                                                }
+                                                if (serverSeller && serverSeller.id) {
+                                                    createdSeller = await API.updateSeller(serverSeller.id, localSeller);
+                                                }
+                                            } catch (e) {}
+                                        }
+                                        if (!createdSeller) throw createErr;
+                                    }
                                     if (createdSeller && createdSeller.id) {
                                         const allLocalSellers = await DB.getAll('catalog_sellers') || [];
                                         const sellersToUpdate = allLocalSellers.filter(s => {
@@ -2352,7 +2383,7 @@ const Employees = {
             <button class="btn-primary" onclick="window.Employees.saveSeller('${sellerIdSafe}')">Guardar</button>
         `;
 
-        UI.showModal(sellerId ? 'Editar Vendedor' : 'Nuevo Vendedor', body, footer, { size: 'large' });
+        UI.showModal(sellerId ? 'Editar Vendedor' : 'Nuevo Vendedor', body, footer);
 
         if (seller?.barcode) {
             setTimeout(() => {
@@ -2542,14 +2573,26 @@ const Employees = {
                                 console.log(`📤 [Paso 1 Guides] Subiendo guía local al servidor: ${localGuide.id}`);
                                 
                                 let serverGuide = null;
-                                if (localGuide.name && localGuide.agency_id) {
-                                    try {
+                                // Buscar en servidor: 1) por barcode, 2) por code, 3) por name+agency_id
+                                try {
+                                    if (localGuide.barcode && API.getGuideByBarcode) {
+                                        try {
+                                            serverGuide = await API.getGuideByBarcode(localGuide.barcode);
+                                        } catch (e) { /* no encontrada por barcode */ }
+                                    }
+                                    if (!serverGuide && localGuide.code) {
+                                        const serverGuides = await API.getGuides({ search: String(localGuide.code).trim() });
+                                        if (serverGuides && serverGuides.length > 0) {
+                                            serverGuide = serverGuides.find(g => (g.code || '').toString().trim() === (localGuide.code || '').toString().trim());
+                                        }
+                                    }
+                                    if (!serverGuide && localGuide.name && localGuide.agency_id) {
                                         const serverGuides = await API.getGuides({ agency_id: localGuide.agency_id });
                                         if (serverGuides && serverGuides.length > 0) {
                                             serverGuide = serverGuides.find(g => g.name === localGuide.name);
                                         }
-                                    } catch (e) {}
-                                }
+                                    }
+                                } catch (e) { /* fallback */ }
                                 
                                 if (serverGuide && serverGuide.id) {
                                     const updatedGuide = await API.updateGuide(serverGuide.id, localGuide);
@@ -2569,7 +2612,29 @@ const Employees = {
                                         uploadedCount++;
                                     }
                                 } else {
-                                    const createdGuide = await API.createGuide(localGuide);
+                                    let createdGuide = null;
+                                    try {
+                                        createdGuide = await API.createGuide(localGuide);
+                                    } catch (createErr) {
+                                        const msg = (createErr && createErr.message) ? String(createErr.message) : '';
+                                        if (msg.includes('código') && msg.includes('ya existe') && (localGuide.barcode || localGuide.code)) {
+                                            try {
+                                                if (localGuide.barcode && API.getGuideByBarcode) {
+                                                    serverGuide = await API.getGuideByBarcode(localGuide.barcode);
+                                                }
+                                                if (!serverGuide && localGuide.code) {
+                                                    const serverGuides = await API.getGuides({ search: String(localGuide.code).trim() });
+                                                    if (serverGuides && serverGuides.length > 0) {
+                                                        serverGuide = serverGuides.find(g => (g.code || '').toString().trim() === (localGuide.code || '').toString().trim());
+                                                    }
+                                                }
+                                                if (serverGuide && serverGuide.id) {
+                                                    createdGuide = await API.updateGuide(serverGuide.id, localGuide);
+                                                }
+                                            } catch (e) { /* no recuperable */ }
+                                        }
+                                        if (!createdGuide) throw createErr;
+                                    }
                                     if (createdGuide && createdGuide.id) {
                                         const allLocalGuides = await DB.getAll('catalog_guides') || [];
                                         const guidesToUpdate = allLocalGuides.filter(g => {
@@ -2792,7 +2857,7 @@ const Employees = {
             <button class="btn-primary" onclick="window.Employees.saveGuide('${guideIdSafe}')">Guardar</button>
         `;
 
-        UI.showModal(guideId ? 'Editar Guía' : 'Nuevo Guía', body, footer, { size: 'large' });
+        UI.showModal(guideId ? 'Editar Guía' : 'Nuevo Guía', body, footer);
 
         if (guide?.barcode) {
             setTimeout(() => {
@@ -3008,14 +3073,23 @@ const Employees = {
                                 console.log(`📤 [Paso 1 Agencies] Subiendo agencia local al servidor: ${localAgency.id}`);
                                 
                                 let serverAgency = null;
-                                if (localAgency.name) {
-                                    try {
+                                try {
+                                    if (localAgency.barcode && API.getAgencyByBarcode) {
+                                        try { serverAgency = await API.getAgencyByBarcode(localAgency.barcode); } catch (e) {}
+                                    }
+                                    if (!serverAgency && localAgency.code) {
+                                        const serverAgencies = await API.getAgencies();
+                                        if (serverAgencies && serverAgencies.length > 0) {
+                                            serverAgency = serverAgencies.find(a => (a.code || '').toString().trim() === (localAgency.code || '').toString().trim());
+                                        }
+                                    }
+                                    if (!serverAgency && localAgency.name) {
                                         const serverAgencies = await API.getAgencies();
                                         if (serverAgencies && serverAgencies.length > 0) {
                                             serverAgency = serverAgencies.find(a => a.name === localAgency.name);
                                         }
-                                    } catch (e) {}
-                                }
+                                    }
+                                } catch (e) {}
                                 
                                 if (serverAgency && serverAgency.id) {
                                     const updatedAgency = await API.updateAgency(serverAgency.id, localAgency);
@@ -3035,7 +3109,29 @@ const Employees = {
                                         uploadedCount++;
                                     }
                                 } else {
-                                    const createdAgency = await API.createAgency(localAgency);
+                                    let createdAgency = null;
+                                    try {
+                                        createdAgency = await API.createAgency(localAgency);
+                                    } catch (createErr) {
+                                        const msg = (createErr && createErr.message) ? String(createErr.message) : '';
+                                        if (msg.includes('código') && msg.includes('ya existe') && (localAgency.barcode || localAgency.code)) {
+                                            try {
+                                                if (localAgency.barcode && API.getAgencyByBarcode) {
+                                                    serverAgency = await API.getAgencyByBarcode(localAgency.barcode);
+                                                }
+                                                if (!serverAgency && localAgency.code) {
+                                                    const serverAgencies = await API.getAgencies();
+                                                    if (serverAgencies && serverAgencies.length > 0) {
+                                                        serverAgency = serverAgencies.find(a => (a.code || '').toString().trim() === (localAgency.code || '').toString().trim());
+                                                    }
+                                                }
+                                                if (serverAgency && serverAgency.id) {
+                                                    createdAgency = await API.updateAgency(serverAgency.id, localAgency);
+                                                }
+                                            } catch (e) {}
+                                        }
+                                        if (!createdAgency) throw createErr;
+                                    }
                                     if (createdAgency && createdAgency.id) {
                                         const allLocalAgencies = await DB.getAll('catalog_agencies') || [];
                                         const agenciesToUpdate = allLocalAgencies.filter(a => {
@@ -3226,7 +3322,7 @@ const Employees = {
             <button class="btn-primary" onclick="window.Employees.saveAgency('${agencyIdSafe}')">Guardar</button>
         `;
 
-        UI.showModal(agencyId ? 'Editar Agencia' : 'Nueva Agencia', body, footer, { size: 'medium' });
+        UI.showModal(agencyId ? 'Editar Agencia' : 'Nueva Agencia', body, footer);
 
         if (agency?.barcode) {
             setTimeout(() => {
