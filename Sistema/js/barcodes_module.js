@@ -6,6 +6,9 @@ var BarcodesModule = {
     isExporting: false, // Flag para prevenir múltiples exportaciones simultáneas
     currentTab: 'overview',
     scanHistory: [],
+    BARCODES_BATCH_SIZE: 30,
+    _displayLimits: {},
+    _lastFilterKey: null,
 
     async init() {
         try {
@@ -72,15 +75,9 @@ var BarcodesModule = {
         });
         
         // Configurar event listeners para filtros (solo una vez)
-        this.setupBarcodeEventListeners();
     },
     
-    setupBarcodeEventListeners() {
-        // Usar una bandera para evitar agregar listeners múltiples veces
-        if (this._listenersSetup) return;
-        this._listenersSetup = true;
-        
-        // Event listeners para filtros (usar delegación de eventos para evitar duplicados)
+    setupBarcodesTabListeners() {
         const searchInput = document.getElementById('barcodes-search');
         if (searchInput && !searchInput.dataset.listenerAdded) {
             searchInput.dataset.listenerAdded = 'true';
@@ -105,7 +102,6 @@ var BarcodesModule = {
             branchFilter.addEventListener('change', () => this.loadBarcodes());
         }
         
-        // Event listeners para botones de acción
         const batchPrintBtn = document.getElementById('barcodes-batch-print');
         if (batchPrintBtn && !batchPrintBtn.dataset.listenerAdded) {
             batchPrintBtn.dataset.listenerAdded = 'true';
@@ -117,8 +113,9 @@ var BarcodesModule = {
             exportAllBtn.dataset.listenerAdded = 'true';
             exportAllBtn.addEventListener('click', () => this.showExportOptions());
         }
-        
-        // Event listeners para historial
+    },
+    
+    setupScanHistoryTabListeners() {
         const scanHistorySearch = document.getElementById('scan-history-search');
         if (scanHistorySearch && !scanHistorySearch.dataset.listenerAdded) {
             scanHistorySearch.dataset.listenerAdded = 'true';
@@ -224,8 +221,8 @@ var BarcodesModule = {
                     content.innerHTML = await this.getBarcodesTab();
                     // Configurar filtro de sucursal antes de cargar códigos
                     await this.setupBranchFilter();
-                    // Configurar event listeners después de crear el HTML
-                    this.setupBarcodeEventListeners();
+                    // Configurar event listeners para filtros del tab Códigos
+                    this.setupBarcodesTabListeners();
                     // Configurar event listeners para botones de generación individual
                     setTimeout(() => {
                         const generateItemBtn = document.getElementById('barcodes-generate-item');
@@ -271,6 +268,7 @@ var BarcodesModule = {
                     break;
                 case 'scan-history':
                     content.innerHTML = await this.getScanHistoryTab();
+                    this.setupScanHistoryTabListeners();
                     await this.loadScanHistory();
                     break;
                 case 'templates':
@@ -978,7 +976,7 @@ var BarcodesModule = {
 
         try {
             await DB.put('settings', {
-                id: 'barcode_settings',
+                key: 'barcode_settings',
                 value: settings,
                 updated_at: new Date().toISOString()
             });
@@ -1160,7 +1158,12 @@ var BarcodesModule = {
         }
     },
 
-    async loadBarcodes() {
+    async loadMoreBarcodes(type) {
+        this._displayLimits[type] = (this._displayLimits[type] || this.BARCODES_BATCH_SIZE) + this.BARCODES_BATCH_SIZE;
+        await this.loadBarcodes({ loadMoreFor: type });
+    },
+
+    async loadBarcodes(options = {}) {
         const container = document.getElementById('barcodes-list');
         if (!container) {
             return;
@@ -1200,6 +1203,20 @@ var BarcodesModule = {
             const viewAllBranches = isMasterAdmin && !selectedBranchId;
             
             console.log(`📍 Barcodes: Filtro de sucursal - selectedBranchId: ${selectedBranchId}, currentBranchId: ${currentBranchId}, filterBranchId: ${filterBranchId}, isMasterAdmin: ${isMasterAdmin}`);
+
+            // Paginación: resetear límites si cambió el filtro; loadMoreBarcodes ya incrementó si aplica
+            const filterKey = `${search}|${typeFilter}|${statusFilter}|${selectedBranchId || 'all'}`;
+            if (!options.loadMoreFor && filterKey !== this._lastFilterKey) {
+                this._lastFilterKey = filterKey;
+                this._displayLimits = {
+                    items: this.BARCODES_BATCH_SIZE,
+                    employees: this.BARCODES_BATCH_SIZE,
+                    sellers: this.BARCODES_BATCH_SIZE,
+                    guides: this.BARCODES_BATCH_SIZE,
+                    agencies: this.BARCODES_BATCH_SIZE,
+                    suppliers: this.BARCODES_BATCH_SIZE
+                };
+            }
 
             let items = [];
             let employees = [];
@@ -1401,13 +1418,28 @@ var BarcodesModule = {
                 return;
             }
 
+            const limitItems = this._displayLimits.items || this.BARCODES_BATCH_SIZE;
+            const limitEmployees = this._displayLimits.employees || this.BARCODES_BATCH_SIZE;
+            const limitSellers = this._displayLimits.sellers || this.BARCODES_BATCH_SIZE;
+            const limitGuides = this._displayLimits.guides || this.BARCODES_BATCH_SIZE;
+            const limitAgencies = this._displayLimits.agencies || this.BARCODES_BATCH_SIZE;
+            const limitSuppliers = this._displayLimits.suppliers || this.BARCODES_BATCH_SIZE;
+
+            const itemsToShow = items.slice(0, limitItems);
+            const employeesToShow = employees.slice(0, limitEmployees);
+            const sellersToShow = sellers.slice(0, limitSellers);
+            const guidesToShow = guides.slice(0, limitGuides);
+            const agenciesToShow = agencies.slice(0, limitAgencies);
+            const suppliersToShow = suppliers.slice(0, limitSuppliers);
+
             let html = '';
 
             // Mostrar productos con contador y acciones (solo si el filtro es 'all' o 'items')
             if (items.length > 0 && (typeFilter === 'all' || typeFilter === 'items')) {
                 const itemsWithoutBarcode = items.filter(item => Utils.isBarcodeEmpty(item.barcode)).length;
+                const hasMore = items.length > limitItems;
                 html += `
-                    <div class="barcodes-section">
+                    <div class="barcodes-section" data-type="items">
                         <div class="barcodes-section-header">
                             <h3><i class="fas fa-box"></i> Productos <span class="barcode-count">(${items.length})</span></h3>
                             <div style="display: flex; gap: var(--spacing-xs);">
@@ -1422,8 +1454,9 @@ var BarcodesModule = {
                             </div>
                         </div>
                         <div class="barcodes-grid">
-                            ${items.map(item => this.renderBarcodeCard(item, 'item')).join('')}
+                            ${itemsToShow.map(item => this.renderBarcodeCard(item, 'item')).join('')}
                         </div>
+                        ${hasMore ? `<div style="margin-top: var(--spacing-sm); text-align: center;"><button class="btn-secondary btn-sm" onclick="window.BarcodesModule.loadMoreBarcodes('items')">Ver más (${items.length - limitItems} restantes)</button></div>` : ''}
                     </div>
                 `;
             }
@@ -1431,8 +1464,9 @@ var BarcodesModule = {
             // Mostrar empleados con contador y acciones (solo si el filtro es 'all' o 'employees')
             if (employees.length > 0 && (typeFilter === 'all' || typeFilter === 'employees')) {
                 const employeesWithoutBarcode = employees.filter(emp => Utils.isBarcodeEmpty(emp.barcode)).length;
+                const hasMore = employees.length > limitEmployees;
                 html += `
-                    <div class="barcodes-section">
+                    <div class="barcodes-section" data-type="employees">
                         <div class="barcodes-section-header">
                             <h3><i class="fas fa-user-tie"></i> Empleados <span class="barcode-count">(${employees.length})</span></h3>
                             <div style="display: flex; gap: var(--spacing-xs);">
@@ -1447,8 +1481,9 @@ var BarcodesModule = {
                             </div>
                         </div>
                         <div class="barcodes-grid">
-                            ${employees.map(emp => this.renderBarcodeCard(emp, 'employee')).join('')}
+                            ${employeesToShow.map(emp => this.renderBarcodeCard(emp, 'employee')).join('')}
                         </div>
+                        ${hasMore ? `<div style="margin-top: var(--spacing-sm); text-align: center;"><button class="btn-secondary btn-sm" onclick="window.BarcodesModule.loadMoreBarcodes('employees')">Ver más (${employees.length - limitEmployees} restantes)</button></div>` : ''}
                     </div>
                 `;
             }
@@ -1456,8 +1491,9 @@ var BarcodesModule = {
             // Mostrar vendedores con contador y acciones (solo si el filtro es 'all' o 'sellers')
             if (sellers.length > 0 && (typeFilter === 'all' || typeFilter === 'sellers')) {
                 const sellersWithoutBarcode = sellers.filter(s => Utils.isBarcodeEmpty(s.barcode)).length;
+                const hasMore = sellers.length > limitSellers;
                 html += `
-                    <div class="barcodes-section">
+                    <div class="barcodes-section" data-type="sellers">
                         <div class="barcodes-section-header">
                             <h3><i class="fas fa-user-tag"></i> Vendedores <span class="barcode-count">(${sellers.length})</span></h3>
                             <div style="display: flex; gap: var(--spacing-xs);">
@@ -1472,8 +1508,9 @@ var BarcodesModule = {
                             </div>
                         </div>
                         <div class="barcodes-grid">
-                            ${sellers.map(seller => this.renderBarcodeCard(seller, 'seller')).join('')}
+                            ${sellersToShow.map(seller => this.renderBarcodeCard(seller, 'seller')).join('')}
                         </div>
+                        ${hasMore ? `<div style="margin-top: var(--spacing-sm); text-align: center;"><button class="btn-secondary btn-sm" onclick="window.BarcodesModule.loadMoreBarcodes('sellers')">Ver más (${sellers.length - limitSellers} restantes)</button></div>` : ''}
                     </div>
                 `;
             }
@@ -1481,8 +1518,9 @@ var BarcodesModule = {
             // Mostrar guías con contador y acciones (solo si el filtro es 'all' o 'guides')
             if (guides.length > 0 && (typeFilter === 'all' || typeFilter === 'guides')) {
                 const guidesWithoutBarcode = guides.filter(g => Utils.isBarcodeEmpty(g.barcode)).length;
+                const hasMore = guides.length > limitGuides;
                 html += `
-                    <div class="barcodes-section">
+                    <div class="barcodes-section" data-type="guides">
                         <div class="barcodes-section-header">
                             <h3><i class="fas fa-suitcase"></i> Guías <span class="barcode-count">(${guides.length})</span></h3>
                             <div style="display: flex; gap: var(--spacing-xs);">
@@ -1497,8 +1535,9 @@ var BarcodesModule = {
                             </div>
                         </div>
                         <div class="barcodes-grid">
-                            ${guides.map(guide => this.renderBarcodeCard(guide, 'guide')).join('')}
+                            ${guidesToShow.map(guide => this.renderBarcodeCard(guide, 'guide')).join('')}
                         </div>
+                        ${hasMore ? `<div style="margin-top: var(--spacing-sm); text-align: center;"><button class="btn-secondary btn-sm" onclick="window.BarcodesModule.loadMoreBarcodes('guides')">Ver más (${guides.length - limitGuides} restantes)</button></div>` : ''}
                     </div>
                 `;
             }
@@ -1506,8 +1545,9 @@ var BarcodesModule = {
             // Mostrar agencias con contador y acciones (solo si el filtro es 'all' o 'agencies')
             if (agencies.length > 0 && (typeFilter === 'all' || typeFilter === 'agencies')) {
                 const agenciesWithoutBarcode = agencies.filter(a => Utils.isBarcodeEmpty(a.barcode)).length;
+                const hasMore = agencies.length > limitAgencies;
                 html += `
-                    <div class="barcodes-section">
+                    <div class="barcodes-section" data-type="agencies">
                         <div class="barcodes-section-header">
                             <h3><i class="fas fa-building"></i> Agencias <span class="barcode-count">(${agencies.length})</span></h3>
                             <div style="display: flex; gap: var(--spacing-xs);">
@@ -1522,8 +1562,9 @@ var BarcodesModule = {
                             </div>
                         </div>
                         <div class="barcodes-grid">
-                            ${agencies.map(agency => this.renderBarcodeCard(agency, 'agency')).join('')}
+                            ${agenciesToShow.map(agency => this.renderBarcodeCard(agency, 'agency')).join('')}
                         </div>
+                        ${hasMore ? `<div style="margin-top: var(--spacing-sm); text-align: center;"><button class="btn-secondary btn-sm" onclick="window.BarcodesModule.loadMoreBarcodes('agencies')">Ver más (${agencies.length - limitAgencies} restantes)</button></div>` : ''}
                     </div>
                 `;
             }
@@ -1531,8 +1572,9 @@ var BarcodesModule = {
             // Mostrar proveedores con contador y acciones (solo si el filtro es 'all' o 'suppliers')
             if (suppliers.length > 0 && (typeFilter === 'all' || typeFilter === 'suppliers')) {
                 const suppliersWithoutBarcode = suppliers.filter(s => Utils.isBarcodeEmpty(s.barcode)).length;
+                const hasMore = suppliers.length > limitSuppliers;
                 html += `
-                    <div class="barcodes-section">
+                    <div class="barcodes-section" data-type="suppliers">
                         <div class="barcodes-section-header">
                             <h3><i class="fas fa-truck"></i> Proveedores <span class="barcode-count">(${suppliers.length})</span></h3>
                             <div style="display: flex; gap: var(--spacing-xs);">
@@ -1547,8 +1589,9 @@ var BarcodesModule = {
                             </div>
                         </div>
                         <div class="barcodes-grid">
-                            ${suppliers.map(supplier => this.renderBarcodeCard(supplier, 'supplier')).join('')}
+                            ${suppliersToShow.map(supplier => this.renderBarcodeCard(supplier, 'supplier')).join('')}
                         </div>
+                        ${hasMore ? `<div style="margin-top: var(--spacing-sm); text-align: center;"><button class="btn-secondary btn-sm" onclick="window.BarcodesModule.loadMoreBarcodes('suppliers')">Ver más (${suppliers.length - limitSuppliers} restantes)</button></div>` : ''}
                     </div>
                 `;
             }
@@ -1595,116 +1638,34 @@ var BarcodesModule = {
             // Configurar selector de sucursal ANTES de cargar datos
             await this.setupBranchFilter();
             
-            // Los event listeners ya están configurados en setupBarcodeEventListeners()
-            // Solo asegurarse de que estén configurados si no lo están
-            this.setupBarcodeEventListeners();
+            // Los event listeners se configuran en setupBarcodesTabListeners() al cargar el tab
+            // Re-aplicar por si el DOM fue reconstruido (ej. selección múltiple)
+            this.setupBarcodesTabListeners();
 
-            // Generar códigos de barras visuales
+            // Generar códigos de barras en lotes para evitar trabar la UI
             const settings = await this.getBarcodeSettings();
             const format = settings.format || 'CODE128';
-            
-            // Generar códigos de barras con delay para asegurar que JsBarcode esté cargado
-            let delay = 200; // Empezar con 200ms de delay
-            items.forEach((item, index) => {
-                if (!Utils.isBarcodeEmpty(item.barcode)) {
-                    setTimeout(async () => {
-                        try {
-                            await BarcodeManager.generateBarcode(item.barcode, `barcode-item-${item.id}`, format, {
-                                width: settings.width,
-                                height: settings.height,
-                                displayValue: settings.displayValue
-                            });
-                        } catch (error) {
-                            console.warn(`Error generando código de barras para item ${item.id}:`, error.message);
-                        }
-                    }, delay + (index * 10)); // Espaciar las llamadas ligeramente
-                }
-            });
+            const barcodeOpts = { width: settings.width, height: settings.height, displayValue: settings.displayValue };
 
-            delay += items.length * 10 + 100; // Aumentar delay para employees
-            employees.forEach((emp, index) => {
-                if (!Utils.isBarcodeEmpty(emp.barcode)) {
-                    setTimeout(async () => {
-                        try {
-                            await BarcodeManager.generateBarcode(emp.barcode, `barcode-emp-${emp.id}`, format, {
-                                width: settings.width,
-                                height: settings.height,
-                                displayValue: settings.displayValue
-                            });
-                        } catch (error) {
-                            console.warn(`Error generando código de barras para empleado ${emp.id}:`, error.message);
-                        }
-                    }, delay + (index * 10));
-                }
-            });
+            const batches = [
+                itemsToShow.filter(i => !Utils.isBarcodeEmpty(i.barcode)).map(i => ({ barcode: i.barcode, id: `barcode-item-${i.id}` })),
+                employeesToShow.filter(e => !Utils.isBarcodeEmpty(e.barcode)).map(e => ({ barcode: e.barcode, id: `barcode-emp-${e.id}` })),
+                sellersToShow.filter(s => !Utils.isBarcodeEmpty(s.barcode)).map(s => ({ barcode: s.barcode, id: `barcode-seller-${s.id}` })),
+                guidesToShow.filter(g => !Utils.isBarcodeEmpty(g.barcode)).map(g => ({ barcode: g.barcode, id: `barcode-guide-${g.id}` })),
+                agenciesToShow.filter(a => !Utils.isBarcodeEmpty(a.barcode)).map(a => ({ barcode: a.barcode, id: `barcode-agency-${a.id}` })),
+                suppliersToShow.filter(s => !Utils.isBarcodeEmpty(s.barcode)).map(s => ({ barcode: s.barcode, id: `barcode-supplier-${s.id}` }))
+            ].flat();
 
-            delay += employees.length * 10 + 100; // Aumentar delay para sellers
-            sellers.forEach((seller, index) => {
-                if (!Utils.isBarcodeEmpty(seller.barcode)) {
-                    setTimeout(async () => {
-                        try {
-                            await BarcodeManager.generateBarcode(seller.barcode, `barcode-seller-${seller.id}`, format, {
-                                width: settings.width,
-                                height: settings.height,
-                                displayValue: settings.displayValue
-                            });
-                        } catch (error) {
-                            console.warn(`Error generando código de barras para vendedor ${seller.id}:`, error.message);
-                        }
-                    }, delay + (index * 10));
-                }
-            });
-
-            delay += sellers.length * 10 + 100; // Aumentar delay para guides
-            guides.forEach((guide, index) => {
-                if (!Utils.isBarcodeEmpty(guide.barcode)) {
-                    setTimeout(async () => {
-                        try {
-                            await BarcodeManager.generateBarcode(guide.barcode, `barcode-guide-${guide.id}`, format, {
-                                width: settings.width,
-                                height: settings.height,
-                                displayValue: settings.displayValue
-                            });
-                        } catch (error) {
-                            console.warn(`Error generando código de barras para guía ${guide.id}:`, error.message);
-                        }
-                    }, delay + (index * 10));
-                }
-            });
-
-            delay += guides.length * 10 + 100; // Aumentar delay para agencies
-            agencies.forEach((agency, index) => {
-                if (!Utils.isBarcodeEmpty(agency.barcode)) {
-                    setTimeout(async () => {
-                        try {
-                            await BarcodeManager.generateBarcode(agency.barcode, `barcode-agency-${agency.id}`, format, {
-                                width: settings.width,
-                                height: settings.height,
-                                displayValue: settings.displayValue
-                            });
-                        } catch (error) {
-                            console.warn(`Error generando código de barras para agencia ${agency.id}:`, error.message);
-                        }
-                    }, delay + (index * 10));
-                }
-            });
-
-            delay += agencies.length * 10 + 100; // Aumentar delay para suppliers
-            suppliers.forEach((supplier, index) => {
-                if (!Utils.isBarcodeEmpty(supplier.barcode)) {
-                    setTimeout(async () => {
-                        try {
-                            await BarcodeManager.generateBarcode(supplier.barcode, `barcode-supplier-${supplier.id}`, format, {
-                                width: settings.width,
-                                height: settings.height,
-                                displayValue: settings.displayValue
-                            });
-                        } catch (error) {
-                            console.warn(`Error generando código de barras para proveedor ${supplier.id}:`, error.message);
-                        }
-                    }, delay + (index * 10));
-                }
-            });
+            const BATCH_SIZE = 10;
+            for (let i = 0; i < batches.length; i += BATCH_SIZE) {
+                const batch = batches.slice(i, i + BATCH_SIZE);
+                await Promise.all(batch.map(b => 
+                    BarcodeManager.generateBarcode(b.barcode, b.id, format, barcodeOpts).catch(err => {
+                        console.warn(`Error generando código ${b.id}:`, err?.message);
+                    })
+                ));
+                await new Promise(r => requestAnimationFrame(r));
+            }
 
         } catch (e) {
             console.error('Error loading barcodes:', e);
@@ -2499,7 +2460,7 @@ var BarcodesModule = {
                 </div>
                 <div class="form-group">
                     <label>Campos a Mostrar</label>
-                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--spacing-xs); margin-top: var(--spacing-xs);">
+                    <div id="template-fields-container" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--spacing-xs); margin-top: var(--spacing-xs);">
                         <label style="display: flex; align-items: center; gap: var(--spacing-xs);">
                             <input type="checkbox" value="name" ${template.fields.includes('name') ? 'checked' : ''}>
                             <span>Nombre</span>
@@ -2573,9 +2534,9 @@ var BarcodesModule = {
         
         const fields = [];
         try {
-            const descriptionGroup = document.querySelector('#template-description')?.closest('.form-group');
-            if (descriptionGroup && descriptionGroup.nextElementSibling) {
-                descriptionGroup.nextElementSibling.querySelectorAll('input[type="checkbox"]:checked').forEach(cb => {
+            const fieldsContainer = document.getElementById('template-fields-container');
+            if (fieldsContainer) {
+                fieldsContainer.querySelectorAll('input[type="checkbox"]:checked').forEach(cb => {
                     if (!cb.disabled) fields.push(cb.value);
                 });
             }
