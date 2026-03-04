@@ -584,8 +584,12 @@ const Inventory = {
                 
                 branchFilter.innerHTML = '<option value="all">Todas las sucursales</option>' + 
                 branches.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
-                // Master admin: mostrar TODAS las piezas por defecto (no filtrar por sucursal)
-                branchFilter.value = 'all';
+                // Establecer valor por defecto según sucursal actual
+                if (currentBranchId) {
+                    branchFilter.value = currentBranchId;
+                } else {
+                    branchFilter.value = 'all';
+                }
             }
             
             branchFilter.addEventListener('change', () => this.loadInventory());
@@ -1104,12 +1108,15 @@ const Inventory = {
                 console.log('⚡ [Camino rápido] Mostrando inventario desde IndexedDB + pieza nueva, API en background');
                 try {
                     const fromIdb = await DB.getAll('inventory_items', null, null, { filterByBranch: false }) || [];
+                    const norm = (id) => String(id || '').trim().toLowerCase();
                     if (filterBranchId) {
-                        allItemsRaw = fromIdb.filter(item => item.branch_id && String(item.branch_id) === String(filterBranchId));
+                        const fb = norm(filterBranchId);
+                        allItemsRaw = fromIdb.filter(item => item.branch_id && norm(item.branch_id) === fb);
                     } else if (viewAllBranches && isMasterAdmin) {
                         allItemsRaw = fromIdb;
                     } else if (currentBranchId) {
-                        allItemsRaw = fromIdb.filter(item => item.branch_id && String(item.branch_id) === String(currentBranchId));
+                        const cb = norm(currentBranchId);
+                        allItemsRaw = fromIdb.filter(item => item.branch_id && norm(item.branch_id) === cb);
                     } else {
                         allItemsRaw = fromIdb;
                     }
@@ -1161,16 +1168,13 @@ const Inventory = {
                     allItemsRaw = await API.getInventoryItems(filters);
                     const apiReturnedZero = (allItemsRaw.length === 0);
                     
-                    // CRÍTICO: Aplicar filtro estricto DESPUÉS de recibir de API
-                    // Esto asegura que items sin branch_id se excluyan cuando se filtra por sucursal específica
+                    // CRÍTICO: Aplicar filtro estricto DESPUÉS de recibir de API (comparación case-insensitive para UUIDs)
                     if (filterBranchId) {
                         const beforeStrictFilter = allItemsRaw.length;
+                        const filterBranchNorm = String(filterBranchId || '').trim().toLowerCase();
                         allItemsRaw = allItemsRaw.filter(item => {
-                            // CRÍTICO: Excluir items sin branch_id cuando se filtra por sucursal específica
-                            if (!item.branch_id) {
-                                return false; // NO mostrar items sin branch_id
-                            }
-                            return String(item.branch_id) === String(filterBranchId);
+                            if (!item.branch_id) return false;
+                            return String(item.branch_id || '').trim().toLowerCase() === filterBranchNorm;
                         });
                         console.log(`📍 Inventory: Filtrado estricto API: ${beforeStrictFilter} → ${allItemsRaw.length} (sucursal: ${filterBranchId})`);
                     }
@@ -1217,12 +1221,15 @@ const Inventory = {
                         try {
                             const fromIdb = await DB.getAll('inventory_items', null, null, { filterByBranch: false }) || [];
                             if (fromIdb.length > 0) {
+                                const norm = (id) => String(id || '').trim().toLowerCase();
                                 if (filterBranchId) {
-                                    allItemsRaw = fromIdb.filter(item => item.branch_id && String(item.branch_id) === String(filterBranchId));
+                                    const fb = norm(filterBranchId);
+                                    allItemsRaw = fromIdb.filter(item => item.branch_id && norm(item.branch_id) === fb);
                                 } else if (viewAllBranches && isMasterAdmin) {
                                     allItemsRaw = fromIdb;
                                 } else if (currentBranchId) {
-                                    allItemsRaw = fromIdb.filter(item => item.branch_id && String(item.branch_id) === String(currentBranchId));
+                                    const cb = norm(currentBranchId);
+                                    allItemsRaw = fromIdb.filter(item => item.branch_id && norm(item.branch_id) === cb);
                                 }
                                 if (allItemsRaw.length > 0) {
                                     console.log('📦 API devolvió 0 items. Mostrando datos en caché (IndexedDB):', allItemsRaw.length);
@@ -1303,10 +1310,12 @@ const Inventory = {
             let serverByBarcode = new Map();
             
             // Si hay API disponible, obtener lista de IDs del servidor para comparar
+            // Usar filterBranchId cuando hay filtro de sucursal para verificar contra las mismas piezas que mostramos
             if (typeof API !== 'undefined' && API.baseURL && API.token && API.getInventoryItems) {
                 try {
+                    const branchForVerification = viewAllBranches ? null : (filterBranchId || currentBranchId);
                     const serverItemsList = await API.getInventoryItems({
-                        branch_id: viewAllBranches ? null : currentBranchId
+                        branch_id: branchForVerification
                     });
                     serverItems = new Set(serverItemsList.map(item => item.id));
                     serverBySku = new Map(serverItemsList.filter(i => i?.sku).map(i => [String(i.sku), i]));
