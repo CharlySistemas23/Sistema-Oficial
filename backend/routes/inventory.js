@@ -14,10 +14,16 @@ const router = express.Router();
 // Obtener items de inventario
 router.get('/', requireBranchAccess, async (req, res) => {
   try {
-    const { 
+    const {
       branch_id, status, search, category, metal, stone_type, min_price, max_price,
-      material, purity, plating, style, finish, theme, condition, location_detail, collection
+      material, purity, plating, style, finish, theme, condition, location_detail,
+      collection, updated_after
     } = req.query;
+
+    // Sync incremental: solo cuando se envía updated_after se limita el resultado
+    const syncLimit = (updated_after && req.query.limit)
+      ? Math.min(parseInt(req.query.limit) || 500, 2000)
+      : null;
 
     const normalizeBranchId = (id) => {
       if (id == null || id === '' || id === 'null' || id === 'undefined') return null;
@@ -25,17 +31,16 @@ router.get('/', requireBranchAccess, async (req, res) => {
       return s ? s.toLowerCase() : null;
     };
 
-    // Manejar branch_id: query (master o usuario con varias sucursales) o req.user.branchId (ya normalizado en auth)
+    // Resolver branch_id efectivo (ignorar "all" para devolver TODAS las piezas)
     let branchId = null;
-    if (branch_id && branch_id !== 'null' && branch_id !== 'undefined') {
+    const branchVal = (branch_id && String(branch_id).trim().toLowerCase());
+    if (branchVal && branchVal !== 'null' && branchVal !== 'undefined' && branchVal !== 'all') {
       branchId = normalizeBranchId(branch_id);
     }
     if (!req.user.isMasterAdmin) {
       const allowedBranchIds = (req.user.branchIds || []).map(b => normalizeBranchId(b)).filter(Boolean);
       const queryBranchOk = branchId && allowedBranchIds.includes(branchId);
-      if (!queryBranchOk) {
-        branchId = normalizeBranchId(req.user.branchId);
-      }
+      if (!queryBranchOk) branchId = normalizeBranchId(req.user.branchId);
       if (!branchId) {
         return res.status(400).json({
           error: 'Usuario sin sucursal asignada',
@@ -45,134 +50,142 @@ router.get('/', requireBranchAccess, async (req, res) => {
       }
     }
 
-    let sql = `
-      SELECT i.*, 
-             s.name as supplier_name,
-             s.code as supplier_code
+    // ── Construir cláusula WHERE compartida ─────────────────────────────
+    // La misma WHERE se usa tanto para la query de ítems como para la de stats.
+    // Esto evita el frágil regex de reemplazo de SQL anterior.
+    const whereParts = ['1=1'];
+    const whereParams = [];
+    let p = 1;
+
+    if (branchId) {
+      whereParts.push(`i.branch_id = $${p}::uuid`);
+      whereParams.push(branchId); p++;
+    }
+    if (status) {
+      whereParts.push(`i.status = $${p}`);
+      whereParams.push(status); p++;
+    }
+    if (search) {
+      whereParts.push(`(i.name ILIKE $${p} OR i.sku ILIKE $${p} OR i.barcode ILIKE $${p})`);
+      whereParams.push(`%${search}%`); p++;
+    }
+    if (category) {
+      whereParts.push(`i.category = $${p}`);
+      whereParams.push(category); p++;
+    }
+    if (metal) {
+      whereParts.push(`i.metal = $${p}`);
+      whereParams.push(metal); p++;
+    }
+    if (stone_type) {
+      whereParts.push(`i.stone_type = $${p}`);
+      whereParams.push(stone_type); p++;
+    }
+    if (min_price) {
+      whereParts.push(`i.price >= $${p}`);
+      whereParams.push(min_price); p++;
+    }
+    if (max_price) {
+      whereParts.push(`i.price <= $${p}`);
+      whereParams.push(max_price); p++;
+    }
+    if (material) {
+      whereParts.push(`(i.material = $${p} OR i.metal ILIKE $${p})`);
+      whereParams.push(`%${material}%`); p++;
+    }
+    if (purity) {
+      whereParts.push(`(i.purity = $${p} OR i.metal ILIKE $${p})`);
+      whereParams.push(`%${purity}%`); p++;
+    }
+    if (plating) {
+      whereParts.push(`i.plating = $${p}`);
+      whereParams.push(plating); p++;
+    }
+    if (style) {
+      whereParts.push(`i.style = $${p}`);
+      whereParams.push(style); p++;
+    }
+    if (finish) {
+      whereParts.push(`i.finish_type = $${p}`);
+      whereParams.push(finish); p++;
+    }
+    if (theme) {
+      whereParts.push(`i.theme = $${p}`);
+      whereParams.push(theme); p++;
+    }
+    if (condition) {
+      whereParts.push(`i.condition = $${p}`);
+      whereParams.push(condition); p++;
+    }
+    if (location_detail) {
+      whereParts.push(`(i.location_detail = $${p} OR i.location = $${p})`);
+      whereParams.push(location_detail); p++;
+    }
+    if (collection) {
+      whereParts.push(`i.collection = $${p}`);
+      whereParams.push(collection); p++;
+    }
+    if (updated_after) {
+      whereParts.push(`i.updated_at > $${p}`);
+      whereParams.push(updated_after); p++;
+    }
+
+    const whereClause = 'WHERE ' + whereParts.join(' AND ');
+
+    // ── Query de estadísticas globales (KPIs) ───────────────────────────
+    // Se ejecuta primero; si falla no bloquea la carga de ítems.
+    let globalStats = null;
+    try {
+      const statsSql = `
+        SELECT
+          COUNT(*)                                          AS total,
+          COUNT(*) FILTER (WHERE i.status = 'disponible')  AS disponible,
+          COUNT(*) FILTER (WHERE i.status = 'vendida')     AS vendida,
+          COUNT(*) FILTER (WHERE i.status = 'apartada')    AS apartada,
+          COUNT(*) FILTER (WHERE i.status = 'reparacion')  AS reparacion,
+          COALESCE(SUM(COALESCE(i.cost,0) * GREATEST(COALESCE(i.stock_actual,0),1)),0) AS total_value,
+          COALESCE(SUM(GREATEST(COALESCE(i.stock_actual,0),0)),0)                       AS total_stock
+        FROM inventory_items i
+        ${whereClause}
+      `;
+      const sr = (await query(statsSql, whereParams)).rows[0] || {};
+      globalStats = {
+        total:      parseInt(sr.total      || '0', 10),
+        disponible: parseInt(sr.disponible || '0', 10),
+        vendida:    parseInt(sr.vendida    || '0', 10),
+        apartada:   parseInt(sr.apartada   || '0', 10),
+        reparacion: parseInt(sr.reparacion || '0', 10),
+        totalValue: parseFloat(sr.total_value || '0'),
+        totalStock: parseInt(sr.total_stock   || '0', 10),
+      };
+    } catch (statsErr) {
+      console.warn('Stats query failed (non-fatal):', statsErr.message);
+      // globalStats stays null; frontend calculates from items array
+    }
+
+    // ── Query de ítems ──────────────────────────────────────────────────
+    let itemsSql = `
+      SELECT i.*,
+             s.name AS supplier_name,
+             s.code AS supplier_code
       FROM inventory_items i
       LEFT JOIN suppliers s ON i.supplier_id = s.id
-      WHERE 1=1
+      ${whereClause}
+      ORDER BY i.created_at DESC
     `;
-    const params = [];
-    let paramCount = 1;
-
-    // Filtro por sucursal: comparar como UUID para evitar fallos por formato/case
-    if (req.user.isMasterAdmin) {
-      if (branchId) {
-        sql += ` AND i.branch_id = $${paramCount}::uuid`;
-        params.push(branchId);
-        paramCount++;
-      }
-    } else {
-      if (branchId) {
-        sql += ` AND i.branch_id = $${paramCount}::uuid`;
-        params.push(branchId);
-        paramCount++;
-      }
+    const itemsParams = [...whereParams];
+    if (syncLimit) {
+      itemsSql += ` LIMIT $${p}`;
+      itemsParams.push(syncLimit);
     }
 
-    // Filtros adicionales
-    if (status) {
-      sql += ` AND i.status = $${paramCount}`;
-      params.push(status);
-      paramCount++;
-    }
+    const result = await query(itemsSql, itemsParams);
 
-    if (search) {
-      sql += ` AND (i.name ILIKE $${paramCount} OR i.sku ILIKE $${paramCount} OR i.barcode ILIKE $${paramCount})`;
-      params.push(`%${search}%`);
-      paramCount++;
-    }
-
-    if (category) {
-      sql += ` AND i.category = $${paramCount}`;
-      params.push(category);
-      paramCount++;
-    }
-
-    if (metal) {
-      sql += ` AND i.metal = $${paramCount}`;
-      params.push(metal);
-      paramCount++;
-    }
-
-    if (stone_type) {
-      sql += ` AND i.stone_type = $${paramCount}`;
-      params.push(stone_type);
-      paramCount++;
-    }
-
-    if (min_price) {
-      sql += ` AND i.price >= $${paramCount}`;
-      params.push(min_price);
-      paramCount++;
-    }
-
-    if (max_price) {
-      sql += ` AND i.price <= $${paramCount}`;
-      params.push(max_price);
-      paramCount++;
-    }
-
-    // Filtros avanzados
-    if (material) {
-      sql += ` AND (i.material = $${paramCount} OR i.metal ILIKE $${paramCount})`;
-      params.push(`%${material}%`);
-      paramCount++;
-    }
-
-    if (purity) {
-      sql += ` AND (i.purity = $${paramCount} OR i.metal ILIKE $${paramCount})`;
-      params.push(`%${purity}%`);
-      paramCount++;
-    }
-
-    if (plating) {
-      sql += ` AND i.plating = $${paramCount}`;
-      params.push(plating);
-      paramCount++;
-    }
-
-    if (style) {
-      sql += ` AND i.style = $${paramCount}`;
-      params.push(style);
-      paramCount++;
-    }
-
-    if (finish) {
-      sql += ` AND i.finish_type = $${paramCount}`;
-      params.push(finish);
-      paramCount++;
-    }
-
-    if (theme) {
-      sql += ` AND i.theme = $${paramCount}`;
-      params.push(theme);
-      paramCount++;
-    }
-
-    if (condition) {
-      sql += ` AND i.condition = $${paramCount}`;
-      params.push(condition);
-      paramCount++;
-    }
-
-    if (location_detail) {
-      sql += ` AND (i.location_detail = $${paramCount} OR i.location = $${paramCount})`;
-      params.push(location_detail);
-      paramCount++;
-    }
-
-    if (collection) {
-      sql += ` AND i.collection = $${paramCount}`;
-      params.push(collection);
-      paramCount++;
-    }
-
-    sql += ` ORDER BY i.created_at DESC LIMIT 1000`;
-
-    const result = await query(sql, params);
-    res.json(result.rows);
+    res.json({
+      items: result.rows,
+      total: globalStats?.total ?? result.rows.length,
+      stats: globalStats
+    });
   } catch (error) {
     console.error('Error obteniendo inventario:', error);
     res.status(500).json({ error: 'Error al obtener inventario' });
