@@ -192,7 +192,8 @@ const Inventory = {
                                 <option value="">Todos los estados</option>
                                 <option value="disponible">Disponible</option>
                                 <option value="vendida">Vendida</option>
-                                <option value="reservada">Reservada</option>
+                                <option value="apartada">Apartada</option>
+                                <option value="reparacion">Reparación</option>
                             </select>
                         </div>
                         <div class="form-group" style="margin-bottom: 0;">
@@ -661,12 +662,16 @@ const Inventory = {
             groupByCollection.addEventListener('change', () => this.loadInventory());
         }
 
-        // Poblar dropdown de colecciones dinámicamente
+        // Poblar dropdowns dinámicamente
         this.populateCollectionFilter();
-        
-        // Recargar colecciones cuando se carga el inventario
+        this.populateMetalFilter();
+        this.populateStoneTypeFilter();
+
+        // Recargar dropdowns cuando se carga el inventario
         window.addEventListener('inventory-loaded', () => {
             this.populateCollectionFilter();
+            this.populateMetalFilter();
+            this.populateStoneTypeFilter();
         });
 
             // Escuchar cambios de sucursal para sincronizar el dropdown
@@ -1132,12 +1137,31 @@ const Inventory = {
                     console.log('📦 Cargando inventario desde API...');
                     const categoryChip = document.querySelector('.inventory-category-bar .inventory-category-chip.active')?.dataset.category;
                     const categoryFilter = (categoryChip && categoryChip !== 'all') ? categoryChip : undefined;
+                    const searchVal = document.getElementById('inventory-search')?.value?.trim();
+                    const minPriceVal = document.getElementById('inventory-min-price')?.value;
+                    const maxPriceVal = document.getElementById('inventory-max-price')?.value;
                     const filters = {
                         branch_id: filterBranchId != null ? String(filterBranchId).trim() || undefined : undefined,
                         status: document.getElementById('inventory-status-filter')?.value || undefined,
-                        category: categoryFilter
+                        category: categoryFilter,
+                        search: searchVal || undefined,
+                        metal: document.getElementById('inventory-metal-filter')?.value || undefined,
+                        stone_type: document.getElementById('inventory-stone-type-filter')?.value || undefined,
+                        min_price: minPriceVal ? String(minPriceVal) : undefined,
+                        max_price: maxPriceVal ? String(maxPriceVal) : undefined,
+                        material: document.getElementById('inventory-material-filter')?.value || undefined,
+                        purity: document.getElementById('inventory-purity-filter')?.value || undefined,
+                        plating: document.getElementById('inventory-plating-filter')?.value || undefined,
+                        style: document.getElementById('inventory-style-filter')?.value || undefined,
+                        finish: document.getElementById('inventory-finish-filter')?.value || undefined,
+                        theme: document.getElementById('inventory-theme-filter')?.value || undefined,
+                        condition: document.getElementById('inventory-condition-filter')?.value || undefined,
+                        location_detail: document.getElementById('inventory-location-filter')?.value || undefined,
+                        collection: document.getElementById('inventory-collection-filter')?.value || undefined
                     };
-                    
+                    // Eliminar propiedades undefined para no enviar query params vacíos
+                    Object.keys(filters).forEach(k => { if (filters[k] == null || filters[k] === '') delete filters[k]; });
+
                     allItemsRaw = await API.getInventoryItems(filters);
                     const apiReturnedZero = (allItemsRaw.length === 0);
                     
@@ -1533,8 +1557,8 @@ const Inventory = {
             const supplierFilter = document.getElementById('inventory-supplier-filter')?.value;
             if (supplierFilter) {
                 items = items.filter(item => {
-                    // Comparar tanto supplier_id como supplier_name/supplier_code para compatibilidad
-                    const itemSupplierId = item.supplier_id || item.supplier_id;
+                    // Comparar supplier_id
+                    const itemSupplierId = item.supplier_id;
                     return String(itemSupplierId) === String(supplierFilter);
                 });
             }
@@ -1804,6 +1828,63 @@ const Inventory = {
             }
         } catch (error) {
             console.error('Error poblando filtro de colecciones:', error);
+        }
+    },
+
+    // Poblar dropdown de metales dinámicamente
+    async populateMetalFilter() {
+        const metalFilter = document.getElementById('inventory-metal-filter');
+        if (!metalFilter) return;
+
+        try {
+            const allItems = await DB.getAll('inventory_items', null, null, { filterByBranch: false }) || [];
+            const metals = [...new Set(allItems
+                .map(item => item.metal)
+                .filter(Boolean)
+            )].sort((a, b) => String(a).localeCompare(String(b)));
+
+            const currentValue = metalFilter.value;
+            metalFilter.innerHTML = '<option value="">Todos los metales</option>';
+            metals.forEach(metal => {
+                const option = document.createElement('option');
+                option.value = metal;
+                option.textContent = metal;
+                metalFilter.appendChild(option);
+            });
+
+            if (currentValue && metals.includes(currentValue)) {
+                metalFilter.value = currentValue;
+            }
+        } catch (error) {
+            console.error('Error poblando filtro de metales:', error);
+        }
+    },
+
+    // Poblar dropdown de tipos de piedra dinámicamente
+    async populateStoneTypeFilter() {
+        const stoneFilter = document.getElementById('inventory-stone-type-filter');
+        if (!stoneFilter) return;
+
+        try {
+            const allItems = await DB.getAll('inventory_items', null, null, { filterByBranch: false }) || [];
+            const stoneTypes = [...new Set(
+                allItems.flatMap(item => [item.stone_type, item.stone].filter(Boolean))
+            )].sort((a, b) => String(a).localeCompare(String(b)));
+
+            const currentValue = stoneFilter.value;
+            stoneFilter.innerHTML = '<option value="">Todos los tipos</option>';
+            stoneTypes.forEach(st => {
+                const option = document.createElement('option');
+                option.value = st;
+                option.textContent = st;
+                stoneFilter.appendChild(option);
+            });
+
+            if (currentValue && stoneTypes.includes(currentValue)) {
+                stoneFilter.value = currentValue;
+            }
+        } catch (error) {
+            console.error('Error poblando filtro de tipos de piedra:', error);
         }
     },
 
@@ -3960,6 +4041,40 @@ const Inventory = {
             });
         } catch (error) {
             console.error('Error cargando proveedores:', error);
+        }
+    },
+
+    // Cargar dropdown de proveedores para filtro de inventario
+    async loadSupplierFilterDropdown() {
+        const supplierFilter = document.getElementById('inventory-supplier-filter');
+        if (!supplierFilter) return;
+
+        try {
+            let suppliers = [];
+            if (typeof Suppliers !== 'undefined' && Suppliers.loadSuppliers) {
+                suppliers = await DB.getAll('suppliers') || [];
+            } else if (typeof API !== 'undefined' && API.baseURL && API.getSuppliers) {
+                suppliers = await API.getSuppliers() || [];
+            } else {
+                suppliers = await DB.getAll('suppliers') || [];
+            }
+
+            suppliers = suppliers.filter(s => s.status === 'active');
+
+            const currentValue = supplierFilter.value;
+            supplierFilter.innerHTML = '<option value="">Todos los proveedores</option>';
+            suppliers.forEach(supplier => {
+                const option = document.createElement('option');
+                option.value = supplier.id;
+                option.textContent = `${supplier.code || ''} - ${supplier.name || 'Sin nombre'}`.trim();
+                supplierFilter.appendChild(option);
+            });
+
+            if (currentValue && suppliers.some(s => String(s.id) === String(currentValue))) {
+                supplierFilter.value = currentValue;
+            }
+        } catch (error) {
+            console.error('Error cargando proveedores para filtro de inventario:', error);
         }
     },
 
