@@ -1037,9 +1037,10 @@ const API = {
     // MÉTODOS ESPECÍFICOS POR ENTIDAD
     // ============================================
 
-    // Inventario
+    // Inventario (el backend devuelve { items, total, stats }; retornamos el array de items)
     async getInventoryItems(filters = {}) {
-        return await this.get('/api/inventory', filters);
+        const res = await this.get('/api/inventory', filters);
+        return Array.isArray(res) ? res : (res?.items || []);
     },
 
     async getInventoryItem(id) {
