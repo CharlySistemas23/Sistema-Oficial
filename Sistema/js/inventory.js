@@ -4,17 +4,11 @@
 
 const Inventory = {
     initialized: false,
-    isExporting: false,
-    selectedItems: new Set(),
-    currentView: 'grid',
+    isExporting: false, // Flag para prevenir múltiples exportaciones simultáneas
+    selectedItems: new Set(), // Items seleccionados para acciones en lote
+    currentView: 'grid', // grid o list
     sortBy: 'name',
     sortOrder: 'asc',
-    // Paginación
-    currentPage: 1,
-    totalPages: 1,
-    totalItems: 0,
-    // Stats globales del servidor (KPIs siempre muestran totales de todo el inventario)
-    globalStats: null,
     
     // Configuración de stock por defecto
     defaultStockConfig: {
@@ -528,16 +522,14 @@ const Inventory = {
             }
         });
         
-        const resetPage = () => { this.currentPage = 1; };
-
         const searchInput = document.getElementById('inventory-search');
         if (searchInput) {
-            searchInput.addEventListener('input', Utils.debounce(() => { resetPage(); this.loadInventory(); }, 300));
+            searchInput.addEventListener('input', Utils.debounce(() => this.loadInventory(), 300));
         }
 
         const statusFilter = document.getElementById('inventory-status-filter');
         if (statusFilter) {
-            statusFilter.addEventListener('change', () => { resetPage(); this.loadInventory(); });
+            statusFilter.addEventListener('change', () => this.loadInventory());
         }
 
         const branchFilter = document.getElementById('inventory-branch-filter');
@@ -599,39 +591,39 @@ const Inventory = {
                 }
             }
             
-            branchFilter.addEventListener('change', () => { resetPage(); this.loadInventory(); });
+            branchFilter.addEventListener('change', () => this.loadInventory());
         }
 
         const metalFilter = document.getElementById('inventory-metal-filter');
         if (metalFilter) {
-            metalFilter.addEventListener('change', () => { resetPage(); this.loadInventory(); });
+            metalFilter.addEventListener('change', () => this.loadInventory());
         }
 
         const stoneTypeFilter = document.getElementById('inventory-stone-type-filter');
         if (stoneTypeFilter) {
-            stoneTypeFilter.addEventListener('change', () => { resetPage(); this.loadInventory(); });
+            stoneTypeFilter.addEventListener('change', () => this.loadInventory());
         }
 
         const certificateFilter = document.getElementById('inventory-certificate-filter');
         if (certificateFilter) {
-            certificateFilter.addEventListener('change', () => { resetPage(); this.loadInventory(); });
+            certificateFilter.addEventListener('change', () => this.loadInventory());
         }
 
         const minPrice = document.getElementById('inventory-min-price');
         if (minPrice) {
-            minPrice.addEventListener('input', Utils.debounce(() => { resetPage(); this.loadInventory(); }, 500));
+            minPrice.addEventListener('input', Utils.debounce(() => this.loadInventory(), 500));
         }
 
         const maxPrice = document.getElementById('inventory-max-price');
         if (maxPrice) {
-            maxPrice.addEventListener('input', Utils.debounce(() => { resetPage(); this.loadInventory(); }, 500));
+            maxPrice.addEventListener('input', Utils.debounce(() => this.loadInventory(), 500));
         }
 
         // Filtro por proveedor
         const supplierFilter = document.getElementById('inventory-supplier-filter');
         if (supplierFilter) {
             await this.loadSupplierFilterDropdown();
-            supplierFilter.addEventListener('change', () => { resetPage(); this.loadInventory(); });
+            supplierFilter.addEventListener('change', () => this.loadInventory());
         }
 
         // Toggle de filtros avanzados
@@ -659,7 +651,7 @@ const Inventory = {
         advancedFilterIds.forEach(filterId => {
             const filter = document.getElementById(filterId);
             if (filter) {
-                filter.addEventListener('change', () => { resetPage(); this.loadInventory(); });
+                filter.addEventListener('change', () => this.loadInventory());
             }
         });
 
@@ -1107,10 +1099,6 @@ const Inventory = {
             let allItemsRaw = [];
             let useFastPath = !!(ensureItemInList && ensureItemInList.id);
 
-            // Flag: indica si los datos vienen de una respuesta paginada del servidor.
-            // Se usa más abajo para omitir filtros client-side y mostrar controles de paginación.
-            let paginatedResponse = false;
-
             if (useFastPath) {
                 console.log('⚡ [Camino rápido] Mostrando inventario desde IndexedDB + pieza nueva, API en background');
                 try {
@@ -1141,51 +1129,16 @@ const Inventory = {
 
             if (!useFastPath && typeof API !== 'undefined' && API.baseURL && API.token && API.getInventoryItems) {
                 try {
-                    console.log('📦 Cargando inventario desde API (paginado)...');
+                    console.log('📦 Cargando inventario desde API...');
                     const categoryChip = document.querySelector('.inventory-category-bar .inventory-category-chip.active')?.dataset.category;
-                    const getVal = (id) => document.getElementById(id)?.value || undefined;
+                    const categoryFilter = (categoryChip && categoryChip !== 'all') ? categoryChip : undefined;
                     const filters = {
-                        branch_id:       filterBranchId != null ? String(filterBranchId).trim() || undefined : undefined,
-                        status:          getVal('inventory-status-filter'),
-                        category:        (categoryChip && categoryChip !== 'all') ? categoryChip : undefined,
-                        search:          getVal('inventory-search'),
-                        metal:           getVal('inventory-metal-filter'),
-                        stone_type:      getVal('inventory-stone-type-filter'),
-                        min_price:       getVal('inventory-min-price'),
-                        max_price:       getVal('inventory-max-price'),
-                        material:        getVal('inventory-material-filter'),
-                        purity:          getVal('inventory-purity-filter'),
-                        plating:         getVal('inventory-plating-filter'),
-                        style:           getVal('inventory-style-filter'),
-                        finish:          getVal('inventory-finish-filter'),
-                        theme:           getVal('inventory-theme-filter'),
-                        condition:       getVal('inventory-condition-filter'),
-                        location_detail: getVal('inventory-location-filter'),
-                        collection:      getVal('inventory-collection-filter'),
-                        page:            this.currentPage || 1,
-                        limit:           50,
+                        branch_id: filterBranchId != null ? String(filterBranchId).trim() || undefined : undefined,
+                        status: document.getElementById('inventory-status-filter')?.value || undefined,
+                        category: categoryFilter
                     };
-                    // Limpiar claves con valor undefined/vacío
-                    Object.keys(filters).forEach(k => (filters[k] === undefined || filters[k] === '') && delete filters[k]);
-
-                    const apiResponse = await API.getInventoryItems(filters);
-
-                    // Respuesta paginada { items, total, page, pages, stats } o array plano (legacy)
-                    if (apiResponse && apiResponse.items && Array.isArray(apiResponse.items)) {
-                        allItemsRaw = apiResponse.items;
-                        this.totalItems = apiResponse.total || allItemsRaw.length;
-                        this.totalPages  = apiResponse.pages || 1;
-                        this.currentPage = apiResponse.page  || 1;
-                        // Stats globales para KPIs (totales de TODAS las piezas filtradas)
-                        this.globalStats = apiResponse.stats || null;
-                        paginatedResponse = true;
-                    } else {
-                        allItemsRaw = Array.isArray(apiResponse) ? apiResponse : [];
-                        this.totalItems  = allItemsRaw.length;
-                        this.totalPages  = 1;
-                        this.currentPage = 1;
-                        this.globalStats = null;
-                    }
+                    
+                    allItemsRaw = await API.getInventoryItems(filters);
                     const apiReturnedZero = (allItemsRaw.length === 0);
                     
                     // CRÍTICO: Aplicar filtro estricto DESPUÉS de recibir de API
@@ -1322,30 +1275,22 @@ const Inventory = {
             
             console.log(`📦 Items obtenidos: ${allItemsRaw.length}`);
             
-            // VERIFICAR ITEMS FANTASMA
-            // Si la respuesta viene del servidor (paginada), los items son válidos por definición.
-            // Solo hacer verificación costosa cuando los datos vienen de IndexedDB (modo offline).
+            // VERIFICAR ITEMS FANTASMA: Comparar con API del servidor si está disponible
             const verifiedItems = [];
             const ghostItems = [];
             let serverItems = new Set();
             let serverBySku = new Map();
             let serverByBarcode = new Map();
             
-            if (paginatedResponse) {
-                // Respuesta paginada del servidor: todos los items son válidos, no hay fantasmas
-                verifiedItems.push(...allItemsRaw);
-                console.log(`✅ ${verifiedItems.length} items verificados (fuente: servidor paginado)`);
-            } else if (typeof API !== 'undefined' && API.baseURL && API.token && API.getInventoryItems) {
-                // Carga no paginada (legacy) o offline fallback: verificar contra servidor con limit alto
+            // Si hay API disponible, obtener lista de IDs del servidor para comparar
+            if (typeof API !== 'undefined' && API.baseURL && API.token && API.getInventoryItems) {
                 try {
                     const serverItemsList = await API.getInventoryItems({
-                        branch_id: viewAllBranches ? null : currentBranchId,
-                        limit: 2000
+                        branch_id: viewAllBranches ? null : currentBranchId
                     });
-                    const srvArr = serverItemsList?.items || (Array.isArray(serverItemsList) ? serverItemsList : []);
-                    serverItems = new Set(srvArr.map(item => item.id));
-                    serverBySku = new Map(srvArr.filter(i => i?.sku).map(i => [String(i.sku), i]));
-                    serverByBarcode = new Map(srvArr.filter(i => i?.barcode).map(i => [String(i.barcode), i]));
+                    serverItems = new Set(serverItemsList.map(item => item.id));
+                    serverBySku = new Map(serverItemsList.filter(i => i?.sku).map(i => [String(i.sku), i]));
+                    serverByBarcode = new Map(serverItemsList.filter(i => i?.barcode).map(i => [String(i.barcode), i]));
                     console.log(`✅ ${serverItems.size} items verificados contra servidor`);
                 } catch (apiError) {
                     console.warn('No se pudo verificar items contra servidor, usando verificación local:', apiError);
@@ -1535,10 +1480,6 @@ const Inventory = {
                 console.log(`✅ Cargados ${items.length} items de inventario`);
             }
             
-            // Filtros client-side: solo se aplican en modo offline (IndexedDB).
-            // Cuando la respuesta viene paginada del servidor, los filtros ya se aplicaron en el SQL.
-            if (!paginatedResponse) {
-
             // Apply search filter
             const search = document.getElementById('inventory-search')?.value.toLowerCase() || '';
             if (search) {
@@ -1690,8 +1631,6 @@ const Inventory = {
                 items = items.filter(item => item.collection === collectionFilter);
             }
 
-            } // fin if (!paginatedResponse) — filtros client-side
-
             // ========== ORDENAMIENTO ==========
             const sortBy = document.getElementById('inventory-sort-by')?.value || 'newest';
             items = this.sortInventoryItems(items, sortBy);
@@ -1727,19 +1666,7 @@ const Inventory = {
             console.log(`📊 Mostrando inventario en vista: ${this.currentView} (${items.length} items)`);
             // Usar displayInventory que verifica si hay agrupación
             await this.displayInventory(items);
-
-            // Barra de paginación (modo online paginado)
-            if (paginatedResponse && this.totalPages > 1) {
-                this.renderPaginationControls(this.totalItems, this.currentPage, this.totalPages);
-            } else {
-                document.getElementById('inventory-pagination-bar')?.remove();
-            }
-
-            // Sync incremental en background (actualiza caché offline sin bloquear UI)
-            if (paginatedResponse) {
-                this.syncIncrementalInventory().catch(() => {});
-            }
-
+            
             // Actualizar filtro de ubicación con ubicaciones disponibles
             await this.updateLocationFilter();
             
@@ -1751,92 +1678,6 @@ const Inventory = {
         } finally {
             this._loadInventoryInProgress = false;
         }
-    },
-
-    // =====================================================================
-    // SYNC INCREMENTAL — se ejecuta en background al abrir el módulo
-    // Descarga solo los items modificados desde la última sincronización
-    // y los persiste en IndexedDB como caché offline.
-    // =====================================================================
-
-    async syncIncrementalInventory() {
-        if (!API?.baseURL || !API?.token) return;
-        try {
-            const lastSync = localStorage.getItem('last_inventory_sync');
-            const params = { limit: 500 };
-            if (lastSync) params.updated_after = lastSync;
-
-            const result = await API.getInventoryItems(params);
-            const newItems = result?.items || (Array.isArray(result) ? result : []);
-
-            if (newItems.length > 0) {
-                for (const item of newItems) {
-                    await DB.put('inventory_items', { ...item, server_id: item.id, sync_status: 'synced' }, { autoBranchId: false });
-                }
-                console.log(`🔄 Sync incremental: ${newItems.length} items actualizados en IndexedDB`);
-            }
-            // Actualizar timestamp aunque no haya cambios (confirma que se revisó)
-            localStorage.setItem('last_inventory_sync', new Date().toISOString());
-        } catch (err) {
-            console.warn('⚠️ Sync incremental inventario falló (sin conexión?):', err?.message || err);
-        }
-    },
-
-    // =====================================================================
-    // PAGINACIÓN
-    // =====================================================================
-
-    goToPage(page) {
-        const p = parseInt(page);
-        if (!p || p < 1 || p > (this.totalPages || 1)) return;
-        if (p === this.currentPage) return;
-        this.currentPage = p;
-        this.loadInventory({ force: true });
-        // Scroll suave al inicio de la lista
-        document.getElementById('inventory-list')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    },
-
-    renderPaginationControls(total, page, pages) {
-        // Eliminar barra anterior si existe
-        document.getElementById('inventory-pagination-bar')?.remove();
-
-        if (!pages || pages <= 1) return; // Sin paginación si hay solo 1 página
-
-        const container = document.getElementById('inventory-list');
-        if (!container) return;
-
-        const bar = document.createElement('div');
-        bar.id = 'inventory-pagination-bar';
-        bar.className = 'pagination-bar';
-
-        const prev2 = page <= 1;
-        const next2 = page >= pages;
-
-        // Generar números de página cercanos
-        const pageNums = [];
-        const delta = 2;
-        for (let i = Math.max(1, page - delta); i <= Math.min(pages, page + delta); i++) {
-            pageNums.push(i);
-        }
-
-        const pageButtons = pageNums.map(n =>
-            n === page
-                ? `<span class="page-current">${n}</span>`
-                : `<button class="page-btn" onclick="Inventory.goToPage(${n})">${n}</button>`
-        ).join('');
-
-        bar.innerHTML = `
-            <span class="pagination-info">${total.toLocaleString()} piezas &mdash; pág. ${page} / ${pages}</span>
-            <div class="pagination-controls">
-                <button class="page-btn" onclick="Inventory.goToPage(1)"      ${prev2 ? 'disabled' : ''}>«</button>
-                <button class="page-btn" onclick="Inventory.goToPage(${page-1})" ${prev2 ? 'disabled' : ''}>‹</button>
-                ${pageButtons}
-                <button class="page-btn" onclick="Inventory.goToPage(${page+1})" ${next2 ? 'disabled' : ''}>›</button>
-                <button class="page-btn" onclick="Inventory.goToPage(${pages})"  ${next2 ? 'disabled' : ''}>»</button>
-            </div>`;
-
-        // Insertar después del contenedor de la lista
-        container.insertAdjacentElement('afterend', bar);
     },
 
     // Determinar el estado del stock de un item
@@ -3390,7 +3231,7 @@ const Inventory = {
             <form id="inventory-form">
                 <div style="display: grid; grid-template-columns: 200px 1fr; gap: var(--spacing-md); min-height: 500px;">
                     <!-- Sidebar de Pestañas Vertical -->
-                    <div style="background: rgba(255,255,255,0.45); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.70); border-radius: var(--radius-md); padding: var(--spacing-sm); display: flex; flex-direction: column; gap: 4px;">
+                    <div style="background: var(--color-bg-secondary); border-radius: var(--radius-md); padding: var(--spacing-sm); display: flex; flex-direction: column; gap: 4px;">
                         <button type="button" class="tab-btn-vertical active" data-tab="basic" onclick="window.Inventory.switchTab('basic')" style="text-align: left; padding: 12px; border-radius: var(--radius-sm); border: none; background: transparent; cursor: pointer; display: flex; align-items: center; gap: 8px; color: var(--color-text);">
                             <i class="fas fa-info-circle"></i> <span>Información Básica</span>
                         </button>
@@ -3927,17 +3768,14 @@ const Inventory = {
             <style>
                 .tab-btn-vertical {
                     transition: all 0.2s ease;
-                    color: #4a4560 !important;
                 }
                 .tab-btn-vertical:hover {
-                    background: rgba(255,255,255,0.55) !important;
-                    color: #2d2a3e !important;
+                    background: var(--color-bg) !important;
                 }
                 .tab-btn-vertical.active {
-                    background: rgba(201,161,74,0.18) !important;
-                    color: #8a6820 !important;
+                    background: var(--color-primary) !important;
+                    color: white !important;
                     font-weight: 600;
-                    border-left: 3px solid #C9A14A !important;
                 }
                 .tab-content {
                     display: none;
@@ -5414,28 +5252,26 @@ const Inventory = {
     },
 
     async displayInventoryStats(items) {
+        // Usar los items filtrados que se pasan como parámetro
+        // (ya están filtrados por sucursal si corresponde)
         const filteredItems = Array.isArray(items) ? items : [];
-
-        // Si tenemos stats globales del servidor, úsarlos para los KPIs principales
-        // (muestran el total de TODO el inventario, no solo la página actual).
-        // Las alertas de stock se calculan localmente sobre los items de la página actual
-        // como indicadores de referencia visual.
-        const gs = this.globalStats;
+        
+        // Estadísticas de stock basadas en los items filtrados
         const stats = {
-            total:           gs ? gs.total      : filteredItems.length,
-            filteredCount:   filteredItems.length,
-            disponible:      gs ? gs.disponible : filteredItems.filter(i => i.status === 'disponible').length,
-            vendida:         gs ? gs.vendida    : filteredItems.filter(i => i.status === 'vendida').length,
-            apartada:        gs ? gs.apartada   : filteredItems.filter(i => i.status === 'apartada').length,
-            reparacion:      gs ? gs.reparacion : filteredItems.filter(i => i.status === 'reparacion').length,
-            totalValue:      gs ? gs.totalValue : filteredItems.reduce((sum, i) => sum + ((i.cost || 0) * (i.stock_actual || 1)), 0),
-            totalStock:      gs ? gs.totalStock : filteredItems.reduce((sum, i) => sum + (i.stock_actual || 1), 0),
+            total: filteredItems.length,
+            filteredCount: filteredItems.length,
+            disponible: filteredItems.filter(i => i.status === 'disponible').length,
+            vendida: filteredItems.filter(i => i.status === 'vendida').length,
+            apartada: filteredItems.filter(i => i.status === 'apartada').length,
+            reparacion: filteredItems.filter(i => i.status === 'reparacion').length,
+            totalValue: filteredItems.reduce((sum, i) => sum + ((i.cost || 0) * (i.stock_actual || 1)), 0),
+            totalStock: filteredItems.reduce((sum, i) => sum + (i.stock_actual || 1), 0),
             withCertificates: filteredItems.filter(i => i.certificate_type && i.certificate_number).length,
-            // Alertas de stock (basadas en la página actual como indicadores de referencia visual)
-            stockOut:  filteredItems.filter(i => this.getStockStatus(i) === 'out').length,
-            stockLow:  filteredItems.filter(i => this.getStockStatus(i) === 'low').length,
+            // Alertas de stock basadas en items filtrados
+            stockOut: filteredItems.filter(i => this.getStockStatus(i) === 'out').length,
+            stockLow: filteredItems.filter(i => this.getStockStatus(i) === 'low').length,
             stockOver: filteredItems.filter(i => this.getStockStatus(i) === 'over').length,
-            stockOk:   filteredItems.filter(i => this.getStockStatus(i) === 'ok').length,
+            stockOk: filteredItems.filter(i => this.getStockStatus(i) === 'ok').length
         };
         
         const statsContainer = document.getElementById('inventory-stats');
@@ -5447,20 +5283,19 @@ const Inventory = {
             ].concat(this.INVENTORY_CATEGORIES.map(cat =>
                 `<button type="button" class="inventory-category-chip ${activeCategory === cat ? 'active' : ''}" data-category="${cat.replace(/"/g, '&quot;')}">${cat}</button>`
             )).join('');
-            const fmtNum = (n) => (n ?? 0).toLocaleString('es-MX');
             statsContainer.innerHTML = `
                 <div class="inventory-stats-grid">
                     <div class="inventory-stat-card">
                         <div class="stat-icon"><i class="fas fa-gem"></i></div>
                         <div class="stat-content">
-                            <div class="stat-value">${fmtNum(stats.total)}</div>
+                            <div class="stat-value">${stats.total}</div>
                             <div class="stat-label">Total Piezas</div>
                         </div>
                     </div>
                     <div class="inventory-stat-card">
                         <div class="stat-icon" style="background: var(--color-success);"><i class="fas fa-check-circle"></i></div>
                         <div class="stat-content">
-                            <div class="stat-value">${fmtNum(stats.disponible)}</div>
+                            <div class="stat-value">${stats.disponible}</div>
                             <div class="stat-label">Disponibles</div>
                         </div>
                     </div>
@@ -5474,7 +5309,7 @@ const Inventory = {
                     <div class="inventory-stat-card">
                         <div class="stat-icon" style="background: var(--color-info);"><i class="fas fa-cubes"></i></div>
                         <div class="stat-content">
-                            <div class="stat-value">${fmtNum(stats.totalStock)}</div>
+                            <div class="stat-value">${stats.totalStock}</div>
                             <div class="stat-label">Unidades en Stock</div>
                         </div>
                     </div>
