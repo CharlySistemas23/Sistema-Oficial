@@ -584,12 +584,8 @@ const Inventory = {
                 
                 branchFilter.innerHTML = '<option value="all">Todas las sucursales</option>' + 
                 branches.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
-                // Establecer valor por defecto según sucursal actual
-                if (currentBranchId) {
-                    branchFilter.value = currentBranchId;
-                } else {
-                    branchFilter.value = 'all';
-                }
+                // Master admin: mostrar TODAS las piezas por defecto (no filtrar por sucursal)
+                branchFilter.value = 'all';
             }
             
             branchFilter.addEventListener('change', () => this.loadInventory());
