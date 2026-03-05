@@ -503,9 +503,12 @@ const BarcodeManager = {
                 const allGuides = await DB.getAll('catalog_guides', null, null, { filterByBranch: false }) || [];
                 const allSellers = await DB.getAll('catalog_sellers', null, null, { filterByBranch: false }) || [];
                 
-                const foundAgency = allAgencies.find(a => matchesCode(a, barcodeClean) && a.active);
-                const foundGuide = allGuides.find(g => matchesCode(g, barcodeClean) && g.active !== false);
-                const foundSeller = allSellers.find(s => matchesCode(s, barcodeClean) && s.active !== false);
+                // Incluir búsqueda por código generado (por si barcode no está guardado en DB)
+                const genGuide = (g) => (typeof Utils !== 'undefined' && Utils.generateGuideBarcode) ? Utils.generateGuideBarcode(g) : (g.barcode || g.code || '');
+                const genAgency = (a) => (typeof Utils !== 'undefined' && Utils.generateAgencyBarcode) ? Utils.generateAgencyBarcode(a) : (a.barcode || a.code || '');
+                const foundAgency = allAgencies.find(a => (matchesCode(a, barcodeClean) || norm(genAgency(a)) === norm(barcodeClean)) && a.active);
+                const foundGuide = allGuides.find(g => (matchesCode(g, barcodeClean) || norm(genGuide(g)) === norm(barcodeClean)) && g.active !== false);
+                const foundSeller = allSellers.find(s => (matchesCode(s, barcodeClean) || (typeof Utils !== 'undefined' && Utils.generateSellerBarcode && norm(Utils.generateSellerBarcode(s)) === norm(barcodeClean))) && s.active !== false);
                 
                 if (foundAgency) {
                     console.log('✅ Agencia encontrada en búsqueda alternativa:', foundAgency.name);
