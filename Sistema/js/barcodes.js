@@ -1,6 +1,6 @@
 // Barcode Manager - Code 128 generation and scanning
-
-const BarcodeManager = {
+// Usar var para evitar "Identifier 'BarcodeManager' has already been declared" si el script se carga dos veces
+var BarcodeManager = window.BarcodeManager || {
     _jsBarcodeReady: false,
     _jsBarcodeCheckAttempts: 0,
     _maxJsBarcodeCheckAttempts: 50, // 5 segundos máximo (50 * 100ms)
