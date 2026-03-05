@@ -1,6 +1,7 @@
 // Barcode Manager - Code 128 generation and scanning
-// Usar var para evitar "Identifier 'BarcodeManager' has already been declared" si el script se carga dos veces
-var BarcodeManager = window.BarcodeManager || {
+// IIFE: BarcodeManager nunca se declara en ámbito global, evita "already been declared"
+(function() {
+    const BarcodeManager = {
     _jsBarcodeReady: false,
     _jsBarcodeCheckAttempts: 0,
     _maxJsBarcodeCheckAttempts: 50, // 5 segundos máximo (50 * 100ms)
@@ -821,6 +822,5 @@ var BarcodeManager = window.BarcodeManager || {
     }
 };
 
-// Exponer BarcodeManager globalmente
-window.BarcodeManager = BarcodeManager;
-
+    window.BarcodeManager = BarcodeManager;
+})();
