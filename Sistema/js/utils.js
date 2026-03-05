@@ -807,7 +807,7 @@ const Utils = {
     },
 
     // Detectar escaneo vs tecleo (velocidad)
-    createBarcodeScanner(callback, minSpeed = 50) {
+    createBarcodeScanner(callback, minSpeed = 150) {
         let buffer = '';
         let lastKeyTime = 0;
         let timeout;
