@@ -9,6 +9,10 @@ const Inventory = {
     currentView: 'grid', // grid o list
     sortBy: 'name',
     sortOrder: 'asc',
+    // Carga progresiva: 3 filas iniciales (~5 columnas = 15 tarjetas), botón "Cargar más" para evitar peso de render
+    INVENTORY_GRID_BATCH_SIZE: 15,
+    _gridDisplayLimit: 0,
+    _lastGridItems: [],
     
     // Configuración de stock por defecto
     defaultStockConfig: {
@@ -2381,8 +2385,7 @@ const Inventory = {
         this.updateViewButtons();
     },
 
-    async displayInventoryGrid(items) {
-        
+    async displayInventoryGrid(items, options = {}) {
         const container = document.getElementById('inventory-list');
         if (!container) {
             // #region agent log
@@ -2391,7 +2394,7 @@ const Inventory = {
             return;
         }
         
-        // Mostrar estadísticas si hay items
+        // Mostrar estadísticas con TODOS los items (no solo los visibles)
         await this.displayInventoryStats(items);
         
         // Actualizar contador de seleccionados
@@ -2402,15 +2405,43 @@ const Inventory = {
             return;
         }
 
+        // Carga progresiva: resetear límite si es carga nueva (no "Cargar más")
+        if (!options.isLoadMore) {
+            this._gridDisplayLimit = this.INVENTORY_GRID_BATCH_SIZE;
+            this._lastGridItems = items;
+        } else {
+            items = this._lastGridItems || items;
+        }
+        const limit = this._gridDisplayLimit || this.INVENTORY_GRID_BATCH_SIZE;
+        const toShow = items.slice(0, limit);
+        const hasMore = items.length > limit;
+        const remaining = items.length - limit;
+
         // Asegurar que tenga la clase inventory-grid para modo tarjetas
         if (!container.classList.contains('inventory-grid')) {
             container.classList.add('inventory-grid');
             container.classList.remove('inventory-list-view');
         }
 
-        // Usar función helper para obtener HTML de las tarjetas
-        const cardsHTML = await this.getInventoryGridHTML(items);
-        container.innerHTML = cardsHTML;
+        // Renderizar solo los items visibles (reducir peso en DOM)
+        const cardsHTML = await this.getInventoryGridHTML(toShow);
+        const loadMoreBtn = hasMore ? `
+            <div class="inventory-load-more-wrap" style="grid-column: 1 / -1; display: flex; justify-content: center; padding: var(--spacing-md);">
+                <button type="button" class="btn-secondary" onclick="window.Inventory.loadMoreInventoryGrid()">
+                    <i class="fas fa-chevron-down"></i> Cargar más (${remaining} restantes)
+                </button>
+            </div>
+        ` : '';
+        container.innerHTML = cardsHTML + loadMoreBtn;
+    },
+
+    /**
+     * Incrementa la cantidad de tarjetas mostradas y vuelve a renderizar (carga progresiva).
+     */
+    async loadMoreInventoryGrid() {
+        if (!this._lastGridItems || this._lastGridItems.length === 0) return;
+        this._gridDisplayLimit = (this._gridDisplayLimit || this.INVENTORY_GRID_BATCH_SIZE) + this.INVENTORY_GRID_BATCH_SIZE;
+        await this.displayInventoryGrid(null, { isLoadMore: true });
     },
 
     async displayInventoryList(items) {
