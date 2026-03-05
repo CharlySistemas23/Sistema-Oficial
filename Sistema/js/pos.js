@@ -945,23 +945,21 @@ Object.assign(POS, {
             if (hasCache) {
                 console.log(`⚡ [Cache-First] POS: ${items.length} productos desde IndexedDB`);
                 if (hasApi) {
+                    // Actualizar caché en segundo plano sin recargar la UI (evita refrescos cada pocos segundos)
                     Promise.resolve().then(async () => {
                         try {
                             const fresh = await API.getInventoryItems({ branch_id: filterBranchId, status: 'disponible' });
-                            let freshFiltered = fresh;
+                            let freshFiltered = Array.isArray(fresh) ? fresh : (fresh?.items || []);
                             if (filterBranchId) {
-                                freshFiltered = fresh.filter(item => item?.branch_id && String(item.branch_id) === String(filterBranchId));
+                                freshFiltered = freshFiltered.filter(item => item?.branch_id && String(item.branch_id) === String(filterBranchId));
                             }
                             for (const item of freshFiltered) {
                                 try {
                                     await DB.put('inventory_items', { ...item, server_id: item.id, sync_status: 'synced' }, { autoBranchId: false });
                                 } catch (e) {}
                             }
-                            const beforeIds = new Set(items.map(i => i.id));
-                            const afterIds = new Set(freshFiltered.map(i => i.id));
-                            if (beforeIds.size !== afterIds.size || [...beforeIds].some(id => !afterIds.has(id))) {
-                                this.loadProducts();
-                            }
+                            // No llamar loadProducts aquí: evita ciclo de recargas. Los cambios se reflejan al cambiar filtros
+                            // o con el evento inventory-updated del socket.
                         } catch (e) { console.warn('POS sync background:', e); }
                     }).catch(e => console.warn('POS sync background:', e));
                 }
@@ -1397,14 +1395,12 @@ Object.assign(POS, {
                 const searchEl = document.getElementById('pos-product-search');
                 if (searchEl) searchEl.value = '';
             } else {
-                // No es producto: intentar agencia, guía o vendedor
-                if (typeof BarcodeManager !== 'undefined' && BarcodeManager.handlePOSScan) {
-                    const format = BarcodeManager.detectBarcodeFormat ? BarcodeManager.detectBarcodeFormat(rawQuery) : 'CODE128';
-                    await BarcodeManager.handlePOSScan(rawQuery, format);
-                    const searchEl = document.getElementById('pos-product-search');
-                    if (searchEl) searchEl.value = '';
-                } else {
-                    Utils.showNotification('Producto no encontrado', 'warning');
+                // No es producto: buscar y asignar agencia, guía o vendedor directamente
+                const found = await this.trySetGuideAgencyOrSellerByBarcode(rawQuery);
+                const searchEl = document.getElementById('pos-product-search');
+                if (searchEl) searchEl.value = '';
+                if (!found) {
+                    Utils.showNotification('Código no encontrado. Escanea agencia, guía, vendedor o producto.', 'warning');
                 }
             }
         } catch (e) {
@@ -2991,6 +2987,56 @@ Object.assign(POS, {
         this.currentSeller = null;
         this.updateCustomerDisplay();
         Utils.showNotification('Vendedor limpiado', 'info');
+    },
+
+    /**
+     * Busca agencia, guía o vendedor por código de barras y los asigna en el POS.
+     * Retorna true si encontró y asignó alguno, false si no.
+     */
+    async trySetGuideAgencyOrSellerByBarcode(barcode) {
+        const raw = String(barcode || '').trim().replace(/\r?\n/g, '');
+        if (!raw) return false;
+
+        const norm = v => String(v || '').trim();
+        const matchesCode = (item, val) => {
+            const b = norm(item.barcode);
+            const c = norm(item.code);
+            const v = norm(val);
+            return b === v || c === v ||
+                b.toLowerCase() === v.toLowerCase() || c.toLowerCase() === v.toLowerCase();
+        };
+
+        const findByBarcode = async (store) => {
+            let r = await DB.getByIndex(store, 'barcode', raw);
+            if (!r) {
+                const all = await DB.getAll(store, null, null, { filterByBranch: false }) || [];
+                r = all.find(x => matchesCode(x, raw));
+            }
+            return r;
+        };
+
+        // 1. Agencia
+        let agency = await findByBarcode('catalog_agencies');
+        if (agency && agency.active !== false) {
+            await this.setAgency(agency);
+            return true;
+        }
+
+        // 2. Guía
+        let guide = await findByBarcode('catalog_guides');
+        if (guide && guide.active !== false) {
+            await this.setGuide(guide);
+            return true;
+        }
+
+        // 3. Vendedor
+        let seller = await findByBarcode('catalog_sellers');
+        if (seller && seller.active !== false) {
+            await this.setSeller(seller);
+            return true;
+        }
+
+        return false;
     },
 
     clearSaleInfo() {
