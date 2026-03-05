@@ -1397,7 +1397,15 @@ Object.assign(POS, {
                 const searchEl = document.getElementById('pos-product-search');
                 if (searchEl) searchEl.value = '';
             } else {
-                Utils.showNotification('Producto no encontrado', 'warning');
+                // No es producto: intentar agencia, guía o vendedor
+                if (typeof BarcodeManager !== 'undefined' && BarcodeManager.handlePOSScan) {
+                    const format = BarcodeManager.detectBarcodeFormat ? BarcodeManager.detectBarcodeFormat(rawQuery) : 'CODE128';
+                    await BarcodeManager.handlePOSScan(rawQuery, format);
+                    const searchEl = document.getElementById('pos-product-search');
+                    if (searchEl) searchEl.value = '';
+                } else {
+                    Utils.showNotification('Producto no encontrado', 'warning');
+                }
             }
         } catch (e) {
             console.error('Error en búsqueda rápida:', e);
