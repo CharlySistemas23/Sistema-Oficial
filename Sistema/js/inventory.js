@@ -2416,11 +2416,15 @@ const Inventory = {
 
     async displayInventoryGrid(items, options = {}) {
         const container = document.getElementById('inventory-list');
-        if (!container) {
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/d085ffd8-d37f-46dc-af23-0f9fbbe46595',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'inventory.js:404',message:'Container not found in displayInventory',data:{itemsCount:items.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-            // #endregion
-            return;
+        if (!container) return;
+        
+        // Resolver items primero: en loadMore usar _lastGridItems; evitar null
+        if (options.isLoadMore) {
+            items = (this._lastGridItems && Array.isArray(this._lastGridItems)) ? this._lastGridItems : [];
+        } else {
+            items = Array.isArray(items) ? items : [];
+            this._gridDisplayLimit = this.INVENTORY_GRID_BATCH_SIZE;
+            this._lastGridItems = items;
         }
         
         // Mostrar estadísticas con TODOS los items (no solo los visibles)
@@ -2434,13 +2438,6 @@ const Inventory = {
             return;
         }
 
-        // Carga progresiva: resetear límite si es carga nueva (no "Cargar más")
-        if (!options.isLoadMore) {
-            this._gridDisplayLimit = this.INVENTORY_GRID_BATCH_SIZE;
-            this._lastGridItems = items;
-        } else {
-            items = this._lastGridItems || items;
-        }
         const limit = this._gridDisplayLimit || this.INVENTORY_GRID_BATCH_SIZE;
         const toShow = items.slice(0, limit);
         const hasMore = items.length > limit;
