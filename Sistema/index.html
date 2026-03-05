@@ -853,14 +853,14 @@
                             <option value="reservado">Reservado</option>
                         </select>
                     </div>
-                    <div class="form-group" style="margin-bottom: 0;">
-                        <label style="font-size: 11px;"><i class="fas fa-cubes" style="color: var(--color-primary);"></i> Alerta Stock</label>
+                    <!-- Select oculto: filtro de stock controlado por las pills -->
+                    <div class="form-group" style="margin-bottom: 0; display: none;">
                         <select id="inventory-stock-alert-filter" class="form-select">
                             <option value="">Todos</option>
-                            <option value="out">⛔ Agotados</option>
-                            <option value="low">⚠️ Stock Bajo</option>
-                            <option value="over">📈 Exceso</option>
-                            <option value="ok">✅ Normal</option>
+                            <option value="out">Agotados</option>
+                            <option value="low">Stock Bajo</option>
+                            <option value="over">Exceso</option>
+                            <option value="ok">Normal</option>
                         </select>
                     </div>
                     <div class="form-group" style="margin-bottom: 0;">
