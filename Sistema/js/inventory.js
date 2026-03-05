@@ -5652,9 +5652,8 @@ const Inventory = {
             // Configurar nuestro handler
             BarcodeManager.handleBarcodeScan = async (barcode) => {
                 // Si estamos en el módulo de inventario, usar nuestro handler
-                const activeModule = document.querySelector('.module.active') || 
-                                   document.querySelector('[data-module="inventory"]');
-                if (activeModule || window.location.hash.includes('inventory')) {
+                const isInventoryActive = typeof UI !== 'undefined' && UI.currentModule === 'inventory';
+                if (isInventoryActive) {
                     await this.searchByBarcode(barcode);
                 } else {
                     // Si no estamos en inventario, usar el handler original
