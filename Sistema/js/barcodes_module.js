@@ -6,7 +6,7 @@ var BarcodesModule = {
     isExporting: false, // Flag para prevenir múltiples exportaciones simultáneas
     currentTab: 'overview',
     scanHistory: [],
-    BARCODES_BATCH_SIZE: 30,
+    BARCODES_BATCH_SIZE: 15, // ~3 filas iniciales para reducir peso de render; "Ver más" carga el resto
     _displayLimits: {},
     _lastFilterKey: null,
 
