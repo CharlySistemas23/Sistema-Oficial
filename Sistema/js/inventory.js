@@ -222,10 +222,11 @@ const Inventory = {
                                 <option value="no">Sin certificado</option>
                             </select>
                         </div>
-                        <div class="form-group" style="margin-bottom: 0;">
+                        <!-- Select oculto: filtro de stock controlado por las pills -->
+                        <div class="form-group" style="margin-bottom: 0; display: none;">
                             <select id="inventory-stock-alert-filter" class="form-select">
                                 <option value="">Todos</option>
-                                <option value="ok">Stock Normal</option>
+                                <option value="ok">Normal</option>
                                 <option value="low">Stock Bajo</option>
                                 <option value="out">Agotado</option>
                                 <option value="over">Exceso</option>
@@ -508,15 +509,38 @@ const Inventory = {
         // Filtro de alertas de stock
         document.getElementById('inventory-stock-alert-filter')?.addEventListener('change', () => this.loadInventory());
         
-        // Delegación: clic en chips de categoría (barra generada en displayInventoryStats)
+        // Delegación: clic en chips de categoría y pills de alerta (barra generada en displayInventoryStats)
         const statsContainer = document.getElementById('inventory-stats');
         if (statsContainer) {
+            const handleAlertOrCategoryClick = (target) => {
+                const alertItem = target?.closest('.alert-item');
+                if (alertItem) {
+                    const value = alertItem.dataset.value ?? '';
+                    const select = document.getElementById('inventory-stock-alert-filter');
+                    if (select) {
+                        select.value = value;
+                        this.loadInventory();
+                    }
+                    return true;
+                }
+                const chip = target?.closest('.inventory-category-chip');
+                if (chip) {
+                    statsContainer.querySelectorAll('.inventory-category-bar .inventory-category-chip').forEach(b => b.classList.remove('active'));
+                    chip.classList.add('active');
+                    this.loadInventory();
+                    return true;
+                }
+                return false;
+            };
             statsContainer.addEventListener('click', (e) => {
-                const chip = e.target.closest('.inventory-category-chip');
-                if (!chip) return;
-                statsContainer.querySelectorAll('.inventory-category-bar .inventory-category-chip').forEach(b => b.classList.remove('active'));
-                chip.classList.add('active');
-                this.loadInventory();
+                if (handleAlertOrCategoryClick(e.target)) return;
+            });
+            statsContainer.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    if (handleAlertOrCategoryClick(e.target)) {
+                        e.preventDefault();
+                    }
+                }
             });
         }
         
@@ -1496,6 +1520,15 @@ const Inventory = {
                 items = items.filter(item => !item.certificate_type || !item.certificate_number);
             }
 
+            // Apply category filter ANTES de stock (para que pills respeten categoría seleccionada)
+            const selectedCategory = document.querySelector('.inventory-category-bar .inventory-category-chip.active')?.dataset.category;
+            if (selectedCategory && selectedCategory !== 'all') {
+                items = items.filter(item => (item.category || '').toLowerCase() === (selectedCategory || '').toLowerCase());
+            }
+
+            // Guardar items antes del filtro de stock (para pills: totales por contexto actual)
+            const itemsBeforeStockFilter = [...items];
+
             // Apply stock alert filter
             const stockAlertFilter = document.getElementById('inventory-stock-alert-filter')?.value;
             if (stockAlertFilter === 'low') {
@@ -1506,12 +1539,6 @@ const Inventory = {
                 items = items.filter(item => this.getStockStatus(item) === 'over');
             } else if (stockAlertFilter === 'ok') {
                 items = items.filter(item => this.getStockStatus(item) === 'ok');
-            }
-
-            // Apply category filter (barra debajo de alertas de stock, case-insensitive)
-            const selectedCategory = document.querySelector('.inventory-category-bar .inventory-category-chip.active')?.dataset.category;
-            if (selectedCategory && selectedCategory !== 'all') {
-                items = items.filter(item => (item.category || '').toLowerCase() === (selectedCategory || '').toLowerCase());
             }
 
             // ========== FILTROS AVANZADOS ==========
@@ -1613,6 +1640,8 @@ const Inventory = {
 
             // Decidir qué vista mostrar según currentView
             console.log(`📊 Mostrando inventario en vista: ${this.currentView} (${items.length} items)`);
+            // Guardar items antes de stock para stats (pills con totales globales)
+            this._itemsBeforeStockFilterForStats = itemsBeforeStockFilter;
             // Usar displayInventory que verifica si hay agrupación
             await this.displayInventory(items);
             
@@ -5319,11 +5348,13 @@ const Inventory = {
     },
 
     async displayInventoryStats(items) {
-        // Usar los items filtrados que se pasan como parámetro
-        // (ya están filtrados por sucursal si corresponde)
+        // Items filtrados (vista actual): para Total Piezas, Valor, etc.
         const filteredItems = Array.isArray(items) ? items : [];
+        // Items antes del filtro de stock: para pills (Agotados, Stock Bajo, etc.) muestran totales por contexto
+        const itemsForPillCounts = Array.isArray(this._itemsBeforeStockFilterForStats)
+            ? this._itemsBeforeStockFilterForStats
+            : filteredItems;
         
-        // Estadísticas de stock basadas en los items filtrados
         const stats = {
             total: filteredItems.length,
             filteredCount: filteredItems.length,
@@ -5334,11 +5365,11 @@ const Inventory = {
             totalValue: filteredItems.reduce((sum, i) => sum + ((i.cost || 0) * (i.stock_actual || 1)), 0),
             totalStock: filteredItems.reduce((sum, i) => sum + (i.stock_actual || 1), 0),
             withCertificates: filteredItems.filter(i => i.certificate_type && i.certificate_number).length,
-            // Alertas de stock basadas en items filtrados
-            stockOut: filteredItems.filter(i => this.getStockStatus(i) === 'out').length,
-            stockLow: filteredItems.filter(i => this.getStockStatus(i) === 'low').length,
-            stockOver: filteredItems.filter(i => this.getStockStatus(i) === 'over').length,
-            stockOk: filteredItems.filter(i => this.getStockStatus(i) === 'ok').length
+            // Pills: conteos globales (antes de filtro stock) para que siempre muestren cuántos hay de cada tipo
+            stockOut: itemsForPillCounts.filter(i => this.getStockStatus(i) === 'out').length,
+            stockLow: itemsForPillCounts.filter(i => this.getStockStatus(i) === 'low').length,
+            stockOver: itemsForPillCounts.filter(i => this.getStockStatus(i) === 'over').length,
+            stockOk: itemsForPillCounts.filter(i => this.getStockStatus(i) === 'ok').length
         };
         
         const statsContainer = document.getElementById('inventory-stats');
@@ -5382,21 +5413,25 @@ const Inventory = {
                     </div>
                 </div>
                 
-                <!-- Alertas de Stock (chip activo según filtro del dropdown) -->
+                <!-- Alertas de Stock (pills con delegación; data-value para filtro) -->
                 <div class="inventory-alerts-bar">
-                    <div class="alert-item ${stats.stockOut > 0 ? 'alert-critical' : 'alert-ok'} ${currentStockFilter === 'out' ? 'active' : ''}" data-value="out" onclick="document.getElementById('inventory-stock-alert-filter').value='out'; window.Inventory.loadInventory();">
+                    <div class="alert-item ${!currentStockFilter ? 'active' : ''}" data-value="" role="button" tabindex="0" style="cursor: pointer;">
+                        <i class="fas fa-th-list"></i>
+                        <span>Todos (${itemsForPillCounts.length})</span>
+                    </div>
+                    <div class="alert-item ${stats.stockOut > 0 ? 'alert-critical' : 'alert-ok'} ${currentStockFilter === 'out' ? 'active' : ''}" data-value="out" role="button" tabindex="0" style="cursor: pointer;">
                         <i class="fas fa-exclamation-circle"></i>
                         <span>${stats.stockOut} Agotado${stats.stockOut !== 1 ? 's' : ''}</span>
                     </div>
-                    <div class="alert-item ${stats.stockLow > 0 ? 'alert-warning' : 'alert-ok'} ${currentStockFilter === 'low' ? 'active' : ''}" data-value="low" onclick="document.getElementById('inventory-stock-alert-filter').value='low'; window.Inventory.loadInventory();">
+                    <div class="alert-item ${stats.stockLow > 0 ? 'alert-warning' : 'alert-ok'} ${currentStockFilter === 'low' ? 'active' : ''}" data-value="low" role="button" tabindex="0" style="cursor: pointer;">
                         <i class="fas fa-arrow-down"></i>
                         <span>${stats.stockLow} Stock Bajo</span>
                     </div>
-                    <div class="alert-item ${stats.stockOver > 0 ? 'alert-info' : 'alert-ok'} ${currentStockFilter === 'over' ? 'active' : ''}" data-value="over" onclick="document.getElementById('inventory-stock-alert-filter').value='over'; window.Inventory.loadInventory();">
+                    <div class="alert-item ${stats.stockOver > 0 ? 'alert-info' : 'alert-ok'} ${currentStockFilter === 'over' ? 'active' : ''}" data-value="over" role="button" tabindex="0" style="cursor: pointer;">
                         <i class="fas fa-arrow-up"></i>
                         <span>${stats.stockOver} Exceso</span>
                     </div>
-                    <div class="alert-item alert-success ${currentStockFilter === 'ok' ? 'active' : ''}" data-value="ok" onclick="document.getElementById('inventory-stock-alert-filter').value='ok'; window.Inventory.loadInventory();">
+                    <div class="alert-item alert-success ${currentStockFilter === 'ok' ? 'active' : ''}" data-value="ok" role="button" tabindex="0" style="cursor: pointer;">
                         <i class="fas fa-check"></i>
                         <span>${stats.stockOk} Normal</span>
                     </div>
