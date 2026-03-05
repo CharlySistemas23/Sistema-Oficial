@@ -268,7 +268,10 @@ const BarcodeManager = {
         if (activeModule === 'login' || focused?.id === 'employee-barcode-input') {
             return 'login';
         }
-        if (activeModule === 'pos' || focused?.classList.contains('pos-scan-input')) {
+        if (activeModule === 'pos' || 
+            focused?.id === 'pos-product-search' || 
+            focused?.classList?.contains('pos-scan-input') ||
+            focused?.classList?.contains('pos-search-input')) {
             return 'pos';
         }
         if (activeModule === 'inventory') {
@@ -389,7 +392,7 @@ const BarcodeManager = {
                 let guide = await DB.getByIndex('catalog_guides', 'barcode', barcodeClean);
                 if (!guide) {
                     const all = await DB.getAll('catalog_guides', null, null, { filterByBranch: false }) || [];
-                    guide = all.find(g => matchesCode(g, barcodeClean) && g.active);
+                    guide = all.find(g => matchesCode(g, barcodeClean) && g.active !== false);
                 }
                 if (guide && window.POS?.setGuide) {
                     await window.POS.setGuide(guide);
@@ -452,7 +455,7 @@ const BarcodeManager = {
 
             // PASO 1: Verificar si es un guía
             let guide = await findByBarcode('catalog_guides', barcodeClean);
-            if (guide && guide.active) {
+            if (guide && guide.active !== false) {
                 // Es un guía, cargar agencia automáticamente
                 if (window.POS && window.POS.setGuide) {
                     await window.POS.setGuide(guide);
@@ -501,7 +504,7 @@ const BarcodeManager = {
                 const allSellers = await DB.getAll('catalog_sellers', null, null, { filterByBranch: false }) || [];
                 
                 const foundAgency = allAgencies.find(a => matchesCode(a, barcodeClean) && a.active);
-                const foundGuide = allGuides.find(g => matchesCode(g, barcodeClean) && g.active);
+                const foundGuide = allGuides.find(g => matchesCode(g, barcodeClean) && g.active !== false);
                 const foundSeller = allSellers.find(s => matchesCode(s, barcodeClean) && s.active !== false);
                 
                 if (foundAgency) {
@@ -635,10 +638,27 @@ const BarcodeManager = {
                 return;
             }
             
-            // Buscar en guías
-            const guide = await DB.getByIndex('catalog_guides', 'barcode', barcode);
+            // Buscar en guías (fallback si contexto era generic pero POS está visible)
+            let guide = await DB.getByIndex('catalog_guides', 'barcode', barcode);
+            if (!guide && barcode) {
+                const all = await DB.getAll('catalog_guides', null, null, { filterByBranch: false }) || [];
+                const norm = v => String(v || '').trim().replace(/\r?\n/g, '');
+                const matchesCode = (item, val) => {
+                    const b = norm(item.barcode);
+                    const c = norm(item.code);
+                    const v = norm(val);
+                    return b === v || c === v || b.toLowerCase() === v.toLowerCase() || c.toLowerCase() === v.toLowerCase();
+                };
+                guide = all.find(g => matchesCode(g, barcode) && g.active !== false);
+            }
             if (guide) {
-                Utils.showNotification(`Guía encontrado: ${guide.name}`, 'success');
+                const posVisible = document.getElementById('module-pos')?.style?.display !== 'none';
+                if (posVisible && window.POS?.setGuide) {
+                    await window.POS.setGuide(guide);
+                    Utils.showNotification(`Guía ${guide.name} asignado al POS`, 'success');
+                } else {
+                    Utils.showNotification(`Guía encontrado: ${guide.name}`, 'success');
+                }
                 return;
             }
             
