@@ -807,12 +807,13 @@ const Utils = {
     },
 
     // Detectar escaneo vs tecleo (velocidad)
-    createBarcodeScanner(callback, minSpeed = 150) {
+    createBarcodeScanner(callback, minSpeed = 350) {
         let buffer = '';
         let lastKeyTime = 0;
         let timeout;
         let isScanning = false;
         let scanStartTime = 0;
+        const fallbackMaxDelay = 600; // Escáneres lentos: aceptar Enter hasta 600ms después del último carácter
         
         return (event) => {
             // Si estamos procesando un escaneo, bloquear todo
@@ -829,7 +830,9 @@ const Utils = {
             
             // Si es Enter y hay buffer, puede ser escaneo
             if (event.key === 'Enter') {
-                if (buffer.length > 0 && timeSinceLastKey < minSpeed) {
+                const isRapidScan = buffer.length > 0 && timeSinceLastKey < minSpeed;
+                const isFallbackScan = buffer.length >= 4 && timeSinceLastKey < fallbackMaxDelay;
+                if (isRapidScan || isFallbackScan) {
                     // Probable escaneo - prevenir TODOS los comportamientos por defecto
                     event.preventDefault();
                     event.stopPropagation();
