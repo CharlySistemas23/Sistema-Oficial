@@ -179,10 +179,13 @@
             const isInput = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA';
             const isBarcodeInput = e.target.id === 'employee-barcode-input' || 
                                    e.target.id === 'pos-product-search' ||
+                                   e.target.id === 'pos-customer-search' ||
                                    e.target.classList.contains('barcode-input') || 
                                    e.target.classList.contains('pos-scan-input');
             
-            if (isInput && !isBarcodeInput) {
+            // En el módulo POS, siempre pasar eventos al escáner (cualquier campo puede recibir escaneos)
+            const inPosModule = typeof UI !== 'undefined' && UI.currentModule === 'pos';
+            if (isInput && !isBarcodeInput && !inPosModule) {
                 return;
             }
             
