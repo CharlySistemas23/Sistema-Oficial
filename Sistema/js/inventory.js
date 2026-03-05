@@ -13,6 +13,8 @@ const Inventory = {
     INVENTORY_GRID_BATCH_SIZE: 15,
     _gridDisplayLimit: 0,
     _lastGridItems: [],
+    _suppressFilterChange: false,
+    _lastBackgroundRefreshTime: 0,
     
     // Configuración de stock por defecto
     defaultStockConfig: {
@@ -695,11 +697,16 @@ const Inventory = {
         this.populateMetalFilter();
         this.populateStoneTypeFilter();
 
-        // Recargar dropdowns cuando se carga el inventario
+        // Recargar dropdowns cuando se carga el inventario (sin disparar change → loadInventory)
         window.addEventListener('inventory-loaded', () => {
-            this.populateCollectionFilter();
-            this.populateMetalFilter();
-            this.populateStoneTypeFilter();
+            this._suppressFilterChange = true;
+            try {
+                this.populateCollectionFilter();
+                this.populateMetalFilter();
+                this.populateStoneTypeFilter();
+            } finally {
+                this._suppressFilterChange = false;
+            }
         });
 
             // Escuchar cambios de sucursal para sincronizar el dropdown
@@ -858,6 +865,7 @@ const Inventory = {
     },
 
     async loadInventory(options) {
+        if (this._suppressFilterChange) return;
         if (this._loadInventoryInProgress && !options?.force) return;
         this._loadInventoryInProgress = true;
         this._lastLoadEmptyFromServer = false;
@@ -1235,7 +1243,12 @@ const Inventory = {
                         const beforeIds = new Set((allItemsRaw || []).map(i => i.id));
                         const afterIds = new Set(freshFiltered.map(i => i.id));
                         const changed = beforeIds.size !== afterIds.size || [...beforeIds].some(id => !afterIds.has(id));
-                        if (changed) this.loadInventory({ force: true }).catch(e => console.warn('Refresh tras sync:', e));
+                        const now = Date.now();
+                        const minInterval = 3000;
+                        if (changed && (now - this._lastBackgroundRefreshTime) >= minInterval) {
+                            this._lastBackgroundRefreshTime = now;
+                            this.loadInventory({ force: true }).catch(e => console.warn('Refresh tras sync:', e));
+                        }
                     } catch (e) {
                         console.warn('Sync background inventario:', e);
                     }
