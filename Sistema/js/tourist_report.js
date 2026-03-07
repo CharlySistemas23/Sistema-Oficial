@@ -2423,14 +2423,9 @@ const TouristReport = {
                 // Guardar en IndexedDB como caché
                 await DB.put('agency_arrivals', arrival);
                 
-                // IMPORTANTE: NO llamar registerArrivalPayment aquí porque:
-                // 1. Si el backend procesa la llegada, puede crear el costo automáticamente
-                // 2. Si usamos ArrivalRules.saveArrival en el fallback, ya llama a registerArrivalPayment
-                // 3. Para evitar duplicados, usamos ArrivalRules.saveArrival que maneja todo centralmente
-                // Si la llegada viene del backend sin costo, lo registramos usando ArrivalRules
-                if (arrival.arrival_fee > 0 && typeof ArrivalRules !== 'undefined' && ArrivalRules.saveArrival) {
-                    // Usar ArrivalRules.saveArrival para asegurar que el costo se registre correctamente
-                    // Esta función ya maneja la detección de duplicados
+                // IMPORTANTE: El backend devuelve calculated_fee, NO arrival_fee. Usar ambos para compatibilidad.
+                const fee = arrival.arrival_fee ?? arrival.calculated_fee ?? 0;
+                if (fee > 0 && typeof ArrivalRules !== 'undefined' && ArrivalRules.saveArrival) {
                     await ArrivalRules.saveArrival({
                         date: arrival.date,
                         branch_id: arrival.branch_id,
@@ -2438,8 +2433,8 @@ const TouristReport = {
                         passengers: arrival.passengers,
                         units: arrival.units || 1,
                         unit_type: arrival.unit_type || null,
-                        calculated_fee: arrival.calculated_fee || arrival.arrival_fee,
-                        arrival_fee: arrival.arrival_fee,
+                        calculated_fee: fee,
+                        arrival_fee: fee,
                         override: arrival.override || false,
                         override_amount: arrival.override_amount || null,
                         override_reason: arrival.override_reason || null,
