@@ -13979,8 +13979,8 @@ const Reports = {
     },
 
     async deleteArchivedReport(reportId) {
-        // Usar server_id para la API si el id local tiene formato incorrecto (evita 404)
-        let apiId = reportId;
+        // Usar server_id para la API solo si el reporte fue sincronizado (evita 404 en reportes solo locales)
+        let apiId = null;
         try {
             const report = await DB.get('archived_quick_captures', reportId);
             if (report?.server_id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(report.server_id))) {
@@ -14021,16 +14021,20 @@ const Reports = {
             document.getElementById('delete-archived-confirm-btn').onclick = async () => {
                 confirmModal.remove();
                 try {
-                    // Eliminar del servidor primero (bidireccional)
-                    if (typeof API !== 'undefined' && API.baseURL && API.token && typeof API.deleteArchivedReport === 'function') {
+                    // Eliminar del servidor solo si el reporte fue sincronizado (apiId); si es solo local, no llamar API
+                    if (apiId && typeof API !== 'undefined' && API.baseURL && API.token && typeof API.deleteArchivedReport === 'function') {
                         try {
                             await API.deleteArchivedReport(apiId);
                             console.log('✅ Reporte archivado eliminado del servidor:', reportId);
                         } catch (apiErr) {
-                            console.warn('⚠️ No se pudo eliminar del servidor (se elimina localmente):', apiErr);
+                            if (apiErr?.status === 404 || apiErr?.message?.includes('Reporte archivado no encontrado')) {
+                                console.log('ℹ️ Reporte no encontrado en servidor, eliminando solo local');
+                            } else {
+                                console.warn('⚠️ No se pudo eliminar del servidor (se elimina localmente):', apiErr);
+                            }
                         }
                     }
-                    // Eliminar localmente
+                    // Siempre eliminar localmente (funciona para reportes sincronizados y solo locales)
                     await DB.delete('archived_quick_captures', reportId);
                     Utils.showNotification('Reporte archivado eliminado', 'success');
                     await this.loadArchivedReports();
