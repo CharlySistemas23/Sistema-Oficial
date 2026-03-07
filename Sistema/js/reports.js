@@ -5508,17 +5508,17 @@ const Reports = {
             </div>
 
             <!-- Sección de Llegadas del Día (Desplegable) -->
-            <div class="module" style="padding: 10px; background: white; border-radius: 6px; border: 1px solid #e0e0e0; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06);">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #f0f0f0; cursor: pointer;" onclick="window.Reports.toggleArrivalsForm()">
+            <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border); margin-bottom: var(--spacing-md); box-shadow: var(--shadow-sm);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-sm); padding-bottom: var(--spacing-xs); border-bottom: 1px solid var(--color-border-light); cursor: pointer;" onclick="window.Reports.toggleArrivalsForm()">
                     <div style="display: flex; align-items: center; gap: 6px;">
-                        <div style="width: 3px; height: 18px; background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); border-radius: 2px;"></div>
-                        <h3 style="margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; color: #333;">
-                            <i class="fas fa-plane-arrival" style="color: #fa709a; margin-right: 4px; font-size: 11px;"></i> Llegadas del Día
+                        <div style="width: 3px; height: 18px; background: var(--gradient-primary); border-radius: 2px;"></div>
+                        <h3 style="margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; color: var(--color-text);">
+                            <i class="fas fa-plane-arrival" style="color: var(--color-primary); margin-right: 4px; font-size: 11px;"></i> Llegadas del Día
                         </h3>
                     </div>
-                    <i id="arrivals-form-toggle-icon" class="fas fa-chevron-down" style="transition: transform 0.3s; color: #6c757d; font-size: 11px;"></i>
+                    <i id="arrivals-form-toggle-icon" class="fas fa-chevron-down" style="transition: transform 0.3s; color: var(--color-text-secondary); font-size: 11px;"></i>
                 </div>
-                <div id="quick-capture-arrivals-form-container" style="display: none; margin-bottom: 10px; padding: 10px; background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-radius: 4px; border: 1px solid #dee2e6; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                <div id="quick-capture-arrivals-form-container" style="display: none; margin-bottom: var(--spacing-sm); padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-sm); border: 1px solid var(--color-border-light);">
                     <form id="quick-arrivals-form" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--spacing-md);">
                         ${isMasterAdmin ? `
                         <div class="form-group">
@@ -5567,8 +5567,8 @@ const Reports = {
                         </div>
                         <div class="form-group">
                             <label>Costo de Llegada (MXN)</label>
-                            <input type="number" id="qc-arrival-cost" class="form-input" min="0" step="0.01" placeholder="0.00" readonly style="background: var(--color-bg-secondary);">
-                            <small id="qc-arrival-cost-help" style="color: var(--color-text-secondary); font-size: 9px;">Se calcula automáticamente</small>
+                            <input type="number" id="qc-arrival-cost" class="form-input" min="0" step="0.01" placeholder="0.00" readonly style="background: var(--color-bg-tertiary);">
+                            <small id="qc-arrival-cost-help" style="color: var(--color-text-secondary); font-size: 9px;">Se calcula automáticamente según reglas en Configuración → Reglas de Llegadas</small>
                         </div>
                         <div class="form-group" style="grid-column: 1 / -1;">
                             <label>Notas</label>
@@ -5589,11 +5589,11 @@ const Reports = {
             </div>
 
             <!-- Sección de Comisiones -->
-            <div class="module" style="padding: 10px; background: white; border-radius: 6px; border: 1px solid #e0e0e0; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06);">
-                <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #f0f0f0;">
-                    <div style="width: 3px; height: 18px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 2px;"></div>
-                    <h3 style="margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; color: #333;">
-                        <i class="fas fa-percent" style="color: #667eea; margin-right: 4px; font-size: 11px;"></i> Comisiones Calculadas
+            <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border); margin-bottom: var(--spacing-md); box-shadow: var(--shadow-sm);">
+                <div style="display: flex; align-items: center; gap: 6px; margin-bottom: var(--spacing-sm); padding-bottom: var(--spacing-xs); border-bottom: 1px solid var(--color-border-light);">
+                    <div style="width: 3px; height: 18px; background: var(--gradient-accent); border-radius: 2px;"></div>
+                    <h3 style="margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; color: var(--color-text);">
+                        <i class="fas fa-percent" style="color: var(--color-primary); margin-right: 4px; font-size: 11px;"></i> Comisiones Calculadas
                     </h3>
                 </div>
                 <div id="quick-capture-commissions">
@@ -5604,11 +5604,11 @@ const Reports = {
             </div>
 
             <!-- Sección de Utilidades del Día -->
-            <div class="module" style="padding: 10px; background: white; border-radius: 6px; border: 1px solid #e0e0e0; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06);">
-                <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #f0f0f0;">
-                    <div style="width: 3px; height: 18px; background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); border-radius: 2px;"></div>
-                    <h3 style="margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; color: #333;">
-                        <i class="fas fa-chart-line" style="color: #11998e; margin-right: 4px; font-size: 11px;"></i> Utilidades del Día
+            <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border); margin-bottom: var(--spacing-md); box-shadow: var(--shadow-sm);">
+                <div style="display: flex; align-items: center; gap: 6px; margin-bottom: var(--spacing-sm); padding-bottom: var(--spacing-xs); border-bottom: 1px solid var(--color-border-light);">
+                    <div style="width: 3px; height: 18px; background: var(--gradient-success); border-radius: 2px;"></div>
+                    <h3 style="margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; color: var(--color-text);">
+                        <i class="fas fa-chart-line" style="color: var(--color-success); margin-right: 4px; font-size: 11px;"></i> Utilidades del Día
                     </h3>
                 </div>
                 <div id="quick-capture-profits">
@@ -5619,12 +5619,12 @@ const Reports = {
             </div>
 
             <!-- Sección de Historial de Reportes Archivados -->
-            <div class="module" style="padding: 10px; background: white; border-radius: 6px; border: 1px solid #e0e0e0; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06);">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #f0f0f0;">
+            <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border); margin-bottom: var(--spacing-md); box-shadow: var(--shadow-sm);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-sm); padding-bottom: var(--spacing-xs); border-bottom: 1px solid var(--color-border-light);">
                     <div style="display: flex; align-items: center; gap: 6px;">
-                        <div style="width: 3px; height: 18px; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); border-radius: 2px;"></div>
-                        <h3 style="margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; color: #333;">
-                            <i class="fas fa-history" style="color: #f093fb; margin-right: 4px; font-size: 11px;"></i> Historial de Reportes Archivados
+                        <div style="width: 3px; height: 18px; background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-danger) 100%); border-radius: 2px;"></div>
+                        <h3 style="margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; color: var(--color-text);">
+                            <i class="fas fa-history" style="color: var(--color-primary); margin-right: 4px; font-size: 11px;"></i> Historial de Reportes Archivados
                         </h3>
                     </div>
                     <button class="btn-secondary btn-sm" onclick="window.Reports.loadArchivedReports()" title="Actualizar historial" style="font-weight: 600; padding: 6px 10px; font-size: 11px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
@@ -9017,6 +9017,13 @@ const Reports = {
             } catch (e) {
                 console.warn('No se pudieron obtener costos operativos:', e);
             }
+
+            // Si no hay comisiones bancarias registradas en cost_entries, aplicar 4.5% fijo sobre ventas (temporal)
+            const BANK_COMMISSION_FALLBACK_RATE = 4.5;
+            if (bankCommissions <= 0 && totalSalesMXN > 0) {
+                bankCommissions = totalSalesMXN * (BANK_COMMISSION_FALLBACK_RATE / 100);
+                console.log(`   Comisiones Bancarias (${BANK_COMMISSION_FALLBACK_RATE}% fijo sobre ventas): $${bankCommissions.toFixed(2)}`);
+            }
             
             // 8. Gastos de caja (retiros) del día
             // Los retiros de caja también son gastos operativos que deben incluirse
@@ -10167,6 +10174,11 @@ const Reports = {
                 console.warn('Error calculando costos operativos:', e);
             }
 
+            // Si no hay comisiones bancarias registradas, aplicar 4.5% fijo sobre ventas (temporal)
+            if (bankCommissions <= 0 && totalSalesMXN > 0) {
+                bankCommissions = totalSalesMXN * 0.045;
+            }
+
             const grossProfit = totalSalesMXN - totalCOGS - totalCommissions;
             const netProfit = grossProfit - totalArrivalCosts - totalOperatingCosts - bankCommissions;
 
@@ -11314,13 +11326,18 @@ const Reports = {
                             captureTotalMXN = captureTotal;
                         }
                         
-                        // Buscar configuración de comisión bancaria
+                        // Buscar configuración de comisión bancaria; si no existe, usar 4.5% fijo (temporal)
                         const bankCommissionSetting = await DB.get('settings', 'bank_commission_default_rate');
-                        const bankCommissionRate = bankCommissionSetting?.value ? parseFloat(bankCommissionSetting.value) : 0;
+                        const bankCommissionRate = bankCommissionSetting?.value ? parseFloat(bankCommissionSetting.value) : 4.5;
                         if (bankCommissionRate > 0) {
                             bankCommissions += (captureTotalMXN * bankCommissionRate) / 100;
                         }
                     }
+                }
+                // Si aún no hay comisiones bancarias (sin payment_method o sin capturas con tarjeta), aplicar 4.5% fijo sobre total ventas
+                const BANK_COMMISSION_FALLBACK_RATE = 4.5;
+                if (bankCommissions <= 0 && totalSalesMXN > 0) {
+                    bankCommissions = totalSalesMXN * (BANK_COMMISSION_FALLBACK_RATE / 100);
                 }
             } catch (e) {
                 console.warn('No se pudieron obtener costos operativos:', e);
@@ -11807,6 +11824,11 @@ const Reports = {
                 }
             } catch (e) {
                 console.warn('Error calculando costos operativos:', e);
+            }
+
+            // Si no hay comisiones bancarias registradas, aplicar 4.5% fijo sobre ventas (temporal)
+            if (bankCommissions <= 0 && totalSalesMXN > 0) {
+                bankCommissions = totalSalesMXN * 0.045;
             }
             
             // Total de costos operativos (variables + fijos)
