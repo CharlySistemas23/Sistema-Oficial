@@ -23,6 +23,11 @@ Object.assign(POS, {
     autoSaveInterval: null,
     isFullscreen: false,
 
+    // Carga progresiva: como Inventario, evitar renderizar todo el catálogo
+    POS_GRID_BATCH_SIZE: 15,
+    _posGridDisplayLimit: 0,
+    _lastPosItems: [],
+
     async init() {
         // Verificar permiso
         if (typeof PermissionManager !== 'undefined' && !PermissionManager.hasPermission('pos.view')) {
@@ -1130,26 +1135,10 @@ Object.assign(POS, {
                 return;
             }
 
-            // Cargar fotos
-            const itemsWithPhotos = await Promise.all(items.map(async (item) => {
-                try {
-                    const photos = await DB.query('inventory_photos', 'item_id', item.id);
-                    const photo = photos && photos.length > 0 ? photos[0] : null;
-                    return { ...item, photo: photo?.thumbnail_blob || photo?.photo_blob || null };
-                } catch (e) {
-                    return { ...item, photo: null };
-                }
-            }));
-
-            // Asegurar que window.POS esté disponible ANTES de renderizar
-            if (!window.POS) {
-                window.POS = this;
-                console.log('POS: window.POS expuesto manualmente antes de renderizar');
-            }
-            
-            // Renderizar productos
-            const productsHTML = itemsWithPhotos.map(item => this.renderProductCard(item)).join('');
-            container.innerHTML = productsHTML;
+            // Carga progresiva: guardar items y mostrar primer batch (como Inventario)
+            this._lastPosItems = items;
+            this._posGridDisplayLimit = this.POS_GRID_BATCH_SIZE;
+            await this.displayPosProducts();
             
             // Re-asegurar que window.POS esté disponible después de renderizar
             if (!window.POS) {
@@ -1173,16 +1162,19 @@ Object.assign(POS, {
                     
                     // Intentar ejecutar el onclick original primero
                     try {
-                        // Si el onclick no funciona, ejecutarlo manualmente
-                        const funcMatch = onclick.match(/window\.POS\.(\w+)\(['"]?([^'")]+)['"]?\)/);
+                        // Si el onclick no funciona, ejecutarlo manualmente (param opcional para loadMorePosProducts, etc.)
+                        const funcMatch = onclick.match(/window\.POS\.(\w+)\(['"]?([^'")]*)['"]?\)/);
                         if (funcMatch) {
                             const funcName = funcMatch[1];
-                            const param = funcMatch[2];
+                            const param = funcMatch[2] || undefined;
                             if (this[funcName] && typeof this[funcName] === 'function') {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                console.log(`POS: Ejecutando ${funcName} con parámetro: ${param}`);
-                                this[funcName](param);
+                                if (param !== undefined && param !== '') {
+                                    this[funcName](param);
+                                } else {
+                                    this[funcName]();
+                                }
                                 return;
                             }
                         }
@@ -1220,6 +1212,54 @@ Object.assign(POS, {
                 </div>
             `;
         }
+    },
+
+    async displayPosProducts(options = {}) {
+        const container = document.getElementById('pos-products-list');
+        if (!container) return;
+
+        const items = Array.isArray(this._lastPosItems) ? this._lastPosItems : [];
+        if (!options.isLoadMore) {
+            this._posGridDisplayLimit = this.POS_GRID_BATCH_SIZE;
+        }
+
+        if (items.length === 0) return;
+
+        const limit = this._posGridDisplayLimit || this.POS_GRID_BATCH_SIZE;
+        const toShow = items.slice(0, limit);
+        const hasMore = items.length > limit;
+        const remaining = items.length - limit;
+
+        // Cargar fotos solo para los items visibles
+        const itemsWithPhotos = await Promise.all(toShow.map(async (item) => {
+            try {
+                const photos = await DB.query('inventory_photos', 'item_id', item.id);
+                const photo = photos && photos.length > 0 ? photos[0] : null;
+                return { ...item, photo: photo?.thumbnail_blob || photo?.photo_blob || null };
+            } catch (e) {
+                return { ...item, photo: null };
+            }
+        }));
+
+        if (!window.POS) {
+            window.POS = this;
+        }
+
+        const productsHTML = itemsWithPhotos.map(item => this.renderProductCard(item)).join('');
+        const loadMoreBtn = hasMore ? `
+            <div class="pos-load-more-wrap" style="grid-column: 1 / -1; display: flex; justify-content: center; padding: var(--spacing-md);">
+                <button type="button" class="btn-secondary" onclick="window.POS.loadMorePosProducts()">
+                    <i class="fas fa-chevron-down"></i> Cargar más (${remaining} restantes)
+                </button>
+            </div>
+        ` : '';
+        container.innerHTML = productsHTML + loadMoreBtn;
+    },
+
+    loadMorePosProducts() {
+        if (!this._lastPosItems || this._lastPosItems.length === 0) return;
+        this._posGridDisplayLimit = (this._posGridDisplayLimit || this.POS_GRID_BATCH_SIZE) + this.POS_GRID_BATCH_SIZE;
+        this.displayPosProducts({ isLoadMore: true });
     },
 
     renderProductCard(item) {
