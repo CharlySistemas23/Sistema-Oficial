@@ -1603,17 +1603,21 @@ const Costs = {
                         try {
                             const fresh = await API.getCosts(filters);
                             const deletedCostIds = new Set();
+                            const deletedLogicalKeys = new Set();
                             try {
                                 const deletedItems = await DB.getAll('sync_deleted_items') || [];
                                 for (const d of deletedItems) {
                                     if (d.entity_type === 'cost_entry' && d.metadata) {
                                         if (d.metadata.server_id) deletedCostIds.add(String(d.metadata.server_id));
                                         if (d.id) deletedCostIds.add(String(d.id));
+                                        if (d.metadata.logical_key) deletedLogicalKeys.add(String(d.metadata.logical_key));
                                     }
                                 }
                             } catch (_) {}
+                            const buildLogicalKey = (c) => `${c.date || c.created_at || ''}_${c.category || ''}_${c.branch_id || 'no-branch'}_${c.amount || 0}_${(c.description || c.notes || '').slice(0, 100)}`;
                             for (const c of fresh) {
                                 if (deletedCostIds.has(String(c.id)) || (c.server_id && deletedCostIds.has(String(c.server_id)))) continue;
+                                if (deletedLogicalKeys.has(buildLogicalKey(c))) continue;
                                 try { await DB.put('cost_entries', { ...c, server_id: c.id, sync_status: 'synced' }, { autoBranchId: false }); } catch (e) {}
                             }
                             const beforeIds = new Set((costs || []).map(c => c.id));
@@ -1634,21 +1638,25 @@ const Costs = {
                     console.log(`📥 [Paso 2 Costs] ${costs.length} costos recibidos del servidor`);
                     
                     const deletedCostIds = new Set();
+                    const deletedLogicalKeys = new Set();
                     try {
                         const deletedItems = await DB.getAll('sync_deleted_items') || [];
                         for (const d of deletedItems) {
                             if (d.entity_type === 'cost_entry' && d.metadata) {
                                 if (d.metadata.server_id) deletedCostIds.add(String(d.metadata.server_id));
                                 if (d.id) deletedCostIds.add(String(d.id));
+                                if (d.metadata.logical_key) deletedLogicalKeys.add(String(d.metadata.logical_key));
                             }
                         }
                     } catch (_) {}
                     
+                    const buildLogicalKey = (c) => `${c.date || c.created_at || ''}_${c.category || ''}_${c.branch_id || 'no-branch'}_${c.amount || 0}_${(c.description || c.notes || '').slice(0, 100)}`;
                     // Guardar/actualizar cada costo en IndexedDB local (excluir eliminados localmente)
                     let savedCount = 0;
                     let updatedCount = 0;
                     for (const serverCost of costs) {
                         if (deletedCostIds.has(String(serverCost.id)) || (serverCost.server_id && deletedCostIds.has(String(serverCost.server_id)))) continue;
+                        if (deletedLogicalKeys.has(buildLogicalKey(serverCost))) continue;
                         try {
                             const key = `${serverCost.date || serverCost.created_at || ''}_${serverCost.category || ''}_${serverCost.branch_id || 'no-branch'}_${serverCost.amount || 0}`;
                             const existingLocalCosts = await DB.getAll('cost_entries') || [];
@@ -3163,9 +3171,11 @@ const Costs = {
 
         // CRÍTICO: Registrar eliminación INMEDIATAMENTE para evitar que el sync en background re-inserte el costo
         // (race: API.deleteCost puede no haber terminado cuando el refresh trae datos del servidor)
+        const logicalKey = `${cost.date || cost.created_at || ''}_${cost.category || ''}_${cost.branch_id || 'no-branch'}_${cost.amount || 0}_${(cost.description || cost.notes || '').slice(0, 100)}`;
         const costMetadata = {
             id: cost.id,
             server_id: apiIdToDelete,
+            logical_key: logicalKey,
             type: cost.type,
             category: cost.category,
             branch_id: cost.branch_id,
@@ -3182,7 +3192,6 @@ const Costs = {
 
         // Encontrar todos los duplicados (mismo costo lógico con distintos ids por bug de sincronización)
         const allCosts = await DB.getAll('cost_entries', null, null, { filterByBranch: false }) || [];
-        const logicalKey = `${cost.date || cost.created_at || ''}_${cost.category || ''}_${cost.branch_id || 'no-branch'}_${cost.amount || 0}_${(cost.description || cost.notes || '').slice(0, 100)}`;
         const idsToDelete = new Set();
         idsToDelete.add(costId);
         for (const c of allCosts) {
