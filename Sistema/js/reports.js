@@ -5814,7 +5814,7 @@ const Reports = {
                                 console.log('💰 [Cálculo Costo] Resultado:', calculation);
                                     
                                     if (costInput) {
-                                    const calculatedFee = calculation.calculatedFee || 0;
+                                    const calculatedFee = parseFloat(calculation.calculatedFee) || 0;
                                     costInput.value = calculatedFee.toFixed(2);
                                     costInput.style.color = '';
                                             if (costHelp) {
