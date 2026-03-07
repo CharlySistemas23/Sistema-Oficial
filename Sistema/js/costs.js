@@ -926,7 +926,16 @@ const Costs = {
             const selectedBranchId = branchFilterValue === '' ? null : branchFilterValue;
             
             const allCosts = await this.getFilteredCosts({ branchId: selectedBranchId });
-            const recurringCosts = allCosts.filter(c => c.recurring === true);
+            let recurringCosts = allCosts.filter(c => c.recurring === true);
+            
+            // Deduplicar gastos recurrentes (bug: se crearon muchos duplicados)
+            const seenKeys = new Map();
+            recurringCosts = recurringCosts.filter(c => {
+                const key = `${c.branch_id || ''}_${c.category || ''}_${c.period_type || ''}_${parseFloat(c.amount) || 0}_${(c.notes || '').slice(0, 80)}`;
+                if (seenKeys.has(key)) return false;
+                seenKeys.set(key, c);
+                return true;
+            });
             
             // Ordenar por período y categoría
             recurringCosts.sort((a, b) => {
@@ -1010,7 +1019,7 @@ const Costs = {
             const branchName = branch?.name || 'Sin Sucursal';
             
             // Calcular total de la sucursal
-            const branchTotal = branchCosts.reduce((sum, cost) => sum + (cost.amount || 0), 0);
+            const branchTotal = branchCosts.reduce((sum, cost) => sum + (parseFloat(cost.amount) || 0), 0);
             
             // Ordenar por período y categoría
             branchCosts.sort((a, b) => {
@@ -1594,7 +1603,18 @@ const Costs = {
                     Promise.resolve().then(async () => {
                         try {
                             const fresh = await API.getCosts(filters);
+                            const deletedCostIds = new Set();
+                            try {
+                                const deletedItems = await DB.getAll('sync_deleted_items') || [];
+                                for (const d of deletedItems) {
+                                    if (d.entity_type === 'cost_entry' && d.metadata) {
+                                        if (d.metadata.server_id) deletedCostIds.add(String(d.metadata.server_id));
+                                        if (d.id) deletedCostIds.add(String(d.id));
+                                    }
+                                }
+                            } catch (_) {}
                             for (const c of fresh) {
+                                if (deletedCostIds.has(String(c.id)) || (c.server_id && deletedCostIds.has(String(c.server_id)))) continue;
                                 try { await DB.put('cost_entries', { ...c, server_id: c.id, sync_status: 'synced' }, { autoBranchId: false }); } catch (e) {}
                             }
                             const beforeIds = new Set((costs || []).map(c => c.id));
@@ -1614,10 +1634,22 @@ const Costs = {
                     costs = await API.getCosts(filters);
                     console.log(`📥 [Paso 2 Costs] ${costs.length} costos recibidos del servidor`);
                     
-                    // Guardar/actualizar cada costo en IndexedDB local
+                    const deletedCostIds = new Set();
+                    try {
+                        const deletedItems = await DB.getAll('sync_deleted_items') || [];
+                        for (const d of deletedItems) {
+                            if (d.entity_type === 'cost_entry' && d.metadata) {
+                                if (d.metadata.server_id) deletedCostIds.add(String(d.metadata.server_id));
+                                if (d.id) deletedCostIds.add(String(d.id));
+                            }
+                        }
+                    } catch (_) {}
+                    
+                    // Guardar/actualizar cada costo en IndexedDB local (excluir eliminados localmente)
                     let savedCount = 0;
                     let updatedCount = 0;
                     for (const serverCost of costs) {
+                        if (deletedCostIds.has(String(serverCost.id)) || (serverCost.server_id && deletedCostIds.has(String(serverCost.server_id)))) continue;
                         try {
                             const key = `${serverCost.date || serverCost.created_at || ''}_${serverCost.category || ''}_${serverCost.branch_id || 'no-branch'}_${serverCost.amount || 0}`;
                             const existingLocalCosts = await DB.getAll('cost_entries') || [];
@@ -1983,7 +2015,7 @@ const Costs = {
             const branchName = branch?.name || 'Sin Sucursal';
             
             // Calcular total de la sucursal
-            const branchTotal = branchCosts.reduce((sum, cost) => sum + (cost.amount || 0), 0);
+            const branchTotal = branchCosts.reduce((sum, cost) => sum + (parseFloat(cost.amount) || 0), 0);
             
             // Ordenar costos por fecha descendente
             branchCosts.sort((a, b) => new Date(b.date || b.created_at) - new Date(a.date || a.created_at));
@@ -3150,11 +3182,12 @@ const Costs = {
             if (cost.category === 'pago_llegadas' && cost.arrival_id) {
                 const arrival = await DB.get('agency_arrivals', cost.arrival_id);
                 if (arrival) {
-                    // Intentar eliminar llegada con API
-                    if (typeof API !== 'undefined' && API.baseURL && API.token && API.deleteArrival) {
+                    const arrivalApiId = arrival.server_id || arrival.id;
+                    const isUuid = arrivalApiId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(arrivalApiId));
+                    if (typeof API !== 'undefined' && API.baseURL && API.token && API.deleteArrival && isUuid) {
                         try {
                             console.log('🗑️ Eliminando llegada asociada con API...');
-                            await API.deleteArrival(cost.arrival_id);
+                            await API.deleteArrival(arrivalApiId);
                             console.log('✅ Llegada eliminada con API en servidor');
                             arrivalApiDeleted = true;
                         } catch (arrivalApiError) {
@@ -3187,9 +3220,10 @@ const Costs = {
                 }
             }
 
-            // Guardar metadata para sincronización (por cada id a eliminar)
+            // Guardar metadata para sincronización (incluir server_id para evitar re-insertar desde API)
             const costMetadata = {
                 id: cost.id,
+                server_id: apiIdToDelete,
                 type: cost.type,
                 category: cost.category,
                 branch_id: cost.branch_id,
