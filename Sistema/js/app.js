@@ -1671,38 +1671,64 @@ const App = {
             }
         }
 
-        // Guides (by agency)
-        const guidesData = {
-            'ag2': ['CARLOS SIS', 'MARIO RENDON', 'CHAVA', 'FREDY', 'NETO', 'EMMANUEL'],
-            'ag3': ['MARINA', 'GLORIA', 'DANIELA'],
-            'ag4': ['RAMON', 'GUSTAVO SIS', 'GUSTAVO LEPE', 'NOVOA', 'ERIK', 'CHILO', 'FERMIN', 'EMMA', 'HERASMO'],
-            'ag1': ['MIGUEL SUAREZ', 'SANTA', 'MIGUEL DELGADILLO', 'ANDRES CHAVEZ', 'SAREM', 'ZAVALA', 'TEMO', 'ROCIO', 'NETO', 'SEBASTIAN S'],
-            'ag5': ['MIGUEL IBARRA', 'ADAN', 'MIGUEL RAGA', 'GABINO', 'HECTOR SUAREZ', 'OSCAR', 'JOSE AVILES'],
-            'ag6': ['HUGO', 'HILBERTO', 'JOSE MASIAS', 'DAVID BUSTOS', 'ALFONSO', 'DANIEL RIVERA', 'EDUARDO LEAL'],
-            'ag7': ['NANCY', 'JAVIER', 'GINA', 'LUKE', 'JULIAN', 'GEOVANNY', 'NEYRA', 'ROGER']
+        // Guides (by agency) - Usar nombre de agencia para resolver UUID real del servidor
+        // Mapa: nombre de agencia → lista de guías
+        const guidesDataByAgencyName = {
+            'VERANOS': ['CARLOS SIS', 'MARIO RENDON', 'CHAVA', 'FREDY', 'NETO', 'EMMANUEL'],
+            'TANITOURS': ['MARINA', 'GLORIA', 'DANIELA'],
+            'DISCOVERY': ['RAMON', 'GUSTAVO SIS', 'GUSTAVO LEPE', 'NOVOA', 'ERIK', 'CHILO', 'FERMIN', 'EMMA', 'HERASMO'],
+            'TRAVELEX': ['MIGUEL SUAREZ', 'SANTA', 'MIGUEL DELGADILLO', 'ANDRES CHAVEZ', 'SAREM', 'ZAVALA', 'TEMO', 'ROCIO', 'NETO', 'SEBASTIAN S'],
+            'TB': ['MIGUEL IBARRA', 'ADAN', 'MIGUEL RAGA', 'GABINO', 'HECTOR SUAREZ', 'OSCAR', 'JOSE AVILES'],
+            'TTF': ['HUGO', 'HILBERTO', 'JOSE MASIAS', 'DAVID BUSTOS', 'ALFONSO', 'DANIEL RIVERA', 'EDUARDO LEAL'],
+            'TROPICAL ADVENTURE': ['NANCY', 'JAVIER', 'GINA', 'LUKE', 'JULIAN', 'GEOVANNY', 'NEYRA', 'ROGER']
+        };
+
+        // Cargar agencias ya existentes (con UUID del servidor si está disponible)
+        let allAgenciesForGuides = [];
+        try {
+            allAgenciesForGuides = await DB.getAll('catalog_agencies') || [];
+        } catch (e) { /* ignore */ }
+
+        // Función para obtener el ID de agencia real a partir del nombre
+        const resolveAgencyId = (agencyName) => {
+            const norm = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+            const normTarget = norm(agencyName);
+            const found = allAgenciesForGuides.find(a => {
+                const an = norm(a.name);
+                return an === normTarget || an.includes(normTarget) || normTarget.includes(an);
+            });
+            if (found) return found.id;
+            // Fallback a IDs legacy
+            const legacyMap = { 'TRAVELEX': 'ag1', 'VERANOS': 'ag2', 'TANITOURS': 'ag3', 'DISCOVERY': 'ag4', 'TB': 'ag5', 'TTF': 'ag6', 'TROPICAL ADVENTURE': 'ag7' };
+            return legacyMap[agencyName] || null;
         };
 
         let guideIdx = 1;
-        for (const [agencyId, guideNames] of Object.entries(guidesData)) {
+        for (const [agencyName, guideNames] of Object.entries(guidesDataByAgencyName)) {
+            const resolvedAgencyId = resolveAgencyId(agencyName);
             for (const name of guideNames) {
                 try {
                     const guideId = `guide_${guideIdx++}`;
                     const guideData = {
                         id: guideId,
                         name: name,
-                        agency_id: agencyId,
+                        agency_id: resolvedAgencyId,
                         active: true,
                         commission_rule: name === 'MARINA' ? 'guide_marina' : 'guide_default'
                     };
                     const existing = await DB.get('catalog_guides', guideId);
                     if (existing) {
-                        // Si existe pero no tiene código de barras, generarlo
-                        if (!existing.barcode || Utils.isBarcodeEmpty(existing.barcode)) {
+                        // Actualizar agency_id si el existente tiene ID legacy (ag1..ag7) y el nuevo es UUID
+                        const existingIsLegacy = existing.agency_id && /^ag\d+$/i.test(String(existing.agency_id));
+                        const resolvedIsUUID = resolvedAgencyId && /^[0-9a-f]{8}-/i.test(String(resolvedAgencyId));
+                        if (existingIsLegacy && resolvedIsUUID) {
+                            existing.agency_id = resolvedAgencyId;
+                            await DB.put('catalog_guides', existing);
+                        } else if (!existing.barcode || Utils.isBarcodeEmpty(existing.barcode)) {
                             existing.barcode = Utils.generateGuideBarcode(existing);
                             await DB.put('catalog_guides', existing);
                         }
                     } else {
-                        // Nuevo registro: generar código de barras
                         guideData.barcode = Utils.generateGuideBarcode(guideData);
                         await DB.put('catalog_guides', guideData);
                     }
@@ -1710,6 +1736,28 @@ const App = {
                     // Already exists
                 }
             }
+        }
+
+        // Migración: corregir agency_id de guías existentes que usen ag1..ag7 legacy
+        try {
+            const allGuidesForMigration = await DB.getAll('catalog_guides') || [];
+            const legacyAgencyIdMap = { 'ag1': 'TRAVELEX', 'ag2': 'VERANOS', 'ag3': 'TANITOURS', 'ag4': 'DISCOVERY', 'ag5': 'TB', 'ag6': 'TTF', 'ag7': 'TROPICAL ADVENTURE' };
+            for (const guide of allGuidesForMigration) {
+                if (!guide || !guide.agency_id) continue;
+                const isLegacy = /^ag\d+$/i.test(String(guide.agency_id));
+                if (isLegacy) {
+                    const agencyName = legacyAgencyIdMap[guide.agency_id];
+                    if (agencyName) {
+                        const resolvedId = resolveAgencyId(agencyName);
+                        if (resolvedId && resolvedId !== guide.agency_id) {
+                            guide.agency_id = resolvedId;
+                            await DB.put('catalog_guides', guide);
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn('⚠️ Error en migración de agency_id de guías:', e);
         }
 
         // Intentar sincronizar TROPICAL ADVENTURE con Railway si hay API disponible
