@@ -2721,6 +2721,19 @@ const Reports = {
      */
     async calculateArrivalCosts(dateStr, branchId = null, branchIds = []) {
         try {
+            // Si branchIds está vacío pero hay sucursal actual, incluirla para no excluir costos válidos
+            let effectiveBranchIds = Array.isArray(branchIds) ? [...branchIds] : [];
+            if (effectiveBranchIds.length === 0 && typeof BranchManager !== 'undefined' && BranchManager.getCurrentBranchId) {
+                const currentBranch = BranchManager.getCurrentBranchId();
+                if (currentBranch) {
+                    effectiveBranchIds = [currentBranch];
+                }
+            }
+            // Normalizar branch IDs para comparación (evitar diferencias de formato)
+            const norm = (id) => (id != null && id !== '') ? String(id).trim().toLowerCase() : '';
+            const normBranchId = branchId != null && branchId !== '' ? norm(branchId) : null;
+            const normBranchIds = effectiveBranchIds.map(norm).filter(Boolean);
+
             // 1. PRIMERO: Intentar obtener costos desde cost_entries (fuente autorizada)
             const allCosts = await DB.getAll('cost_entries', null, null, { 
                 filterByBranch: false, 
@@ -2728,34 +2741,24 @@ const Reports = {
             }) || [];
             
             // Filtrar costos de llegadas del día
-            // CRÍTICO: Aplicar filtro estricto por sucursal - NO incluir costos sin branch_id cuando se filtra por sucursal específica
+            // CRÍTICO: Aplicar filtro estricto por sucursal con comparación normalizada
             const arrivalCostEntries = allCosts.filter(c => {
                 const costDate = c.date || c.created_at;
                 const costDateStr = typeof costDate === 'string' ? costDate.split('T')[0] : new Date(costDate).toISOString().split('T')[0];
                 
-                // Verificar que sea de la categoría de llegadas
                 if (c.category !== 'pago_llegadas') return false;
-                
-                // Verificar fecha
                 if (costDateStr !== dateStr) return false;
                 
-                // CRÍTICO: Verificar sucursal con filtro estricto
-                if (branchId !== null) {
-                    // Sucursal específica: SOLO incluir costos de esta sucursal (excluir sin branch_id)
-                    if (!c.branch_id) {
-                        return false; // EXCLUIR costos sin branch_id cuando se filtra por sucursal específica
-                    }
-                    return String(c.branch_id) === String(branchId);
-                } else if (branchIds.length > 0) {
-                    // Múltiples sucursales específicas: SOLO incluir costos de esas sucursales (excluir sin branch_id)
-                    if (!c.branch_id) {
-                        return false; // EXCLUIR costos sin branch_id
-                    }
-                    return branchIds.includes(c.branch_id);
-                } else {
-                    // Todas las sucursales (master_admin): incluir todos los costos
-                    return true;
+                // Verificar sucursal con comparación normalizada
+                if (normBranchId !== null) {
+                    if (!c.branch_id) return false;
+                    return norm(c.branch_id) === normBranchId;
                 }
+                if (normBranchIds.length > 0) {
+                    if (!c.branch_id) return false;
+                    return normBranchIds.includes(norm(c.branch_id));
+                }
+                return true;
             });
             
             // Calcular total desde cost_entries (asegurar que siempre sea un número)
@@ -2789,7 +2792,7 @@ const Reports = {
                 return totalAsNumber;
             }
             
-            console.warn(`⚠️ No se encontraron costos de llegadas en cost_entries para ${dateStr}, branchId: ${branchId || 'null'}, branchIds: [${branchIds.join(', ')}]`);
+            console.warn(`⚠️ No se encontraron costos de llegadas en cost_entries para ${dateStr}, branchId: ${branchId || 'null'}, branchIds: [${effectiveBranchIds.join(', ')}]`);
             
             // 2. FALLBACK: Si no hay costos registrados, calcular desde agency_arrivals
             // (Por si acaso no se registraron automáticamente)
@@ -2805,14 +2808,14 @@ const Reports = {
                 if (!arrivalDate || arrivalDate !== dateStr) return false;
                 if (a.passengers <= 0 && (a.units <= 0 && (a.arrival_fee <= 0 && a.calculated_fee <= 0))) return false;
                 
-                // Verificar sucursal
-                if (branchId !== null) {
-                    return a.branch_id === branchId || !a.branch_id;
-                } else if (branchIds.length > 0) {
-                    return !a.branch_id || branchIds.includes(a.branch_id);
-                } else {
-                    return true;
+                // Verificar sucursal (usar effectiveBranchIds y comparación normalizada)
+                if (normBranchId !== null) {
+                    return !a.branch_id || norm(a.branch_id) === normBranchId;
                 }
+                if (normBranchIds.length > 0) {
+                    return !a.branch_id || normBranchIds.includes(norm(a.branch_id));
+                }
+                return true;
             });
             
             // Agrupar llegadas por ID para evitar duplicados al calcular desde agency_arrivals
@@ -6555,50 +6558,49 @@ const Reports = {
             console.log(`   [Llegadas] Agencia seleccionada: ${selectedAgency.name} (ID: ${selectedAgency.id})`);
             console.log(`   [Llegadas] Total guías en DB: ${guides.length}`);
 
+            // Normalizar nombre de la agencia seleccionada para comparaciones
+            const selectedNameNorm = String(selectedAgency.name || '').trim().toUpperCase().replace(/\s+/g, '');
+            // IDs de todas las agencias con el mismo nombre (duplicados local vs servidor)
+            const agencyIdsWithSameName = agencies
+                .filter(a => {
+                    const an = String(a.name || '').trim().toUpperCase().replace(/\s+/g, '');
+                    return an === selectedNameNorm || an.includes(selectedNameNorm) || selectedNameNorm.includes(an);
+                })
+                .map(a => a.id);
+
             // Filtrar guías por agencia seleccionada
             const filteredGuides = guides.filter(g => {
-                if (!g.agency_id) {
+                // Permitir guías sin agency_id solo si hay un segundo pase fallback (ver más abajo)
+                const guideAgencyIdStr = String(g.agency_id || '').trim();
+                if (!guideAgencyIdStr) {
                     return false;
                 }
                 
-                // Comparar por ID (método principal)
+                // 1. Comparar por ID (método principal)
                 let matches = this.compareIds(g.agency_id, agencyId);
                 
-                // Si no coincide por ID, intentar comparar por nombre de agencia (método fallback)
+                // 2. Si no coincide, verificar si agency_id del guía coincide con CUALQUIER agencia del mismo nombre
+                if (!matches && agencyIdsWithSameName.length > 0) {
+                    matches = agencyIdsWithSameName.some(aid => this.compareIds(g.agency_id, aid));
+                }
+                
+                // 3. Si no coincide por ID, intentar comparar por nombre de agencia (guideAgency encontrada por g.agency_id)
                 if (!matches) {
                     const guideAgency = agencies.find(a => this.compareIds(a.id, g.agency_id));
                     if (guideAgency) {
-                        const selectedName = String(selectedAgency.name || '').trim().toUpperCase();
-                        const guideAgencyName = String(guideAgency.name || '').trim().toUpperCase();
-                        
-                        // Comparación flexible por nombre (incluye variaciones como "TANITOURS" vs "TANI TOURS")
-                        // Normalizar espacios para comparar
-                        const selectedNameNormalized = selectedName.replace(/\s+/g, '');
-                        const guideAgencyNameNormalized = guideAgencyName.replace(/\s+/g, '');
-                        
-                        matches = selectedName === guideAgencyName || 
-                                 selectedName.includes(guideAgencyName) || 
-                                 guideAgencyName.includes(selectedName) ||
-                                 selectedNameNormalized === guideAgencyNameNormalized ||
-                                 selectedNameNormalized.includes(guideAgencyNameNormalized) ||
-                                 guideAgencyNameNormalized.includes(selectedNameNormalized);
+                        const guideAgencyNameNorm = String(guideAgency.name || '').trim().toUpperCase().replace(/\s+/g, '');
+                        matches = selectedNameNorm === guideAgencyNameNorm || 
+                                 selectedNameNorm.includes(guideAgencyNameNorm) || 
+                                 guideAgencyNameNorm.includes(selectedNameNorm);
                     }
                 }
                 
-                // Si aún no coincide, intentar comparar directamente el agency_id del guía con el nombre de la agencia seleccionada
-                // (por si hay guías que tienen el nombre de la agencia en lugar del ID)
+                // 4. Guías con agency_id = nombre de agencia (ej. "VERANOS" en lugar de id)
                 if (!matches) {
-                    const guideAgencyIdStr = String(g.agency_id || '').trim().toUpperCase();
-                    const selectedName = String(selectedAgency.name || '').trim().toUpperCase();
-                    const selectedNameNormalized = selectedName.replace(/\s+/g, '');
-                    const guideAgencyIdNormalized = guideAgencyIdStr.replace(/\s+/g, '');
-                    
-                    matches = guideAgencyIdStr === selectedName || 
-                             guideAgencyIdStr.includes(selectedName) || 
-                             selectedName.includes(guideAgencyIdStr) ||
-                             guideAgencyIdNormalized === selectedNameNormalized ||
-                             guideAgencyIdNormalized.includes(selectedNameNormalized) ||
-                             selectedNameNormalized.includes(guideAgencyIdNormalized);
+                    const guideAgencyIdUpper = guideAgencyIdStr.toUpperCase().replace(/\s+/g, '');
+                    matches = guideAgencyIdUpper === selectedNameNorm || 
+                             guideAgencyIdUpper.includes(selectedNameNorm) || 
+                             selectedNameNorm.includes(guideAgencyIdUpper);
                 }
                 
                 return matches;
