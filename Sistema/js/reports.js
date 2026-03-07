@@ -5482,7 +5482,7 @@ const Reports = {
                         <div style="width: 3px; height: 18px; background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); border-radius: 2px;"></div>
                         <h3 style="margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; color: #333;">
                             <i class="fas fa-list" style="color: #11998e; margin-right: 4px; font-size: 11px;"></i> Capturas del Día
-                            <span id="captures-date-display" style="color: #6c757d; font-size: 10px; font-weight: 400; margin-left: 4px;">(${today})</span>
+                            <span id="captures-date-display" style="color: var(--color-text-secondary); font-size: 10px; font-weight: 400; margin-left: 4px;">(${today})</span>
                         </h3>
                     </div>
                     <div style="display: flex; gap: 4px; flex-wrap: wrap;">
@@ -7624,6 +7624,7 @@ const Reports = {
             const cadRate = exchangeRates?.cad || 13.0;
 
             this.pendingCaptures.forEach(c => {
+                const cTotal = parseFloat(c.total) || 0;
                 // Si hay pagos individuales, calcular desde ellos
                 if (c.payments && Array.isArray(c.payments) && c.payments.length > 0) {
                     c.payments.forEach(payment => {
@@ -7632,17 +7633,17 @@ const Reports = {
                         totals[currency] = (totals[currency] || 0) + amount;
                     });
                     // El total ya está en MXN (se calculó al agregar)
-                    totalMXN += c.total || 0;
+                    totalMXN += cTotal;
                 } else {
                     // Fallback: usar total y currency de la captura
-                    totals[c.currency || 'MXN'] = (totals[c.currency || 'MXN'] || 0) + (c.total || 0);
+                    totals[c.currency || 'MXN'] = (totals[c.currency || 'MXN'] || 0) + cTotal;
                     // Convertir a MXN si es necesario
                     if (c.currency === 'USD') {
-                        totalMXN += (c.total || 0) * usdRate;
+                        totalMXN += cTotal * usdRate;
                     } else if (c.currency === 'CAD') {
-                        totalMXN += (c.total || 0) * cadRate;
+                        totalMXN += cTotal * cadRate;
                     } else {
-                        totalMXN += (c.total || 0);
+                        totalMXN += cTotal;
                     }
                 }
                 totalQuantity += c.quantity || 1;
@@ -7650,68 +7651,68 @@ const Reports = {
 
             // Renderizar tabla
             let html = `
-                <div style="margin-bottom: 10px; padding: 10px; background: linear-gradient(135deg, #fff9e6 0%, #fff3cd 100%); border-radius: 6px; border: 1px solid #ffc107; box-shadow: 0 1px 3px rgba(255,193,7,0.15);">
+                <div style="margin-bottom: 10px; padding: 10px; background: var(--color-bg-secondary); border-radius: 6px; border: 1px solid var(--color-warning); box-shadow: var(--shadow-sm);">
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px;">
-                        <div style="padding: 8px; background: white; border-radius: 4px; border-left: 3px solid #ffc107; box-shadow: 0 1px 2px rgba(0,0,0,0.08);">
-                            <div style="font-size: 9px; color: #856404; text-transform: uppercase; margin-bottom: 4px; font-weight: 600; letter-spacing: 0.3px;">Total Pendientes</div>
-                            <div style="font-size: 20px; font-weight: 700; color: #ffc107;">${this.pendingCaptures.length}</div>
+                        <div style="padding: 8px; background: var(--color-bg-card); border-radius: 4px; border-left: 3px solid var(--color-warning); box-shadow: var(--shadow-xs);">
+                            <div style="font-size: 9px; color: var(--color-text-secondary); text-transform: uppercase; margin-bottom: 4px; font-weight: 600; letter-spacing: 0.3px;">Total Pendientes</div>
+                            <div style="font-size: 20px; font-weight: 700; color: var(--color-warning);">${this.pendingCaptures.length}</div>
                         </div>
-                        <div style="padding: 8px; background: white; border-radius: 4px; border-left: 3px solid #ffc107; box-shadow: 0 1px 2px rgba(0,0,0,0.08);">
-                            <div style="font-size: 9px; color: #856404; text-transform: uppercase; margin-bottom: 4px; font-weight: 600; letter-spacing: 0.3px;">Total Cantidad</div>
-                            <div style="font-size: 20px; font-weight: 700; color: #ffc107;">${totalQuantity}</div>
+                        <div style="padding: 8px; background: var(--color-bg-card); border-radius: 4px; border-left: 3px solid var(--color-warning); box-shadow: var(--shadow-xs);">
+                            <div style="font-size: 9px; color: var(--color-text-secondary); text-transform: uppercase; margin-bottom: 4px; font-weight: 600; letter-spacing: 0.3px;">Total Cantidad</div>
+                            <div style="font-size: 20px; font-weight: 700; color: var(--color-warning);">${totalQuantity}</div>
                         </div>
-                        <div style="padding: 8px; background: white; border-radius: 4px; border-left: 3px solid #ffc107; box-shadow: 0 1px 2px rgba(0,0,0,0.08);">
-                            <div style="font-size: 9px; color: #856404; text-transform: uppercase; margin-bottom: 4px; font-weight: 600; letter-spacing: 0.3px;">Total USD</div>
-                            <div style="font-size: 16px; font-weight: 700; color: #ffc107;">$${totals.USD.toFixed(2)}</div>
+                        <div style="padding: 8px; background: var(--color-bg-card); border-radius: 4px; border-left: 3px solid var(--color-warning); box-shadow: var(--shadow-xs);">
+                            <div style="font-size: 9px; color: var(--color-text-secondary); text-transform: uppercase; margin-bottom: 4px; font-weight: 600; letter-spacing: 0.3px;">Total USD</div>
+                            <div style="font-size: 16px; font-weight: 700; color: var(--color-warning);">$${totals.USD.toFixed(2)}</div>
                         </div>
-                        <div style="padding: 8px; background: white; border-radius: 4px; border-left: 3px solid #ffc107; box-shadow: 0 1px 2px rgba(0,0,0,0.08);">
-                            <div style="font-size: 9px; color: #856404; text-transform: uppercase; margin-bottom: 4px; font-weight: 600; letter-spacing: 0.3px;">Total MXN</div>
-                            <div style="font-size: 16px; font-weight: 700; color: #ffc107;">$${totalMXN.toFixed(2)}</div>
+                        <div style="padding: 8px; background: var(--color-bg-card); border-radius: 4px; border-left: 3px solid var(--color-warning); box-shadow: var(--shadow-xs);">
+                            <div style="font-size: 9px; color: var(--color-text-secondary); text-transform: uppercase; margin-bottom: 4px; font-weight: 600; letter-spacing: 0.3px;">Total MXN</div>
+                            <div style="font-size: 16px; font-weight: 700; color: var(--color-warning);">$${totalMXN.toFixed(2)}</div>
                         </div>
-                        <div style="padding: 8px; background: white; border-radius: 4px; border-left: 3px solid #ffc107; box-shadow: 0 1px 2px rgba(0,0,0,0.08);">
-                            <div style="font-size: 9px; color: #856404; text-transform: uppercase; margin-bottom: 4px; font-weight: 600; letter-spacing: 0.3px;">Total CAD</div>
-                            <div style="font-size: 16px; font-weight: 700; color: #ffc107;">$${totals.CAD.toFixed(2)}</div>
+                        <div style="padding: 8px; background: var(--color-bg-card); border-radius: 4px; border-left: 3px solid var(--color-warning); box-shadow: var(--shadow-xs);">
+                            <div style="font-size: 9px; color: var(--color-text-secondary); text-transform: uppercase; margin-bottom: 4px; font-weight: 600; letter-spacing: 0.3px;">Total CAD</div>
+                            <div style="font-size: 16px; font-weight: 700; color: var(--color-warning);">$${totals.CAD.toFixed(2)}</div>
                         </div>
                     </div>
                 </div>
 
-                <div style="overflow-x: auto; border-radius: 4px; border: 1px solid #ffc107;">
-                    <table style="width: 100%; border-collapse: collapse; background: white; font-size: 11px;">
+                <div style="overflow-x: auto; border-radius: 4px; border: 1px solid var(--color-border);">
+                    <table style="width: 100%; min-width: 900px; border-collapse: collapse; background: var(--color-bg-card); font-size: 11px; table-layout: auto;">
                         <thead>
-                            <tr style="background: linear-gradient(135deg, #ffc107 0%, #ff9800 100%); color: white;">
-                                <th style="padding: 8px 6px; text-align: left; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">#</th>
-                                <th style="padding: 8px 6px; text-align: left; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Sucursal</th>
-                                <th style="padding: 8px 6px; text-align: left; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Vendedor</th>
-                                <th style="padding: 8px 6px; text-align: left; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Guía</th>
-                                <th style="padding: 8px 6px; text-align: left; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Agencia</th>
-                                <th style="padding: 8px 6px; text-align: left; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Producto</th>
-                                <th style="padding: 8px 6px; text-align: center; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Cantidad</th>
-                                <th style="padding: 8px 6px; text-align: right; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Moneda</th>
-                                <th style="padding: 8px 6px; text-align: right; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Total</th>
-                                <th style="padding: 8px 6px; text-align: right; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Costo</th>
-                                <th style="padding: 8px 6px; text-align: center; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Acciones</th>
+                            <tr style="background: linear-gradient(135deg, var(--color-warning) 0%, #ff9800 100%); color: white;">
+                                <th style="padding: 8px 6px; text-align: left; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px; white-space: nowrap; min-width: 40px;">#</th>
+                                <th style="padding: 8px 6px; text-align: left; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px; white-space: nowrap; min-width: 80px;">Sucursal</th>
+                                <th style="padding: 8px 6px; text-align: left; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px; white-space: nowrap; min-width: 80px;">Vendedor</th>
+                                <th style="padding: 8px 6px; text-align: left; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px; white-space: nowrap; min-width: 70px;">Guía</th>
+                                <th style="padding: 8px 6px; text-align: left; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px; white-space: nowrap; min-width: 70px;">Agencia</th>
+                                <th style="padding: 8px 6px; text-align: left; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px; white-space: nowrap; min-width: 90px;">Producto</th>
+                                <th style="padding: 8px 6px; text-align: center; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px; white-space: nowrap; min-width: 60px;">Cantidad</th>
+                                <th style="padding: 8px 6px; text-align: right; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px; white-space: nowrap; min-width: 80px;">Moneda</th>
+                                <th style="padding: 8px 6px; text-align: right; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px; white-space: nowrap; min-width: 80px;">Total</th>
+                                <th style="padding: 8px 6px; text-align: right; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px; white-space: nowrap; min-width: 80px;">Costos</th>
+                                <th style="padding: 8px 6px; text-align: center; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px; white-space: nowrap; min-width: 90px;">Acciones</th>
                             </tr>
                         </thead>
                         <tbody>
                             ${this.pendingCaptures.map((c, index) => {
                                 const isEven = index % 2 === 0;
                                 return `
-                                    <tr style="border-bottom: 1px solid #ffe69c; background: ${isEven ? 'white' : '#fff9e6'};">
-                                        <td style="padding: 6px; font-size: 11px; font-weight: 600; color: #856404;">${index + 1}</td>
-                                        <td style="padding: 6px; font-size: 11px; color: #495057;">${c.branch_name || 'N/A'}</td>
-                                        <td style="padding: 6px; font-size: 11px; color: #495057; font-weight: 500;">${c.seller_name || 'N/A'}</td>
-                                        <td style="padding: 6px; font-size: 11px; color: #6c757d;">${c.guide_name || '-'}</td>
-                                        <td style="padding: 6px; font-size: 11px; color: #6c757d;">${c.agency_name || '-'}</td>
-                                        <td style="padding: 6px; font-size: 11px; color: #495057; font-weight: 500;">${c.product}</td>
-                                        <td style="padding: 6px; font-size: 11px; text-align: center; color: #495057;">${c.quantity}</td>
-                                        <td style="padding: 6px; font-size: 11px; text-align: right; color: #495057; font-weight: 500;">
+                                    <tr style="border-bottom: 1px solid var(--color-border-light); background: ${isEven ? 'var(--color-bg-card)' : 'var(--color-bg-secondary)'};">
+                                        <td style="padding: 6px; font-size: 11px; font-weight: 600; color: var(--color-text);">${index + 1}</td>
+                                        <td style="padding: 6px; font-size: 11px; color: var(--color-text);">${c.branch_name || 'N/A'}</td>
+                                        <td style="padding: 6px; font-size: 11px; color: var(--color-text); font-weight: 500;">${c.seller_name || 'N/A'}</td>
+                                        <td style="padding: 6px; font-size: 11px; color: var(--color-text-secondary);">${c.guide_name || '-'}</td>
+                                        <td style="padding: 6px; font-size: 11px; color: var(--color-text-secondary);">${c.agency_name || '-'}</td>
+                                        <td style="padding: 6px; font-size: 11px; color: var(--color-text); font-weight: 500;">${c.product}</td>
+                                        <td style="padding: 6px; font-size: 11px; text-align: center; color: var(--color-text);">${c.quantity}</td>
+                                        <td style="padding: 6px; font-size: 11px; text-align: right; color: var(--color-text); font-weight: 500;">
                                             ${c.payments && Array.isArray(c.payments) && c.payments.length > 0 
                                                 ? c.payments.map(p => `${p.method === 'cash' ? 'Efectivo' : p.method === 'card' ? 'Tarjeta' : p.method} ${p.currency || 'MXN'} $${(parseFloat(p.amount) || 0).toFixed(2)}`).join('<br>')
                                                 : `${c.currency || 'MXN'} $${(parseFloat(c.total) || 0).toFixed(2)}`
                                             }
                                         </td>
-                                        <td style="padding: 6px; font-size: 11px; text-align: right; font-weight: 600; color: #28a745;">$${(parseFloat(c.total) || 0).toFixed(2)}</td>
-                                        <td style="padding: 6px; font-size: 11px; text-align: right; color: #dc3545; font-weight: 500;">$${(parseFloat(c.merchandise_cost) || 0).toFixed(2)}</td>
+                                        <td style="padding: 6px; font-size: 11px; text-align: right; font-weight: 600; color: var(--color-success);">$${(parseFloat(c.total) || 0).toFixed(2)}</td>
+                                        <td style="padding: 6px; font-size: 11px; text-align: right; color: var(--color-danger); font-weight: 500;">$${(parseFloat(c.merchandise_cost) || 0).toFixed(2)}</td>
                                         <td style="padding: 6px; text-align: center;">
                                             <div style="display: flex; gap: 4px; justify-content: center;">
                                                 <button class="btn-primary btn-xs" onclick="window.Reports.editPendingCapture('${c.id}')" title="Editar" style="padding: 4px 6px; font-size: 10px;">
@@ -7781,7 +7782,8 @@ const Reports = {
                 document.getElementById('qc-quantity').value = capture.quantity;
             }
             if (document.getElementById('qc-date')) {
-                document.getElementById('qc-date').value = capture.date || new Date().toISOString().split('T')[0];
+                const dateVal = capture.date ? (typeof capture.date === 'string' ? capture.date.split('T')[0] : capture.date) : '';
+                document.getElementById('qc-date').value = dateVal || (typeof Utils !== 'undefined' && Utils.formatDate ? Utils.formatDate(new Date(), 'YYYY-MM-DD') : new Date().toISOString().split('T')[0]);
             }
             if (document.getElementById('qc-currency')) {
                 document.getElementById('qc-currency').value = capture.currency;
@@ -8172,47 +8174,47 @@ const Reports = {
 
             // Renderizar tabla
             let html = `
-                <div style="margin-bottom: 10px; padding: 10px; background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-radius: 6px; border: 1px solid #dee2e6; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                <div style="margin-bottom: 10px; padding: 10px; background: var(--color-bg-secondary); border-radius: 6px; border: 1px solid var(--color-border); box-shadow: var(--shadow-sm);">
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px;">
-                        <div style="padding: 8px; background: white; border-radius: 4px; border-left: 3px solid #667eea; box-shadow: 0 1px 2px rgba(0,0,0,0.08);">
-                            <div style="font-size: 9px; color: #6c757d; text-transform: uppercase; margin-bottom: 4px; font-weight: 600; letter-spacing: 0.3px;">Total Capturas</div>
+                        <div style="padding: 8px; background: var(--color-bg-card); border-radius: 4px; border-left: 3px solid #667eea; box-shadow: var(--shadow-xs);">
+                            <div style="font-size: 9px; color: var(--color-text-secondary); text-transform: uppercase; margin-bottom: 4px; font-weight: 600; letter-spacing: 0.3px;">Total Capturas</div>
                             <div style="font-size: 20px; font-weight: 700; color: #667eea;">${captures.length}</div>
                         </div>
-                        <div style="padding: 8px; background: white; border-radius: 4px; border-left: 3px solid #11998e; box-shadow: 0 1px 2px rgba(0,0,0,0.08);">
-                            <div style="font-size: 9px; color: #6c757d; text-transform: uppercase; margin-bottom: 4px; font-weight: 600; letter-spacing: 0.3px;">Total Cantidad</div>
+                        <div style="padding: 8px; background: var(--color-bg-card); border-radius: 4px; border-left: 3px solid #11998e; box-shadow: var(--shadow-xs);">
+                            <div style="font-size: 9px; color: var(--color-text-secondary); text-transform: uppercase; margin-bottom: 4px; font-weight: 600; letter-spacing: 0.3px;">Total Cantidad</div>
                             <div style="font-size: 20px; font-weight: 700; color: #11998e;">${totalQuantity}</div>
                         </div>
-                        <div style="padding: 8px; background: white; border-radius: 4px; border-left: 3px solid #f093fb; box-shadow: 0 1px 2px rgba(0,0,0,0.08);">
-                            <div style="font-size: 9px; color: #6c757d; text-transform: uppercase; margin-bottom: 4px; font-weight: 600; letter-spacing: 0.3px;">Total USD</div>
+                        <div style="padding: 8px; background: var(--color-bg-card); border-radius: 4px; border-left: 3px solid #f093fb; box-shadow: var(--shadow-xs);">
+                            <div style="font-size: 9px; color: var(--color-text-secondary); text-transform: uppercase; margin-bottom: 4px; font-weight: 600; letter-spacing: 0.3px;">Total USD</div>
                             <div style="font-size: 16px; font-weight: 700; color: #f093fb;">$${totals.USD.toFixed(2)}</div>
                         </div>
-                        <div style="padding: 8px; background: white; border-radius: 4px; border-left: 3px solid #4facfe; box-shadow: 0 1px 2px rgba(0,0,0,0.08);">
-                            <div style="font-size: 9px; color: #6c757d; text-transform: uppercase; margin-bottom: 4px; font-weight: 600; letter-spacing: 0.3px;">Total MXN</div>
+                        <div style="padding: 8px; background: var(--color-bg-card); border-radius: 4px; border-left: 3px solid #4facfe; box-shadow: var(--shadow-xs);">
+                            <div style="font-size: 9px; color: var(--color-text-secondary); text-transform: uppercase; margin-bottom: 4px; font-weight: 600; letter-spacing: 0.3px;">Total MXN</div>
                             <div style="font-size: 16px; font-weight: 700; color: #4facfe;">$${totals.MXN.toFixed(2)}</div>
                         </div>
-                        <div style="padding: 8px; background: white; border-radius: 4px; border-left: 3px solid #fa709a; box-shadow: 0 1px 2px rgba(0,0,0,0.08);">
-                            <div style="font-size: 9px; color: #6c757d; text-transform: uppercase; margin-bottom: 4px; font-weight: 600; letter-spacing: 0.3px;">Total CAD</div>
+                        <div style="padding: 8px; background: var(--color-bg-card); border-radius: 4px; border-left: 3px solid #fa709a; box-shadow: var(--shadow-xs);">
+                            <div style="font-size: 9px; color: var(--color-text-secondary); text-transform: uppercase; margin-bottom: 4px; font-weight: 600; letter-spacing: 0.3px;">Total CAD</div>
                             <div style="font-size: 16px; font-weight: 700; color: #fa709a;">$${totals.CAD.toFixed(2)}</div>
                         </div>
                     </div>
                 </div>
 
-                <div style="overflow-x: auto; border-radius: 4px; border: 1px solid #e0e0e0;">
-                    <table style="width: 100%; border-collapse: collapse; background: white; font-size: 11px;">
+                <div style="overflow-x: auto; border-radius: 4px; border: 1px solid var(--color-border);">
+                    <table style="width: 100%; min-width: 900px; border-collapse: collapse; background: var(--color-bg-card); font-size: 11px; table-layout: auto;">
                         <thead>
                             <tr style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
-                                <th style="padding: 8px 6px; text-align: left; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Hora</th>
-                                <th style="padding: 8px 6px; text-align: left; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Sucursal</th>
-                                <th style="padding: 8px 6px; text-align: left; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Vendedor</th>
-                                <th style="padding: 8px 6px; text-align: left; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Guía</th>
-                                <th style="padding: 8px 6px; text-align: left; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Agencia</th>
-                                <th style="padding: 8px 6px; text-align: left; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Producto</th>
-                                <th style="padding: 8px 6px; text-align: center; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Cantidad</th>
-                                <th style="padding: 8px 6px; text-align: right; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Moneda</th>
-                                <th style="padding: 8px 6px; text-align: right; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Total</th>
-                                <th style="padding: 8px 6px; text-align: right; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Costo</th>
-                                <th style="padding: 8px 6px; text-align: left; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Notas</th>
-                                <th style="padding: 8px 6px; text-align: center; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;">Acciones</th>
+                                <th style="padding: 8px 6px; text-align: left; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px; white-space: nowrap; min-width: 50px;">Hora</th>
+                                <th style="padding: 8px 6px; text-align: left; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px; white-space: nowrap; min-width: 80px;">Sucursal</th>
+                                <th style="padding: 8px 6px; text-align: left; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px; white-space: nowrap; min-width: 80px;">Vendedor</th>
+                                <th style="padding: 8px 6px; text-align: left; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px; white-space: nowrap; min-width: 70px;">Guía</th>
+                                <th style="padding: 8px 6px; text-align: left; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px; white-space: nowrap; min-width: 70px;">Agencia</th>
+                                <th style="padding: 8px 6px; text-align: left; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px; white-space: nowrap; min-width: 90px;">Producto</th>
+                                <th style="padding: 8px 6px; text-align: center; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px; white-space: nowrap; min-width: 60px;">Cantidad</th>
+                                <th style="padding: 8px 6px; text-align: right; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px; white-space: nowrap; min-width: 80px;">Moneda</th>
+                                <th style="padding: 8px 6px; text-align: right; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px; white-space: nowrap; min-width: 80px;">Total</th>
+                                <th style="padding: 8px 6px; text-align: right; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px; white-space: nowrap; min-width: 80px;">Costos</th>
+                                <th style="padding: 8px 6px; text-align: left; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px; white-space: nowrap; min-width: 100px;">Notas</th>
+                                <th style="padding: 8px 6px; text-align: center; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px; white-space: nowrap; min-width: 90px;">Acciones</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -8220,15 +8222,15 @@ const Reports = {
                                 const time = new Date(c.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
                                 const isEven = index % 2 === 0;
                                 return `
-                                    <tr style="border-bottom: 1px solid #f0f0f0; background: ${isEven ? 'white' : '#f8f9fa'};">
-                                        <td style="padding: 6px; font-size: 11px; color: #495057;">${time}</td>
-                                        <td style="padding: 6px; font-size: 11px; color: #495057;">${c.branch_name || 'N/A'}</td>
-                                        <td style="padding: 6px; font-size: 11px; color: #495057; font-weight: 500;">${c.seller_name || 'N/A'}</td>
-                                        <td style="padding: 6px; font-size: 11px; color: #6c757d;">${c.guide_name || '-'}</td>
-                                        <td style="padding: 6px; font-size: 11px; color: #6c757d;">${c.agency_name || '-'}</td>
-                                        <td style="padding: 6px; font-size: 11px; color: #495057; font-weight: 500;">${c.product}</td>
-                                        <td style="padding: 6px; font-size: 11px; text-align: center; color: #495057;">${c.quantity}</td>
-                                        <td style="padding: 6px; font-size: 10px; text-align: right; color: #495057; font-weight: 500;">
+                                    <tr style="border-bottom: 1px solid var(--color-border-light); background: ${isEven ? 'var(--color-bg-card)' : 'var(--color-bg-secondary)'};">
+                                        <td style="padding: 6px; font-size: 11px; color: var(--color-text);">${time}</td>
+                                        <td style="padding: 6px; font-size: 11px; color: var(--color-text);">${c.branch_name || 'N/A'}</td>
+                                        <td style="padding: 6px; font-size: 11px; color: var(--color-text); font-weight: 500;">${c.seller_name || 'N/A'}</td>
+                                        <td style="padding: 6px; font-size: 11px; color: var(--color-text-secondary);">${c.guide_name || '-'}</td>
+                                        <td style="padding: 6px; font-size: 11px; color: var(--color-text-secondary);">${c.agency_name || '-'}</td>
+                                        <td style="padding: 6px; font-size: 11px; color: var(--color-text); font-weight: 500;">${c.product}</td>
+                                        <td style="padding: 6px; font-size: 11px; text-align: center; color: var(--color-text);">${c.quantity}</td>
+                                        <td style="padding: 6px; font-size: 10px; text-align: right; color: var(--color-text); font-weight: 500;">
                                             ${c.payments && Array.isArray(c.payments) && c.payments.length > 0 
                                                 ? c.payments.map(p => {
                                                     const methodLabel = p.method === 'cash' ? 'Efectivo' : p.method === 'card' ? 'Tarjeta' : p.method === 'transfer' ? 'Transferencia' : p.method || 'Otro';
@@ -8237,9 +8239,9 @@ const Reports = {
                                                 : `${c.currency || 'MXN'} $${(parseFloat(c.total) || 0).toFixed(2)}`
                                             }
                                         </td>
-                                        <td style="padding: 6px; font-size: 11px; text-align: right; font-weight: 600; color: #28a745;">$${(parseFloat(c.total) || 0).toFixed(2)}</td>
-                                        <td style="padding: 6px; font-size: 11px; text-align: right; color: #dc3545; font-weight: 500;">$${(parseFloat(c.merchandise_cost) || 0).toFixed(2)}</td>
-                                        <td style="padding: 6px; font-size: 10px; color: #6c757d; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${c.notes || ''}">${c.notes || '-'}</td>
+                                        <td style="padding: 6px; font-size: 11px; text-align: right; font-weight: 600; color: var(--color-success);">$${(parseFloat(c.total) || 0).toFixed(2)}</td>
+                                        <td style="padding: 6px; font-size: 11px; text-align: right; color: var(--color-danger); font-weight: 500;">$${(parseFloat(c.merchandise_cost) || 0).toFixed(2)}</td>
+                                        <td style="padding: 6px; font-size: 10px; color: var(--color-text-secondary); max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${c.notes || ''}">${c.notes || '-'}</td>
                                         <td style="padding: 6px; text-align: center;">
                                             <div style="display: flex; gap: 4px; justify-content: center;">
                                                 <button class="btn-primary btn-xs" onclick="window.Reports.editQuickCaptureSale('${c.id}')" title="Editar" style="padding: 4px 6px; font-size: 10px;">
@@ -8838,8 +8840,9 @@ const Reports = {
             let totalCOGS = 0;
             for (const capture of captures) {
                 // Priorizar costo almacenado manualmente
-                if (capture.merchandise_cost && capture.merchandise_cost > 0) {
-                    totalCOGS += capture.merchandise_cost;
+                const merchCost = parseFloat(capture.merchandise_cost) || 0;
+                if (merchCost > 0) {
+                    totalCOGS += merchCost;
                 } else {
                     // Si no hay costo almacenado, intentar obtener del inventario
                     try {
@@ -9348,11 +9351,12 @@ const Reports = {
 
             for (const capture of captures) {
                 // Convertir el total de la captura a MXN antes de calcular comisiones
-                let captureTotalMXN = capture.total;
+                const capTotal = parseFloat(capture.total) || 0;
+                let captureTotalMXN = capTotal;
                 if (capture.currency === 'USD') {
-                    captureTotalMXN = capture.total * usdRate;
+                    captureTotalMXN = capTotal * usdRate;
                 } else if (capture.currency === 'CAD') {
-                    captureTotalMXN = capture.total * cadRate;
+                    captureTotalMXN = capTotal * cadRate;
                 }
 
                 // Calcular comisión del vendedor
@@ -10055,9 +10059,9 @@ const Reports = {
             let totalCOGS = 0;
 
             captures.forEach(c => {
-                totals[c.currency] = (totals[c.currency] || 0) + c.total;
+                totals[c.currency] = (totals[c.currency] || 0) + (parseFloat(c.total) || 0);
                 totalQuantity += c.quantity || 1;
-                totalCOGS += c.merchandise_cost || 0;
+                totalCOGS += (parseFloat(c.merchandise_cost) || 0);
             });
 
             const totalSalesMXN = totals.USD * usdRate + totals.MXN + totals.CAD * cadRate;
@@ -10066,25 +10070,26 @@ const Reports = {
             const commissionRules = await DB.getAll('commission_rules') || [];
             let totalCommissions = 0;
             for (const capture of captures) {
-                if (capture.seller_id && capture.total > 0) {
+                const capTotal = parseFloat(capture.total) || 0;
+                if (capture.seller_id && capTotal > 0) {
                     const sellerRule = commissionRules.find(r => 
                         r.entity_type === 'seller' && r.entity_id === capture.seller_id
                     ) || commissionRules.find(r => r.entity_type === 'seller' && r.entity_id === null);
                     if (sellerRule) {
                         const discountPct = sellerRule.discount_pct || 0;
                         const multiplier = sellerRule.multiplier || 1;
-                        const afterDiscount = capture.total * (1 - (discountPct / 100));
+                        const afterDiscount = capTotal * (1 - (discountPct / 100));
                         totalCommissions += afterDiscount * (multiplier / 100);
                     }
                 }
-                if (capture.guide_id && capture.total > 0) {
+                if (capture.guide_id && capTotal > 0) {
                     const guideRule = commissionRules.find(r => 
                         r.entity_type === 'guide' && r.entity_id === capture.guide_id
                     ) || commissionRules.find(r => r.entity_type === 'guide' && r.entity_id === null);
                     if (guideRule) {
                         const discountPct = guideRule.discount_pct || 0;
                         const multiplier = guideRule.multiplier || 1;
-                        const afterDiscount = capture.total * (1 - (discountPct / 100));
+                        const afterDiscount = capTotal * (1 - (discountPct / 100));
                         totalCommissions += afterDiscount * (multiplier / 100);
                     }
                 }
@@ -10190,14 +10195,14 @@ const Reports = {
                 captures: captures,
                 totals: totals,
                 total_quantity: totalQuantity,
-                total_sales_mxn: totalSalesMXN,
-                total_cogs: totalCOGS,
-                total_commissions: totalCommissions,
-                total_arrival_costs: totalArrivalCosts,
-                total_operating_costs: totalOperatingCosts,
-                bank_commissions: bankCommissions,
-                gross_profit: grossProfit,
-                net_profit: netProfit,
+                total_sales_mxn: parseFloat(totalSalesMXN) || 0,
+                total_cogs: parseFloat(totalCOGS) || 0,
+                total_commissions: parseFloat(totalCommissions) || 0,
+                total_arrival_costs: parseFloat(totalArrivalCosts) || 0,
+                total_operating_costs: parseFloat(totalOperatingCosts) || 0,
+                bank_commissions: parseFloat(bankCommissions) || 0,
+                gross_profit: parseFloat(grossProfit) || 0,
+                net_profit: parseFloat(netProfit) || 0,
                 exchange_rates: { usd: usdRate, cad: cadRate },
                 arrivals: filteredArrivals,
                 archived_at: new Date().toISOString(),
@@ -11534,9 +11539,9 @@ const Reports = {
             let totalCOGS = 0;
 
             captures.forEach(c => {
-                totals[c.currency] = (totals[c.currency] || 0) + c.total;
+                totals[c.currency] = (totals[c.currency] || 0) + (parseFloat(c.total) || 0);
                 totalQuantity += c.quantity || 1;
-                totalCOGS += c.merchandise_cost || 0;
+                totalCOGS += (parseFloat(c.merchandise_cost) || 0);
             });
 
             const totalSalesMXN = totals.USD * usdRate + totals.MXN + totals.CAD * cadRate;
@@ -11556,11 +11561,12 @@ const Reports = {
             
             for (const capture of captures) {
                 // Convertir el total de la captura a MXN antes de calcular comisiones
-                let captureTotalMXN = capture.total;
+                const capTotal = parseFloat(capture.total) || 0;
+                let captureTotalMXN = capTotal;
                 if (capture.currency === 'USD') {
-                    captureTotalMXN = capture.total * usdRate;
+                    captureTotalMXN = capTotal * usdRate;
                 } else if (capture.currency === 'CAD') {
-                    captureTotalMXN = capture.total * cadRate;
+                    captureTotalMXN = capTotal * cadRate;
                 }
                 
                 // Si es venta de calle, aplicar reglas especiales de calle (solo para vendedores)
@@ -12006,9 +12012,9 @@ const Reports = {
                 captures: captures,
                 totals: totals,
                 total_quantity: totalQuantity,
-                total_sales_mxn: totalSalesMXN,
-                total_cogs: totalCOGS,
-                total_commissions: totalCommissions,
+                total_sales_mxn: parseFloat(totalSalesMXN) || 0,
+                total_cogs: parseFloat(totalCOGS) || 0,
+                total_commissions: parseFloat(totalCommissions) || 0,
                 // Comisiones detalladas por vendedor y guía
                 seller_commissions: Object.values(sellerCommissions).map(s => ({
                     seller_id: s.seller?.id,
@@ -12024,13 +12030,13 @@ const Reports = {
                     sales: g.sales,
                     commissions: g.commissions
                 })),
-                total_arrival_costs: totalArrivalCosts,
-                total_operating_costs: totalOperatingCosts,
-                variable_costs_daily: variableCostsDaily,
-                fixed_costs_prorated: fixedCostsProrated,
-                bank_commissions: bankCommissions,
-                gross_profit: grossProfit,
-                net_profit: netProfit,
+                total_arrival_costs: parseFloat(totalArrivalCosts) || 0,
+                total_operating_costs: parseFloat(totalOperatingCosts) || 0,
+                variable_costs_daily: parseFloat(variableCostsDaily) || 0,
+                fixed_costs_prorated: parseFloat(fixedCostsProrated) || 0,
+                bank_commissions: parseFloat(bankCommissions) || 0,
+                gross_profit: parseFloat(grossProfit) || 0,
+                net_profit: parseFloat(netProfit) || 0,
                 exchange_rates: { usd: usdRate, cad: cadRate },
                 arrivals: filteredArrivals,
                 branch_ids: captureBranchIds,
@@ -12143,16 +12149,16 @@ const Reports = {
                             branch_id: branchId,
                             total_captures: captures.length,
                             total_quantity: totalQuantity,
-                            total_sales_mxn: totalSalesMXN,
-                            total_cogs: totalCOGS,
-                            total_commissions: totalCommissions,
-                            total_arrival_costs: totalArrivalCosts,
-                            total_operating_costs: totalOperatingCosts,
-                            variable_costs_daily: variableCostsDaily,
-                            fixed_costs_prorated: fixedCostsProrated,
-                            bank_commissions: bankCommissions,
-                            gross_profit: grossProfit,
-                            net_profit: netProfit,
+                            total_sales_mxn: parseFloat(totalSalesMXN) || 0,
+                            total_cogs: parseFloat(totalCOGS) || 0,
+                            total_commissions: parseFloat(totalCommissions) || 0,
+                            total_arrival_costs: parseFloat(totalArrivalCosts) || 0,
+                            total_operating_costs: parseFloat(totalOperatingCosts) || 0,
+                            variable_costs_daily: parseFloat(variableCostsDaily) || 0,
+                            fixed_costs_prorated: parseFloat(fixedCostsProrated) || 0,
+                            bank_commissions: parseFloat(bankCommissions) || 0,
+                            gross_profit: parseFloat(grossProfit) || 0,
+                            net_profit: parseFloat(netProfit) || 0,
                             exchange_rates: { usd: usdRate, cad: cadRate },
                             captures: captures,
                             daily_summary: [{
@@ -12455,16 +12461,16 @@ const Reports = {
                                     branch_id: localReport.branch_id,
                                     total_captures: localReport.total_captures || (localReport.captures ? localReport.captures.length : 0),
                                     total_quantity: localReport.total_quantity || 0,
-                                    total_sales_mxn: localReport.total_sales_mxn || 0,
-                                    total_cogs: localReport.total_cogs || 0,
-                                    total_commissions: localReport.total_commissions || 0,
-                                    total_arrival_costs: localReport.total_arrival_costs || 0,
-                                    total_operating_costs: localReport.total_operating_costs || 0,
-                                    variable_costs_daily: localReport.variable_costs_daily || 0,
-                                    fixed_costs_prorated: localReport.fixed_costs_prorated || 0,
-                                    bank_commissions: localReport.bank_commissions || 0,
-                                    gross_profit: localReport.gross_profit || 0,
-                                    net_profit: localReport.net_profit || 0,
+                                    total_sales_mxn: parseFloat(localReport.total_sales_mxn) || 0,
+                                    total_cogs: parseFloat(localReport.total_cogs) || 0,
+                                    total_commissions: parseFloat(localReport.total_commissions) || 0,
+                                    total_arrival_costs: parseFloat(localReport.total_arrival_costs) || 0,
+                                    total_operating_costs: parseFloat(localReport.total_operating_costs) || 0,
+                                    variable_costs_daily: parseFloat(localReport.variable_costs_daily) || 0,
+                                    fixed_costs_prorated: parseFloat(localReport.fixed_costs_prorated) || 0,
+                                    bank_commissions: parseFloat(localReport.bank_commissions) || 0,
+                                    gross_profit: parseFloat(localReport.gross_profit) || 0,
+                                    net_profit: parseFloat(localReport.net_profit) || 0,
                                     exchange_rates: localReport.exchange_rates || {},
                                     captures: localReport.captures || [],
                                     daily_summary: localReport.daily_summary || [],
