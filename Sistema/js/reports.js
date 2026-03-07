@@ -2742,12 +2742,13 @@ const Reports = {
             
             // Filtrar costos de llegadas del día
             // CRÍTICO: Aplicar filtro por sucursal con comparación normalizada
-            // TOLERANCIA: incluir también registros sin branch_id (pueden haberse saneado al sincronizar con servidor)
+            // TOLERANCIA: aceptar "pago_llegadas", "pago Llegadas" y variantes (bugs de entrada)
+            const isArrivalCost = (cat) => (cat || '').toLowerCase().replace(/\s+/g, '_') === 'pago_llegadas';
             const arrivalCostEntries = allCosts.filter(c => {
                 const costDate = c.date || c.created_at;
                 const costDateStr = typeof costDate === 'string' ? costDate.split('T')[0] : new Date(costDate).toISOString().split('T')[0];
                 
-                if (c.category !== 'pago_llegadas') return false;
+                if (!isArrivalCost(c.category)) return false;
                 if (costDateStr !== dateStr) return false;
                 
                 // Si no hay filtro de sucursal, incluir todo
@@ -8541,10 +8542,16 @@ const Reports = {
     async deleteArrivalRecord(arrivalId) {
         if (!confirm('¿Eliminar esta llegada? Esta acción no se puede deshacer.')) return;
         try {
-            // Eliminar del servidor primero
-            if (typeof API !== 'undefined' && API.baseURL && API.token && typeof API.deleteArrival === 'function') {
+            let apiId = arrivalId;
+            const arrival = await DB.get('agency_arrivals', arrivalId);
+            if (arrival?.server_id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(arrival.server_id))) {
+                apiId = arrival.server_id;
+            } else if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(arrivalId))) {
+                apiId = null;
+            }
+            if (apiId && typeof API !== 'undefined' && API.baseURL && API.token && typeof API.deleteArrival === 'function') {
                 try {
-                    await API.deleteArrival(arrivalId);
+                    await API.deleteArrival(apiId);
                     console.log('✅ Llegada eliminada del servidor:', arrivalId);
                 } catch (apiErr) {
                     console.warn('⚠️ No se pudo eliminar llegada del servidor (se elimina localmente):', apiErr);
@@ -13972,6 +13979,15 @@ const Reports = {
     },
 
     async deleteArchivedReport(reportId) {
+        // Usar server_id para la API si el id local tiene formato incorrecto (evita 404)
+        let apiId = reportId;
+        try {
+            const report = await DB.get('archived_quick_captures', reportId);
+            if (report?.server_id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(report.server_id))) {
+                apiId = report.server_id;
+            }
+        } catch (_) {}
+        
         // Crear modal de confirmación personalizado (bien posicionado)
         const confirmModal = document.createElement('div');
         confirmModal.className = 'modal-overlay';
@@ -14008,7 +14024,7 @@ const Reports = {
                     // Eliminar del servidor primero (bidireccional)
                     if (typeof API !== 'undefined' && API.baseURL && API.token && typeof API.deleteArchivedReport === 'function') {
                         try {
-                            await API.deleteArchivedReport(reportId);
+                            await API.deleteArchivedReport(apiId);
                             console.log('✅ Reporte archivado eliminado del servidor:', reportId);
                         } catch (apiErr) {
                             console.warn('⚠️ No se pudo eliminar del servidor (se elimina localmente):', apiErr);
