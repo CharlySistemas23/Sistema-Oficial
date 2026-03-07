@@ -318,7 +318,9 @@ const ArrivalRules = {
             // MEJORAR: Buscar llegadas existentes de forma más robusta
             // Buscar TODAS las llegadas del día (no solo por índice de fecha)
             const allArrivals = await DB.getAll('agency_arrivals') || [];
-            const dateStr = date ? date.split('T')[0] : new Date().toISOString().split('T')[0];
+            const now = new Date();
+            const localToday = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+            const dateStr = date ? date.split('T')[0] : localToday;
             
             // Declarar existingArrival al inicio para evitar problemas de scope
             let existingArrival = null;
