@@ -375,10 +375,11 @@ const ArrivalRules = {
                 existingArrival = fallbackArrivals[0] || null;
             }
 
-            // Calcular arrival_fee
-            const arrivalFee = arrivalData.override ? 
+            // Calcular arrival_fee (normalizar a número para evitar toFixed/Comparisons con strings)
+            const arrivalFeeRaw = arrivalData.override ? 
                 (arrivalData.override_amount || 0) : 
-                (arrivalData.calculated_fee || arrivalData.arrival_fee || 0);
+                (arrivalData.calculated_fee ?? arrivalData.arrival_fee ?? 0);
+            const arrivalFee = parseFloat(arrivalFeeRaw) || 0;
 
             const arrival = {
                 id: existingArrival?.id || Utils.generateId(),
@@ -451,7 +452,8 @@ const ArrivalRules = {
                 }
             }
 
-            console.log(`${existingArrival ? '✅ Llegada actualizada' : '➕ Llegada creada'}: ${arrival.agency_id} - ${arrival.passengers} pasajeros - $${arrival.arrival_fee.toFixed(2)}`);
+            const feeNum = parseFloat(arrival.arrival_fee) || 0;
+            console.log(`${existingArrival ? '✅ Llegada actualizada' : '➕ Llegada creada'}: ${arrival.agency_id} - ${arrival.passengers} pasajeros - $${feeNum.toFixed(2)}`);
             return arrival;
         } catch (e) {
             console.error('Error saving arrival:', e);
