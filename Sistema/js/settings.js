@@ -62,7 +62,7 @@ const Settings = {
                         <i class="fas fa-book"></i> Datos maestros
                     </button>
                     <button class="settings-main-tab" data-tab="arrival-rates">
-                        <i class="fas fa-table"></i> Tabulador Llegadas
+                        <i class="fas fa-table"></i> Reglas de Llegadas
                     </button>
                     <button class="settings-main-tab" data-tab="sync">
                         <i class="fas fa-sync-alt"></i> Sincronización
@@ -4581,14 +4581,20 @@ const Settings = {
         return `
             <div style="display: grid; grid-template-columns: 1fr; gap: var(--spacing-md);">
                 <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light);">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-md);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--spacing-sm); margin-bottom: var(--spacing-md);">
                         <h3 style="margin: 0; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
-                            <i class="fas fa-table"></i> Reglas de Llegadas
+                            <i class="fas fa-table"></i> Reglas de Llegadas (Pago por Agencias)
                         </h3>
-                        <button class="btn-primary btn-sm" id="arrival-rate-add-btn">
-                            <i class="fas fa-plus"></i> Nueva Regla
-                        </button>
+                        <div style="display: flex; gap: var(--spacing-sm);">
+                            <button class="btn-secondary btn-sm" id="arrival-rate-reload-default-btn" title="Cargar reglas por defecto: TANITOURS, TRAVELEX, DISCOVERY, VERANOS, TB, TTF, TROPICAL ADVENTURE">
+                                <i class="fas fa-sync-alt"></i> Recargar reglas por defecto
+                            </button>
+                            <button class="btn-primary btn-sm" id="arrival-rate-add-btn">
+                                <i class="fas fa-plus"></i> Nueva Regla
+                            </button>
+                        </div>
                     </div>
+                    <p style="margin: 0 0 var(--spacing-md) 0; font-size: 11px; color: var(--color-text-secondary);">Configura aquí las tarifas de pago por agencia según pasajeros y tipo de unidad. Estas reglas se usan para calcular automáticamente el costo al guardar una llegada.</p>
                     <div id="arrival-rates-list" style="max-height: 600px; overflow-y: auto; width: 100%; overflow-x: auto;"></div>
                 </div>
             </div>
@@ -4597,6 +4603,21 @@ const Settings = {
 
     async loadArrivalRates() {
         document.getElementById('arrival-rate-add-btn')?.addEventListener('click', () => this.showArrivalRateForm());
+        document.getElementById('arrival-rate-reload-default-btn')?.addEventListener('click', async () => {
+            try {
+                if (!await Utils.confirm('¿Recargar las reglas por defecto? Se crearán/actualizarán las reglas para TANITOURS, TRAVELEX, DISCOVERY, VERANOS, TB, TTF y TROPICAL ADVENTURE (según agencias existentes en el catálogo).')) return;
+                if (typeof App !== 'undefined' && App.loadArrivalRateRules) {
+                    await App.loadArrivalRateRules();
+                    Utils.showNotification('Reglas por defecto recargadas', 'success');
+                    await this.loadArrivalRates();
+                } else {
+                    Utils.showNotification('Función no disponible', 'error');
+                }
+            } catch (e) {
+                console.error('Error recargando reglas:', e);
+                Utils.showNotification('Error al recargar reglas: ' + (e.message || ''), 'error');
+            }
+        });
 
         try {
             // ========== SINCRONIZACIÓN BIDIRECCIONAL ==========
