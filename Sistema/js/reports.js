@@ -2842,11 +2842,19 @@ const Reports = {
             });
             const totalFromArrivals = Array.from(uniqueArrivals.values()).reduce((sum, fee) => sum + fee, 0);
             
-            // DESHABILITADO: No registrar costos automáticamente
-            // El usuario debe crear los costos manualmente desde el módulo de llegadas
-            // Esto evita que se generen costos no deseados de datos demo o históricos
-            if (totalFromArrivals > 0 && totalFromCosts === 0) {
-                console.warn(`⚠️ Se encontraron ${dayArrivals.length} llegadas sin costos registrados para ${dateStr}, pero NO se crearán automáticamente. El usuario debe crear los costos manualmente si lo desea.`);
+            // Registrar costos automáticamente si hay llegadas con fee pero sin cost_entry (corrige $0 en Utilidades del Día)
+            if (totalFromArrivals > 0 && totalFromCosts === 0 && typeof Costs !== 'undefined' && Costs.registerArrivalPayment) {
+                for (const a of dayArrivals) {
+                    const fee = parseFloat(a.calculated_fee || a.arrival_fee || 0) || 0;
+                    if (fee > 0) {
+                        try {
+                            await Costs.registerArrivalPayment(a.id, fee, a.branch_id, a.agency_id, a.passengers, a.date);
+                            console.log(`📝 Costo de llegada registrado automáticamente: $${fee.toFixed(2)} para llegada ${a.id}`);
+                        } catch (e) {
+                            console.warn('Error registrando costo de llegada:', e);
+                        }
+                    }
+                }
             }
             
             const totalFromArrivalsAsNumber = typeof totalFromArrivals === 'number' ? totalFromArrivals : parseFloat(totalFromArrivals) || 0;
@@ -8898,8 +8906,9 @@ const Reports = {
                 return;
             }
 
-            // Usar la fecha de las capturas (todas deberían tener la misma fecha)
-            const captureDate = captures[0]?.date || new Date().toISOString().split('T')[0];
+            // Usar la fecha de las capturas (priorizar original_report_date, consistente con loadQuickCaptureData)
+            const captureDateRaw = captures[0]?.original_report_date || captures[0]?.date || new Date().toISOString().split('T')[0];
+            const captureDate = typeof captureDateRaw === 'string' ? captureDateRaw.split('T')[0] : (captureDateRaw || '').toString().split('T')[0] || new Date().toISOString().split('T')[0];
             
             // 1. Obtener tipo de cambio del día (prioriza el display, luego BD)
             const exchangeRates = await this.getExchangeRatesForDate(captureDate);
@@ -9084,12 +9093,14 @@ const Reports = {
             }
 
             // 6. Costos de llegadas del día - Leer desde cost_entries (fuente autorizada)
-            // IMPORTANTE: Usar la fecha de las capturas, no la fecha actual
+            // IMPORTANTE: Usar la fecha de las capturas. Si no hay branch_id en capturas, usar sucursal actual
             const captureBranchIds = [...new Set(captures.map(c => c.branch_id).filter(Boolean))];
-            const branchIdForArrivals = captureBranchIds.length === 1 ? captureBranchIds[0] : null;
-            const totalArrivalCostsRaw = await this.calculateArrivalCosts(captureDate, branchIdForArrivals, captureBranchIds);
+            const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
+            const effectiveBranchIds = captureBranchIds.length > 0 ? captureBranchIds : (currentBranchId ? [currentBranchId] : []);
+            const branchIdForArrivals = effectiveBranchIds.length === 1 ? effectiveBranchIds[0] : null;
+            const totalArrivalCostsRaw = await this.calculateArrivalCosts(captureDate, branchIdForArrivals, effectiveBranchIds);
             const totalArrivalCosts = typeof totalArrivalCostsRaw === 'number' ? totalArrivalCostsRaw : parseFloat(totalArrivalCostsRaw) || 0;
-            console.log(`✈️ Costos de llegadas para ${captureDate}: $${totalArrivalCosts.toFixed(2)} (sucursales: ${captureBranchIds.join(', ')})`);
+            console.log(`✈️ Costos de llegadas para ${captureDate}: $${totalArrivalCosts.toFixed(2)} (sucursales: ${effectiveBranchIds.join(', ') || 'todas'})`);
 
             // 7. Costos operativos del día (prorrateados) - Por todas las sucursales involucradas
             // IMPORTANTE: Usar la fecha de las capturas, no la fecha actual
@@ -9103,8 +9114,8 @@ const Reports = {
             try {
                 const allCosts = await DB.getAll('cost_entries') || [];
                 const targetDate = new Date(captureDate);
-                // captureBranchIds ya está definido arriba, no redefinir
-                console.log(`💰 Calculando costos operativos para ${captureDate}, sucursales: ${captureBranchIds.join(', ') || 'todas'}`);
+                // effectiveBranchIds ya definido arriba (incluye currentBranchId si captureBranchIds vacío)
+                console.log(`💰 Calculando costos operativos para ${captureDate}, sucursales: ${effectiveBranchIds.join(', ') || 'todas'}`);
                 console.log(`   📊 Total costos en DB: ${allCosts.length}`);
                 
                 // CRÍTICO: Determinar si debemos incluir costos globales (sin branch_id)
@@ -9115,10 +9126,10 @@ const Reports = {
                     UserManager.currentUser?.isMasterAdmin ||
                     UserManager.currentEmployee?.role === 'master_admin'
                 );
-                const includeGlobalCosts = isMasterAdmin && captureBranchIds.length === 0;
+                const includeGlobalCosts = isMasterAdmin && effectiveBranchIds.length === 0;
                 
-                // Si hay branchIds específicos, procesar cada uno por separado con filtro estricto
-                const branchIdsToProcess = captureBranchIds.length > 0 ? captureBranchIds : (includeGlobalCosts ? [null] : []);
+                // Si hay branchIds específicos, procesar cada uno. Si no, usar sucursal actual o globales
+                const branchIdsToProcess = effectiveBranchIds.length > 0 ? effectiveBranchIds : (includeGlobalCosts ? [null] : []);
                 
                 for (const branchId of branchIdsToProcess) {
                     // CRÍTICO: Filtro estricto por sucursal
