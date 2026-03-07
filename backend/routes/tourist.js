@@ -279,9 +279,14 @@ router.delete('/rules/:id', requireBranchAccess, async (req, res) => {
 });
 
 // Eliminar llegada
+const isUUID = (v) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v || ''));
+
 router.delete('/arrivals/:id', requireBranchAccess, async (req, res) => {
   try {
     const { id } = req.params;
+    if (!isUUID(id)) {
+      return res.status(404).json({ error: 'Llegada no encontrada' });
+    }
 
     // Verificar que la llegada existe y pertenece a la sucursal del usuario
     const checkResult = await query(
