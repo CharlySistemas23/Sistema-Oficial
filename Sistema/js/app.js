@@ -1898,16 +1898,14 @@ const App = {
                 console.log(`✅ ${rulesWithFutureDate.length} reglas actualizadas con active_from: 2000-01-01`);
             }
             
-            // Solo precargar si no hay reglas o si hay menos de 25 (para asegurar que todas estén cargadas)
-            // Hay aproximadamente 25 reglas en total según el tabulador:
-            // 3 TANITOURS + 1 TRAVELEX + 6 DISCOVERY (2 city_tour + 4 sprinter/van) + 1 VERANOS + 5 TB + 5 TTF + 4 TROPICAL (van/sprinter/city_tour 1-14 + truck 15-45) = 25 reglas
-            if (existingRules.length >= 25 && rulesWithFutureDate.length === 0) {
-                console.log(`✅ Arrival rate rules ya existen (${existingRules.length}) y están actualizadas, omitiendo precarga`);
+            // Solo precargar si no hay reglas o si hay menos de 15 (indica configuración incompleta)
+            const MIN_EXPECTED_RULES = 15;
+            if (existingRules.length >= MIN_EXPECTED_RULES && rulesWithFutureDate.length === 0) {
+                console.log(`✅ Arrival rate rules ya existen (${existingRules.length}), omitiendo precarga`);
                 return;
             }
             
-            // Si hay menos de 25 reglas, eliminar todas y recargar
-            if (existingRules.length < 25) {
+            if (existingRules.length < MIN_EXPECTED_RULES) {
                 console.log(`⚠️ Reglas incompletas detectadas (${existingRules.length} < 25), eliminando y recargando todas las reglas del tabulador...`);
                 for (const rule of existingRules) {
                     try {
@@ -1993,25 +1991,25 @@ const App = {
                 );
             }
 
-            // TB: 1-6 → $300, 7-14 → $600, 15-18 → $800, 20-30 → $1,000, 30-45 → $1,200, +$20 por pasajero extra >45
-            // Nota: El extra solo aplica después de 45 pasajeros, no después de cada rango
+            // TB: 1-6 → $300, 7-14 → $600, 15-18 → $800, 20-29 → $1,000, 30-45 → $1,200, +$20 por pasajero extra >45
+            // Nota: 20-29 y 30-45 evitan solapamiento; el extra solo aplica después de 45 pasajeros
             if (tbAgency) {
                 rules.push(
                     { id: Utils.generateId(), agency_id: tbAgency.id, branch_id: null, min_passengers: 1, max_passengers: 6, unit_type: null, rate_per_passenger: 0, fee_type: 'flat', flat_fee: 300, extra_per_passenger: 0, active_from: today, active_until: null, notes: 'TB: 1-6 PAX', created_at: new Date().toISOString(), updated_at: new Date().toISOString(), sync_status: 'pending' },
                     { id: Utils.generateId(), agency_id: tbAgency.id, branch_id: null, min_passengers: 7, max_passengers: 14, unit_type: null, rate_per_passenger: 0, fee_type: 'flat', flat_fee: 600, extra_per_passenger: 0, active_from: today, active_until: null, notes: 'TB: 7-14 PAX', created_at: new Date().toISOString(), updated_at: new Date().toISOString(), sync_status: 'pending' },
                     { id: Utils.generateId(), agency_id: tbAgency.id, branch_id: null, min_passengers: 15, max_passengers: 18, unit_type: null, rate_per_passenger: 0, fee_type: 'flat', flat_fee: 800, extra_per_passenger: 0, active_from: today, active_until: null, notes: 'TB: 15-18 PAX', created_at: new Date().toISOString(), updated_at: new Date().toISOString(), sync_status: 'pending' },
-                    { id: Utils.generateId(), agency_id: tbAgency.id, branch_id: null, min_passengers: 20, max_passengers: 30, unit_type: null, rate_per_passenger: 0, fee_type: 'flat', flat_fee: 1000, extra_per_passenger: 0, active_from: today, active_until: null, notes: 'TB: 20-30 PAX', created_at: new Date().toISOString(), updated_at: new Date().toISOString(), sync_status: 'pending' },
+                    { id: Utils.generateId(), agency_id: tbAgency.id, branch_id: null, min_passengers: 20, max_passengers: 29, unit_type: null, rate_per_passenger: 0, fee_type: 'flat', flat_fee: 1000, extra_per_passenger: 0, active_from: today, active_until: null, notes: 'TB: 20-29 PAX', created_at: new Date().toISOString(), updated_at: new Date().toISOString(), sync_status: 'pending' },
                     { id: Utils.generateId(), agency_id: tbAgency.id, branch_id: null, min_passengers: 30, max_passengers: 45, unit_type: null, rate_per_passenger: 0, fee_type: 'flat', flat_fee: 1200, extra_per_passenger: 20, active_from: today, active_until: null, notes: 'TB: 30-45 PAX + $20 extra >45', created_at: new Date().toISOString(), updated_at: new Date().toISOString(), sync_status: 'pending' }
                 );
             }
 
-            // TTF: 1-6 → $300, 7-14 → $600, 15-18 → $800, 20-30 → $1,000, 30-45 → $1,200 (tarifa fija, sin extra)
+            // TTF: 1-6 → $300, 7-14 → $600, 15-18 → $800, 20-29 → $1,000, 30-45 → $1,200 (tarifa fija, sin extra)
             if (ttfAgency) {
                 rules.push(
                     { id: Utils.generateId(), agency_id: ttfAgency.id, branch_id: null, min_passengers: 1, max_passengers: 6, unit_type: null, rate_per_passenger: 0, fee_type: 'flat', flat_fee: 300, extra_per_passenger: 0, active_from: today, active_until: null, notes: 'TTF: 1-6 PAX', created_at: new Date().toISOString(), updated_at: new Date().toISOString(), sync_status: 'pending' },
                     { id: Utils.generateId(), agency_id: ttfAgency.id, branch_id: null, min_passengers: 7, max_passengers: 14, unit_type: null, rate_per_passenger: 0, fee_type: 'flat', flat_fee: 600, extra_per_passenger: 0, active_from: today, active_until: null, notes: 'TTF: 7-14 PAX', created_at: new Date().toISOString(), updated_at: new Date().toISOString(), sync_status: 'pending' },
                     { id: Utils.generateId(), agency_id: ttfAgency.id, branch_id: null, min_passengers: 15, max_passengers: 18, unit_type: null, rate_per_passenger: 0, fee_type: 'flat', flat_fee: 800, extra_per_passenger: 0, active_from: today, active_until: null, notes: 'TTF: 15-18 PAX', created_at: new Date().toISOString(), updated_at: new Date().toISOString(), sync_status: 'pending' },
-                    { id: Utils.generateId(), agency_id: ttfAgency.id, branch_id: null, min_passengers: 20, max_passengers: 30, unit_type: null, rate_per_passenger: 0, fee_type: 'flat', flat_fee: 1000, extra_per_passenger: 0, active_from: today, active_until: null, notes: 'TTF: 20-30 PAX', created_at: new Date().toISOString(), updated_at: new Date().toISOString(), sync_status: 'pending' },
+                    { id: Utils.generateId(), agency_id: ttfAgency.id, branch_id: null, min_passengers: 20, max_passengers: 29, unit_type: null, rate_per_passenger: 0, fee_type: 'flat', flat_fee: 1000, extra_per_passenger: 0, active_from: today, active_until: null, notes: 'TTF: 20-29 PAX', created_at: new Date().toISOString(), updated_at: new Date().toISOString(), sync_status: 'pending' },
                     { id: Utils.generateId(), agency_id: ttfAgency.id, branch_id: null, min_passengers: 30, max_passengers: 45, unit_type: null, rate_per_passenger: 0, fee_type: 'flat', flat_fee: 1200, extra_per_passenger: 0, active_from: today, active_until: null, notes: 'TTF: 30-45 PAX', created_at: new Date().toISOString(), updated_at: new Date().toISOString(), sync_status: 'pending' }
                 );
             }
