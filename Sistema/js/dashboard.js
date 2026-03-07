@@ -608,9 +608,10 @@ const Dashboard = {
                             dateTo: todayStr
                         });
                         
+                        const isArrivalCost = (cat) => (cat || '').toLowerCase().replace(/\s+/g, '_') === 'pago_llegadas';
                         // Obtener costos de llegadas desde cost_entries
                         const arrivalCostsFromEntries = todayCosts
-                            .filter(c => c.category === 'pago_llegadas')
+                            .filter(c => isArrivalCost(c.category))
                             .reduce((sum, c) => sum + (c.amount || 0), 0);
                         
                         if (arrivalCostsFromEntries > 0) {
@@ -627,7 +628,7 @@ const Dashboard = {
                                 c.category !== 'costo_ventas' && 
                                 c.category !== 'comisiones' && 
                                 c.category !== 'comisiones_bancarias' &&
-                                c.category !== 'pago_llegadas' // Ya se contaron arriba
+                                !isArrivalCost(c.category) // Ya se contaron arriba
                             )
                             .reduce((sum, c) => sum + (c.amount || 0), 0);
                     } else {
@@ -850,7 +851,7 @@ const Dashboard = {
                     .filter(c => c.type === 'fijo')
                     .reduce((sum, c) => sum + (c.amount || 0), 0);
                 costBreakdown.variable = thisMonthCosts
-                    .filter(c => c.type === 'variable' && c.category !== 'costo_ventas' && c.category !== 'comisiones' && c.category !== 'comisiones_bancarias' && c.category !== 'pago_llegadas')
+                    .filter(c => c.type === 'variable' && c.category !== 'costo_ventas' && c.category !== 'comisiones' && c.category !== 'comisiones_bancarias' && (c.category || '').toLowerCase().replace(/\s+/g, '_') !== 'pago_llegadas')
                     .reduce((sum, c) => sum + (c.amount || 0), 0);
                 costBreakdown.cogs = thisMonthCosts
                     .filter(c => c.category === 'costo_ventas')
@@ -859,7 +860,7 @@ const Dashboard = {
                     .filter(c => c.category === 'comisiones')
                     .reduce((sum, c) => sum + (c.amount || 0), 0);
                 costBreakdown.arrivals = thisMonthCosts
-                    .filter(c => c.category === 'pago_llegadas')
+                    .filter(c => (c.category || '').toLowerCase().replace(/\s+/g, '_') === 'pago_llegadas')
                     .reduce((sum, c) => sum + (c.amount || 0), 0);
                 costBreakdown.bankCommissions = thisMonthCosts
                     .filter(c => c.category === 'comisiones_bancarias')
