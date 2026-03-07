@@ -4741,6 +4741,7 @@ const Settings = {
                     console.warn('Error cargando reglas desde API, usando modo local:', apiError);
                     rules = await DB.getAll('arrival_rate_rules') || [];
                 }
+                }
             } else {
                 rules = await DB.getAll('arrival_rate_rules') || [];
             }
