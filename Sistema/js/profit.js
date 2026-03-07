@@ -358,9 +358,9 @@ const ProfitCalculator = {
             });
             
             for (const cost of monthlyCosts) {
-                const costDate = new Date(cost.date || cost.created_at);
-                const daysInMonth = new Date(costDate.getFullYear(), costDate.getMonth() + 1, 0).getDate();
-                fixedCostsDaily += (cost.amount || 0) / daysInMonth;
+                // Usar 30 días fijos para prorrateo mensual (convención contable estándar)
+                const DAYS_PER_MONTH = 30;
+                fixedCostsDaily += (cost.amount || 0) / DAYS_PER_MONTH;
             }
 
             // Costos semanales prorrateados
