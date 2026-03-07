@@ -2432,9 +2432,9 @@ const Reports = {
                        costDate.getFullYear() === targetDate.getFullYear();
             });
             for (const cost of monthlyCosts) {
-                const costDate = new Date(cost.date || cost.created_at);
-                const daysInMonth = new Date(costDate.getFullYear(), costDate.getMonth() + 1, 0).getDate();
-                fixedCostsDaily += (cost.amount || 0) / daysInMonth;
+                // Usar 30 días fijos para prorrateo mensual (convención contable: $94,500/30 = $3,150)
+                const DAYS_PER_MONTH = 30;
+                fixedCostsDaily += (cost.amount || 0) / DAYS_PER_MONTH;
             }
             
             // Costos semanales prorrateados
@@ -9159,12 +9159,12 @@ const Reports = {
                     }));
                     console.log(`   📅 Costos mensuales encontrados: ${monthlyCosts.length} (únicos tras deduplicar recurrentes)`);
                     for (const cost of monthlyCosts) {
-                        // Usar el mes objetivo (targetDate) para calcular días del mes, no el mes del costo
-                        const daysInMonth = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0).getDate();
+                        // Usar 30 días fijos para prorrateo mensual (convención contable estándar)
+                        const DAYS_PER_MONTH = 30;
                         const amount = parseFloat(cost.amount) || 0;
-                        const dailyAmount = amount / daysInMonth;
+                        const dailyAmount = amount / DAYS_PER_MONTH;
                         fixedCostsProrated += dailyAmount;
-                        console.log(`   💰 Costo mensual: ${cost.category || 'Sin categoría'} - $${amount} / ${daysInMonth} días = $${dailyAmount.toFixed(2)}/día`);
+                        console.log(`   💰 Costo mensual: ${cost.category || 'Sin categoría'} - $${amount} / ${DAYS_PER_MONTH} días = $${dailyAmount.toFixed(2)}/día`);
                         fixedCostsDetail.push({
                             category: cost.category || 'Sin categoría',
                             description: cost.description || cost.notes || '',
@@ -10364,9 +10364,9 @@ const Reports = {
                                costDate.getFullYear() === targetDate.getFullYear();
                     }));
                     for (const cost of monthlyCosts) {
-                        const costDate = new Date(cost.date || cost.created_at);
-                        const daysInMonth = new Date(costDate.getFullYear(), costDate.getMonth() + 1, 0).getDate();
-                        totalOperatingCosts += (parseFloat(cost.amount) || 0) / daysInMonth;
+                        // Usar 30 días fijos para prorrateo mensual (convención contable estándar)
+                        const DAYS_PER_MONTH = 30;
+                        totalOperatingCosts += (parseFloat(cost.amount) || 0) / DAYS_PER_MONTH;
                     }
 
                     // Semanales
@@ -11341,9 +11341,9 @@ const Reports = {
                         return isMonthly && isRecurring && isValidCategory;
                     }));
                     for (const cost of monthlyCosts) {
-                        // Usar el mes objetivo (targetDate) para calcular días del mes, no el mes del costo
-                        const daysInMonth = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0).getDate();
-                        const dailyAmount = (parseFloat(cost.amount) || 0) / daysInMonth;
+                        // Usar 30 días fijos para prorrateo mensual (convención contable estándar)
+                        const DAYS_PER_MONTH = 30;
+                        const dailyAmount = (parseFloat(cost.amount) || 0) / DAYS_PER_MONTH;
                         fixedCostsProrated += dailyAmount;
                     }
 
@@ -11814,8 +11814,9 @@ const Reports = {
                         return isMonthly && isRecurring && isValidCategory;
                     }));
                     for (const cost of monthlyCosts) {
-                        const daysInMonth = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0).getDate();
-                        fixedCostsProrated += (parseFloat(cost.amount) || 0) / daysInMonth;
+                        // Usar 30 días fijos para prorrateo mensual (convención contable estándar)
+                        const DAYS_PER_MONTH = 30;
+                        fixedCostsProrated += (parseFloat(cost.amount) || 0) / DAYS_PER_MONTH;
                     }
 
                     // Semanales
