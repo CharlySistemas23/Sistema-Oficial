@@ -2710,12 +2710,13 @@ const TouristReport = {
                 return;
             }
 
-            // Intentar eliminar con API si está disponible
+            const arrivalApiId = arrival.server_id || arrival.id;
+            const isUuid = arrivalApiId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(arrivalApiId));
             let apiDeleted = false;
-            if (typeof API !== 'undefined' && API.baseURL && API.token && API.deleteArrival) {
+            if (isUuid && typeof API !== 'undefined' && API.baseURL && API.token && API.deleteArrival) {
                 try {
                     console.log('🗑️ Eliminando llegada con API en servidor...');
-                    await API.deleteArrival(arrivalId);
+                    await API.deleteArrival(arrivalApiId);
                     console.log('✅ Llegada eliminada con API en servidor');
                     apiDeleted = true;
                 } catch (apiError) {
