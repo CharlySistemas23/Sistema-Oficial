@@ -4,6 +4,7 @@ const Costs = {
     initialized: false,
     isExporting: false,
     _lastBackgroundRefreshTime: 0,
+    _costsPaso1InProgress: false,
     currentTab: 'costs',
     
     // Helper para obtener costos filtrados por sucursal
@@ -1415,13 +1416,13 @@ const Costs = {
         document.getElementById('cost-add-btn')?.addEventListener('click', () => this.showAddForm());
         document.getElementById('cost-export-btn')?.addEventListener('click', () => this.exportCosts());
         document.getElementById('cost-search')?.addEventListener('input', Utils.debounce(() => this.loadCosts(), 300));
-        document.getElementById('cost-branch-filter')?.addEventListener('change', (e) => {
+        document.getElementById('cost-branch-filter')?.addEventListener('change', Utils.debounce((e) => {
             // Marcar que el usuario seleccionó manualmente
-            if (e.target) {
+            if (e && e.target) {
                 e.target.dataset.manualSelection = 'true';
             }
             this.loadCosts();
-        });
+        }, 350));
         document.getElementById('cost-type-filter')?.addEventListener('change', () => this.loadCosts());
         document.getElementById('cost-category-filter')?.addEventListener('change', () => this.loadCosts());
         document.getElementById('cost-supplier-filter')?.addEventListener('change', () => this.loadCosts());
@@ -1475,6 +1476,9 @@ const Costs = {
             // PASO 1: Subir costos locales que NO están en el servidor
             try {
                 if (typeof API !== 'undefined' && API.baseURL && API.token && API.createCost && API.updateCost) {
+                    if (this._costsPaso1InProgress) return;
+                    this._costsPaso1InProgress = true;
+                    try {
                     console.log('📤 [Paso 1 Costs] Buscando costos locales que no están en el servidor...');
                     
                     const allLocalCosts = await DB.getAll('cost_entries') || [];
@@ -1527,12 +1531,16 @@ const Costs = {
                                         return cKey === key;
                                     });
                                     
-                                    for (const costToUpdate of costsToUpdate) {
-                                        costToUpdate.server_id = createdCost.id;
-                                        costToUpdate.id = createdCost.id;
-                                        costToUpdate.sync_status = 'synced';
-                                        await DB.put('cost_entries', costToUpdate, { autoBranchId: false });
+                                    // Eliminar registros antiguos antes de actualizar (evita bucle: put con nuevo id crea fila nueva sin borrar la antigua)
+                                    const idsToDelete = [...new Set(costsToUpdate.map(c => c.id).filter(id => id && id !== createdCost.id))];
+                                    for (const oldId of idsToDelete) {
+                                        try { await DB.delete('cost_entries', oldId); } catch (_) {}
                                     }
+                                    const canonical = costsToUpdate[0];
+                                    canonical.server_id = createdCost.id;
+                                    canonical.id = createdCost.id;
+                                    canonical.sync_status = 'synced';
+                                    await DB.put('cost_entries', canonical, { autoBranchId: false });
                                     uploadedCount++;
                                 }
                             } catch (uploadError) {
@@ -1542,9 +1550,13 @@ const Costs = {
                         
                         console.log(`✅ [Paso 1 Costs] Sincronización local→servidor completada: ${uploadedCount} costos subidos`);
                     }
+                    } finally {
+                        this._costsPaso1InProgress = false;
+                    }
                 }
             } catch (error) {
                 console.error('❌ [Paso 1 Costs] Error sincronizando costos locales al servidor:', error);
+                this._costsPaso1InProgress = false;
             }
 
             // CACHE-FIRST: leer de IndexedDB primero
