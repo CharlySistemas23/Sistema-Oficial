@@ -1523,6 +1523,10 @@ const API = {
         return await this.put(`/api/tourist/arrivals/${id}`, arrival);
     },
 
+    async deleteArrival(id) {
+        return await this.delete(`/api/tourist/arrivals/${id}`);
+    },
+
     async getArrivalRules(filters = {}) {
         return await this.get('/api/tourist/rules', filters);
     },
@@ -1589,6 +1593,14 @@ const API = {
 
     async getArchivedReport(id) {
         return await this.get(`/api/reports/archived-quick-captures/${id}`);
+    },
+
+    async updateArchivedReport(id, data) {
+        return await this.put(`/api/reports/archived-quick-captures/${id}`, data);
+    },
+
+    async deleteArchivedReport(id) {
+        return await this.delete(`/api/reports/archived-quick-captures/${id}`);
     },
 
     // ========== REPORTES HISTÓRICOS (Historical Quick Capture Reports) ==========
