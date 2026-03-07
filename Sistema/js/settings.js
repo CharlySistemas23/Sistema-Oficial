@@ -5276,9 +5276,9 @@ const Settings = {
                     } else if (cost.period_type === 'weekly') {
                         dailyProrate = (cost.amount || 0) / 7;
                     } else if (cost.period_type === 'monthly') {
-                        const costDate = new Date(cost.date || cost.created_at);
-                        const daysInMonth = new Date(costDate.getFullYear(), costDate.getMonth() + 1, 0).getDate();
-                        dailyProrate = (cost.amount || 0) / daysInMonth;
+                        // Usar 30 días fijos para prorrateo mensual (convención contable estándar)
+                        const DAYS_PER_MONTH = 30;
+                        dailyProrate = (cost.amount || 0) / DAYS_PER_MONTH;
                     }
                     operatingCosts += dailyProrate;
                 }
