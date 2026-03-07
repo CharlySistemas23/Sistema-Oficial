@@ -2670,6 +2670,27 @@ const Reports = {
     },
 
     /**
+     * Deduplica costos por server_id o clave lógica para evitar sumar duplicados (bug de sincronización)
+     * @param {Array} costs - Array de costos
+     * @returns {Array} Costos únicos
+     */
+    deduplicateCosts(costs) {
+        if (!Array.isArray(costs) || costs.length === 0) return costs;
+        const seen = new Set();
+        const result = [];
+        const isUUID = (id) => id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id));
+        for (const c of costs) {
+            if (!c || !c.id) continue;
+            const sid = c.server_id || (isUUID(c.id) ? c.id : null);
+            const key = sid || `${c.branch_id || ''}_${c.category || ''}_${c.period_type || ''}_${(c.description || c.notes || '').slice(0, 80)}_${c.amount || 0}_${c.date || c.created_at || ''}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            result.push(c);
+        }
+        return result;
+    },
+
+    /**
      * Calcula los costos de llegadas desde cost_entries (fuente autorizada)
      * Si no hay costos registrados, calcula desde agency_arrivals como fallback
      * @param {string} dateStr - Fecha en formato YYYY-MM-DD
@@ -8856,18 +8877,15 @@ const Reports = {
                     // CRÍTICO: Filtro estricto por sucursal
                     // Si branchId es null (costos globales), solo incluir costos sin branch_id
                     // Si branchId tiene valor, SOLO incluir costos de esa sucursal (excluir globales)
-                    const branchCosts = allCosts.filter(c => {
+                    let branchCosts = allCosts.filter(c => {
                         if (branchId === null) {
-                            // Costos globales: solo incluir si no tienen branch_id
                             return !c.branch_id;
                         } else {
-                            // Sucursal específica: SOLO incluir costos de esta sucursal (excluir sin branch_id)
-                            if (!c.branch_id) {
-                                return false; // EXCLUIR costos sin branch_id cuando se filtra por sucursal específica
-                            }
+                            if (!c.branch_id) return false;
                             return String(c.branch_id) === String(branchId);
                         }
                     });
+                    branchCosts = this.deduplicateCosts(branchCosts);
 
                     // A) COSTOS FIJOS PRORRATEADOS (Mensuales, Semanales, Anuales)
                     // Costos mensuales prorrateados
@@ -10062,10 +10080,11 @@ const Reports = {
                 const branchIdsToProcess = captureBranchIds.length > 0 ? captureBranchIds : [null];
                 
                 for (const branchId of branchIdsToProcess) {
-                    const branchCosts = allCosts.filter(c => 
+                    let branchCosts = allCosts.filter(c => 
                         branchId === null ? (!c.branch_id || captureBranchIds.includes(c.branch_id)) : 
-                        (c.branch_id === branchId || !c.branch_id)
+                        (c.branch_id && String(c.branch_id) === String(branchId))
                     );
+                    branchCosts = this.deduplicateCosts(branchCosts);
 
                     // Mensuales
                     const monthlyCosts = branchCosts.filter(c => {
@@ -11175,10 +11194,11 @@ const Reports = {
                 const branchIdsToProcess = captureBranchIdsForOperating.length > 0 ? captureBranchIdsForOperating : [null];
                 
                 for (const branchId of branchIdsToProcess) {
-                    const branchCosts = allCosts.filter(c => 
+                    let branchCosts = allCosts.filter(c => 
                         branchId === null ? (!c.branch_id || captureBranchIdsForOperating.includes(c.branch_id)) : 
-                        (c.branch_id === branchId || !c.branch_id) // Incluir costos globales también
+                        (c.branch_id && String(c.branch_id) === String(branchId))
                     );
+                    branchCosts = this.deduplicateCosts(branchCosts);
 
                     // A) COSTOS FIJOS PRORRATEADOS (Mensuales, Semanales, Anuales)
                     // IMPORTANTE: Usar la misma lógica que loadQuickCaptureProfits
@@ -11672,7 +11692,7 @@ const Reports = {
                 
                 for (const branchId of branchIdsToProcess) {
                     // Filtro estricto por sucursal
-                    const branchCosts = allCosts.filter(c => {
+                    let branchCosts = allCosts.filter(c => {
                         if (branchId === null) {
                             return !c.branch_id;
                         } else {
@@ -11680,6 +11700,7 @@ const Reports = {
                             return String(c.branch_id) === String(branchId);
                         }
                     });
+                    branchCosts = this.deduplicateCosts(branchCosts);
 
                     // A) COSTOS FIJOS PRORRATEADOS
                     // Mensuales
