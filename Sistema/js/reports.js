@@ -12790,15 +12790,27 @@ const Reports = {
                     if (serverReports && Array.isArray(serverReports)) {
                         console.log(`✅ [Paso 2] ${serverReports.length} reportes archivados recibidos del servidor`);
                         
+                        // Obtener reportes archivados eliminados localmente para no re-insertarlos
+                        const deletedArchivedReportIds = new Set();
+                        try {
+                            const deletedItems = await DB.getAll('sync_deleted_items') || [];
+                            for (const d of deletedItems) {
+                                if (d.entity_type === 'archived_quick_capture' && d.metadata?.server_id) {
+                                    deletedArchivedReportIds.add(String(d.metadata.server_id));
+                                }
+                            }
+                        } catch (_) {}
+                        
                         if (serverReports.length > 0) {
                             console.log(`📋 [Paso 2] Fechas de reportes recibidos:`, 
                                 serverReports.map(r => r.report_date || r.date).join(', '));
                         }
                         
-                        // Guardar/actualizar cada reporte en IndexedDB local
+                        // Guardar/actualizar cada reporte en IndexedDB local (excluir eliminados)
                         let savedCount = 0;
                         let updatedCount = 0;
                         for (const serverReport of serverReports) {
+                            if (serverReport.id && deletedArchivedReportIds.has(String(serverReport.id))) continue;
                             try {
                                 const reportDate = serverReport.report_date || serverReport.date;
                                 const branchId = serverReport.branch_id;
@@ -14021,6 +14033,22 @@ const Reports = {
             document.getElementById('delete-archived-confirm-btn').onclick = async () => {
                 confirmModal.remove();
                 try {
+                    const report = await DB.get('archived_quick_captures', reportId);
+                    // Registrar eliminación INMEDIATAMENTE para evitar que loadArchivedReports re-inserte al sincronizar
+                    const deletedId = `archived_deleted_${apiId || reportId}`;
+                    try {
+                        await DB.put('sync_deleted_items', {
+                            id: deletedId,
+                            entity_type: 'archived_quick_capture',
+                            metadata: {
+                                server_id: apiId,
+                                report_id: reportId,
+                                date: report?.date || report?.report_date,
+                                branch_id: report?.branch_id
+                            },
+                            deleted_at: new Date().toISOString()
+                        });
+                    } catch (e) { console.warn('Error guardando sync_deleted_items para reporte archivado:', e); }
                     // Eliminar del servidor solo si el reporte fue sincronizado (apiId); si es solo local, no llamar API
                     if (apiId && typeof API !== 'undefined' && API.baseURL && API.token && typeof API.deleteArchivedReport === 'function') {
                         try {
