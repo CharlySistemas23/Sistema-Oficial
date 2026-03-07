@@ -834,10 +834,11 @@ const SyncManager = {
                             }
 
                             // Si faltan campos requeridos, no tiene sentido reintentar: eliminar de cola
+                            const amountNum = typeof entityData.amount === 'number' ? entityData.amount : parseFloat(entityData.amount);
                             const requiredOk =
-                                typeof entityData.amount === 'number' && entityData.amount > 0 &&
+                                !isNaN(amountNum) && amountNum > 0 &&
                                 (entityData.type === 'fijo' || entityData.type === 'variable') &&
-                                !!entityData.date;
+                                !!(entityData.date || entityData.created_at);
                             if (!requiredOk) {
                                 console.warn(`⚠️ cost_entry inválido (faltan campos). Eliminando de cola: ${item.entity_id}`, entityData);
                                 await DB.delete('sync_queue', item.id);
