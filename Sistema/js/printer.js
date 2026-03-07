@@ -554,10 +554,11 @@ const Printer = {
                 const itemName = (item.name || 'Pieza').toUpperCase().substring(0, 32);
                 await this.writeText(itemName + '\r\n', true);
                 
-                // Cantidad×precio a la izquierda, subtotal a la derecha
+                // Cantidad×precio a la izquierda, subtotal a la derecha (solo precio de venta, nunca costo)
                 await this.sendCommand(this.commands.BOLD_ON); // Asegurar negritas
                 await this.sendCommand(this.commands.BOLD_ON_ALT); // Asegurar negritas alternativo
-                const qtyPrice = item.quantity + ' X ' + this.formatMoney(item.price);
+                const unitPrice = item.unit_price ?? item.price;
+                const qtyPrice = item.quantity + ' X ' + this.formatMoney(unitPrice);
                 const subtotal = this.formatMoney(item.subtotal);
                 await this.writeText(this.mkline(qtyPrice, subtotal) + '\r\n', true);
                 
@@ -906,7 +907,7 @@ const Printer = {
     ${ticketFormat !== 'minimal' ? items.map(item => `
         <div class="bold" style="font-size: 14pt !important; font-weight: 900 !important; margin-bottom: 2mm;">${(item.name || 'Pieza').substring(0, 28)}</div>
         <div class="row" style="font-size: 13pt !important; font-weight: 900 !important;">
-            <span>${item.quantity}x ${this.formatMoney(item.price)}</span>
+            <span>${item.quantity}x ${this.formatMoney(item.unit_price ?? item.price)}</span>
             <span>${this.formatMoney(item.subtotal)}</span>
             </div>
         ${item.discount > 0 && ticketFormat === 'detailed' ? `<div style="font-size: 12pt !important; font-weight: 900 !important;">Desc: ${item.discount}%</div>` : ''}
