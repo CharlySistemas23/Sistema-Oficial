@@ -2741,7 +2741,8 @@ const Reports = {
             }) || [];
             
             // Filtrar costos de llegadas del día
-            // CRÍTICO: Aplicar filtro estricto por sucursal con comparación normalizada
+            // CRÍTICO: Aplicar filtro por sucursal con comparación normalizada
+            // TOLERANCIA: incluir también registros sin branch_id (pueden haberse saneado al sincronizar con servidor)
             const arrivalCostEntries = allCosts.filter(c => {
                 const costDate = c.date || c.created_at;
                 const costDateStr = typeof costDate === 'string' ? costDate.split('T')[0] : new Date(costDate).toISOString().split('T')[0];
@@ -2749,13 +2750,17 @@ const Reports = {
                 if (c.category !== 'pago_llegadas') return false;
                 if (costDateStr !== dateStr) return false;
                 
+                // Si no hay filtro de sucursal, incluir todo
+                if (normBranchId === null && normBranchIds.length === 0) return true;
+                
+                // Si el costo no tiene branch_id (fue saneado al enviarse al servidor), incluirlo como candidato
+                if (!c.branch_id) return true;
+                
                 // Verificar sucursal con comparación normalizada
                 if (normBranchId !== null) {
-                    if (!c.branch_id) return false;
                     return norm(c.branch_id) === normBranchId;
                 }
                 if (normBranchIds.length > 0) {
-                    if (!c.branch_id) return false;
                     return normBranchIds.includes(norm(c.branch_id));
                 }
                 return true;
@@ -2785,8 +2790,8 @@ const Reports = {
             
             const totalFromCosts = Array.from(uniqueCosts.values()).reduce((sum, amount) => sum + amount, 0);
             
-            // Si hay costos registrados (incluso si el total es 0 pero hay registros), retornar ese valor (fuente autorizada)
-            if (uniqueCosts.size > 0) {
+            // Si hay costos registrados con monto > 0, retornar ese valor (fuente autorizada)
+            if (uniqueCosts.size > 0 && totalFromCosts > 0) {
                 const totalAsNumber = typeof totalFromCosts === 'number' ? totalFromCosts : parseFloat(totalFromCosts) || 0;
                 console.log(`✅ Costos de llegadas encontrados en cost_entries: ${arrivalCostEntries.length} registros, ${uniqueCosts.size} únicos, total: $${totalAsNumber.toFixed(2)}`);
                 return totalAsNumber;
@@ -2806,7 +2811,9 @@ const Reports = {
             const dayArrivals = allArrivals.filter(a => {
                 const arrivalDate = a.date || (a.created_at ? a.created_at.split('T')[0] : null);
                 if (!arrivalDate || arrivalDate !== dateStr) return false;
-                if (a.passengers <= 0 && (a.units <= 0 && (a.arrival_fee <= 0 && a.calculated_fee <= 0))) return false;
+                // Solo excluir si no hay fee calculado o asignado
+                const hasFee = parseFloat(a.calculated_fee || a.arrival_fee || 0) > 0;
+                if (!hasFee) return false;
                 
                 // Verificar sucursal (usar effectiveBranchIds y comparación normalizada)
                 if (normBranchId !== null) {
@@ -6601,6 +6608,15 @@ const Reports = {
                     matches = guideAgencyIdUpper === selectedNameNorm || 
                              guideAgencyIdUpper.includes(selectedNameNorm) || 
                              selectedNameNorm.includes(guideAgencyIdUpper);
+                }
+                
+                // 5. Si el agency_id del guía es legacy (ag1..ag7), mapear al nombre de agencia y comparar
+                if (!matches && /^ag\d+$/i.test(guideAgencyIdStr)) {
+                    const legacyNameMap = { 'ag1': 'TRAVELEX', 'ag2': 'VERANOS', 'ag3': 'TANITOURS', 'ag4': 'DISCOVERY', 'ag5': 'TB', 'ag6': 'TTF', 'ag7': 'TROPICALADVENTURE' };
+                    const legacyName = legacyNameMap[guideAgencyIdStr.toLowerCase()] || '';
+                    if (legacyName) {
+                        matches = legacyName === selectedNameNorm || selectedNameNorm.includes(legacyName) || legacyName.includes(selectedNameNorm);
+                    }
                 }
                 
                 return matches;
