@@ -5297,7 +5297,7 @@ const Reports = {
     // ==================== CAPTURA RÁPIDA TEMPORAL ====================
     
     async getQuickCaptureTab() {
-        const today = new Date().toISOString().split('T')[0];
+        const today = this.getLocalDateStr();
         const isMasterAdmin = typeof UserManager !== 'undefined' && (
             UserManager.currentUser?.role === 'master_admin' ||
             UserManager.currentUser?.is_master_admin ||
@@ -5658,7 +5658,7 @@ const Reports = {
             
             if (mainDateInput && arrivalDateInput) {
                 // Inicializar con la fecha del formulario principal
-                const today = new Date().toISOString().split('T')[0];
+                const today = this.getLocalDateStr();
                 if (!mainDateInput.value) {
                     mainDateInput.value = today;
                 }
@@ -5807,7 +5807,7 @@ const Reports = {
                         // Obtener fecha del formulario de llegadas o del formulario principal
                         const arrivalDateInput = document.getElementById('qc-arrival-date');
                         const mainDateInput = document.getElementById('qc-date');
-                        const arrivalDate = arrivalDateInput?.value || mainDateInput?.value || new Date().toISOString().split('T')[0];
+                        const arrivalDate = arrivalDateInput?.value || mainDateInput?.value || this.getLocalDateStr();
                         
                                 if (typeof ArrivalRules !== 'undefined' && ArrivalRules.calculateArrivalFee) {
                             try {
@@ -6180,7 +6180,7 @@ const Reports = {
                 }
             } else {
                 // Fallback: obtener desde configuración
-                const today = new Date().toISOString().split('T')[0];
+                const today = this.getLocalDateStr();
                 const exchangeRates = await DB.query('exchange_rates_daily', 'date', today) || [];
                 const todayRate = exchangeRates[0] || { usd_to_mxn: 20.0, cad_to_mxn: 15.0 };
                 const display = document.getElementById('qc-exchange-rates-display');
@@ -8305,11 +8305,32 @@ const Reports = {
 
     async loadQuickCaptureArrivals() {
         try {
-            // Obtener la fecha del formulario o usar hoy por defecto
+            // Obtener la fecha del formulario o usar hoy por defecto (fecha LOCAL, no UTC)
             const dateInput = document.getElementById('qc-date');
             const arrivalDateInput = document.getElementById('qc-arrival-date');
-            const selectedDate = arrivalDateInput?.value || dateInput?.value || new Date().toISOString().split('T')[0];
+            const selectedDate = arrivalDateInput?.value || dateInput?.value || this.getLocalDateStr();
             
+            // SINCRONIZACIÓN BAJANTE: cargar llegadas del servidor para esta fecha
+            if (typeof API !== 'undefined' && API.baseURL && API.token && typeof API.getArrivals === 'function') {
+                try {
+                    const serverArrivals = await API.getArrivals({ date: selectedDate });
+                    if (Array.isArray(serverArrivals) && serverArrivals.length > 0) {
+                        for (const a of serverArrivals) {
+                            if (a && a.id) {
+                                const existing = await DB.get('agency_arrivals', a.id);
+                                // Solo actualizar si el servidor tiene una versión más reciente
+                                if (!existing || new Date(a.updated_at || 0) >= new Date(existing.updated_at || 0)) {
+                                    await DB.put('agency_arrivals', a);
+                                }
+                            }
+                        }
+                        console.log(`🔄 Sincronizadas ${serverArrivals.length} llegadas desde servidor para ${selectedDate}`);
+                    }
+                } catch (syncErr) {
+                    console.warn('⚠️ No se pudieron sincronizar llegadas desde servidor (usando caché local):', syncErr.message);
+                }
+            }
+
             // Obtener guía seleccionado en el formulario (si existe)
             const guideSelect = document.getElementById('qc-arrival-guide');
             const selectedGuideId = guideSelect?.value || null;
@@ -8444,14 +8465,25 @@ const Reports = {
                                                 </span>
                                                 <span style="font-size: 10px; color: #6c757d; font-weight: 500;">${guideGroup.totalPassengers} pasajeros</span>
                                             </div>
-                                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 4px; font-size: 10px; color: #6c757d;">
+                                            <div style="display: grid; gap: 4px; font-size: 10px; color: #6c757d;">
                                                 ${guideGroup.arrivals.map(a => {
                                                     const branch = branches.find(b => b.id === a.branch_id);
                                                     return `
-                                                        <div style="padding: 3px 6px; background: #f8f9fa; border-radius: 2px;">
-                                                            <i class="fas fa-building" style="font-size: 9px; margin-right: 4px;"></i> ${branch?.name || 'N/A'}: 
-                                                            <strong style="color: #495057;">${a.passengers || 0}</strong> pasajeros
-                                                            ${a.unit_type ? `<span style="margin-left: 4px; font-size: 9px; color: #6c757d;">(${a.unit_type})</span>` : ''}
+                                                        <div style="padding: 3px 6px; background: #f8f9fa; border-radius: 2px; display: flex; justify-content: space-between; align-items: center;">
+                                                            <span>
+                                                                <i class="fas fa-building" style="font-size: 9px; margin-right: 4px;"></i> ${branch?.name || 'N/A'}: 
+                                                                <strong style="color: #495057;">${a.passengers || 0}</strong> pax
+                                                                ${a.unit_type ? `<span style="margin-left: 4px; font-size: 9px;">(${a.unit_type})</span>` : ''}
+                                                                ${a.arrival_fee || a.calculated_fee ? `<span style="margin-left: 4px; color: #28a745; font-weight: 600;">$${parseFloat(a.arrival_fee || a.calculated_fee || 0).toFixed(0)}</span>` : ''}
+                                                            </span>
+                                                            <span style="display: flex; gap: 3px; flex-shrink: 0; margin-left: 6px;">
+                                                                <button onclick="window.Reports.editArrivalRecord('${a.id}')" style="font-size: 8px; padding: 2px 5px; background: #667eea; color: white; border: none; border-radius: 2px; cursor: pointer;" title="Editar llegada">
+                                                                    <i class="fas fa-edit"></i>
+                                                                </button>
+                                                                <button onclick="window.Reports.deleteArrivalRecord('${a.id}')" style="font-size: 8px; padding: 2px 5px; background: #dc3545; color: white; border: none; border-radius: 2px; cursor: pointer;" title="Eliminar llegada">
+                                                                    <i class="fas fa-trash"></i>
+                                                                </button>
+                                                            </span>
                                                         </div>
                                                     `;
                                                 }).join('')}
@@ -8460,16 +8492,27 @@ const Reports = {
                                     `).join('')}
                                 </div>
                             ` : `
-                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 6px; font-size: 10px; color: #6c757d;">
+                            <div style="display: grid; gap: 6px; font-size: 10px; color: #6c757d;">
                                 ${group.arrivals.map(a => {
                                     const branch = branches.find(b => b.id === a.branch_id);
-                                        const guide = a.guide_id ? guides.find(g => g.id === a.guide_id) : null;
+                                    const guide = a.guide_id ? guides.find(g => g.id === a.guide_id) : null;
                                     return `
-                                        <div style="padding: 4px 6px; background: white; border-radius: 3px;">
-                                            <i class="fas fa-building" style="font-size: 9px; margin-right: 4px;"></i> ${branch?.name || 'N/A'}: 
-                                            <strong style="color: #495057;">${a.passengers || 0}</strong> pasajeros
+                                        <div style="padding: 4px 6px; background: white; border-radius: 3px; display: flex; justify-content: space-between; align-items: center;">
+                                            <span>
+                                                <i class="fas fa-building" style="font-size: 9px; margin-right: 4px;"></i> ${branch?.name || 'N/A'}: 
+                                                <strong style="color: #495057;">${a.passengers || 0}</strong> pax
                                                 ${guide ? `<span style="margin-left: 4px; font-size: 9px; color: #667eea;"><i class="fas fa-user-tie"></i> ${guide.name}</span>` : ''}
                                                 ${a.unit_type ? `<span style="margin-left: 4px; font-size: 9px;">(${a.unit_type})</span>` : ''}
+                                                ${a.arrival_fee || a.calculated_fee ? `<span style="margin-left: 4px; color: #28a745; font-weight: 600;">$${parseFloat(a.arrival_fee || a.calculated_fee || 0).toFixed(0)}</span>` : ''}
+                                            </span>
+                                            <span style="display: flex; gap: 3px; flex-shrink: 0; margin-left: 6px;">
+                                                <button onclick="window.Reports.editArrivalRecord('${a.id}')" style="font-size: 8px; padding: 2px 5px; background: #667eea; color: white; border: none; border-radius: 2px; cursor: pointer;" title="Editar llegada">
+                                                    <i class="fas fa-edit"></i>
+                                                </button>
+                                                <button onclick="window.Reports.deleteArrivalRecord('${a.id}')" style="font-size: 8px; padding: 2px 5px; background: #dc3545; color: white; border: none; border-radius: 2px; cursor: pointer;" title="Eliminar llegada">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </span>
                                         </div>
                                     `;
                                 }).join('')}
@@ -8492,6 +8535,161 @@ const Reports = {
                     </div>
                 `;
             }
+        }
+    },
+
+    async deleteArrivalRecord(arrivalId) {
+        if (!confirm('¿Eliminar esta llegada? Esta acción no se puede deshacer.')) return;
+        try {
+            // Eliminar del servidor primero
+            if (typeof API !== 'undefined' && API.baseURL && API.token && typeof API.deleteArrival === 'function') {
+                try {
+                    await API.deleteArrival(arrivalId);
+                    console.log('✅ Llegada eliminada del servidor:', arrivalId);
+                } catch (apiErr) {
+                    console.warn('⚠️ No se pudo eliminar llegada del servidor (se elimina localmente):', apiErr);
+                }
+            }
+            // Eliminar del cost_entries relacionado
+            try {
+                const allCosts = await DB.getAll('cost_entries') || [];
+                const relatedCost = allCosts.find(c => c.arrival_id === arrivalId);
+                if (relatedCost) {
+                    if (typeof API !== 'undefined' && API.baseURL && API.token && typeof API.deleteCost === 'function') {
+                        try { await API.deleteCost(relatedCost.id); } catch (e) {}
+                    }
+                    await DB.delete('cost_entries', relatedCost.id);
+                }
+            } catch (e) { console.warn('No se pudo limpiar cost_entry relacionado:', e); }
+            // Eliminar localmente
+            await DB.delete('agency_arrivals', arrivalId);
+            Utils.showNotification('Llegada eliminada correctamente', 'success');
+            await this.loadQuickCaptureArrivals();
+            // Refrescar resumen
+            await this.loadQuickCaptureCommissions();
+        } catch (error) {
+            console.error('Error eliminando llegada:', error);
+            Utils.showNotification('Error al eliminar llegada: ' + error.message, 'error');
+        }
+    },
+
+    async editArrivalRecord(arrivalId) {
+        try {
+            const arrival = await DB.get('agency_arrivals', arrivalId);
+            if (!arrival) {
+                Utils.showNotification('Llegada no encontrada', 'error');
+                return;
+            }
+            const agencies = await DB.getAll('catalog_agencies') || [];
+            const guides = await DB.getAll('catalog_guides') || [];
+            const branches = await DB.getAll('catalog_branches') || [];
+
+            const agencyOptions = agencies.map(a => `<option value="${a.id}" ${a.id === arrival.agency_id ? 'selected' : ''}>${a.name}</option>`).join('');
+            const guideOptions = '<option value="">Sin guía</option>' + guides.map(g => `<option value="${g.id}" ${g.id === arrival.guide_id ? 'selected' : ''}>${g.name}</option>`).join('');
+            const branchOptions = branches.map(b => `<option value="${b.id}" ${b.id === arrival.branch_id ? 'selected' : ''}>${b.name}</option>`).join('');
+
+            const modal = document.createElement('div');
+            modal.id = 'edit-arrival-modal';
+            modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:10000;display:flex;align-items:center;justify-content:center;';
+            modal.innerHTML = `
+                <div style="background:var(--color-bg-card,#1e1e2e);border-radius:8px;padding:24px;min-width:380px;max-width:500px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.4);">
+                    <h3 style="margin:0 0 16px;color:var(--color-text,#fff);font-size:16px;">Editar Llegada</h3>
+                    <div style="display:grid;gap:12px;">
+                        <div>
+                            <label style="font-size:11px;color:var(--color-text-secondary,#aaa);display:block;margin-bottom:4px;">Agencia</label>
+                            <select id="edit-arr-agency" style="width:100%;padding:7px;border-radius:4px;border:1px solid var(--color-border,#333);background:var(--color-bg,#13131f);color:var(--color-text,#fff);">${agencyOptions}</select>
+                        </div>
+                        <div>
+                            <label style="font-size:11px;color:var(--color-text-secondary,#aaa);display:block;margin-bottom:4px;">Guía</label>
+                            <select id="edit-arr-guide" style="width:100%;padding:7px;border-radius:4px;border:1px solid var(--color-border,#333);background:var(--color-bg,#13131f);color:var(--color-text,#fff);">${guideOptions}</select>
+                        </div>
+                        <div>
+                            <label style="font-size:11px;color:var(--color-text-secondary,#aaa);display:block;margin-bottom:4px;">Sucursal</label>
+                            <select id="edit-arr-branch" style="width:100%;padding:7px;border-radius:4px;border:1px solid var(--color-border,#333);background:var(--color-bg,#13131f);color:var(--color-text,#fff);">${branchOptions}</select>
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                            <div>
+                                <label style="font-size:11px;color:var(--color-text-secondary,#aaa);display:block;margin-bottom:4px;">Pasajeros</label>
+                                <input id="edit-arr-pax" type="number" min="0" value="${arrival.passengers || 0}" style="width:100%;padding:7px;border-radius:4px;border:1px solid var(--color-border,#333);background:var(--color-bg,#13131f);color:var(--color-text,#fff);">
+                            </div>
+                            <div>
+                                <label style="font-size:11px;color:var(--color-text-secondary,#aaa);display:block;margin-bottom:4px;">Costo (MXN)</label>
+                                <input id="edit-arr-fee" type="number" min="0" step="0.01" value="${parseFloat(arrival.arrival_fee || arrival.calculated_fee || 0).toFixed(2)}" style="width:100%;padding:7px;border-radius:4px;border:1px solid var(--color-border,#333);background:var(--color-bg,#13131f);color:var(--color-text,#fff);">
+                            </div>
+                        </div>
+                        <div>
+                            <label style="font-size:11px;color:var(--color-text-secondary,#aaa);display:block;margin-bottom:4px;">Fecha</label>
+                            <input id="edit-arr-date" type="date" value="${(arrival.date || '').split('T')[0]}" style="width:100%;padding:7px;border-radius:4px;border:1px solid var(--color-border,#333);background:var(--color-bg,#13131f);color:var(--color-text,#fff);">
+                        </div>
+                        <div>
+                            <label style="font-size:11px;color:var(--color-text-secondary,#aaa);display:block;margin-bottom:4px;">Notas</label>
+                            <input id="edit-arr-notes" type="text" value="${arrival.notes || ''}" style="width:100%;padding:7px;border-radius:4px;border:1px solid var(--color-border,#333);background:var(--color-bg,#13131f);color:var(--color-text,#fff);">
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end;">
+                        <button id="edit-arr-cancel" style="padding:8px 16px;border-radius:4px;border:1px solid var(--color-border,#333);background:transparent;color:var(--color-text,#fff);cursor:pointer;">Cancelar</button>
+                        <button id="edit-arr-save" style="padding:8px 16px;border-radius:4px;border:none;background:#667eea;color:white;cursor:pointer;font-weight:600;">Guardar</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+
+            document.getElementById('edit-arr-cancel').onclick = () => modal.remove();
+
+            document.getElementById('edit-arr-save').onclick = async () => {
+                const updatedArrival = {
+                    ...arrival,
+                    agency_id: document.getElementById('edit-arr-agency').value,
+                    guide_id: document.getElementById('edit-arr-guide').value || null,
+                    branch_id: document.getElementById('edit-arr-branch').value,
+                    passengers: parseInt(document.getElementById('edit-arr-pax').value) || 0,
+                    arrival_fee: parseFloat(document.getElementById('edit-arr-fee').value) || 0,
+                    calculated_fee: parseFloat(document.getElementById('edit-arr-fee').value) || 0,
+                    date: document.getElementById('edit-arr-date').value,
+                    notes: document.getElementById('edit-arr-notes').value,
+                    updated_at: new Date().toISOString(),
+                    sync_status: 'pending'
+                };
+                try {
+                    // Guardar en servidor
+                    if (typeof API !== 'undefined' && API.baseURL && API.token && typeof API.updateArrival === 'function') {
+                        try {
+                            const isUUID = (v) => /^[0-9a-f]{8}-/i.test(String(v || ''));
+                            const payload = { ...updatedArrival };
+                            if (!isUUID(payload.branch_id)) payload.branch_id = null;
+                            if (!isUUID(payload.agency_id)) payload.agency_id = null;
+                            if (!isUUID(payload.guide_id)) payload.guide_id = null;
+                            await API.updateArrival(arrivalId, payload);
+                        } catch (apiErr) {
+                            console.warn('⚠️ No se pudo actualizar en servidor:', apiErr);
+                        }
+                    }
+                    // Guardar localmente
+                    await DB.put('agency_arrivals', updatedArrival);
+                    // Actualizar cost_entry relacionado
+                    try {
+                        const allCosts = await DB.getAll('cost_entries') || [];
+                        const relatedCost = allCosts.find(c => c.arrival_id === arrivalId);
+                        if (relatedCost) {
+                            relatedCost.amount = updatedArrival.arrival_fee;
+                            relatedCost.passengers = updatedArrival.passengers;
+                            relatedCost.date = updatedArrival.date;
+                            relatedCost.branch_id = updatedArrival.branch_id;
+                            relatedCost.updated_at = new Date().toISOString();
+                            await DB.put('cost_entries', relatedCost);
+                        }
+                    } catch (e) {}
+                    modal.remove();
+                    Utils.showNotification('Llegada actualizada correctamente', 'success');
+                    await this.loadQuickCaptureArrivals();
+                    await this.loadQuickCaptureCommissions();
+                } catch (err) {
+                    Utils.showNotification('Error al guardar: ' + err.message, 'error');
+                }
+            };
+        } catch (error) {
+            console.error('Error editando llegada:', error);
+            Utils.showNotification('Error al abrir edición: ' + error.message, 'error');
         }
     },
 
@@ -13807,6 +14005,16 @@ const Reports = {
             document.getElementById('delete-archived-confirm-btn').onclick = async () => {
                 confirmModal.remove();
                 try {
+                    // Eliminar del servidor primero (bidireccional)
+                    if (typeof API !== 'undefined' && API.baseURL && API.token && typeof API.deleteArchivedReport === 'function') {
+                        try {
+                            await API.deleteArchivedReport(reportId);
+                            console.log('✅ Reporte archivado eliminado del servidor:', reportId);
+                        } catch (apiErr) {
+                            console.warn('⚠️ No se pudo eliminar del servidor (se elimina localmente):', apiErr);
+                        }
+                    }
+                    // Eliminar localmente
                     await DB.delete('archived_quick_captures', reportId);
                     Utils.showNotification('Reporte archivado eliminado', 'success');
                     await this.loadArchivedReports();
@@ -13822,6 +14030,15 @@ const Reports = {
                 resolve();
             };
         });
+    },
+
+    // Obtener la fecha LOCAL actual como YYYY-MM-DD (evita desfase de UTC)
+    getLocalDateStr() {
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = String(now.getMonth() + 1).padStart(2, '0');
+        const d = String(now.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
     },
 
     // Función helper para formatear fechas sin desfase de zona horaria
