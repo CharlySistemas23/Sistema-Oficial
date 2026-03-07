@@ -7664,12 +7664,12 @@ const Reports = {
                                         <td style="padding: 6px; font-size: 11px; text-align: center; color: #495057;">${c.quantity}</td>
                                         <td style="padding: 6px; font-size: 11px; text-align: right; color: #495057; font-weight: 500;">
                                             ${c.payments && Array.isArray(c.payments) && c.payments.length > 0 
-                                                ? c.payments.map(p => `${p.method === 'cash' ? 'Efectivo' : p.method === 'card' ? 'Tarjeta' : p.method} ${p.currency || 'MXN'} $${(p.amount || 0).toFixed(2)}`).join('<br>')
-                                                : `${c.currency || 'MXN'} $${(c.total || 0).toFixed(2)}`
+                                                ? c.payments.map(p => `${p.method === 'cash' ? 'Efectivo' : p.method === 'card' ? 'Tarjeta' : p.method} ${p.currency || 'MXN'} $${(parseFloat(p.amount) || 0).toFixed(2)}`).join('<br>')
+                                                : `${c.currency || 'MXN'} $${(parseFloat(c.total) || 0).toFixed(2)}`
                                             }
                                         </td>
-                                        <td style="padding: 6px; font-size: 11px; text-align: right; font-weight: 600; color: #28a745;">$${c.total.toFixed(2)}</td>
-                                        <td style="padding: 6px; font-size: 11px; text-align: right; color: #dc3545; font-weight: 500;">$${(c.merchandise_cost || 0).toFixed(2)}</td>
+                                        <td style="padding: 6px; font-size: 11px; text-align: right; font-weight: 600; color: #28a745;">$${(parseFloat(c.total) || 0).toFixed(2)}</td>
+                                        <td style="padding: 6px; font-size: 11px; text-align: right; color: #dc3545; font-weight: 500;">$${(parseFloat(c.merchandise_cost) || 0).toFixed(2)}</td>
                                         <td style="padding: 6px; text-align: center;">
                                             <div style="display: flex; gap: 4px; justify-content: center;">
                                                 <button class="btn-primary btn-xs" onclick="window.Reports.editPendingCapture('${c.id}')" title="Editar" style="padding: 4px 6px; font-size: 10px;">
@@ -8190,13 +8190,13 @@ const Reports = {
                                             ${c.payments && Array.isArray(c.payments) && c.payments.length > 0 
                                                 ? c.payments.map(p => {
                                                     const methodLabel = p.method === 'cash' ? 'Efectivo' : p.method === 'card' ? 'Tarjeta' : p.method === 'transfer' ? 'Transferencia' : p.method || 'Otro';
-                                                    return `${methodLabel} ${p.currency || 'MXN'} $${(p.amount || 0).toFixed(2)}`;
+                                                    return `${methodLabel} ${p.currency || 'MXN'} $${(parseFloat(p.amount) || 0).toFixed(2)}`;
                                                 }).join('<br>')
-                                                : `${c.currency || 'MXN'} $${(c.total || 0).toFixed(2)}`
+                                                : `${c.currency || 'MXN'} $${(parseFloat(c.total) || 0).toFixed(2)}`
                                             }
                                         </td>
-                                        <td style="padding: 6px; font-size: 11px; text-align: right; font-weight: 600; color: #28a745;">$${(c.total || 0).toFixed(2)}</td>
-                                        <td style="padding: 6px; font-size: 11px; text-align: right; color: #dc3545; font-weight: 500;">$${(c.merchandise_cost || 0).toFixed(2)}</td>
+                                        <td style="padding: 6px; font-size: 11px; text-align: right; font-weight: 600; color: #28a745;">$${(parseFloat(c.total) || 0).toFixed(2)}</td>
+                                        <td style="padding: 6px; font-size: 11px; text-align: right; color: #dc3545; font-weight: 500;">$${(parseFloat(c.merchandise_cost) || 0).toFixed(2)}</td>
                                         <td style="padding: 6px; font-size: 10px; color: #6c757d; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${c.notes || ''}">${c.notes || '-'}</td>
                                         <td style="padding: 6px; text-align: center;">
                                             <div style="display: flex; gap: 4px; justify-content: center;">
@@ -9469,19 +9469,19 @@ const Reports = {
                                         <tr style="border-bottom: 1px solid var(--color-border-light);">
                                             <td style="padding: var(--spacing-xs);">${s.seller?.name || 'N/A'}</td>
                                             <td style="padding: var(--spacing-xs); text-align: center;">${s.sales}</td>
-                                            <td style="padding: var(--spacing-xs); text-align: right; font-weight: 600;">$${s.total.toFixed(2)}</td>
-                                            <td style="padding: var(--spacing-xs); text-align: right;">${s.commissions.USD ? '$' + s.commissions.USD.toFixed(2) : '-'}</td>
-                                            <td style="padding: var(--spacing-xs); text-align: right;">${s.commissions.MXN ? '$' + s.commissions.MXN.toFixed(2) : '-'}</td>
-                                            <td style="padding: var(--spacing-xs); text-align: right;">${s.commissions.CAD ? '$' + s.commissions.CAD.toFixed(2) : '-'}</td>
+                                            <td style="padding: var(--spacing-xs); text-align: right; font-weight: 600;">$${(parseFloat(s.total) || 0).toFixed(2)}</td>
+                                            <td style="padding: var(--spacing-xs); text-align: right;">${s.commissions.USD ? '$' + (parseFloat(s.commissions.USD) || 0).toFixed(2) : '-'}</td>
+                                            <td style="padding: var(--spacing-xs); text-align: right;">${s.commissions.MXN ? '$' + (parseFloat(s.commissions.MXN) || 0).toFixed(2) : '-'}</td>
+                                            <td style="padding: var(--spacing-xs); text-align: right;">${s.commissions.CAD ? '$' + (parseFloat(s.commissions.CAD) || 0).toFixed(2) : '-'}</td>
                                         </tr>
                                     `).join('')}
                                     <tr style="background: var(--color-bg-secondary); font-weight: 600;">
                                         <td style="padding: var(--spacing-xs);">TOTAL</td>
                                         <td style="padding: var(--spacing-xs); text-align: center;">${sellerEntries.reduce((sum, s) => sum + s.sales, 0)}</td>
-                                        <td style="padding: var(--spacing-xs); text-align: right;">$${sellerEntries.reduce((sum, s) => sum + s.total, 0).toFixed(2)}</td>
-                                        <td style="padding: var(--spacing-xs); text-align: right;">$${sellerEntries.reduce((sum, s) => sum + (s.commissions.USD || 0), 0).toFixed(2)}</td>
-                                        <td style="padding: var(--spacing-xs); text-align: right;">$${sellerEntries.reduce((sum, s) => sum + (s.commissions.MXN || 0), 0).toFixed(2)}</td>
-                                        <td style="padding: var(--spacing-xs); text-align: right;">$${sellerEntries.reduce((sum, s) => sum + (s.commissions.CAD || 0), 0).toFixed(2)}</td>
+                                        <td style="padding: var(--spacing-xs); text-align: right;">$${sellerEntries.reduce((sum, s) => sum + (parseFloat(s.total) || 0), 0).toFixed(2)}</td>
+                                        <td style="padding: var(--spacing-xs); text-align: right;">$${sellerEntries.reduce((sum, s) => sum + (parseFloat(s.commissions.USD) || 0), 0).toFixed(2)}</td>
+                                        <td style="padding: var(--spacing-xs); text-align: right;">$${sellerEntries.reduce((sum, s) => sum + (parseFloat(s.commissions.MXN) || 0), 0).toFixed(2)}</td>
+                                        <td style="padding: var(--spacing-xs); text-align: right;">$${sellerEntries.reduce((sum, s) => sum + (parseFloat(s.commissions.CAD) || 0), 0).toFixed(2)}</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -9515,19 +9515,19 @@ const Reports = {
                                         <tr style="border-bottom: 1px solid var(--color-border-light);">
                                             <td style="padding: var(--spacing-xs);">${g.guide?.name || 'N/A'}</td>
                                             <td style="padding: var(--spacing-xs); text-align: center;">${g.sales}</td>
-                                            <td style="padding: var(--spacing-xs); text-align: right; font-weight: 600;">$${g.total.toFixed(2)}</td>
-                                            <td style="padding: var(--spacing-xs); text-align: right;">${g.commissions.USD ? '$' + g.commissions.USD.toFixed(2) : '-'}</td>
-                                            <td style="padding: var(--spacing-xs); text-align: right;">${g.commissions.MXN ? '$' + g.commissions.MXN.toFixed(2) : '-'}</td>
-                                            <td style="padding: var(--spacing-xs); text-align: right;">${g.commissions.CAD ? '$' + g.commissions.CAD.toFixed(2) : '-'}</td>
+                                            <td style="padding: var(--spacing-xs); text-align: right; font-weight: 600;">$${(parseFloat(g.total) || 0).toFixed(2)}</td>
+                                            <td style="padding: var(--spacing-xs); text-align: right;">${g.commissions.USD ? '$' + (parseFloat(g.commissions.USD) || 0).toFixed(2) : '-'}</td>
+                                            <td style="padding: var(--spacing-xs); text-align: right;">${g.commissions.MXN ? '$' + (parseFloat(g.commissions.MXN) || 0).toFixed(2) : '-'}</td>
+                                            <td style="padding: var(--spacing-xs); text-align: right;">${g.commissions.CAD ? '$' + (parseFloat(g.commissions.CAD) || 0).toFixed(2) : '-'}</td>
                                         </tr>
                                     `).join('')}
                                     <tr style="background: var(--color-bg-secondary); font-weight: 600;">
                                         <td style="padding: var(--spacing-xs);">TOTAL</td>
                                         <td style="padding: var(--spacing-xs); text-align: center;">${guideEntries.reduce((sum, g) => sum + g.sales, 0)}</td>
-                                        <td style="padding: var(--spacing-xs); text-align: right;">$${guideEntries.reduce((sum, g) => sum + g.total, 0).toFixed(2)}</td>
-                                        <td style="padding: var(--spacing-xs); text-align: right;">$${guideEntries.reduce((sum, g) => sum + (g.commissions.USD || 0), 0).toFixed(2)}</td>
-                                        <td style="padding: var(--spacing-xs); text-align: right;">$${guideEntries.reduce((sum, g) => sum + (g.commissions.MXN || 0), 0).toFixed(2)}</td>
-                                        <td style="padding: var(--spacing-xs); text-align: right;">$${guideEntries.reduce((sum, g) => sum + (g.commissions.CAD || 0), 0).toFixed(2)}</td>
+                                        <td style="padding: var(--spacing-xs); text-align: right;">$${guideEntries.reduce((sum, g) => sum + (parseFloat(g.total) || 0), 0).toFixed(2)}</td>
+                                        <td style="padding: var(--spacing-xs); text-align: right;">$${guideEntries.reduce((sum, g) => sum + (parseFloat(g.commissions.USD) || 0), 0).toFixed(2)}</td>
+                                        <td style="padding: var(--spacing-xs); text-align: right;">$${guideEntries.reduce((sum, g) => sum + (parseFloat(g.commissions.MXN) || 0), 0).toFixed(2)}</td>
+                                        <td style="padding: var(--spacing-xs); text-align: right;">$${guideEntries.reduce((sum, g) => sum + (parseFloat(g.commissions.CAD) || 0), 0).toFixed(2)}</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -9939,14 +9939,15 @@ const Reports = {
             // Calcular totales
             const totals = { USD: 0, MXN: 0, CAD: 0 };
             captures.forEach(c => {
-                totals[c.currency] = (totals[c.currency] || 0) + c.total;
+                const totalNum = parseFloat(c.total) || 0;
+                totals[c.currency] = (totals[c.currency] || 0) + totalNum;
             });
 
             // Crear CSV
             let csv = 'Fecha,Hora,Sucursal,Vendedor,Guía,Agencia,Producto,Cantidad,Moneda,Total\n';
             captures.forEach(c => {
                 const time = new Date(c.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
-                csv += `${c.date},${time},"${c.branch_name || ''}","${c.seller_name || ''}","${c.guide_name || ''}","${c.agency_name || ''}","${c.product}",${c.quantity},${c.currency},${c.total.toFixed(2)}\n`;
+                csv += `${c.date},${time},"${c.branch_name || ''}","${c.seller_name || ''}","${c.guide_name || ''}","${c.agency_name || ''}","${c.product}",${c.quantity},${c.currency},${(parseFloat(c.total) || 0).toFixed(2)}\n`;
             });
 
             csv += `\n,,RESUMEN\n`;
@@ -12882,8 +12883,8 @@ const Reports = {
                                                         <td style="padding: var(--spacing-xs);">${c.seller_name || 'N/A'}</td>
                                                         <td style="padding: var(--spacing-xs);">${c.product || ''}</td>
                                                         <td style="padding: var(--spacing-xs); text-align: center;">${c.quantity || 1}</td>
-                                                        <td style="padding: var(--spacing-xs); text-align: right; font-weight: 600;">$${(c.total || 0).toFixed(2)} ${c.currency || ''}</td>
-                                                        <td style="padding: var(--spacing-xs); text-align: right; color: var(--color-text-secondary);">$${(c.merchandise_cost || 0).toFixed(2)}</td>
+                                                        <td style="padding: var(--spacing-xs); text-align: right; font-weight: 600;">$${(parseFloat(c.total) || 0).toFixed(2)} ${c.currency || ''}</td>
+                                                        <td style="padding: var(--spacing-xs); text-align: right; color: var(--color-text-secondary);">$${(parseFloat(c.merchandise_cost) || 0).toFixed(2)}</td>
                                                     </tr>
                                                 `;
                                             }).join('')}
@@ -14274,8 +14275,8 @@ const Reports = {
                         product: serverCapture.product,
                         quantity: serverCapture.quantity,
                         currency: serverCapture.currency,
-                        total: serverCapture.total,
-                        merchandise_cost: serverCapture.merchandise_cost || 0,
+                        total: parseFloat(serverCapture.total) || 0,
+                        merchandise_cost: parseFloat(serverCapture.merchandise_cost) || 0,
                         notes: serverCapture.notes,
                         is_street: serverCapture.is_street || false,
                         payment_method: serverCapture.payment_method,
@@ -14357,8 +14358,8 @@ const Reports = {
                         product: capture.product,
                         quantity: capture.quantity,
                         currency: capture.currency,
-                        total: capture.total,
-                        merchandise_cost: capture.merchandise_cost || 0,
+                        total: parseFloat(capture.total) || 0,
+                        merchandise_cost: parseFloat(capture.merchandise_cost) || 0,
                         notes: capture.notes,
                         is_street: capture.is_street || false,
                         payment_method: capture.payment_method,
@@ -14415,8 +14416,8 @@ const Reports = {
                         product: capture.product,
                         quantity: capture.quantity,
                         currency: capture.currency,
-                        total: capture.total,
-                        merchandise_cost: capture.merchandise_cost || 0,
+                        total: parseFloat(capture.total) || 0,
+                        merchandise_cost: parseFloat(capture.merchandise_cost) || 0,
                         notes: capture.notes,
                         is_street: capture.is_street || false,
                         payment_method: capture.payment_method,
