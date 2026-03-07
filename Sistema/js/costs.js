@@ -1688,6 +1688,7 @@ const Costs = {
             }
             
             // PASO 3: Eliminar duplicados antes de mostrar
+            const costsBeforeDedup = costs;
             const costsByKey = new Map();
             for (const cost of costs) {
                 const key = `${cost.date || cost.created_at || ''}_${cost.category || ''}_${cost.branch_id || 'no-branch'}_${cost.amount || 0}`;
@@ -1709,7 +1710,19 @@ const Costs = {
                 }
             }
             costs = Array.from(costsByKey.values());
+            const keptIds = new Set(costs.map(c => c.id));
             console.log(`🔍 [Paso 3 Costs] Deduplicación: ${costs.length} costos únicos`);
+
+            // Opcional: limpiar duplicados de IndexedDB cuando hay muchos (bug de sincronización previo)
+            if (costsBeforeDedup.length >= costs.length * 2) {
+                let cleaned = 0;
+                for (const c of costsBeforeDedup) {
+                    if (c && c.id && !keptIds.has(c.id)) {
+                        try { await DB.delete('cost_entries', c.id); cleaned++; } catch (_) {}
+                    }
+                }
+                if (cleaned > 0) console.log(`🧹 [Costs] Limpieza IndexedDB: ${cleaned} duplicados eliminados`);
+            }
             
             const typeFilter = document.getElementById('cost-type-filter')?.value;
             const categoryFilter = document.getElementById('cost-category-filter')?.value;
@@ -2038,7 +2051,10 @@ const Costs = {
         const container = document.getElementById('category-chart');
         if (!container) return;
 
-        const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
+        const branchFilter = document.getElementById('cost-branch-filter');
+        const currentBranchId = branchFilter?.value && branchFilter.value !== ''
+            ? branchFilter.value
+            : (typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null);
         const costs = await this.getFilteredCosts({ branchId: currentBranchId });
         const categoryStats = {};
 
@@ -2087,7 +2103,10 @@ const Costs = {
         const container = document.getElementById('monthly-trend-chart');
         if (!container) return;
 
-        const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
+        const branchFilter = document.getElementById('cost-branch-filter');
+        const currentBranchId = branchFilter?.value && branchFilter.value !== ''
+            ? branchFilter.value
+            : (typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null);
         const costs = await this.getFilteredCosts({ branchId: currentBranchId });
         const monthlyStats = {};
 
@@ -2140,7 +2159,10 @@ const Costs = {
         const container = document.getElementById('type-distribution-chart');
         if (!container) return;
 
-        const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
+        const branchFilter = document.getElementById('cost-branch-filter');
+        const currentBranchId = branchFilter?.value && branchFilter.value !== ''
+            ? branchFilter.value
+            : (typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null);
         const costs = await this.getFilteredCosts({ branchId: currentBranchId });
         const variable = costs.filter(c => c.type === 'variable').reduce((sum, c) => sum + (c.amount || 0), 0);
         const fixed = costs.filter(c => c.type === 'fijo').reduce((sum, c) => sum + (c.amount || 0), 0);
@@ -2174,7 +2196,10 @@ const Costs = {
         const container = document.getElementById('branch-chart');
         if (!container) return;
 
-        const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
+        const branchFilter = document.getElementById('cost-branch-filter');
+        const currentBranchId = branchFilter?.value && branchFilter.value !== ''
+            ? branchFilter.value
+            : (typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null);
         const costs = await this.getFilteredCosts({ branchId: currentBranchId });
         const branches = await DB.getAll('catalog_branches') || [];
         const branchStats = {};
@@ -3102,6 +3127,20 @@ const Costs = {
             return;
         }
 
+        // Encontrar todos los duplicados (mismo costo lógico con distintos ids por bug de sincronización)
+        const allCosts = await DB.getAll('cost_entries', null, null, { filterByBranch: false }) || [];
+        const serverId = cost.server_id || (cost.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(cost.id)) ? cost.id : null);
+        const logicalKey = `${cost.date || cost.created_at || ''}_${cost.category || ''}_${cost.branch_id || 'no-branch'}_${cost.amount || 0}_${(cost.description || cost.notes || '').slice(0, 100)}`;
+        const idsToDelete = new Set();
+        idsToDelete.add(costId);
+        for (const c of allCosts) {
+            if (!c || !c.id) continue;
+            if (c.id === costId) continue;
+            const sameServer = serverId && (c.server_id === serverId || c.id === serverId);
+            const sameLogical = `${c.date || c.created_at || ''}_${c.category || ''}_${c.branch_id || 'no-branch'}_${c.amount || 0}_${(c.description || c.notes || '').slice(0, 100)}` === logicalKey;
+            if (sameServer || sameLogical) idsToDelete.add(c.id);
+        }
+
         this.removeCostFromDOM(costId, cost.amount || 0);
         Utils.showNotification('Costo eliminado', 'success');
 
@@ -3135,21 +3174,20 @@ const Costs = {
             }
 
             // ELIMINAR EN AMBOS LADOS: Backend (Railway) y Frontend (IndexedDB)
-            // Primero intentar eliminar del backend si está disponible
+            const apiIdToDelete = serverId || costId;
             let costApiDeleted = false;
             if (typeof API !== 'undefined' && API.baseURL && API.token && API.deleteCost) {
                 try {
                     console.log('🗑️ Eliminando costo del servidor...');
-                    await API.deleteCost(costId);
+                    await API.deleteCost(apiIdToDelete);
                     costApiDeleted = true;
                     console.log('✅ Costo eliminado del servidor');
                 } catch (apiError) {
                     console.warn('⚠️ Error eliminando del servidor (continuando con eliminación local):', apiError);
-                    // Continuar con eliminación local aunque falle el backend
                 }
             }
-            
-            // Guardar metadata del costo antes de eliminarlo para sincronización
+
+            // Guardar metadata para sincronización (por cada id a eliminar)
             const costMetadata = {
                 id: cost.id,
                 type: cost.type,
@@ -3157,37 +3195,31 @@ const Costs = {
                 branch_id: cost.branch_id,
                 deleted_at: new Date().toISOString()
             };
-            
-            // Agregar a cola de sincronización si NO se eliminó con API (o como respaldo)
-            if (typeof SyncManager !== 'undefined') {
+            if (typeof SyncManager !== 'undefined' && !costApiDeleted) {
                 try {
-                    if (!costApiDeleted) {
-                        // Si no se eliminó del backend, agregar a cola para sincronización
-                        await DB.put('sync_deleted_items', {
-                            id: costId,
-                            entity_type: 'cost_entry',
-                            metadata: costMetadata,
-                            deleted_at: new Date().toISOString()
-                        });
-                        await SyncManager.addToQueue('cost_entry', costId, 'delete');
-                    }
+                    await DB.put('sync_deleted_items', {
+                        id: costId,
+                        entity_type: 'cost_entry',
+                        metadata: costMetadata,
+                        deleted_at: new Date().toISOString()
+                    });
+                    await SyncManager.addToQueue('cost_entry', apiIdToDelete, 'delete');
                 } catch (syncError) {
                     console.error('Error guardando metadata para sincronización:', syncError);
                 }
             }
-            
-            // Eliminar el costo de la base de datos local
+
+            // Eliminar el costo y todos sus duplicados de IndexedDB
             try {
-                await DB.delete('cost_entries', costId);
-                
-                // Verificar que realmente se eliminó
+                for (const id of idsToDelete) {
+                    try { await DB.delete('cost_entries', id); } catch (_) {}
+                }
                 let verifyDeleted = null;
                 for (let attempt = 0; attempt < 3; attempt++) {
                     await new Promise(resolve => setTimeout(resolve, 50 * (attempt + 1)));
                     verifyDeleted = await DB.get('cost_entries', costId);
                     if (!verifyDeleted) break;
                 }
-                
                 if (verifyDeleted) {
                     console.error('⚠️ ERROR: El costo aún existe después de eliminarlo. ID:', costId);
                     Utils.showNotification('Advertencia: La eliminación puede no haberse completado. Recarga la página si el costo sigue apareciendo.', 'warning');
@@ -4116,36 +4148,6 @@ const Costs = {
         }
     },
 
-    async editCost(costId) {
-        await this.showAddForm(costId);
-    },
-
-    async deleteCost(costId) {
-        if (!confirm('¿Estás seguro de eliminar este costo?')) return;
-
-        const cost = await DB.get('cost_entries', costId);
-        if (cost) {
-            this.removeCostFromDOM(costId, cost.amount || 0);
-            Utils.showNotification('Costo eliminado correctamente', 'success');
-        }
-
-        try {
-            if (typeof API !== 'undefined' && API.baseURL && API.token && API.deleteCost) {
-                await API.deleteCost(costId);
-            }
-        } catch (apiError) {
-            console.warn('⚠️ Error eliminando en API:', apiError);
-        }
-
-        try {
-            await DB.delete('cost_entries', costId);
-        } catch (error) {
-            console.error('Error deleting cost:', error);
-            Utils.showNotification(`Error al eliminar costo: ${error.message}`, 'error');
-            const activeTab = document.querySelector('#costs-tabs .tab-btn.active')?.dataset.tab || 'costs';
-            await this.loadTab(activeTab);
-        }
-    }
 };
 
 window.Costs = Costs;
