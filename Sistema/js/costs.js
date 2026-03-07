@@ -21,15 +21,14 @@ const Costs = {
         // Luego aplicaremos el filtro manualmente para tener control total
         let costs = await DB.getAll('cost_entries') || [];
 
-        // Normalizar branch_id para comparación flexible
-        const normalizedBranchId = branchId ? String(branchId).trim() : null;
+        // Normalizar branch_id para comparación flexible (case-insensitive para compatibilidad)
+        const normalizedBranchId = branchId ? String(branchId).trim().toLowerCase() : null;
 
         // Aplicar filtro de sucursal
         if (normalizedBranchId && normalizedBranchId !== '') {
-            // Filtrar por sucursal específica
+            // Filtrar por sucursal específica (comparación case-insensitive)
             costs = costs.filter(c => {
-                const costBranchId = c.branch_id ? String(c.branch_id).trim() : null;
-                // Si el costo no tiene branch_id, excluirlo cuando se filtra por sucursal específica
+                const costBranchId = c.branch_id ? String(c.branch_id).trim().toLowerCase() : null;
                 if (!costBranchId) return false;
                 return costBranchId === normalizedBranchId;
             });
@@ -3159,9 +3158,30 @@ const Costs = {
             return;
         }
 
+        const serverId = cost.server_id || (cost.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(cost.id)) ? cost.id : null);
+        const apiIdToDelete = serverId || costId;
+
+        // CRÍTICO: Registrar eliminación INMEDIATAMENTE para evitar que el sync en background re-inserte el costo
+        // (race: API.deleteCost puede no haber terminado cuando el refresh trae datos del servidor)
+        const costMetadata = {
+            id: cost.id,
+            server_id: apiIdToDelete,
+            type: cost.type,
+            category: cost.category,
+            branch_id: cost.branch_id,
+            deleted_at: new Date().toISOString()
+        };
+        try {
+            await DB.put('sync_deleted_items', {
+                id: costId,
+                entity_type: 'cost_entry',
+                metadata: costMetadata,
+                deleted_at: new Date().toISOString()
+            });
+        } catch (e) { console.warn('Error guardando sync_deleted_items:', e); }
+
         // Encontrar todos los duplicados (mismo costo lógico con distintos ids por bug de sincronización)
         const allCosts = await DB.getAll('cost_entries', null, null, { filterByBranch: false }) || [];
-        const serverId = cost.server_id || (cost.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(cost.id)) ? cost.id : null);
         const logicalKey = `${cost.date || cost.created_at || ''}_${cost.category || ''}_${cost.branch_id || 'no-branch'}_${cost.amount || 0}_${(cost.description || cost.notes || '').slice(0, 100)}`;
         const idsToDelete = new Set();
         idsToDelete.add(costId);
@@ -3207,7 +3227,6 @@ const Costs = {
             }
 
             // ELIMINAR EN AMBOS LADOS: Backend (Railway) y Frontend (IndexedDB)
-            const apiIdToDelete = serverId || costId;
             let costApiDeleted = false;
             if (typeof API !== 'undefined' && API.baseURL && API.token && API.deleteCost) {
                 try {
@@ -3220,26 +3239,12 @@ const Costs = {
                 }
             }
 
-            // Guardar metadata para sincronización (incluir server_id para evitar re-insertar desde API)
-            const costMetadata = {
-                id: cost.id,
-                server_id: apiIdToDelete,
-                type: cost.type,
-                category: cost.category,
-                branch_id: cost.branch_id,
-                deleted_at: new Date().toISOString()
-            };
+            // Cola de sincronización para eliminar en servidor (si falló la API)
             if (typeof SyncManager !== 'undefined' && !costApiDeleted) {
                 try {
-                    await DB.put('sync_deleted_items', {
-                        id: costId,
-                        entity_type: 'cost_entry',
-                        metadata: costMetadata,
-                        deleted_at: new Date().toISOString()
-                    });
                     await SyncManager.addToQueue('cost_entry', apiIdToDelete, 'delete');
                 } catch (syncError) {
-                    console.error('Error guardando metadata para sincronización:', syncError);
+                    console.error('Error agregando eliminación a cola de sync:', syncError);
                 }
             }
 
@@ -3698,6 +3703,10 @@ const Costs = {
                         cost.id = createdCost.id;
                     }
                     Object.assign(cost, createdCost);
+                    // Preservar branch_id si el servidor devolvió null (p.ej. por sanitización de UUID)
+                    if ((createdCost?.branch_id == null || createdCost?.branch_id === '') && branchId) {
+                        cost.branch_id = branchId;
+                    }
                     savedWithAPI = true;
                     console.log('✅ Pago de llegada registrado en servidor');
                 } catch (apiError) {
