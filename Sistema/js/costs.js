@@ -837,7 +837,7 @@ const Costs = {
                 }
                 
                 const cost = arrivalCosts.find(c => c.arrival_id === arrival.id);
-                const amount = cost?.amount || arrival.arrival_fee || 0;
+                const amount = parseFloat(cost?.amount ?? arrival.arrival_fee ?? 0) || 0;
                 
                 const formattedDate = arrivalDateStr ? Utils.formatDate(arrivalDateStr, 'DD/MM/YYYY') : '-';
                 
@@ -1509,9 +1509,16 @@ const Costs = {
                         let uploadedCount = 0;
                         for (const [key, localCost] of costsByKey) {
                             try {
+                                // Validar monto: el backend requiere amount > 0 (número)
+                                const amountNum = parseFloat(localCost.amount ?? localCost.monto ?? 0);
+                                if (isNaN(amountNum) || amountNum <= 0) {
+                                    console.warn(`⚠️ [Paso 1 Costs] Omitiendo costo ${localCost.id}: monto inválido (${localCost.amount ?? localCost.monto})`);
+                                    continue;
+                                }
+                                const payloadToSync = { ...localCost, amount: amountNum };
                                 console.log(`📤 [Paso 1 Costs] Subiendo costo local al servidor: ${localCost.id}`);
                                 
-                                const createdCost = await API.createCost(localCost);
+                                const createdCost = await API.createCost(payloadToSync);
                                 if (createdCost && createdCost.id) {
                                     const allLocalCosts = await DB.getAll('cost_entries') || [];
                                     const costsToUpdate = allLocalCosts.filter(c => {
@@ -2912,11 +2919,17 @@ const Costs = {
             branchId = null;
         }
 
+        const amount = parseFloat(document.getElementById('cost-amount').value);
+        if (isNaN(amount) || amount <= 0) {
+            Utils.showNotification('El monto debe ser un número mayor a 0', 'error');
+            return;
+        }
+
         const cost = {
             id: costId || Utils.generateId(),
             type: document.getElementById('cost-type').value,
             category: document.getElementById('cost-category').value,
-            amount: parseFloat(document.getElementById('cost-amount').value),
+            amount: amount,
             branch_id: branchId,
             date: document.getElementById('cost-date').value,
             period_type: periodType,
