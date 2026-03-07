@@ -298,10 +298,11 @@ const ProfitCalculator = {
                 const arrivalCostEntries = allCosts.filter(c => {
                     const costDate = c.date || c.created_at;
                     const costDateStr = typeof costDate === 'string' ? costDate.split('T')[0] : new Date(costDate).toISOString().split('T')[0];
-                    const costBranch = String(c.branch_id || '').trim();
+                    const costBranch = String(c.branch_id || '').trim().toLowerCase();
+                    const normBranchId = branchIdStr.toLowerCase();
                     return c.category === 'pago_llegadas' && 
                            costDateStr === dateYYYYMMDD &&
-                           (costBranch === branchIdStr || !costBranch);
+                           (costBranch === normBranchId || !costBranch);
                 });
                 
                 if (arrivalCostEntries.length > 0) {
