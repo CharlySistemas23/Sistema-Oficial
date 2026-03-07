@@ -10077,7 +10077,7 @@ const Reports = {
                     for (const cost of monthlyCosts) {
                         const costDate = new Date(cost.date || cost.created_at);
                         const daysInMonth = new Date(costDate.getFullYear(), costDate.getMonth() + 1, 0).getDate();
-                        totalOperatingCosts += (cost.amount || 0) / daysInMonth;
+                        totalOperatingCosts += (parseFloat(cost.amount) || 0) / daysInMonth;
                     }
 
                     // Semanales
@@ -10090,7 +10090,7 @@ const Reports = {
                                targetDate.getFullYear() === costDate.getFullYear();
                     });
                     for (const cost of weeklyCosts) {
-                        totalOperatingCosts += (cost.amount || 0) / 7;
+                        totalOperatingCosts += (parseFloat(cost.amount) || 0) / 7;
                     }
 
                     // Anuales
@@ -10101,7 +10101,7 @@ const Reports = {
                     });
                     for (const cost of annualCosts) {
                         const daysInYear = ((targetDate.getFullYear() % 4 === 0 && targetDate.getFullYear() % 100 !== 0) || (targetDate.getFullYear() % 400 === 0)) ? 366 : 365;
-                        totalOperatingCosts += (cost.amount || 0) / daysInYear;
+                        totalOperatingCosts += (parseFloat(cost.amount) || 0) / daysInYear;
                     }
 
                     // Variables/diarios
@@ -10112,10 +10112,11 @@ const Reports = {
                                (c.period_type === 'one_time' || c.period_type === 'daily' || !c.period_type);
                     });
                     for (const cost of variableCosts) {
+                        const amt = parseFloat(cost.amount) || 0;
                         if (cost.category === 'comisiones_bancarias') {
-                            bankCommissions += (cost.amount || 0);
+                            bankCommissions += amt;
                         } else {
-                            totalOperatingCosts += (cost.amount || 0);
+                            totalOperatingCosts += amt;
                         }
                     }
                 }
@@ -11195,7 +11196,7 @@ const Reports = {
                     for (const cost of monthlyCosts) {
                         // Usar el mes objetivo (targetDate) para calcular días del mes, no el mes del costo
                         const daysInMonth = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0).getDate();
-                        const dailyAmount = (cost.amount || 0) / daysInMonth;
+                        const dailyAmount = (parseFloat(cost.amount) || 0) / daysInMonth;
                         fixedCostsProrated += dailyAmount;
                     }
 
@@ -11211,7 +11212,7 @@ const Reports = {
                         return isWeekly && isRecurring && isValidCategory && isSameYear;
                     });
                     for (const cost of weeklyCosts) {
-                        const dailyAmount = (cost.amount || 0) / 7;
+                        const dailyAmount = (parseFloat(cost.amount) || 0) / 7;
                         fixedCostsProrated += dailyAmount;
                     }
 
@@ -11228,7 +11229,7 @@ const Reports = {
                     });
                     for (const cost of annualCosts) {
                         const daysInYear = ((targetDate.getFullYear() % 4 === 0 && targetDate.getFullYear() % 100 !== 0) || (targetDate.getFullYear() % 400 === 0)) ? 366 : 365;
-                        const dailyAmount = (cost.amount || 0) / daysInYear;
+                        const dailyAmount = (parseFloat(cost.amount) || 0) / daysInYear;
                         fixedCostsProrated += dailyAmount;
                     }
 
@@ -11243,7 +11244,7 @@ const Reports = {
                                (c.period_type === 'one_time' || c.period_type === 'daily' || !c.period_type);
                     });
                     for (const cost of variableCosts) {
-                        variableCostsDaily += (cost.amount || 0);
+                        variableCostsDaily += (parseFloat(cost.amount) || 0);
                     }
                     
                     // También buscar comisiones bancarias en cost_entries para el día
@@ -11255,7 +11256,7 @@ const Reports = {
                                c.category === 'comisiones_bancarias';
                     });
                     for (const cost of bankCommissionCosts) {
-                        bankCommissions += (cost.amount || 0);
+                        bankCommissions += (parseFloat(cost.amount) || 0);
                     }
                 }
                 
@@ -11808,11 +11809,11 @@ const Reports = {
                             total_ventas_mxn: 0
                         };
                     }
-                    let captureTotalMXN = capture.total;
+                    let captureTotalMXN = parseFloat(capture.total) || 0;
                     if (capture.currency === 'USD') {
-                        captureTotalMXN = capture.total * usdRate;
+                        captureTotalMXN = (parseFloat(capture.total) || 0) * usdRate;
                     } else if (capture.currency === 'CAD') {
-                        captureTotalMXN = capture.total * cadRate;
+                        captureTotalMXN = (parseFloat(capture.total) || 0) * cadRate;
                     }
                     salesByAgency[capture.agency_id].ventas++;
                     salesByAgency[capture.agency_id].total_ventas_mxn += captureTotalMXN;
@@ -11840,7 +11841,7 @@ const Reports = {
                     cierre_percent: parseFloat(cierrePercent.toFixed(2)),
                     ticket_promedio: parseFloat(ticketPromedioUSD.toFixed(2)), // En USD
                     ticket_promedio_currency: 'USD',
-                    total_ventas_mxn: parseFloat(agencyData.total_ventas_mxn.toFixed(2))
+                    total_ventas_mxn: parseFloat((parseFloat(agencyData.total_ventas_mxn) || 0).toFixed(2))
                 });
             });
 
@@ -11859,11 +11860,11 @@ const Reports = {
                             total_ventas_mxn: 0
                         };
                     }
-                    let captureTotalMXN = capture.total;
+                    let captureTotalMXN = parseFloat(capture.total) || 0;
                     if (capture.currency === 'USD') {
-                        captureTotalMXN = capture.total * usdRate;
+                        captureTotalMXN = (parseFloat(capture.total) || 0) * usdRate;
                     } else if (capture.currency === 'CAD') {
-                        captureTotalMXN = capture.total * cadRate;
+                        captureTotalMXN = (parseFloat(capture.total) || 0) * cadRate;
                     }
                     salesByGuide[capture.guide_id].ventas++;
                     salesByGuide[capture.guide_id].total_ventas_mxn += captureTotalMXN;
@@ -11894,7 +11895,7 @@ const Reports = {
                     cierre_percent: parseFloat(cierrePercent.toFixed(2)),
                     ticket_promedio: parseFloat(ticketPromedioUSD.toFixed(2)), // En USD
                     ticket_promedio_currency: 'USD',
-                    total_ventas_mxn: parseFloat(guideData.total_ventas_mxn.toFixed(2))
+                    total_ventas_mxn: parseFloat((parseFloat(guideData.total_ventas_mxn) || 0).toFixed(2))
                 });
             });
 
@@ -11910,11 +11911,11 @@ const Reports = {
                             total_ventas_mxn: 0
                         };
                     }
-                    let captureTotalMXN = capture.total;
+                    let captureTotalMXN = parseFloat(capture.total) || 0;
                     if (capture.currency === 'USD') {
-                        captureTotalMXN = capture.total * usdRate;
+                        captureTotalMXN = (parseFloat(capture.total) || 0) * usdRate;
                     } else if (capture.currency === 'CAD') {
-                        captureTotalMXN = capture.total * cadRate;
+                        captureTotalMXN = (parseFloat(capture.total) || 0) * cadRate;
                     }
                     salesBySeller[capture.seller_id].ventas++;
                     salesBySeller[capture.seller_id].total_ventas_mxn += captureTotalMXN;
@@ -11936,7 +11937,7 @@ const Reports = {
                     ventas: sellerData.ventas,
                     ticket_promedio: parseFloat(ticketPromedioUSD.toFixed(2)), // En USD por venta
                     ticket_promedio_currency: 'USD',
-                    total_ventas_mxn: parseFloat(sellerData.total_ventas_mxn.toFixed(2))
+                    total_ventas_mxn: parseFloat((parseFloat(sellerData.total_ventas_mxn) || 0).toFixed(2))
                 });
             });
 
@@ -15206,7 +15207,7 @@ const Reports = {
                     pasajeros: agency.pasajeros,
                     cierre_percent: agency.pasajeros > 0 ? parseFloat(((agency.ventas / agency.pasajeros) * 100).toFixed(2)) : 0,
                     ticket_promedio: agency.ventas > 0 ? parseFloat((agency.total_ventas_mxn / agency.ventas).toFixed(2)) : 0,
-                    total_ventas_mxn: parseFloat(agency.total_ventas_mxn.toFixed(2))
+                    total_ventas_mxn: parseFloat((parseFloat(agency.total_ventas_mxn) || 0).toFixed(2))
                 })),
                 por_guia: Object.values(metricsByGuide).map(guide => ({
                     guide_id: guide.guide_id,
@@ -15217,14 +15218,14 @@ const Reports = {
                     pasajeros: guide.pasajeros,
                     cierre_percent: guide.pasajeros > 0 ? parseFloat(((guide.ventas / guide.pasajeros) * 100).toFixed(2)) : 0,
                     ticket_promedio: guide.ventas > 0 ? parseFloat((guide.total_ventas_mxn / guide.ventas).toFixed(2)) : 0,
-                    total_ventas_mxn: parseFloat(guide.total_ventas_mxn.toFixed(2))
+                    total_ventas_mxn: parseFloat((parseFloat(guide.total_ventas_mxn) || 0).toFixed(2))
                 })),
                 por_vendedor: Object.values(metricsBySeller).map(seller => ({
                     seller_id: seller.seller_id,
                     seller_name: seller.seller_name,
                     ventas: seller.ventas,
                     ticket_promedio: seller.ventas > 0 ? parseFloat((seller.total_ventas_mxn / seller.ventas).toFixed(2)) : 0,
-                    total_ventas_mxn: parseFloat(seller.total_ventas_mxn.toFixed(2))
+                    total_ventas_mxn: parseFloat((parseFloat(seller.total_ventas_mxn) || 0).toFixed(2))
                 }))
             };
 
