@@ -5003,6 +5003,23 @@ button.btn-xs {
     min-width: 0;
 }
 
+/* Métodos tarjeta (VISA/MC, AMEX): layout en dos filas para que el input sea visible */
+.pos-payment-method-card {
+    flex-wrap: wrap;
+    align-items: flex-start;
+}
+.pos-payment-method-card .pos-payment-input-wrap {
+    flex: 1;
+    min-width: 90px;
+}
+.pos-payment-method-card .pos-payment-bank-row {
+    flex-basis: 100%;
+    display: flex;
+    gap: var(--spacing-xs);
+    margin-top: var(--spacing-xs);
+    width: 100%;
+}
+
 .pos-payment-info label {
     display: block;
     font-size: 10px;
