@@ -2368,6 +2368,23 @@ textarea:focus-visible {
     min-width: 0;
 }
 
+/* Métodos tarjeta (VISA/MC, AMEX): layout en dos filas para que el input sea visible */
+.pos-payment-method-card {
+    flex-wrap: wrap !important;
+    align-items: flex-start !important;
+}
+.pos-payment-method-card .pos-payment-input-wrap {
+    flex: 1 !important;
+    min-width: 90px !important;
+}
+.pos-payment-method-card .pos-payment-bank-row {
+    flex-basis: 100% !important;
+    display: flex !important;
+    gap: 8px !important;
+    margin-top: 6px !important;
+    width: 100% !important;
+}
+
 .pos-payment-info label {
     display: block;
     font-size: 10px;
