@@ -618,7 +618,7 @@ const Dashboard = {
                         // Obtener costos de llegadas desde cost_entries
                         const arrivalCostsFromEntries = todayCosts
                             .filter(c => isArrivalCost(c.category))
-                            .reduce((sum, c) => sum + (c.amount || 0), 0);
+                            .reduce((sum, c) => sum + (typeof Utils !== 'undefined' && Utils.parseAmount ? Utils.parseAmount(c.amount) : (parseFloat(c.amount) || 0)), 0);
                         
                         if (arrivalCostsFromEntries > 0) {
                             // Usar costos registrados (fuente autorizada)
@@ -636,7 +636,7 @@ const Dashboard = {
                                 normCat(c.category) !== 'comisiones_bancarias' &&
                                 !isArrivalCost(c.category) // Ya se contaron arriba
                             )
-                            .reduce((sum, c) => sum + (c.amount || 0), 0);
+                            .reduce((sum, c) => sum + (typeof Utils !== 'undefined' && Utils.parseAmount ? Utils.parseAmount(c.amount) : (parseFloat(c.amount) || 0)), 0);
                     } else {
                         // Fallback si Costs no está disponible
                         arrivalCostsRealTime = (todayArrivals || []).reduce((sum, a) => sum + (a.arrival_fee || a.calculated_fee || 0), 0);
@@ -849,28 +849,29 @@ const Dashboard = {
                     dateTo: Utils.formatDate(thisMonthEnd, 'YYYY-MM-DD')
                 });
                 
-                totalCosts = thisMonthCosts.reduce((sum, c) => sum + (c.amount || 0), 0);
+                const parseAmt = (x) => (typeof Utils !== 'undefined' && Utils.parseAmount ? Utils.parseAmount(x) : (parseFloat(x) || 0));
+                totalCosts = thisMonthCosts.reduce((sum, c) => sum + parseAmt(c.amount), 0);
                 
                 // Desglose de costos (insensible a mayúsculas)
                 const norm = (v) => (v || '').toLowerCase().replace(/\s+/g, '_');
                 costBreakdown.fixed = thisMonthCosts
                     .filter(c => norm(c.type) === 'fijo')
-                    .reduce((sum, c) => sum + (c.amount || 0), 0);
+                    .reduce((sum, c) => sum + parseAmt(c.amount), 0);
                 costBreakdown.variable = thisMonthCosts
                     .filter(c => norm(c.type) === 'variable' && norm(c.category) !== 'costo_ventas' && norm(c.category) !== 'comisiones' && norm(c.category) !== 'comisiones_bancarias' && norm(c.category) !== 'pago_llegadas')
-                    .reduce((sum, c) => sum + (c.amount || 0), 0);
+                    .reduce((sum, c) => sum + parseAmt(c.amount), 0);
                 costBreakdown.cogs = thisMonthCosts
                     .filter(c => norm(c.category) === 'costo_ventas')
-                    .reduce((sum, c) => sum + (c.amount || 0), 0);
+                    .reduce((sum, c) => sum + parseAmt(c.amount), 0);
                 costBreakdown.commissions = thisMonthCosts
                     .filter(c => norm(c.category) === 'comisiones')
-                    .reduce((sum, c) => sum + (c.amount || 0), 0);
+                    .reduce((sum, c) => sum + parseAmt(c.amount), 0);
                 costBreakdown.arrivals = thisMonthCosts
                     .filter(c => norm(c.category) === 'pago_llegadas')
-                    .reduce((sum, c) => sum + (c.amount || 0), 0);
+                    .reduce((sum, c) => sum + parseAmt(c.amount), 0);
                 costBreakdown.bankCommissions = thisMonthCosts
                     .filter(c => norm(c.category) === 'comisiones_bancarias')
-                    .reduce((sum, c) => sum + (c.amount || 0), 0);
+                    .reduce((sum, c) => sum + parseAmt(c.amount), 0);
             } else {
                 // Fallback al método anterior
                 const costs = await DB.getAll('cost_entries', null, null, { 
@@ -881,7 +882,8 @@ const Dashboard = {
                     const costDate = new Date(c.date || c.created_at);
                     return costDate.getMonth() === today.getMonth() && costDate.getFullYear() === today.getFullYear();
                 });
-                totalCosts = thisMonthCosts.reduce((sum, c) => sum + (c.amount || 0), 0);
+                const parseAmt = (x) => (typeof Utils !== 'undefined' && Utils.parseAmount ? Utils.parseAmount(x) : (parseFloat(x) || 0));
+                totalCosts = thisMonthCosts.reduce((sum, c) => sum + parseAmt(c.amount), 0);
             }
             
             // Calcular utilidad usando ProfitCalculator (centralizado)
@@ -958,7 +960,7 @@ const Dashboard = {
                             supplierTotals[cost.supplier_id] = { count: 0, total: 0 };
                         }
                         supplierTotals[cost.supplier_id].count++;
-                        supplierTotals[cost.supplier_id].total += cost.amount || 0;
+                        supplierTotals[cost.supplier_id].total += typeof Utils !== 'undefined' && Utils.parseAmount ? Utils.parseAmount(cost.amount) : (parseFloat(cost.amount) || 0);
                     });
                     
                     const topSuppliers = Object.entries(supplierTotals)
@@ -980,7 +982,7 @@ const Dashboard = {
                         totalSuppliers: activeSuppliers.length,
                         recentSuppliers: recentSuppliers.length,
                         totalPurchases: recentCosts.length,
-                        totalPurchaseAmount: recentCosts.reduce((sum, c) => sum + (c.amount || 0), 0),
+                        totalPurchaseAmount: recentCosts.reduce((sum, c) => sum + (typeof Utils !== 'undefined' && Utils.parseAmount ? Utils.parseAmount(c.amount) : (parseFloat(c.amount) || 0)), 0),
                         topSuppliers: topSuppliers
                     };
                 }
