@@ -202,8 +202,20 @@ Object.assign(POS, {
     // ==================== CONFIGURACIÓN ====================
 
     setupEventListeners() {
-        // Nota: El botón completar venta usa onclick en HTML, no agregar listener aquí
-        
+        // Botón Completar venta: asegurar que funcione aunque window.POS se asigne después
+        const completeBtn = document.getElementById('pos-complete-btn');
+        if (completeBtn && !completeBtn.hasAttribute('data-listener-attached')) {
+            completeBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                if (window.POS && typeof window.POS.completeSale === 'function') {
+                    window.POS.completeSale();
+                } else {
+                    Utils.showNotification('Espera a que el módulo POS termine de cargar e intenta de nuevo.', 'warning');
+                }
+            });
+            completeBtn.setAttribute('data-listener-attached', 'true');
+        }
+
         // Configurar event listeners para botones que usan onclick en HTML
         // Esto asegura que funcionen incluso si window.POS no está disponible inmediatamente
         const setupButtonListeners = () => {
@@ -1797,7 +1809,7 @@ Object.assign(POS, {
             console.log('Venta ya en proceso, ignorando llamada duplicada');
             return;
         }
-        
+
         if (this.cart.length === 0) {
             Utils.showNotification('El carrito está vacío', 'error');
             return;
@@ -1813,6 +1825,7 @@ Object.assign(POS, {
         
         if (Math.abs(totalPayments - total) > 0.01 && totalPayments < total) {
             if (!await Utils.confirm(`Falta ${Utils.formatCurrency(total - totalPayments)} por pagar. ¿Continuar de todos modos?`)) {
+                this.isProcessingSale = false;
                 return;
             }
         }
@@ -2706,7 +2719,8 @@ Object.assign(POS, {
         }
     },
 
-    async loadDraft(saleId) {
+    async loadDraft(saleId, options = {}) {
+        const { removeFromList = true } = options;
         try {
             const sale = await DB.get('sales', saleId);
             if (!sale || sale.status !== 'borrador') {
@@ -2726,18 +2740,23 @@ Object.assign(POS, {
             // Limpiar carrito actual
             this.cart = [];
 
-            // Cargar items al carrito
+            // Cargar items al carrito (item.id en cart_data es el id de inventario)
             for (const item of cartItems) {
-                const inventoryItem = await DB.get('inventory_items', item.id);
+                const invId = item.item_id || item.id;
+                const inventoryItem = await DB.get('inventory_items', invId);
                 if (inventoryItem) {
+                    const price = item.price != null ? item.price : inventoryItem.price;
+                    const qty = item.quantity || 1;
+                    const discount = item.discount || 0;
+                    const subtotal = item.subtotal != null ? item.subtotal : (price * qty * (1 - discount / 100));
                     this.cart.push({
-                        id: item.id,
+                        id: inventoryItem.id,
                         name: inventoryItem.name,
                         sku: inventoryItem.sku,
-                        price: item.price || inventoryItem.price,
-                        quantity: item.quantity || 1,
-                        discount: item.discount || 0,
-                        subtotal: item.subtotal || (item.price * (item.quantity || 1))
+                        price: price,
+                        quantity: qty,
+                        discount: discount,
+                        subtotal: subtotal
                     });
                 }
             }
@@ -2775,12 +2794,14 @@ Object.assign(POS, {
                 }
             }
 
-            // Actualizar UI
-            this.updateCart();
-            this.updateTotals();
+            // Actualizar UI (métodos correctos del POS)
+            this.updateCartDisplay();
+            this.calculateTotals();
+            await this.calculatePayments();
 
-            // Eliminar el borrador después de cargarlo
-            await this.deleteDraft(saleId);
+            if (removeFromList) {
+                await this.deleteDraft(saleId, { skipConfirm: true });
+            }
 
             Utils.showNotification('Borrador cargado correctamente', 'success');
             UI.closeModal();
@@ -2798,19 +2819,23 @@ Object.assign(POS, {
                 return;
             }
 
-            // Cargar el borrador primero
-            await this.loadDraft(saleId);
-            
-            // Completar la venta
+            // Cargar el borrador en el carrito sin eliminarlo aún (para poder completar)
+            await this.loadDraft(saleId, { removeFromList: false });
+
+            // Completar la venta con el carrito ya cargado
             await this.completeSale();
+
+            // Eliminar el borrador después de completar con éxito
+            await this.deleteDraft(saleId, { skipConfirm: true });
         } catch (e) {
             console.error('Error completando borrador:', e);
             Utils.showNotification('Error al completar el borrador', 'error');
         }
     },
 
-    async deleteDraft(saleId) {
-        if (!await Utils.confirm('¿Eliminar este borrador?')) return;
+    async deleteDraft(saleId, options = {}) {
+        const { skipConfirm = false } = options;
+        if (!skipConfirm && !await Utils.confirm('¿Eliminar este borrador?')) return;
 
         try {
             await DB.delete('sales', saleId);
