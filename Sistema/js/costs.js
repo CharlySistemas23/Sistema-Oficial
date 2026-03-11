@@ -149,6 +149,7 @@ const Costs = {
         content.innerHTML = `
             <div id="costs-tabs" class="tabs-container" style="margin-bottom: var(--spacing-lg);">
                 <button class="tab-btn active" data-tab="costs"><i class="fas fa-dollar-sign"></i> Costos</button>
+                <button class="tab-btn" data-tab="cogs"><i class="fas fa-box"></i> Mercancía Ventas</button>
                 <button class="tab-btn" data-tab="arrivals"><i class="fas fa-plane"></i> Llegadas</button>
                 <button class="tab-btn" data-tab="recurring"><i class="fas fa-sync-alt"></i> Recurrentes</button>
                 <button class="tab-btn" data-tab="overview"><i class="fas fa-chart-line"></i> Resumen</button>
@@ -184,6 +185,10 @@ const Costs = {
 
             switch(tab) {
                 case 'costs':
+                    content.innerHTML = await this.getCostsTab();
+                    await this.loadCosts();
+                    break;
+                case 'cogs':
                     content.innerHTML = await this.getCostsTab();
                     await this.loadCosts();
                     break;
@@ -458,6 +463,8 @@ const Costs = {
 
         const branches = await DB.getAll('catalog_branches') || [];
         const agencies = await DB.getAll('catalog_agencies') || [];
+        const guides = await DB.getAll('catalog_guides') || [];
+        const allArrivals = await DB.getAll('agency_arrivals') || [];
         
         let html = '';
         let grandTotal = 0;
@@ -523,10 +530,21 @@ const Costs = {
             });
             
             finalDayCosts.forEach(cost => {
+                const linkedArrival = cost.arrival_id
+                    ? allArrivals.find(a => String(a.id) === String(cost.arrival_id) || String(a.server_id || '') === String(cost.arrival_id))
+                    : null;
+
                 const branch = cost.branch_id ? branches.find(b => b.id === cost.branch_id) : null;
                 const agency = cost.agency_id ? agencies.find(a => a.id === cost.agency_id) : null;
                 const branchName = branch?.name || 'Sin sucursal';
-                const agencyName = agency?.name || cost.notes || 'Agencia desconocida';
+                const agencyName = cost.agency_name || agency?.name || cost.notes || 'Agencia desconocida';
+                const guideName = cost.guide_name
+                    || (cost.guide_id ? guides.find(g => String(g.id) === String(cost.guide_id))?.name : null)
+                    || (linkedArrival?.guide_id ? guides.find(g => String(g.id) === String(linkedArrival.guide_id))?.name : null)
+                    || '-';
+                const passengers = parseInt(cost.passengers || linkedArrival?.passengers || 0, 10) || 0;
+                const units = parseInt(cost.units || linkedArrival?.units || 0, 10) || 0;
+                const unitType = cost.unit_type || linkedArrival?.unit_type || '-';
                 const timeStr = cost.created_at ? Utils.formatDate(cost.created_at, 'HH:mm') : '';
                 
                 html += `
@@ -534,10 +552,13 @@ const Costs = {
                         <div style="flex: 1;">
                             <div style="font-weight: 600; font-size: 13px; margin-bottom: 2px;">
                                 ${agencyName}
-                                ${cost.passengers ? ` - ${cost.passengers} pasajeros` : ''}
+                                ${passengers > 0 ? ` - ${passengers} pasajeros` : ''}
                             </div>
                             <div style="font-size: 11px; color: var(--color-text-secondary);">
                                 ${branchName}${timeStr ? ` • ${timeStr}` : ''}
+                            </div>
+                            <div style="font-size: 11px; color: var(--color-text-secondary); margin-top: 2px;">
+                                Guía: ${guideName} • Transporte: ${unitType} • Unidades: ${units > 0 ? units : '-'}
                             </div>
                             ${cost.notes && cost.notes !== agencyName ? `<div style="font-size: 10px; color: var(--color-text-secondary); margin-top: 2px;">${cost.notes}</div>` : ''}
                         </div>
@@ -1751,6 +1772,13 @@ const Costs = {
             costs = Array.from(costsByKey.values());
             const keptIds = new Set(costs.map(c => c.id));
             console.log(`🔍 [Paso 3 Costs] Deduplicación: ${costs.length} costos únicos`);
+
+            // Filtrar por tab: Costos (excluir costo_ventas) vs Mercancía Ventas (solo costo_ventas)
+            if (this.currentTab === 'costs') {
+                costs = costs.filter(c => (c.category || '') !== 'costo_ventas');
+            } else if (this.currentTab === 'cogs') {
+                costs = costs.filter(c => (c.category || '') === 'costo_ventas');
+            }
 
             // Opcional: limpiar duplicados de IndexedDB cuando hay muchos (bug de sincronización previo)
             if (costsBeforeDedup.length >= costs.length * 2) {
@@ -3557,7 +3585,7 @@ const Costs = {
         }
     },
 
-    async registerArrivalPayment(arrivalId, amount, branchId, agencyId, passengers, arrivalDate = null) {
+    async registerArrivalPayment(arrivalId, amount, branchId, agencyId, passengers, arrivalDate = null, metadata = {}) {
         if (!amount || amount <= 0) return;
 
         try {
@@ -3654,6 +3682,20 @@ const Costs = {
                     existingCost.notes = `Pago llegadas ${existingCost.notes?.split(' - ')[0] || 'Agencia'} - ${passengers} pasajeros`;
                     needsUpdate = true;
                 }
+
+                // 4. Actualizar metadata de llegada si viene disponible
+                const metadataFields = ['guide_id', 'guide_name', 'unit_type', 'units', 'agency_name'];
+                metadataFields.forEach(field => {
+                    if (metadata[field] !== undefined && metadata[field] !== null && existingCost[field] !== metadata[field]) {
+                        existingCost[field] = metadata[field];
+                        needsUpdate = true;
+                    }
+                });
+
+                if (metadata.notes && existingCost.notes !== metadata.notes) {
+                    existingCost.notes = metadata.notes;
+                    needsUpdate = true;
+                }
                 
                 // Guardar actualización si es necesaria
                 if (needsUpdate) {
@@ -3680,12 +3722,17 @@ const Costs = {
                 branch_id: branchId,
                 arrival_id: arrivalId,
                 agency_id: agencyId,
+                agency_name: metadata.agency_name || null,
+                guide_id: metadata.guide_id || null,
+                guide_name: metadata.guide_name || null,
                 passengers: passengers,
+                units: metadata.units || null,
+                unit_type: metadata.unit_type || null,
                 date: costDate,
                 period_type: 'one_time',
                 recurring: false,
                 auto_generate: true,
-                notes: `Pago llegadas ${agencyName} - ${passengers || 0} pasajeros`,
+                notes: metadata.notes || `Pago llegadas ${agencyName} - ${passengers || 0} pasajeros`,
                 created_at: new Date().toISOString(),
                 sync_status: 'pending'
             };
