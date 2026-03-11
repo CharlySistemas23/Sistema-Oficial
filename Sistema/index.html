@@ -745,7 +745,7 @@
                             <button class="pos-secondary-btn" onclick="window.POS.reserveSale()">
                                 <i class="fas fa-bookmark"></i> Apartar
                             </button>
-                            <button class="pos-primary-btn" id="pos-complete-btn" onclick="window.POS.completeSale()">
+                            <button class="pos-primary-btn" id="pos-complete-btn" type="button" onclick="if(window.POS&&window.POS.completeSale){window.POS.completeSale();}">
                                 <i class="fas fa-check-circle"></i> Completar Venta
                                 <span class="pos-btn-shortcut">F12</span>
                             </button>
