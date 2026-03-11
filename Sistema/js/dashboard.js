@@ -437,7 +437,7 @@ const Dashboard = {
                         const beforeIds = new Set((allSales || []).map(s => s.id));
                         const afterIds = new Set(freshSales.map(s => s.id));
                         if (beforeIds.size !== afterIds.size || [...beforeIds].some(id => !afterIds.has(id))) {
-                            await this.loadDashboardData();
+                            await this.loadDashboard(showAllBranches);
                         }
                     } catch (e) { console.warn('Sync dashboard background:', e); }
                 }).catch(e => console.warn('Sync dashboard background:', e));
@@ -499,9 +499,9 @@ const Dashboard = {
             try {
                 // Intentar obtener reporte existente primero
                 const profitReports = await DB.query('daily_profit_reports', 'date', todayStr) || [];
-                const todayProfit = profitReports.find(p => 
-                    (viewAllBranches || p.branch_id === branchId || !p.branch_id)
-                );
+                const todayProfit = !viewAllBranches
+                    ? profitReports.find(p => p.branch_id === branchId || !p.branch_id)
+                    : null; // Vista consolidada: no usar reporte de una sola sucursal
                 
                 const revenue = (todayProfit?.revenue_sales_total ?? todayProfit?.revenue) || 0;
                 const operatingCosts = (todayProfit?.fixed_costs_daily || 0) + (todayProfit?.variable_costs_daily || 0);
@@ -738,11 +738,10 @@ const Dashboard = {
                 .sort((a, b) => b.total - a.total)
                 .slice(0, 5);
             
-            // Top productos del mes
+            // Top productos del mes (agrupar por item o por nombre si item_id no existe)
             const saleItems = await DB.getAll('sale_items') || [];
-            // Obtener items filtrados por sucursal
             const items = await DB.getAll('inventory_items', null, null, { 
-                filterByBranch: !viewAllBranches, 
+                filterByBranch: false, 
                 branchIdField: 'branch_id' 
             }) || [];
             const productStats = {};
@@ -750,13 +749,13 @@ const Dashboard = {
                 const itemsForSale = saleItems.filter(si => si.sale_id === sale.id);
                 itemsForSale.forEach(si => {
                     const item = items.find(i => i.id === si.item_id);
-                    if (item) {
-                        if (!productStats[item.id]) {
-                            productStats[item.id] = { name: item.name, qty: 0, revenue: 0 };
-                        }
-                        productStats[item.id].qty += si.quantity || 1;
-                        productStats[item.id].revenue += (si.price || 0) * (si.quantity || 1);
+                    const productName = item?.name || si.name || 'Producto sin nombre';
+                    const productKey = item ? `inv_${item.id}` : `name_${(si.name || 'unknown').replace(/\s+/g, '_')}`;
+                    if (!productStats[productKey]) {
+                        productStats[productKey] = { name: productName, qty: 0, revenue: 0 };
                     }
+                    productStats[productKey].qty += si.quantity || 1;
+                    productStats[productKey].revenue += (si.price || 0) * (si.quantity || 1);
                 });
             });
             
@@ -895,10 +894,15 @@ const Dashboard = {
                 profit = monthTotal - totalCosts;
                 profitMargin = monthTotal > 0 ? (profit / monthTotal * 100) : 0;
             }
-            // Si ProfitCalculator devolvió 0 pero hay ingresos y costos, usar fórmula simple para no mostrar 0 erróneo
-            if (profit === 0 && profitMargin === 0 && monthTotal > 0) {
-                profit = monthTotal - totalCosts;
-                profitMargin = monthTotal > 0 ? (profit / monthTotal * 100) : 0;
+            // Si hay ingresos pero utilidad/margen son 0 o inválidos, usar fórmula directa para evitar mostrar $0 erróneo
+            const simpleProfit = monthTotal - totalCosts;
+            const simpleMargin = monthTotal > 0 ? (simpleProfit / monthTotal * 100) : 0;
+            if (monthTotal > 0 && (
+                (profit === 0 && profitMargin === 0 && simpleProfit !== 0) ||
+                Number.isNaN(profit) || Number.isNaN(profitMargin)
+            )) {
+                profit = simpleProfit;
+                profitMargin = simpleMargin;
             }
             
             // Si es vista consolidada, agregar información por sucursal
