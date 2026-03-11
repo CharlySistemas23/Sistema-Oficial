@@ -134,7 +134,9 @@ const ProfitCalculator = {
             // Calcular utilidades
             const grossProfit = revenue - cogs - arrivalCosts - operatingCosts;
             const netProfit = grossProfit - commissions - bankCommissions;
-            const profitMargin = revenue > 0 ? (netProfit / revenue * 100) : 0;
+            let profitMargin = revenue > 0 ? (netProfit / revenue * 100) : 0;
+            // Garantizar que nunca devolvamos NaN ni undefined
+            if (!Number.isFinite(profitMargin)) profitMargin = 0;
 
             return {
                 revenue,
@@ -143,8 +145,8 @@ const ProfitCalculator = {
                 operatingCosts,
                 arrivalCosts,
                 bankCommissions,
-                grossProfit,
-                netProfit,
+                grossProfit: Number.isFinite(grossProfit) ? grossProfit : 0,
+                netProfit: Number.isFinite(netProfit) ? netProfit : 0,
                 profitMargin,
                 salesCount: monthSales.length,
                 month: month + 1,
