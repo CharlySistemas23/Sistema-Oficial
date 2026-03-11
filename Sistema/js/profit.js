@@ -57,15 +57,15 @@ const ProfitCalculator = {
             
             const revenue = monthSales.reduce((sum, s) => sum + (s.total || 0), 0);
 
-            // 2. COGS: Costo de productos vendidos
+            // 2. COGS: Costo de productos vendidos (usar cost en sale_items o inventory como fallback)
             let cogs = 0;
             const saleItems = await DB.getAll('sale_items') || [];
+            const inventoryItems = await DB.getAll('inventory_items', null, null, { filterByBranch: false, branchIdField: 'branch_id' }) || [];
             for (const sale of monthSales) {
                 const items = saleItems.filter(si => si.sale_id === sale.id);
                 for (const item of items) {
-                    if (item.cost) {
-                        cogs += (item.cost || 0) * (item.quantity || 1);
-                    }
+                    const unitCost = (item.cost != null && item.cost !== '') ? Number(item.cost) : (inventoryItems.find(inv => inv.id === item.item_id)?.cost ?? 0);
+                    cogs += unitCost * (item.quantity || 1);
                 }
             }
 
@@ -114,7 +114,7 @@ const ProfitCalculator = {
                 return true;
             });
             
-            arrivalCosts = monthArrivals.reduce((sum, a) => sum + (a.amount || 0), 0);
+            arrivalCosts = monthArrivals.reduce((sum, a) => sum + (a.amount || a.arrival_fee || a.calculated_fee || 0), 0);
 
             // 6. COMISIONES BANCARIAS
             let bankCommissions = 0;
