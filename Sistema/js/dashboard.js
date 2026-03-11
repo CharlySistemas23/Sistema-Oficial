@@ -5,7 +5,12 @@ const Dashboard = {
     isExporting: false, // Flag para prevenir múltiples exportaciones simultáneas
     viewAllBranches: false, // Flag para vista consolidada
     autoRefreshInterval: null, // Intervalo para actualización automática
-    
+
+    safePercent(val) {
+        const n = parseFloat(val);
+        return (Number.isFinite(n) ? n : 0).toFixed(1);
+    },
+
     async init() {
         try {
             // Verificar permiso
@@ -553,7 +558,8 @@ const Dashboard = {
                 }
                 
                 // Fallback: calcular manualmente si ProfitCalculator no está disponible o falló
-                if (!dailyProfit && todaySales.length > 0) {
+                // En vista consolidada, siempre calcular manualmente para agregar todas las sucursales
+                if (!dailyProfit && (todaySales.length > 0 || viewAllBranches)) {
                     const saleItems = await DB.getAll('sale_items') || [];
                     const allPayments = await DB.getAll('payments') || [];
                     const inventoryItems = await DB.getAll('inventory_items', null, null, { filterByBranch: false, branchIdField: 'branch_id' }) || [];
@@ -607,8 +613,8 @@ const Dashboard = {
                             dateFrom: todayStr,
                             dateTo: todayStr
                         });
-                        
-                        const isArrivalCost = (cat) => (cat || '').toLowerCase().replace(/\s+/g, '_') === 'pago_llegadas';
+                        const normCat = (cat) => (cat || '').toLowerCase().replace(/\s+/g, '_');
+                        const isArrivalCost = (cat) => normCat(cat) === 'pago_llegadas';
                         // Obtener costos de llegadas desde cost_entries
                         const arrivalCostsFromEntries = todayCosts
                             .filter(c => isArrivalCost(c.category))
@@ -622,12 +628,12 @@ const Dashboard = {
                             arrivalCostsRealTime = (todayArrivals || []).reduce((sum, a) => sum + (a.arrival_fee || a.calculated_fee || 0), 0);
                         }
                         
-                        // Calcular costos operativos (excluyendo llegadas que ya se contaron)
+                        // Calcular costos operativos (excluyendo llegadas que ya se contaron; insensible a mayúsculas)
                         operatingCostsRealTime = todayCosts
                             .filter(c => 
-                                c.category !== 'costo_ventas' && 
-                                c.category !== 'comisiones' && 
-                                c.category !== 'comisiones_bancarias' &&
+                                normCat(c.category) !== 'costo_ventas' && 
+                                normCat(c.category) !== 'comisiones' && 
+                                normCat(c.category) !== 'comisiones_bancarias' &&
                                 !isArrivalCost(c.category) // Ya se contaron arriba
                             )
                             .reduce((sum, c) => sum + (c.amount || 0), 0);
@@ -845,24 +851,25 @@ const Dashboard = {
                 
                 totalCosts = thisMonthCosts.reduce((sum, c) => sum + (c.amount || 0), 0);
                 
-                // Desglose de costos
+                // Desglose de costos (insensible a mayúsculas)
+                const norm = (v) => (v || '').toLowerCase().replace(/\s+/g, '_');
                 costBreakdown.fixed = thisMonthCosts
-                    .filter(c => c.type === 'fijo')
+                    .filter(c => norm(c.type) === 'fijo')
                     .reduce((sum, c) => sum + (c.amount || 0), 0);
                 costBreakdown.variable = thisMonthCosts
-                    .filter(c => c.type === 'variable' && c.category !== 'costo_ventas' && c.category !== 'comisiones' && c.category !== 'comisiones_bancarias' && (c.category || '').toLowerCase().replace(/\s+/g, '_') !== 'pago_llegadas')
+                    .filter(c => norm(c.type) === 'variable' && norm(c.category) !== 'costo_ventas' && norm(c.category) !== 'comisiones' && norm(c.category) !== 'comisiones_bancarias' && norm(c.category) !== 'pago_llegadas')
                     .reduce((sum, c) => sum + (c.amount || 0), 0);
                 costBreakdown.cogs = thisMonthCosts
-                    .filter(c => c.category === 'costo_ventas')
+                    .filter(c => norm(c.category) === 'costo_ventas')
                     .reduce((sum, c) => sum + (c.amount || 0), 0);
                 costBreakdown.commissions = thisMonthCosts
-                    .filter(c => c.category === 'comisiones')
+                    .filter(c => norm(c.category) === 'comisiones')
                     .reduce((sum, c) => sum + (c.amount || 0), 0);
                 costBreakdown.arrivals = thisMonthCosts
-                    .filter(c => (c.category || '').toLowerCase().replace(/\s+/g, '_') === 'pago_llegadas')
+                    .filter(c => norm(c.category) === 'pago_llegadas')
                     .reduce((sum, c) => sum + (c.amount || 0), 0);
                 costBreakdown.bankCommissions = thisMonthCosts
-                    .filter(c => c.category === 'comisiones_bancarias')
+                    .filter(c => norm(c.category) === 'comisiones_bancarias')
                     .reduce((sum, c) => sum + (c.amount || 0), 0);
             } else {
                 // Fallback al método anterior
@@ -897,10 +904,10 @@ const Dashboard = {
             // Si hay ingresos pero utilidad/margen son 0 o inválidos, usar fórmula directa para evitar mostrar $0 erróneo
             const simpleProfit = monthTotal - totalCosts;
             const simpleMargin = monthTotal > 0 ? (simpleProfit / monthTotal * 100) : 0;
-            if (monthTotal > 0 && (
-                (profit === 0 && profitMargin === 0 && simpleProfit !== 0) ||
-                Number.isNaN(profit) || Number.isNaN(profitMargin)
-            )) {
+            const isInvalid = profit == null || profit === undefined || !Number.isFinite(profit) ||
+                profitMargin == null || profitMargin === undefined || !Number.isFinite(profitMargin);
+            const isZeroSuspicious = profit === 0 && profitMargin === 0 && simpleProfit !== 0;
+            if (monthTotal > 0 && (isInvalid || isZeroSuspicious)) {
                 profit = simpleProfit;
                 profitMargin = simpleMargin;
             }
@@ -1157,7 +1164,7 @@ const Dashboard = {
                         <div class="db-kpi-value">${Utils.formatCurrency(data.monthTotal)}</div>
                         <div class="db-kpi-sub db-kpi-trend ${data.monthGrowth >= 0 ? 'up' : 'down'}">
                             <i class="fas fa-arrow-${data.monthGrowth >= 0 ? 'up' : 'down'}"></i>
-                            ${Math.abs(data.monthGrowth).toFixed(1)}% vs mes anterior
+                            ${this.safePercent(Math.abs(data.monthGrowth))}% vs mes anterior
                         </div>
                     </div>
                 </div>
@@ -1168,7 +1175,7 @@ const Dashboard = {
                     <div class="db-kpi-body">
                         <div class="db-kpi-label">Ticket Promedio</div>
                         <div class="db-kpi-value">${Utils.formatCurrency(data.avgTicket)}</div>
-                        <div class="db-kpi-sub">Cierre: ${data.closeRate.toFixed(1)}%</div>
+                        <div class="db-kpi-sub">Cierre: ${this.safePercent(data.closeRate)}%</div>
                     </div>
                 </div>
                 <div class="db-kpi-card">
@@ -1178,7 +1185,7 @@ const Dashboard = {
                     <div class="db-kpi-body">
                         <div class="db-kpi-label">Utilidad del Mes</div>
                         <div class="db-kpi-value" style="color: ${data.profit >= 0 ? 'var(--color-success)' : 'var(--color-danger)'};">${Utils.formatCurrency(data.profit)}</div>
-                        <div class="db-kpi-sub">Margen: ${data.profitMargin.toFixed(1)}%</div>
+                        <div class="db-kpi-sub">Margen: ${this.safePercent(data.profitMargin)}%</div>
                     </div>
                 </div>
                 <div class="db-kpi-card db-kpi-card--sm">
@@ -1479,7 +1486,7 @@ const Dashboard = {
                             <i class="fas fa-percent"></i>
                         </div>
                         <div class="db-finance-label">Margen</div>
-                        <div class="db-finance-val" style="color:${data.profitMargin>=0?'var(--color-success)':'var(--color-danger)'};">${data.profitMargin.toFixed(1)}%</div>
+                        <div class="db-finance-val" style="color:${data.profitMargin>=0?'var(--color-success)':'var(--color-danger)'};">${this.safePercent(data.profitMargin)}%</div>
                     </div>
                 </div>
             </div>
@@ -1871,7 +1878,7 @@ const Dashboard = {
                 type: 'warning',
                 icon: 'fa-exclamation-triangle',
                 title: 'Margen de Utilidad Bajo',
-                message: `El margen actual es ${data.profitMargin.toFixed(1)}%. Considera revisar costos o ajustar precios.`
+                message: `El margen actual es ${this.safePercent(data.profitMargin)}%. Considera revisar costos o ajustar precios.`
             });
         }
 
@@ -1948,7 +1955,7 @@ const Dashboard = {
                 type: 'success',
                 icon: 'fa-check-circle',
                 title: 'Excelente Desempeño',
-                message: `Margen de ${data.profitMargin.toFixed(1)}% y utilidad de ${Utils.formatCurrency(data.profit)}. ¡Sigue así!`
+                message: `Margen de ${this.safePercent(data.profitMargin)}% y utilidad de ${Utils.formatCurrency(data.profit)}. ¡Sigue así!`
             });
         }
 
