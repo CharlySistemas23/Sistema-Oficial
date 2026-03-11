@@ -8481,13 +8481,74 @@ const Reports = {
                     return false; // Excluir llegadas demo
                 }
                 
-                // Solo incluir llegadas válidas (con pasajeros > 0)
-                if (!a.passengers || a.passengers <= 0) {
+                // Solo incluir llegadas válidas (con pasajeros > 0 o con costo registrado)
+                const passengers = parseFloat(a.passengers) || 0;
+                const arrivalCost = parseFloat(a.arrival_fee || a.calculated_fee || 0) || 0;
+                if (passengers <= 0 && arrivalCost <= 0) {
                     return false;
                 }
                 
                 return true;
             });
+
+            let finalArrivals = filteredArrivals;
+
+            // Fallback: si no hay agency_arrivals para esa fecha, consultar costos de llegadas
+            if (finalArrivals.length === 0) {
+                const allCosts = await DB.getAll('cost_entries') || [];
+                const arrivalCosts = allCosts.filter(c => {
+                    if (c.category !== 'pago_llegadas') return false;
+
+                    const costDate = (c.date || c.created_at || '').split('T')[0];
+                    if (!costDate || costDate !== selectedDate) return false;
+
+                    if (!isMasterAdmin && currentBranchId) {
+                        if (!c.branch_id || String(c.branch_id) !== String(currentBranchId)) {
+                            return false;
+                        }
+                    }
+
+                    if (selectedAgencyId && c.agency_id && String(c.agency_id) !== String(selectedAgencyId)) {
+                        return false;
+                    }
+
+                    // Si se filtra por guía y no existe guía en cost_entries, no incluir
+                    if (selectedGuideId) {
+                        return false;
+                    }
+
+                    return true;
+                });
+
+                finalArrivals = arrivalCosts.map(c => {
+                    const passengersFromField = parseFloat(c.passengers) || 0;
+                    const passengersFromNotes = (() => {
+                        const notes = String(c.notes || '');
+                        const match = notes.match(/(\d+)\s*pasajeros/i);
+                        return match ? parseFloat(match[1]) || 0 : 0;
+                    })();
+
+                    return {
+                        id: `arrival_from_cost_${c.id}`,
+                        agency_id: c.agency_id || null,
+                        guide_id: null,
+                        branch_id: c.branch_id || null,
+                        date: (c.date || c.created_at || selectedDate).split('T')[0],
+                        passengers: passengersFromField || passengersFromNotes || 0,
+                        units: null,
+                        unit_type: null,
+                        arrival_fee: parseFloat(c.amount) || 0,
+                        calculated_fee: parseFloat(c.amount) || 0,
+                        notes: c.notes || '',
+                        source: 'cost_entries',
+                        created_at: c.created_at || new Date().toISOString()
+                    };
+                });
+
+                if (finalArrivals.length > 0) {
+                    console.log(`🔁 Fallback aplicado: ${finalArrivals.length} llegadas cargadas desde cost_entries para ${selectedDate}`);
+                }
+            }
             
             const agencies = await DB.getAll('catalog_agencies') || [];
             const branches = await DB.getAll('catalog_branches') || [];
@@ -8495,7 +8556,7 @@ const Reports = {
             const container = document.getElementById('quick-capture-arrivals');
             if (!container) return;
 
-            if (filteredArrivals.length === 0) {
+            if (finalArrivals.length === 0) {
                 container.innerHTML = `
                     <div style="text-align: center; padding: var(--spacing-md); color: var(--color-text-secondary);">
                         <i class="fas fa-inbox" style="font-size: 32px; opacity: 0.3; margin-bottom: var(--spacing-sm);"></i>
@@ -8510,7 +8571,7 @@ const Reports = {
             
             // Agrupar por agencia y guía
             const arrivalsByAgency = {};
-            filteredArrivals.forEach(arrival => {
+            finalArrivals.forEach(arrival => {
                 const agencyId = arrival.agency_id;
                 const guideId = arrival.guide_id;
                 
