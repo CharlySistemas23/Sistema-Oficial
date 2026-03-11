@@ -8073,8 +8073,9 @@ const Reports = {
         }
     },
 
-    async loadQuickCaptureData() {
+    async loadQuickCaptureData(options = {}) {
         try {
+            const skipRemoteLookup = options?.skipRemoteLookup === true;
             // Obtener la fecha del formulario o usar hoy por defecto
             const dateInput = document.getElementById('qc-date');
             const selectedDate = dateInput?.value || this.getLocalDateStr();
@@ -8094,8 +8095,8 @@ const Reports = {
             let captures = await DB.getAll('temp_quick_captures') || [];
             console.log(`📊 Total capturas en BD: ${captures.length}, filtrando por fecha: ${selectedDate}`);
             console.log(`🔍 Filtros: isMasterAdmin=${isMasterAdmin}, currentBranchId=${currentBranchId}`);
-            
-            captures = captures.filter(c => {
+
+            const filterCaptureForSelectedDate = (c) => {
                 // Normalizar fechas para comparación estricta (usar original_report_date si existe, sino date)
                 const captureDate = c.original_report_date || c.date;
                 if (!captureDate) {
@@ -8144,7 +8145,19 @@ const Reports = {
                     console.log(`   ❌ Sin sucursal actual pero captura tiene branch_id: ${c.branch_id}`);
                     return false;
                 }
-            });
+            };
+
+            captures = captures.filter(filterCaptureForSelectedDate);
+
+            if (captures.length === 0 && !skipRemoteLookup) {
+                const hydratedCount = await this.hydrateQuickCapturesForDate(selectedDate, currentBranchId, isMasterAdmin);
+                if (hydratedCount > 0) {
+                    const reloadedCaptures = await DB.getAll('temp_quick_captures') || [];
+                    captures = reloadedCaptures.filter(filterCaptureForSelectedDate);
+                    console.log(`🔄 Rehidratadas ${hydratedCount} capturas para ${selectedDate}. Coincidencias tras relectura: ${captures.length}`);
+                }
+            }
+
             console.log(`✅ Capturas filtradas: ${captures.length} para fecha ${selectedDate}`);
             
             // Ordenar por fecha de creación (más recientes primero)
@@ -8309,6 +8322,83 @@ const Reports = {
                     </div>
                 `;
             }
+        }
+    },
+
+    async hydrateQuickCapturesForDate(selectedDate, currentBranchId, isMasterAdmin) {
+        try {
+            if (typeof API === 'undefined' || !API.baseURL || !API.token || !API.getQuickCaptures) {
+                return 0;
+            }
+
+            const filters = {};
+            if (!isMasterAdmin && currentBranchId) {
+                filters.branch_id = currentBranchId;
+            }
+
+            const serverCaptures = await API.getQuickCaptures(filters);
+            if (!Array.isArray(serverCaptures) || serverCaptures.length === 0) {
+                return 0;
+            }
+
+            const normalizedSelectedDate = String(selectedDate || '').split('T')[0];
+            const capturesForDate = serverCaptures.filter(capture => {
+                const captureDate = (capture?.original_report_date || capture?.date || '').split('T')[0];
+                return captureDate === normalizedSelectedDate;
+            });
+
+            if (capturesForDate.length === 0) {
+                return 0;
+            }
+
+            let upsertedCount = 0;
+            for (const capture of capturesForDate) {
+                try {
+                    const localCapture = {
+                        id: capture.id,
+                        server_id: capture.id,
+                        branch_id: capture.branch_id,
+                        branch_name: capture.branch_name,
+                        seller_id: capture.seller_id,
+                        seller_name: capture.seller_name,
+                        guide_id: capture.guide_id,
+                        guide_name: capture.guide_name,
+                        agency_id: capture.agency_id,
+                        agency_name: capture.agency_name,
+                        product: capture.product,
+                        quantity: capture.quantity,
+                        currency: capture.currency,
+                        total: parseFloat(capture.total) || 0,
+                        merchandise_cost: parseFloat(capture.merchandise_cost) || 0,
+                        notes: capture.notes,
+                        is_street: capture.is_street || false,
+                        payment_method: capture.payment_method,
+                        payments: capture.payments || [],
+                        date: capture.date || capture.original_report_date,
+                        original_report_date: capture.original_report_date || capture.date,
+                        created_at: capture.created_at || new Date().toISOString(),
+                        updated_at: capture.updated_at || new Date().toISOString(),
+                        created_by: capture.created_by,
+                        sync_status: 'synced'
+                    };
+
+                    const allLocal = await DB.getAll('temp_quick_captures') || [];
+                    const existing = allLocal.find(c => c.server_id === capture.id || c.id === capture.id);
+                    const toSave = existing
+                        ? { ...localCapture, id: existing.id, server_id: capture.id }
+                        : localCapture;
+
+                    await DB.put('temp_quick_captures', toSave);
+                    upsertedCount++;
+                } catch (captureError) {
+                    console.warn('⚠️ Error rehidratando captura individual:', captureError);
+                }
+            }
+
+            return upsertedCount;
+        } catch (error) {
+            console.warn('⚠️ No se pudo rehidratar capturas desde servidor para la fecha seleccionada:', error?.message || error);
+            return 0;
         }
     },
 
