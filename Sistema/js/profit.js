@@ -54,8 +54,9 @@ const ProfitCalculator = {
                 if (branchId && s.branch_id !== branchId) return false;
                 return true;
             });
-            
-            const revenue = monthSales.reduce((sum, s) => sum + (s.total || 0), 0);
+
+            const parseAmt = (x) => (typeof Utils !== 'undefined' && Utils.parseAmount ? Utils.parseAmount(x) : (parseFloat(x) || 0));
+            const revenue = monthSales.reduce((sum, s) => sum + parseAmt(s.total), 0);
 
             // 2. COGS: Costo de productos vendidos (usar cost en sale_items o inventory como fallback)
             let cogs = 0;
@@ -74,8 +75,8 @@ const ProfitCalculator = {
             for (const sale of monthSales) {
                 const items = saleItems.filter(si => si.sale_id === sale.id);
                 for (const item of items) {
-                    if (item.commission_amount) {
-                        commissions += item.commission_amount;
+                    if (item.commission_amount != null && item.commission_amount !== '') {
+                        commissions += parseAmt(item.commission_amount);
                     }
                 }
             }
@@ -97,7 +98,7 @@ const ProfitCalculator = {
                         c.category !== 'pago_llegadas' &&
                         c.category !== 'comisiones_bancarias'
                     )
-                    .reduce((sum, c) => sum + (c.amount || 0), 0);
+                    .reduce((sum, c) => sum + (typeof Utils !== 'undefined' && Utils.parseAmount ? Utils.parseAmount(c.amount) : (parseFloat(c.amount) || 0)), 0);
             }
 
             // 5. LLEGADAS: Costos de llegadas
@@ -114,7 +115,7 @@ const ProfitCalculator = {
                 return true;
             });
             
-            arrivalCosts = monthArrivals.reduce((sum, a) => sum + (a.amount || a.arrival_fee || a.calculated_fee || 0), 0);
+            arrivalCosts = monthArrivals.reduce((sum, a) => sum + parseAmt(a.amount || a.arrival_fee || a.calculated_fee), 0);
 
             // 6. COMISIONES BANCARIAS
             let bankCommissions = 0;
@@ -129,7 +130,7 @@ const ProfitCalculator = {
                 return true;
             });
             
-            bankCommissions = monthPayments.reduce((sum, p) => sum + (p.bank_commission || 0), 0);
+            bankCommissions = monthPayments.reduce((sum, p) => sum + parseAmt(p.bank_commission), 0);
 
             // Calcular utilidades
             const grossProfit = revenue - cogs - arrivalCosts - operatingCosts;
@@ -175,6 +176,7 @@ const ProfitCalculator = {
                 throw new Error(`Sucursal ${branchId} no encontrada`);
             }
             const branchIdStr = String(branchId || '').trim();
+            const parseCostAmt = (x) => (typeof Utils !== 'undefined' && Utils.parseAmount ? Utils.parseAmount(x) : (parseFloat(x) || 0));
 
             // 1. REVENUE: Suma de ventas completadas del día (filtradas por sucursal)
             // NOTA: Usamos filterByBranch: false porque necesitamos todas las ventas para filtrar por fecha
@@ -191,7 +193,7 @@ const ProfitCalculator = {
                        (typeof Utils !== 'undefined' && Utils.isSaleCompleted ? Utils.isSaleCompleted(s) : (s.status === 'completada' || s.status === 'completed'));
             });
             
-            const revenueSalesTotal = daySales.reduce((sum, s) => sum + (s.total || 0), 0);
+            const revenueSalesTotal = daySales.reduce((sum, s) => sum + parseCostAmt(s.total), 0);
 
             // 2. COGS: Costo de productos vendidos (filtrados por sucursal)
             let cogsTotal = 0;
@@ -235,8 +237,8 @@ const ProfitCalculator = {
                 
                 // Sumar comisiones desde los items (ya calculadas en POS)
                 for (const item of saleItems) {
-                    if (item.commission_amount) {
-                        commissionsTotal += item.commission_amount;
+                    if (item.commission_amount != null && item.commission_amount !== '') {
+                        commissionsTotal += parseCostAmt(item.commission_amount);
                     }
                 }
             }
@@ -309,10 +311,10 @@ const ProfitCalculator = {
                 
                 if (arrivalCostEntries.length > 0) {
                     // Usar costos registrados (fuente autorizada)
-                    arrivalsTotal = arrivalCostEntries.reduce((sum, c) => sum + (c.amount || 0), 0);
+                    arrivalsTotal = arrivalCostEntries.reduce((sum, c) => sum + (typeof Utils !== 'undefined' && Utils.parseAmount ? Utils.parseAmount(c.amount) : (parseFloat(c.amount) || 0)), 0);
                 } else {
                     // Fallback: calcular desde agency_arrivals si no hay costos registrados
-                    arrivalsTotal = branchArrivals.reduce((sum, a) => sum + (a.arrival_fee || a.calculated_fee || 0), 0);
+                    arrivalsTotal = branchArrivals.reduce((sum, a) => sum + parseCostAmt(a.arrival_fee || a.calculated_fee), 0);
                     
                     // Registrar automáticamente si hay llegadas sin costo registrado
                     if (arrivalsTotal > 0 && typeof Costs !== 'undefined') {
@@ -340,7 +342,7 @@ const ProfitCalculator = {
             } catch (e) {
                 console.error('Error calculando costos de llegadas:', e);
                 // Fallback final: calcular desde agency_arrivals
-                arrivalsTotal = branchArrivals.reduce((sum, a) => sum + (a.arrival_fee || a.calculated_fee || 0), 0);
+                arrivalsTotal = branchArrivals.reduce((sum, a) => sum + parseCostAmt(a.arrival_fee || a.calculated_fee), 0);
             }
             
             const passengersTotal = branchArrivals.reduce((sum, a) => sum + (a.passengers || 0), 0);
@@ -362,7 +364,7 @@ const ProfitCalculator = {
             for (const cost of monthlyCosts) {
                 // Usar 30 días fijos para prorrateo mensual (convención contable estándar)
                 const DAYS_PER_MONTH = 30;
-                fixedCostsDaily += (cost.amount || 0) / DAYS_PER_MONTH;
+                fixedCostsDaily += parseCostAmt(cost.amount) / DAYS_PER_MONTH;
             }
 
             // Costos semanales prorrateados
@@ -376,7 +378,7 @@ const ProfitCalculator = {
             });
             
             for (const cost of weeklyCosts) {
-                fixedCostsDaily += (cost.amount || 0) / 7;
+                fixedCostsDaily += parseCostAmt(cost.amount) / 7;
             }
 
             // Costos anuales prorrateados
@@ -391,7 +393,7 @@ const ProfitCalculator = {
             
             for (const cost of annualCosts) {
                 const daysInYear = this.isLeapYear(new Date(dateYYYYMMDD).getFullYear()) ? 366 : 365;
-                fixedCostsDaily += (cost.amount || 0) / daysInYear;
+                fixedCostsDaily += parseCostAmt(cost.amount) / daysInYear;
             }
 
             // Costos variables/diarios del día específico (excluir recurrentes: ya se prorratean en fixedCostsDaily)
@@ -404,7 +406,7 @@ const ProfitCalculator = {
                            !c.recurring &&
                            (c.period_type === 'one_time' || c.period_type === 'daily' || !c.period_type);
                 })
-                .reduce((sum, c) => sum + (c.amount || 0), 0);
+                .reduce((sum, c) => sum + parseCostAmt(c.amount), 0);
 
             // 6. UTILIDAD OPERATIVA ANTES DE IMPUESTOS
             const profitBeforeTaxes = revenueSalesTotal - 
