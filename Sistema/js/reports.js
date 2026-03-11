@@ -14298,8 +14298,9 @@ const Reports = {
                         const localUpdated = new Date(existing.updated_at || 0);
                         
                         if (serverUpdated > localUpdated) {
-                            // Servidor tiene versión más reciente, actualizar local
-                            await DB.put('temp_quick_captures', localCapture);
+                            // Actualizar in situ preservando id local (evita duplicados)
+                            const toUpdate = { ...localCapture, id: existing.id, server_id: serverCapture.id };
+                            await DB.put('temp_quick_captures', toUpdate);
                             updatedCount++;
                             console.log(`🔄 Captura actualizada desde servidor: ${localCapture.product}`);
                         }
@@ -14334,6 +14335,11 @@ const Reports = {
                 console.log('⚠️ Socket.IO no disponible, omitiendo listeners en tiempo real');
                 return;
             }
+
+            // Evitar listeners duplicados: remover anteriores antes de registrar
+            API.socket.off('quick_capture_created');
+            API.socket.off('quick_capture_updated');
+            API.socket.off('quick_capture_deleted');
             
             // Escuchar creación de capturas
             API.socket.on('quick_capture_created', async (data) => {
@@ -14371,22 +14377,26 @@ const Reports = {
                         sync_status: 'synced'
                     };
                     
-                    // Verificar si ya existe localmente
-                    const existing = await DB.get('temp_quick_captures', capture.id);
-                    if (!existing) {
+                    // Verificar si ya existe localmente (por id O por server_id - evita duplicados)
+                    const allLocal = await DB.getAll('temp_quick_captures') || [];
+                    const existing = allLocal.find(c => c.server_id === capture.id || c.id === capture.id);
+                    if (existing) {
+                        // Actualizar en sitio preservando el id local (evita crear duplicado)
+                        const toUpdate = { ...localCapture, id: existing.id, server_id: capture.id };
+                        await DB.put('temp_quick_captures', toUpdate);
+                        console.log('✅ Captura existente actualizada desde servidor');
+                    } else {
                         await DB.put('temp_quick_captures', localCapture);
                         console.log('✅ Captura sincronizada desde servidor en tiempo real');
-                        
-                        // Recargar datos si estamos en la pestaña de captura rápida
-                        const activeTab = document.querySelector('#reports-tabs .tab-btn.active')?.dataset.tab;
-                        if (activeTab === 'quick-capture') {
-                            await this.loadQuickCaptureData();
-                            await this.loadQuickCaptureArrivals();
-                        }
-                        // También recargar reportes archivados si estamos en esa pestaña
-                        if (activeTab === 'history') {
-                            await this.loadArchivedReports();
-                        }
+                    }
+                    // Recargar solo si se modificó algo
+                    const activeTab = document.querySelector('#reports-tabs .tab-btn.active')?.dataset.tab;
+                    if (activeTab === 'quick-capture') {
+                        await this.loadQuickCaptureData();
+                        await this.loadQuickCaptureArrivals();
+                    }
+                    if (activeTab === 'history') {
+                        await this.loadArchivedReports();
                     }
                 } catch (error) {
                     console.error('Error procesando captura creada desde servidor:', error);
@@ -14429,7 +14439,13 @@ const Reports = {
                         sync_status: 'synced'
                     };
                     
-                    await DB.put('temp_quick_captures', localCapture);
+                    // Actualizar en sitio preservando id local si existe (evita duplicados)
+                    const allLocal = await DB.getAll('temp_quick_captures') || [];
+                    const existing = allLocal.find(c => c.server_id === capture.id || c.id === capture.id);
+                    const toSave = existing
+                        ? { ...localCapture, id: existing.id, server_id: capture.id }
+                        : localCapture;
+                    await DB.put('temp_quick_captures', toSave);
                     console.log('✅ Captura actualizada desde servidor en tiempo real');
                     
                     // Recargar datos si estamos en la pestaña de captura rápida
