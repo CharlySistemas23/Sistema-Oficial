@@ -484,7 +484,7 @@ const Costs = {
             });
             const finalDayCosts = Array.from(uniqueDayCosts.values());
             
-            const dayTotal = finalDayCosts.reduce((sum, c) => sum + (c.amount || 0), 0);
+            const dayTotal = finalDayCosts.reduce((sum, c) => sum + (typeof Utils !== 'undefined' && Utils.parseAmount ? Utils.parseAmount(c.amount) : (parseFloat(c.amount) || 0)), 0);
             const dayCount = finalDayCosts.length;
             grandTotal += dayTotal;
             totalArrivals += dayCount;
@@ -1018,7 +1018,7 @@ const Costs = {
             const branchName = branch?.name || 'Sin Sucursal';
             
             // Calcular total de la sucursal
-            const branchTotal = branchCosts.reduce((sum, cost) => sum + (parseFloat(cost.amount) || 0), 0);
+            const branchTotal = branchCosts.reduce((sum, cost) => sum + (typeof Utils !== 'undefined' && Utils.parseAmount ? Utils.parseAmount(cost.amount) : (parseFloat(cost.amount) || 0)), 0);
             
             // Ordenar por período y categoría
             branchCosts.sort((a, b) => {
@@ -1781,10 +1781,12 @@ const Costs = {
             }
 
             if (typeFilter) {
-                costs = costs.filter(c => c.type === typeFilter);
+                const typeNorm = String(typeFilter).toLowerCase();
+                costs = costs.filter(c => (c.type || '').toLowerCase() === typeNorm);
             }
             if (categoryFilter) {
-                costs = costs.filter(c => c.category === categoryFilter);
+                const catNorm = String(categoryFilter).toLowerCase();
+                costs = costs.filter(c => (c.category || '').toLowerCase() === catNorm);
             }
             if (search) {
                 costs = costs.filter(c => 
@@ -1937,7 +1939,7 @@ const Costs = {
             // Ordenar por fecha descendente
             costs.sort((a, b) => new Date(b.date || b.created_at) - new Date(a.date || a.created_at));
             
-            const total = costs.reduce((sum, cost) => sum + (cost.amount || 0), 0);
+            const total = costs.reduce((sum, cost) => sum + (typeof Utils !== 'undefined' && Utils.parseAmount ? Utils.parseAmount(cost.amount) : (parseFloat(cost.amount) || 0)), 0);
             
             let html = `
                 <div class="module" style="margin-bottom: var(--spacing-md); padding: 0; background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light); overflow: hidden;">
@@ -2022,7 +2024,7 @@ const Costs = {
             const branchName = branch?.name || 'Sin Sucursal';
             
             // Calcular total de la sucursal
-            const branchTotal = branchCosts.reduce((sum, cost) => sum + (parseFloat(cost.amount) || 0), 0);
+            const branchTotal = branchCosts.reduce((sum, cost) => sum + (typeof Utils !== 'undefined' && Utils.parseAmount ? Utils.parseAmount(cost.amount) : (parseFloat(cost.amount) || 0)), 0);
             
             // Ordenar costos por fecha descendente
             branchCosts.sort((a, b) => new Date(b.date || b.created_at) - new Date(a.date || a.created_at));
@@ -2102,7 +2104,7 @@ const Costs = {
             if (!categoryStats[category]) {
                 categoryStats[category] = 0;
             }
-            categoryStats[category] += cost.amount || 0;
+            categoryStats[category] += typeof Utils !== 'undefined' && Utils.parseAmount ? Utils.parseAmount(cost.amount) : (parseFloat(cost.amount) || 0);
         });
 
         const categoryData = Object.entries(categoryStats)
@@ -2155,7 +2157,7 @@ const Costs = {
             if (!monthlyStats[monthKey]) {
                 monthlyStats[monthKey] = 0;
             }
-            monthlyStats[monthKey] += cost.amount || 0;
+            monthlyStats[monthKey] += typeof Utils !== 'undefined' && Utils.parseAmount ? Utils.parseAmount(cost.amount) : (parseFloat(cost.amount) || 0);
         });
 
         const monthlyData = Object.entries(monthlyStats)
@@ -2203,8 +2205,8 @@ const Costs = {
             ? branchFilter.value
             : (typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null);
         const costs = await this.getFilteredCosts({ branchId: currentBranchId });
-        const variable = costs.filter(c => c.type === 'variable').reduce((sum, c) => sum + (c.amount || 0), 0);
-        const fixed = costs.filter(c => c.type === 'fijo').reduce((sum, c) => sum + (c.amount || 0), 0);
+        const variable = costs.filter(c => (c.type || '').toLowerCase() === 'variable').reduce((sum, c) => sum + (typeof Utils !== 'undefined' && Utils.parseAmount ? Utils.parseAmount(c.amount) : (parseFloat(c.amount) || 0)), 0);
+        const fixed = costs.filter(c => (c.type || '').toLowerCase() === 'fijo').reduce((sum, c) => sum + (typeof Utils !== 'undefined' && Utils.parseAmount ? Utils.parseAmount(c.amount) : (parseFloat(c.amount) || 0)), 0);
         const total = variable + fixed;
 
         if (total === 0) {
@@ -2248,7 +2250,7 @@ const Costs = {
             if (!branchStats[branchId]) {
                 branchStats[branchId] = 0;
             }
-            branchStats[branchId] += cost.amount || 0;
+            branchStats[branchId] += typeof Utils !== 'undefined' && Utils.parseAmount ? Utils.parseAmount(cost.amount) : (parseFloat(cost.amount) || 0);
         });
 
         const branchData = Object.entries(branchStats)
@@ -2314,11 +2316,11 @@ const Costs = {
             return costDate.getMonth() === lastMonthDate.getMonth() && costDate.getFullYear() === lastMonthDate.getFullYear();
         });
 
-        const totalCosts = costs.reduce((sum, c) => sum + (c.amount || 0), 0);
-        const variableCosts = costs.filter(c => c.type === 'variable').reduce((sum, c) => sum + (c.amount || 0), 0);
-        const fixedCosts = costs.filter(c => c.type === 'fijo').reduce((sum, c) => sum + (c.amount || 0), 0);
-        const thisMonthTotal = thisMonth.reduce((sum, c) => sum + (c.amount || 0), 0);
-        const lastMonthTotal = lastMonth.reduce((sum, c) => sum + (c.amount || 0), 0);
+        const totalCosts = costs.reduce((sum, c) => sum + (typeof Utils !== 'undefined' && Utils.parseAmount ? Utils.parseAmount(c.amount) : (parseFloat(c.amount) || 0)), 0);
+        const variableCosts = costs.filter(c => (c.type || '').toLowerCase() === 'variable').reduce((sum, c) => sum + (typeof Utils !== 'undefined' && Utils.parseAmount ? Utils.parseAmount(c.amount) : (parseFloat(c.amount) || 0)), 0);
+        const fixedCosts = costs.filter(c => (c.type || '').toLowerCase() === 'fijo').reduce((sum, c) => sum + (typeof Utils !== 'undefined' && Utils.parseAmount ? Utils.parseAmount(c.amount) : (parseFloat(c.amount) || 0)), 0);
+        const thisMonthTotal = thisMonth.reduce((sum, c) => sum + (typeof Utils !== 'undefined' && Utils.parseAmount ? Utils.parseAmount(c.amount) : (parseFloat(c.amount) || 0)), 0);
+        const lastMonthTotal = lastMonth.reduce((sum, c) => sum + (typeof Utils !== 'undefined' && Utils.parseAmount ? Utils.parseAmount(c.amount) : (parseFloat(c.amount) || 0)), 0);
         const monthChange = lastMonthTotal > 0 ? ((thisMonthTotal - lastMonthTotal) / lastMonthTotal * 100) : 0;
 
         // Promedio mensual últimos 6 meses
@@ -2329,7 +2331,7 @@ const Costs = {
             if (!monthlyStats[monthKey]) {
                 monthlyStats[monthKey] = 0;
             }
-            monthlyStats[monthKey] += cost.amount || 0;
+            monthlyStats[monthKey] += typeof Utils !== 'undefined' && Utils.parseAmount ? Utils.parseAmount(cost.amount) : (parseFloat(cost.amount) || 0);
         });
         const monthlyData = Object.values(monthlyStats).slice(-6);
         const avgMonthly = monthlyData.length > 0 ? monthlyData.reduce((sum, val) => sum + val, 0) / monthlyData.length : 0;
@@ -2419,7 +2421,7 @@ const Costs = {
                 });
             }
 
-            const totalCosts = filteredCosts.reduce((sum, c) => sum + (c.amount || 0), 0);
+            const totalCosts = filteredCosts.reduce((sum, c) => sum + (typeof Utils !== 'undefined' && Utils.parseAmount ? Utils.parseAmount(c.amount) : (parseFloat(c.amount) || 0)), 0);
             const totalRevenue = completedSales.reduce((sum, s) => {
                 const saleDate = new Date(s.created_at);
                 return saleDate >= cutoffDate ? sum + (s.total || 0) : sum;
@@ -2435,11 +2437,11 @@ const Costs = {
                     categoryAnalysis[category] = { variable: 0, fijo: 0, total: 0 };
                 }
                 if (cost.type === 'variable') {
-                    categoryAnalysis[category].variable += cost.amount || 0;
+                    categoryAnalysis[category].variable += typeof Utils !== 'undefined' && Utils.parseAmount ? Utils.parseAmount(cost.amount) : (parseFloat(cost.amount) || 0);
                 } else {
-                    categoryAnalysis[category].fijo += cost.amount || 0;
+                    categoryAnalysis[category].fijo += typeof Utils !== 'undefined' && Utils.parseAmount ? Utils.parseAmount(cost.amount) : (parseFloat(cost.amount) || 0);
                 }
-                categoryAnalysis[category].total += cost.amount || 0;
+                categoryAnalysis[category].total += typeof Utils !== 'undefined' && Utils.parseAmount ? Utils.parseAmount(cost.amount) : (parseFloat(cost.amount) || 0);
             });
 
             container.innerHTML = `
@@ -2677,7 +2679,7 @@ const Costs = {
                     dateTo: Utils.formatDate(monthEnd, 'YYYY-MM-DD')
                 });
                 
-                const realTotal = realCosts.reduce((sum, c) => sum + (c.amount || 0), 0);
+                const realTotal = realCosts.reduce((sum, c) => sum + (typeof Utils !== 'undefined' && Utils.parseAmount ? Utils.parseAmount(c.amount) : (parseFloat(c.amount) || 0)), 0);
                 const difference = realTotal - budget.amount;
                 const percentage = budget.amount > 0 ? (realTotal / budget.amount * 100) : 0;
                 
@@ -2757,7 +2759,7 @@ const Costs = {
                 if (!monthlyStats[monthKey]) {
                     monthlyStats[monthKey] = 0;
                 }
-                monthlyStats[monthKey] += cost.amount || 0;
+                monthlyStats[monthKey] += typeof Utils !== 'undefined' && Utils.parseAmount ? Utils.parseAmount(cost.amount) : (parseFloat(cost.amount) || 0);
             }
         });
 
