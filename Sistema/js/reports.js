@@ -13612,7 +13612,7 @@ const Reports = {
                 doc.setFontSize(8);
                 doc.setTextColor(150, 150, 150);
                 doc.text(`Página ${i} de ${totalPages}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
-                doc.text(`Generado: ${dateStr}`, margin, pageHeight - 10);
+                doc.text(`Generado: ${generatedAtStr}`, margin, pageHeight - 10);
                 doc.text(`OPAL & CO  |  Reporte de Captura Rápida`, pageWidth - margin, pageHeight - 10, { align: 'right' });
                 doc.setTextColor(0, 0, 0);
             }
@@ -13819,6 +13819,7 @@ const Reports = {
             }
 
             const reportCaptures = this.normalizeArchivedArray(report.captures);
+            const reportArrivals = this.normalizeArchivedArray(report.arrivals);
 
             if (reportCaptures.length === 0) {
                 Utils.showNotification('Este reporte no tiene capturas para restaurar', 'warning');
@@ -13924,6 +13925,25 @@ const Reports = {
                                     console.warn('Error eliminando captura duplicada:', error);
                                 }
                             }
+
+                            // Eliminar llegadas restauradas previamente de este reporte para evitar duplicados
+                            try {
+                                const existingArrivals = await DB.getAll('agency_arrivals') || [];
+                                const arrivalsToDelete = existingArrivals.filter(a => 
+                                    a.restored_from_archived_report === reportId ||
+                                    (a.date && a.date.split('T')[0] === normalizedReportDate && a.restored_from_archived_report)
+                                );
+
+                                for (const existingArrival of arrivalsToDelete) {
+                                    try {
+                                        await DB.delete('agency_arrivals', existingArrival.id);
+                                    } catch (arrivalDeleteError) {
+                                        console.warn('Error eliminando llegada restaurada duplicada:', arrivalDeleteError);
+                                    }
+                                }
+                            } catch (arrivalCleanupError) {
+                                console.warn('Error limpiando llegadas restauradas previas:', arrivalCleanupError);
+                            }
                         }
                         
                         // Restaurar cada captura a temp_quick_captures PRIMERO
@@ -13945,6 +13965,27 @@ const Reports = {
                                 restoredCount++;
                             } catch (error) {
                                 console.error('Error restaurando captura individual:', error);
+                            }
+                        }
+
+                        // Restaurar llegadas archivadas para la misma fecha
+                        let restoredArrivalsCount = 0;
+                        for (const arrival of reportArrivals) {
+                            try {
+                                const restoredArrival = {
+                                    ...arrival,
+                                    id: 'arr_restored_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9) + '_' + restoredArrivalsCount,
+                                    date: normalizedReportDate,
+                                    restored_from_archived_report: reportId,
+                                    restored_at: new Date().toISOString(),
+                                    updated_at: new Date().toISOString(),
+                                    sync_status: 'local'
+                                };
+
+                                await DB.put('agency_arrivals', restoredArrival);
+                                restoredArrivalsCount++;
+                            } catch (arrivalRestoreError) {
+                                console.error('Error restaurando llegada individual:', arrivalRestoreError);
                             }
                         }
                         
@@ -13991,7 +14032,7 @@ const Reports = {
                             }
                             
                             const formattedDate = this.formatDateWithoutTimezone(normalizedReportDate);
-                            Utils.showNotification(`${restoredCount} capturas restauradas correctamente para la fecha ${formattedDate}. Puedes editarlas ahora.`, 'success');
+                            Utils.showNotification(`${restoredCount} capturas y ${restoredArrivalsCount} llegadas restauradas para la fecha ${formattedDate}. Puedes editarlas ahora.`, 'success');
                         } else {
                             Utils.showNotification('No se pudieron restaurar las capturas', 'error');
                         }
