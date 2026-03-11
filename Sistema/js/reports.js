@@ -8512,9 +8512,10 @@ const Reports = {
                         return false;
                     }
 
-                    // Si se filtra por guía y no existe guía en cost_entries, no incluir
                     if (selectedGuideId) {
-                        return false;
+                        if (!c.guide_id || String(c.guide_id) !== String(selectedGuideId)) {
+                            return false;
+                        }
                     }
 
                     return true;
@@ -8531,12 +8532,14 @@ const Reports = {
                     return {
                         id: `arrival_from_cost_${c.id}`,
                         agency_id: c.agency_id || null,
-                        guide_id: null,
+                        guide_id: c.guide_id || null,
+                        guide_name: c.guide_name || null,
+                        agency_name: c.agency_name || null,
                         branch_id: c.branch_id || null,
                         date: (c.date || c.created_at || selectedDate).split('T')[0],
                         passengers: passengersFromField || passengersFromNotes || 0,
-                        units: null,
-                        unit_type: null,
+                        units: parseInt(c.units || 0, 10) || null,
+                        unit_type: c.unit_type || null,
                         arrival_fee: parseFloat(c.amount) || 0,
                         calculated_fee: parseFloat(c.amount) || 0,
                         notes: c.notes || '',
