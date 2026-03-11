@@ -14346,6 +14346,12 @@ const Reports = {
                 try {
                     const { capture } = data || {};
                     if (!capture || !capture.id) return;
+
+                    // Omitir si nosotros creamos esta captura (evita duplicado por race condition)
+                    const currentUserId = typeof UserManager !== 'undefined' && UserManager.currentUser ? UserManager.currentUser.id : null;
+                    if (currentUserId && capture.created_by && String(capture.created_by) === String(currentUserId)) {
+                        return; // Ya la tenemos; saveAllPendingCaptures la actualizará con server_id
+                    }
                     
                     console.log('📥 Captura creada en servidor, sincronizando...');
                     
