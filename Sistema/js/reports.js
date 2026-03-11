@@ -10694,45 +10694,14 @@ const Reports = {
             y = 52;
 
             // ========== RESUMEN ==========
-            // IMPORTANTE: Calcular totales desde los PAGOS ORIGINALES, no desde c.total que ya está convertido
-            const totals = { USD: 0, MXN: 0, CAD: 0 };
-            let totalQuantity = 0;
-            
             // Obtener tipo de cambio del día para mostrar en el reporte
             const exchangeRatesForDisplay = await this.getExchangeRatesForDate(selectedDate);
             const usdRateForDisplay = exchangeRatesForDisplay?.usd || 18.0;
             const cadRateForDisplay = exchangeRatesForDisplay?.cad || 13.0;
-            
-            captures.forEach(c => {
-                // Calcular desde pagos individuales si existen (valores originales)
-                if (c.payments && Array.isArray(c.payments) && c.payments.length > 0) {
-                    c.payments.forEach(payment => {
-                        const amount = parseFloat(payment.amount) || 0;
-                        const currency = payment.currency || c.currency || 'MXN';
-                        totals[currency] = (totals[currency] || 0) + amount;
-                    });
-                } else {
-                    // Fallback: Si no hay pagos, intentar obtener el valor original
-                    // Si c.currency es USD o CAD, necesitamos el valor original, no el convertido
-                    // Por ahora, usar c.total pero dividir por el tipo de cambio si es necesario
-                    // NOTA: Esto es un fallback, idealmente todas las capturas deberían tener payments
-                    const currency = c.currency || 'MXN';
-                    if (currency === 'USD') {
-                        // Si el total está en MXN, dividir por el tipo de cambio para obtener USD original
-                        // Pero si ya está en USD, usar directamente
-                        // Asumimos que c.total puede estar en MXN si fue convertido
-                        // Intentar obtener desde un campo original_amount si existe
-                        const originalAmount = c.original_amount || (parseFloat(c.total) || 0) / usdRateForDisplay;
-                        totals.USD = (totals.USD || 0) + originalAmount;
-                    } else if (currency === 'CAD') {
-                        const originalAmount = c.original_amount || (parseFloat(c.total) || 0) / cadRateForDisplay;
-                        totals.CAD = (totals.CAD || 0) + originalAmount;
-                    } else {
-                        totals.MXN = (totals.MXN || 0) + (parseFloat(c.total) || 0);
-                    }
-                }
-                totalQuantity += c.quantity || 1;
-            });
+
+            const computedSummary = this.calculateCaptureCurrencyTotals(captures, usdRateForDisplay, cadRateForDisplay);
+            const totals = computedSummary.totals;
+            const totalQuantity = computedSummary.totalQuantity;
 
             // Obtener información de sucursal(es)
             const captureBranchIdsForSummary = [...new Set(captures.map(c => c.branch_id).filter(Boolean))];
@@ -10748,7 +10717,7 @@ const Reports = {
             const summaryTotalUSDInMXN = summaryTotalUSDOriginal * usdRateForDisplay;
             const summaryTotalCADOriginal = totals.CAD || 0;
             const summaryTotalCADInMXN = summaryTotalCADOriginal * cadRateForDisplay;
-            const totalGeneralMXN = summaryTotalUSDInMXN + totals.MXN + summaryTotalCADInMXN;
+            const totalGeneralMXN = computedSummary.totalSalesMXN;
 
             const summaryBoxH = 42;
             const summaryMidX = pageWidth / 2;
@@ -10927,10 +10896,11 @@ const Reports = {
                 let originalAmount = 0;
                 let totalMXN = parseFloat(c.total) || 0;
                 const currency = c.currency || 'MXN';
-                if (c.payments && Array.isArray(c.payments) && c.payments.length > 0) {
+                const capturePayments = this.normalizeCapturePayments(c);
+                if (capturePayments.length > 0) {
                     let totalOriginal = 0;
                     let totalMXNFromPayments = 0;
-                    c.payments.forEach(payment => {
+                    capturePayments.forEach(payment => {
                         const amount = parseFloat(payment.amount) || 0;
                         const payCurrency = payment.currency || currency;
                         totalOriginal += amount;
@@ -13082,7 +13052,7 @@ const Reports = {
             const branches = await DB.getAll('catalog_branches') || [];
 
             // Obtener llegadas del reporte archivado
-            const todayArrivals = this.normalizeArchivedArray(report.arrivals);
+            const todayArrivals = this.getArchivedReportArrivals(report);
 
             // Obtener tipos de cambio del reporte archivado
             const exchangeRates = report.exchange_rates || {};
@@ -13160,8 +13130,9 @@ const Reports = {
 
             // ========== RESUMEN ==========
             // IMPORTANTE: Calcular totales desde los PAGOS ORIGINALES o desde report.totals
-            const totals = report.totals || { USD: 0, MXN: 0, CAD: 0 };
-            let totalQuantity = report.total_quantity || 0;
+            const computedSummary = this.calculateCaptureCurrencyTotals(captures, usdRateForDisplay, cadRateForDisplay);
+            const totals = computedSummary.totals;
+            let totalQuantity = computedSummary.totalQuantity || report.total_quantity || 0;
             
             // Obtener información de sucursal(es)
             const captureBranchIdsForSummary = report.branch_ids || [...new Set(captures.map(c => c.branch_id).filter(Boolean))];
@@ -13177,7 +13148,7 @@ const Reports = {
             const summaryTotalUSDInMXN = summaryTotalUSDOriginal * usdRateForDisplay;
             const summaryTotalCADOriginal = totals.CAD || 0;
             const summaryTotalCADInMXN = summaryTotalCADOriginal * cadRateForDisplay;
-            const totalGeneralMXN = summaryTotalUSDInMXN + (totals.MXN || 0) + summaryTotalCADInMXN;
+            const totalGeneralMXN = computedSummary.totalSalesMXN;
 
             const summaryBoxH = 42;
             const summaryMidX = pageWidth / 2;
@@ -13349,10 +13320,11 @@ const Reports = {
                 let totalMXN = parseFloat(c.total) || 0;
                 const currency = c.currency || 'MXN';
                 
-                if (c.payments && Array.isArray(c.payments) && c.payments.length > 0) {
+                const capturePayments = this.normalizeCapturePayments(c);
+                if (capturePayments.length > 0) {
                     let totalOriginal = 0;
                     let totalMXNFromPayments = 0;
-                    c.payments.forEach(payment => {
+                    capturePayments.forEach(payment => {
                         const amount = parseFloat(payment.amount) || 0;
                         const payCurrency = payment.currency || currency;
                         totalOriginal += amount;
@@ -13525,7 +13497,8 @@ const Reports = {
             }
 
             // ========== UTILIDADES (MARGEN BRUTO Y NETO) - homologado ==========
-            const totalSalesMXNNum = parseFloat(report.total_sales_mxn || 0);
+            const totalSalesMXNStored = parseFloat(report.total_sales_mxn || 0);
+            const totalSalesMXNNum = totalSalesMXNStored > 0 ? totalSalesMXNStored : (parseFloat(computedSummary.totalSalesMXN) || 0);
             const totalCOGSNum = parseFloat(report.total_cogs || 0);
             const totalCommissionsNum = parseFloat(report.total_commissions || 0);
             const totalArrivalCostsNum = parseFloat(report.total_arrival_costs || 0);
@@ -13784,6 +13757,92 @@ const Reports = {
         return [];
     },
 
+    normalizeCapturePayments(capture) {
+        if (!capture) return [];
+        const rawPayments = capture.payments;
+
+        if (Array.isArray(rawPayments)) return rawPayments;
+
+        if (typeof rawPayments === 'string') {
+            try {
+                const parsed = JSON.parse(rawPayments);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (_) {
+                return [];
+            }
+        }
+
+        return [];
+    },
+
+    calculateCaptureCurrencyTotals(captures, usdRate = 18.0, cadRate = 13.0) {
+        const normalizedCaptures = Array.isArray(captures) ? captures : [];
+        const safeUsdRate = parseFloat(usdRate) || 18.0;
+        const safeCadRate = parseFloat(cadRate) || 13.0;
+
+        const totals = { USD: 0, MXN: 0, CAD: 0 };
+        let totalQuantity = 0;
+        let totalSalesMXN = 0;
+
+        normalizedCaptures.forEach(capture => {
+            totalQuantity += parseFloat(capture?.quantity) || 1;
+
+            const payments = this.normalizeCapturePayments(capture);
+            if (payments.length > 0) {
+                payments.forEach(payment => {
+                    const amount = parseFloat(payment?.amount) || 0;
+                    const paymentCurrency = (payment?.currency || capture?.currency || 'MXN').toUpperCase();
+                    const currency = ['USD', 'MXN', 'CAD'].includes(paymentCurrency) ? paymentCurrency : 'MXN';
+
+                    totals[currency] = (totals[currency] || 0) + amount;
+                    if (currency === 'USD') totalSalesMXN += amount * safeUsdRate;
+                    else if (currency === 'CAD') totalSalesMXN += amount * safeCadRate;
+                    else totalSalesMXN += amount;
+                });
+                return;
+            }
+
+            const captureCurrencyRaw = (capture?.currency || 'MXN').toUpperCase();
+            const captureCurrency = ['USD', 'MXN', 'CAD'].includes(captureCurrencyRaw) ? captureCurrencyRaw : 'MXN';
+            const captureTotal = parseFloat(capture?.total) || 0;
+
+            if (captureCurrency === 'USD') {
+                const originalAmount = parseFloat(capture?.original_amount) || (captureTotal / safeUsdRate);
+                totals.USD += originalAmount;
+                totalSalesMXN += originalAmount * safeUsdRate;
+            } else if (captureCurrency === 'CAD') {
+                const originalAmount = parseFloat(capture?.original_amount) || (captureTotal / safeCadRate);
+                totals.CAD += originalAmount;
+                totalSalesMXN += originalAmount * safeCadRate;
+            } else {
+                totals.MXN += captureTotal;
+                totalSalesMXN += captureTotal;
+            }
+        });
+
+        return { totals, totalQuantity, totalSalesMXN };
+    },
+
+    getArchivedReportArrivals(report) {
+        const directArrivals = this.normalizeArchivedArray(report?.arrivals);
+        if (directArrivals.length > 0) return directArrivals;
+
+        const dailySummary = this.normalizeArchivedArray(report?.daily_summary);
+        if (dailySummary.length === 0) return [];
+
+        const extractedArrivals = [];
+        dailySummary.forEach(day => {
+            const dayArrivals = this.normalizeArchivedArray(
+                day?.arrivals || day?.arrivals_json || day?.arrival_details
+            );
+            if (dayArrivals.length > 0) {
+                extractedArrivals.push(...dayArrivals);
+            }
+        });
+
+        return extractedArrivals;
+    },
+
     getArchivedReportCompletenessScore(report) {
         const capturesCount = this.normalizeArchivedArray(report?.captures).length;
         const arrivalsCount = this.normalizeArchivedArray(report?.arrivals).length;
@@ -13819,7 +13878,7 @@ const Reports = {
             }
 
             const reportCaptures = this.normalizeArchivedArray(report.captures);
-            const reportArrivals = this.normalizeArchivedArray(report.arrivals);
+            const reportArrivals = this.getArchivedReportArrivals(report);
 
             if (reportCaptures.length === 0) {
                 Utils.showNotification('Este reporte no tiene capturas para restaurar', 'warning');
@@ -13976,6 +14035,7 @@ const Reports = {
                                     ...arrival,
                                     id: 'arr_restored_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9) + '_' + restoredArrivalsCount,
                                     date: normalizedReportDate,
+                                    branch_id: arrival.branch_id || report.branch_id || null,
                                     restored_from_archived_report: reportId,
                                     restored_at: new Date().toISOString(),
                                     updated_at: new Date().toISOString(),
