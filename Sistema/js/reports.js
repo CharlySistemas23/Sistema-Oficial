@@ -12662,12 +12662,12 @@ const Reports = {
                         for (const serverReport of serverReports) {
                             if (serverReport.id && deletedArchivedReportIds.has(String(serverReport.id))) continue;
                             try {
-                                const reportDate = serverReport.report_date || serverReport.date;
+                                const reportDate = this.getArchivedReportDate(serverReport);
                                 const branchId = serverReport.branch_id;
                                 
                                 // Usar una clave única basada en fecha y sucursal para evitar duplicados
                                 // Formato: report_YYYY-MM-DD_branchId
-                                const reportDateStr = reportDate ? (typeof reportDate === 'string' ? reportDate.split('T')[0] : reportDate) : '';
+                                const reportDateStr = reportDate || '';
                                 const uniqueKey = branchId && reportDateStr 
                                     ? `report_${reportDateStr}_${branchId}` 
                                     : serverReport.id || `archived_${reportDateStr || Date.now()}`;
@@ -12675,8 +12675,7 @@ const Reports = {
                                 // Verificar si ya existe un reporte local con la misma fecha y sucursal
                                 const existingLocalReports = await DB.getAll('archived_quick_captures') || [];
                                 const existingReport = existingLocalReports.find(r => {
-                                    const rDate = r.date || r.report_date || '';
-                                    const rDateStr = rDate ? (typeof rDate === 'string' ? rDate.split('T')[0] : rDate) : '';
+                                    const rDateStr = this.getArchivedReportDate(r);
                                     return rDateStr === reportDateStr && r.branch_id === branchId;
                                 });
                                 
@@ -12699,11 +12698,11 @@ const Reports = {
                                     gross_profit: serverReport.gross_profit || 0,
                                     net_profit: serverReport.net_profit || 0,
                                     exchange_rates: serverReport.exchange_rates || {},
-                                    captures: serverReport.captures || [],
-                                    daily_summary: serverReport.daily_summary || [],
-                                    seller_commissions: serverReport.seller_commissions || [],
-                                    guide_commissions: serverReport.guide_commissions || [],
-                                    arrivals: serverReport.arrivals || [],
+                                    captures: this.normalizeArchivedArray(serverReport.captures),
+                                    daily_summary: this.normalizeArchivedArray(serverReport.daily_summary),
+                                    seller_commissions: this.normalizeArchivedArray(serverReport.seller_commissions),
+                                    guide_commissions: this.normalizeArchivedArray(serverReport.guide_commissions),
+                                    arrivals: this.normalizeArchivedArray(serverReport.arrivals),
                                     metrics: serverReport.metrics || {},
                                     archived_at: serverReport.archived_at || serverReport.created_at || new Date().toISOString(),
                                     server_id: serverReport.id, // Guardar el ID del servidor para referencia
@@ -12761,32 +12760,15 @@ const Reports = {
             // Eliminar duplicados: mantener solo el más reciente por fecha + sucursal
             const reportsByKey = new Map();
             for (const report of archivedReports) {
-                const reportDate = report.date || report.report_date || '';
-                const reportDateStr = reportDate ? (typeof reportDate === 'string' ? reportDate.split('T')[0] : reportDate) : '';
+                const reportDateStr = this.getArchivedReportDate(report);
                 const branchId = report.branch_id;
                 
                 if (!reportDateStr || !branchId) continue;
                 
                 const key = `${reportDateStr}_${branchId}`;
-                
-                if (!reportsByKey.has(key)) {
-                    reportsByKey.set(key, report);
-                } else {
-                    const existing = reportsByKey.get(key);
-                    // Preferir el que tiene server_id (está sincronizado)
-                    if (report.server_id && !existing.server_id) {
-                        reportsByKey.set(key, report);
-                    } else if (existing.server_id && !report.server_id) {
-                        // Mantener el existente
-                    } else {
-                        // Si ambos tienen o no tienen server_id, usar el más reciente por archived_at
-                        const existingArchived = existing.archived_at ? new Date(existing.archived_at) : new Date(0);
-                        const currentArchived = report.archived_at ? new Date(report.archived_at) : new Date(0);
-                        if (currentArchived > existingArchived) {
-                            reportsByKey.set(key, report);
-                        }
-                    }
-                }
+
+                const existing = reportsByKey.get(key);
+                reportsByKey.set(key, this.pickMostCompleteArchivedReport(existing, report));
             }
             
             archivedReports = Array.from(reportsByKey.values());
@@ -12796,8 +12778,8 @@ const Reports = {
             // Usar la fecha del reporte (date), no la fecha de archivado (archived_at)
             archivedReports.sort((a, b) => {
                 // Obtener la fecha del reporte (puede estar en 'date' o 'report_date')
-                const dateAStr = a.date || a.report_date || '';
-                const dateBStr = b.date || b.report_date || '';
+                const dateAStr = this.getArchivedReportDate(a);
+                const dateBStr = this.getArchivedReportDate(b);
                 
                 // Si las fechas están en formato YYYY-MM-DD, compararlas directamente
                 if (dateAStr && dateBStr) {
@@ -12842,8 +12824,7 @@ const Reports = {
                         <tbody>
                             ${archivedReports.map(report => {
                                 // Formatear fecha sin desfase de zona horaria
-                                const reportDate = report.date || report.report_date || '';
-                                const normalizedDate = reportDate ? (typeof reportDate === 'string' ? reportDate.split('T')[0] : reportDate) : '';
+                                const normalizedDate = this.getArchivedReportDate(report);
                                 const dateStr = normalizedDate ? this.formatDateWithoutTimezone(normalizedDate) : 'Sin fecha';
                                 
                                 // Formatear fecha de archivado (puede tener hora, así que usar Date)
@@ -12923,7 +12904,7 @@ const Reports = {
         }
     },
 
-    async viewArchivedReport(reportId) {
+    async viewArchivedReportLegacy(reportId) {
         try {
             const report = await DB.get('archived_quick_captures', reportId);
             if (!report) {
@@ -13091,8 +13072,8 @@ const Reports = {
             const { jsPDF } = jspdfLib;
             
             // Obtener datos del reporte archivado
-            const captures = report.captures || [];
-            const selectedDate = report.date || report.report_date || '';
+            const captures = this.normalizeArchivedArray(report.captures);
+            const selectedDate = this.getArchivedReportDate(report);
             
             // Obtener catálogos necesarios
             const sellers = await DB.getAll('catalog_sellers') || [];
@@ -13101,7 +13082,7 @@ const Reports = {
             const branches = await DB.getAll('catalog_branches') || [];
 
             // Obtener llegadas del reporte archivado
-            const todayArrivals = report.arrivals || [];
+            const todayArrivals = this.normalizeArchivedArray(report.arrivals);
 
             // Obtener tipos de cambio del reporte archivado
             const exchangeRates = report.exchange_rates || {};
@@ -13151,17 +13132,20 @@ const Reports = {
             doc.setTextColor(200, 215, 230);
             doc.text('Reporte de Captura Rápida', margin, 28);
 
-            const dateStr = typeof Utils !== 'undefined' && Utils.formatDate 
+            const generatedAtStr = typeof Utils !== 'undefined' && Utils.formatDate 
                 ? Utils.formatDate(new Date(), 'DD/MM/YYYY HH:mm')
                 : new Date().toLocaleString('es-MX');
             doc.setFontSize(9);
             doc.setTextColor(200, 215, 230);
-            doc.text(dateStr, pageWidth - margin, 16, { align: 'right' });
+            doc.text(generatedAtStr, pageWidth - margin, 16, { align: 'right' });
 
-            const reportDate = new Date(selectedDate + 'T00:00:00');
-            const formattedDate = reportDate.toLocaleDateString('es-MX', { 
-                year: 'numeric', month: '2-digit', day: '2-digit' 
-            });
+            let formattedDate = 'Sin fecha';
+            if (selectedDate) {
+                const reportDate = new Date(`${selectedDate}T00:00:00`);
+                formattedDate = reportDate.toLocaleDateString('es-MX', {
+                    year: 'numeric', month: '2-digit', day: '2-digit'
+                });
+            }
             const pillLabel = `Fecha del Reporte: ${formattedDate}`;
             doc.setFontSize(9);
             doc.setFont('helvetica', 'bold');
@@ -13767,6 +13751,65 @@ const Reports = {
         return dateStr;
     },
 
+    getArchivedReportDate(report) {
+        if (!report) return '';
+        const rawDate = report.report_date || report.date || '';
+        if (!rawDate) return '';
+
+        if (typeof rawDate === 'string') {
+            return rawDate.split('T')[0];
+        }
+
+        if (rawDate instanceof Date) {
+            const year = rawDate.getFullYear();
+            const month = String(rawDate.getMonth() + 1).padStart(2, '0');
+            const day = String(rawDate.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
+        return String(rawDate).split('T')[0];
+    },
+
+    normalizeArchivedArray(value) {
+        if (!value) return [];
+        if (Array.isArray(value)) return value;
+        if (typeof value === 'string') {
+            try {
+                const parsed = JSON.parse(value);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (_) {
+                return [];
+            }
+        }
+        return [];
+    },
+
+    getArchivedReportCompletenessScore(report) {
+        const capturesCount = this.normalizeArchivedArray(report?.captures).length;
+        const arrivalsCount = this.normalizeArchivedArray(report?.arrivals).length;
+        const hasMetrics = report?.metrics && typeof report.metrics === 'object' ? 1 : 0;
+        const hasDailySummary = this.normalizeArchivedArray(report?.daily_summary).length > 0 ? 1 : 0;
+        return (capturesCount * 1000) + (arrivalsCount * 100) + (hasDailySummary * 10) + hasMetrics;
+    },
+
+    pickMostCompleteArchivedReport(existingReport, candidateReport) {
+        if (!existingReport) return candidateReport;
+        if (!candidateReport) return existingReport;
+
+        const existingScore = this.getArchivedReportCompletenessScore(existingReport);
+        const candidateScore = this.getArchivedReportCompletenessScore(candidateReport);
+
+        if (candidateScore > existingScore) return candidateReport;
+        if (existingScore > candidateScore) return existingReport;
+
+        if (candidateReport.server_id && !existingReport.server_id) return candidateReport;
+        if (existingReport.server_id && !candidateReport.server_id) return existingReport;
+
+        const existingArchived = existingReport.archived_at ? new Date(existingReport.archived_at) : new Date(0);
+        const candidateArchived = candidateReport.archived_at ? new Date(candidateReport.archived_at) : new Date(0);
+        return candidateArchived > existingArchived ? candidateReport : existingReport;
+    },
+
     async restoreArchivedReport(reportId) {
         try {
             const report = await DB.get('archived_quick_captures', reportId);
@@ -13775,13 +13818,15 @@ const Reports = {
                 return;
             }
 
-            if (!report.captures || report.captures.length === 0) {
+            const reportCaptures = this.normalizeArchivedArray(report.captures);
+
+            if (reportCaptures.length === 0) {
                 Utils.showNotification('Este reporte no tiene capturas para restaurar', 'warning');
                 return;
             }
 
             // Normalizar la fecha sin desfase de zona horaria
-            const normalizedReportDate = report.date.split('T')[0];
+            const normalizedReportDate = this.getArchivedReportDate(report);
             const formattedDate = this.formatDateWithoutTimezone(normalizedReportDate);
 
             // Crear modal de confirmación
@@ -13797,7 +13842,7 @@ const Reports = {
                     </div>
                     <div class="modal-body" style="padding: var(--spacing-md);">
                         <p style="margin: 0 0 var(--spacing-sm) 0; font-size: 14px; line-height: 1.5;">
-                            Se restaurarán <strong>${report.captures.length}</strong> capturas del reporte del <strong>${formattedDate}</strong>.
+                            Se restaurarán <strong>${reportCaptures.length}</strong> capturas del reporte del <strong>${formattedDate}</strong>.
                         </p>
                         <p style="margin: 0; font-size: 13px; line-height: 1.5; color: var(--color-text-secondary);">
                             Las capturas se restaurarán con la fecha del reporte (<strong>${formattedDate}</strong>) y podrás editarlas.
@@ -13824,7 +13869,7 @@ const Reports = {
                     
                     try {
                         // Normalizar la fecha sin desfase de zona horaria
-                        const normalizedReportDate = report.date.split('T')[0];
+                        const normalizedReportDate = this.getArchivedReportDate(report);
                         
                         // Verificar si ya hay capturas restauradas de este reporte para evitar duplicados
                         const existingCaptures = await DB.getAll('temp_quick_captures') || [];
@@ -13883,7 +13928,7 @@ const Reports = {
                         
                         // Restaurar cada captura a temp_quick_captures PRIMERO
                         let restoredCount = 0;
-                        for (const capture of report.captures) {
+                        for (const capture of reportCaptures) {
                             try {
                                 // Generar nuevo ID para evitar conflictos
                                 // IMPORTANTE: Mantener la fecha original del reporte archivado
@@ -13977,13 +14022,17 @@ const Reports = {
                 return;
             }
 
-            const date = new Date(report.date);
+            const normalizedReportDate = this.getArchivedReportDate(report);
+            const date = normalizedReportDate ? new Date(`${normalizedReportDate}T00:00:00`) : new Date();
             const formattedDate = date.toLocaleDateString('es-MX', { 
                 weekday: 'long', 
                 year: 'numeric', 
                 month: 'long', 
                 day: 'numeric' 
             });
+
+            const reportCaptures = this.normalizeArchivedArray(report.captures);
+            const reportArrivals = this.normalizeArchivedArray(report.arrivals);
 
             const grossMargin = report.total_sales_mxn > 0 
                 ? ((report.gross_profit || 0) / report.total_sales_mxn * 100).toFixed(2)
@@ -13993,7 +14042,7 @@ const Reports = {
                 : '0.00';
 
             let capturesHtml = '';
-            if (report.captures && report.captures.length > 0) {
+            if (reportCaptures.length > 0) {
                 capturesHtml = `
                     <div style="max-height: 400px; overflow-y: auto; margin-top: var(--spacing-md);">
                         <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
@@ -14007,7 +14056,7 @@ const Reports = {
                                 </tr>
                             </thead>
                             <tbody>
-                                ${report.captures.map((capture, idx) => {
+                                ${reportCaptures.map((capture, idx) => {
                                     const captureDate = capture.created_at || capture.date || '';
                                     const captureTime = captureDate ? new Date(captureDate).toLocaleTimeString('es-MX', { 
                                         hour: '2-digit', 
@@ -14023,6 +14072,34 @@ const Reports = {
                                         </tr>
                                     `;
                                 }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            }
+
+            let arrivalsHtml = '';
+            if (reportArrivals.length > 0) {
+                arrivalsHtml = `
+                    <div style="max-height: 320px; overflow-y: auto; margin-top: var(--spacing-md);">
+                        <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+                            <thead style="position: sticky; top: 0; background: var(--color-bg-secondary); z-index: 10;">
+                                <tr style="border-bottom: 2px solid var(--color-border-light);">
+                                    <th style="padding: var(--spacing-xs); text-align: left; font-weight: 600;">Agencia</th>
+                                    <th style="padding: var(--spacing-xs); text-align: left; font-weight: 600;">Guía</th>
+                                    <th style="padding: var(--spacing-xs); text-align: center; font-weight: 600;">Pasajeros</th>
+                                    <th style="padding: var(--spacing-xs); text-align: right; font-weight: 600;">Costo</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${reportArrivals.map((arrival, idx) => `
+                                    <tr style="border-bottom: 1px solid var(--color-border-light); ${idx % 2 === 0 ? 'background: var(--color-bg-secondary);' : ''}">
+                                        <td style="padding: var(--spacing-xs);">${arrival.agency_name || arrival.agency || '-'}</td>
+                                        <td style="padding: var(--spacing-xs);">${arrival.guide_name || arrival.guide || '-'}</td>
+                                        <td style="padding: var(--spacing-xs); text-align: center;">${parseInt(arrival.passengers || 0, 10) || 0}</td>
+                                        <td style="padding: var(--spacing-xs); text-align: right; font-weight: 600;">${Utils.formatCurrency(arrival.arrival_fee || arrival.calculated_fee || 0)}</td>
+                                    </tr>
+                                `).join('')}
                             </tbody>
                         </table>
                     </div>
@@ -14049,7 +14126,7 @@ const Reports = {
                         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--spacing-md); margin-bottom: var(--spacing-lg);">
                             <div style="padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md);">
                                 <div style="font-size: 11px; color: var(--color-text-secondary); margin-bottom: 4px;">TOTAL CAPTURAS</div>
-                                <div style="font-size: 20px; font-weight: 700; color: var(--color-primary);">${report.captures?.length || 0}</div>
+                                <div style="font-size: 20px; font-weight: 700; color: var(--color-primary);">${reportCaptures.length}</div>
                             </div>
                             <div style="padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md);">
                                 <div style="font-size: 11px; color: var(--color-text-secondary); margin-bottom: 4px;">VENTAS (MXN)</div>
@@ -14095,8 +14172,15 @@ const Reports = {
                         
                         ${capturesHtml ? `
                             <div>
-                                <h4 style="margin: 0 0 var(--spacing-sm) 0; font-size: 14px; font-weight: 600; text-transform: uppercase;">Capturas (${report.captures?.length || 0})</h4>
+                                <h4 style="margin: 0 0 var(--spacing-sm) 0; font-size: 14px; font-weight: 600; text-transform: uppercase;">Capturas (${reportCaptures.length})</h4>
                                 ${capturesHtml}
+                            </div>
+                        ` : ''}
+
+                        ${arrivalsHtml ? `
+                            <div style="margin-top: var(--spacing-lg);">
+                                <h4 style="margin: 0 0 var(--spacing-sm) 0; font-size: 14px; font-weight: 600; text-transform: uppercase;">Llegadas Archivadas (${reportArrivals.length})</h4>
+                                ${arrivalsHtml}
                             </div>
                         ` : ''}
                     </div>
@@ -15140,9 +15224,9 @@ const Reports = {
                 netProfit += parseFloat(report.net_profit || 0);
 
                 // Agregar a daily_summary
-                const reportDate = report.date || report.report_date || '';
+                const reportDate = this.getArchivedReportDate(report);
                 dailySummary.push({
-                    date: reportDate.split('T')[0],
+                    date: reportDate,
                     captures: parseInt(report.total_captures || report.captures?.length || 0),
                     sales_mxn: parseFloat(report.total_sales_mxn || 0),
                     gross_profit: parseFloat(report.gross_profit || 0),
