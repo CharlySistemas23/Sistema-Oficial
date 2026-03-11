@@ -31,7 +31,17 @@ const Utils = {
     // Formato de fecha
     formatDate(date, format = 'YYYY-MM-DD') {
         if (!date) return '';
-        const d = new Date(date);
+        let d;
+        // Cadenas YYYY-MM-DD: parsear como fecha local (evita desfase UTC en zonas negativas)
+        if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}/.test(date.trim())) {
+            const parts = date.trim().split('T')[0].split('-');
+            const y = parseInt(parts[0], 10);
+            const m = parseInt(parts[1], 10) - 1;
+            const dayNum = parseInt(parts[2], 10);
+            d = new Date(y, m, dayNum);
+        } else {
+            d = new Date(date);
+        }
         const year = d.getFullYear();
         const month = String(d.getMonth() + 1).padStart(2, '0');
         const day = String(d.getDate()).padStart(2, '0');
