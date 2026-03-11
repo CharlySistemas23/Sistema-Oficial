@@ -428,13 +428,30 @@ const ArrivalRules = {
             // registerArrivalPayment ya maneja duplicados: si existe, lo actualiza; si no, lo crea
             if (typeof Costs !== 'undefined' && Costs.registerArrivalPayment) {
                 if (arrival.arrival_fee > 0) {
+                    let agencyName = null;
+                    let guideName = null;
+                    try {
+                        const agencies = await DB.getAll('catalog_agencies') || [];
+                        const guides = await DB.getAll('catalog_guides') || [];
+                        agencyName = agencies.find(a => String(a.id) === String(arrival.agency_id))?.name || null;
+                        guideName = guides.find(g => String(g.id) === String(arrival.guide_id))?.name || null;
+                    } catch (_) {}
+
                     await Costs.registerArrivalPayment(
                         arrival.id,
                         arrival.arrival_fee,
                         arrival.branch_id,
                         arrival.agency_id,
                         arrival.passengers,
-                        arrival.date
+                        arrival.date,
+                        {
+                            agency_name: agencyName,
+                            guide_id: arrival.guide_id || null,
+                            guide_name: guideName,
+                            units: arrival.units || null,
+                            unit_type: arrival.unit_type || null,
+                            notes: arrival.notes || null
+                        }
                     );
                 } else if (existingArrival && arrival.arrival_fee === 0) {
                     // Si se actualiza una llegada y el fee ahora es 0, eliminar el costo si existe
