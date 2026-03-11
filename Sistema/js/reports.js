@@ -14084,6 +14084,45 @@ const Reports = {
                     try {
                         // Normalizar la fecha sin desfase de zona horaria
                         const normalizedReportDate = this.getArchivedReportDate(report);
+
+                        const normalizeDateStr = (value) => {
+                            if (!value) return '';
+                            return String(value).split('T')[0];
+                        };
+
+                        const normalizeCaptureKey = (capture) => {
+                            const payments = this.normalizeCapturePayments(capture)
+                                .map(p => ({
+                                    method: p?.method || '',
+                                    currency: p?.currency || '',
+                                    amount: parseFloat(p?.amount) || 0
+                                }))
+                                .sort((a, b) => `${a.method}_${a.currency}_${a.amount}`.localeCompare(`${b.method}_${b.currency}_${b.amount}`));
+
+                            return JSON.stringify({
+                                date: normalizedReportDate,
+                                branch_id: capture?.branch_id || null,
+                                seller_id: capture?.seller_id || null,
+                                guide_id: capture?.guide_id || null,
+                                agency_id: capture?.agency_id || null,
+                                product: String(capture?.product || '').trim().toLowerCase(),
+                                quantity: parseFloat(capture?.quantity) || 0,
+                                total: parseFloat(capture?.total) || 0,
+                                currency: capture?.currency || 'MXN',
+                                payments
+                            });
+                        };
+
+                        const normalizeArrivalKey = (arrival) => JSON.stringify({
+                            date: normalizedReportDate,
+                            branch_id: arrival?.branch_id || report?.branch_id || null,
+                            agency_id: arrival?.agency_id || null,
+                            guide_id: arrival?.guide_id || null,
+                            passengers: parseFloat(arrival?.passengers) || 0,
+                            units: parseFloat(arrival?.units) || 0,
+                            unit_type: arrival?.unit_type || null,
+                            fee: parseFloat(arrival?.arrival_fee || arrival?.calculated_fee || 0) || 0
+                        });
                         
                         // Verificar si ya hay capturas restauradas de este reporte para evitar duplicados
                         const existingCaptures = await DB.getAll('temp_quick_captures') || [];
@@ -14091,6 +14130,13 @@ const Reports = {
                             c.restored_from === reportId || 
                             (c.date && c.date.split('T')[0] === normalizedReportDate && c.restored_from)
                         );
+
+                        const sameDateCaptures = existingCaptures.filter(c => {
+                            const cDate = normalizeDateStr(c.original_report_date || c.date);
+                            return cDate === normalizedReportDate;
+                        });
+
+                        const existingCaptureKeys = new Set(sameDateCaptures.map(c => normalizeCaptureKey(c)));
                         
                         if (alreadyRestored.length > 0) {
                             // Crear modal de confirmación para reemplazar
@@ -14161,6 +14207,7 @@ const Reports = {
                         
                         // Restaurar cada captura a temp_quick_captures PRIMERO
                         let restoredCount = 0;
+                        let skippedDuplicateCaptures = 0;
                         for (const capture of reportCaptures) {
                             try {
                                 // Generar nuevo ID para evitar conflictos
@@ -14173,8 +14220,15 @@ const Reports = {
                                     restored_at: new Date().toISOString(),
                                     original_report_date: normalizedReportDate // Guardar la fecha original para referencia
                                 };
+
+                                const captureKey = normalizeCaptureKey(restoredCapture);
+                                if (existingCaptureKeys.has(captureKey)) {
+                                    skippedDuplicateCaptures++;
+                                    continue;
+                                }
                                 
                                 await DB.put('temp_quick_captures', restoredCapture);
+                                existingCaptureKeys.add(captureKey);
                                 restoredCount++;
                             } catch (error) {
                                 console.error('Error restaurando captura individual:', error);
@@ -14182,7 +14236,12 @@ const Reports = {
                         }
 
                         // Restaurar llegadas archivadas para la misma fecha
+                        const existingArrivals = await DB.getAll('agency_arrivals') || [];
+                        const sameDateArrivals = existingArrivals.filter(a => normalizeDateStr(a.date) === normalizedReportDate);
+                        const existingArrivalKeys = new Set(sameDateArrivals.map(a => normalizeArrivalKey(a)));
+
                         let restoredArrivalsCount = 0;
+                        let skippedDuplicateArrivals = 0;
                         for (const arrival of reportArrivals) {
                             try {
                                 const restoredArrival = {
@@ -14196,7 +14255,14 @@ const Reports = {
                                     sync_status: 'local'
                                 };
 
+                                const arrivalKey = normalizeArrivalKey(restoredArrival);
+                                if (existingArrivalKeys.has(arrivalKey)) {
+                                    skippedDuplicateArrivals++;
+                                    continue;
+                                }
+
                                 await DB.put('agency_arrivals', restoredArrival);
+                                existingArrivalKeys.add(arrivalKey);
                                 restoredArrivalsCount++;
                             } catch (arrivalRestoreError) {
                                 console.error('Error restaurando llegada individual:', arrivalRestoreError);
@@ -14246,7 +14312,10 @@ const Reports = {
                             }
                             
                             const formattedDate = this.formatDateWithoutTimezone(normalizedReportDate);
-                            Utils.showNotification(`${restoredCount} capturas y ${restoredArrivalsCount} llegadas restauradas para la fecha ${formattedDate}. Puedes editarlas ahora.`, 'success');
+                            const duplicatesInfo = (skippedDuplicateCaptures > 0 || skippedDuplicateArrivals > 0)
+                                ? ` (${skippedDuplicateCaptures} capturas y ${skippedDuplicateArrivals} llegadas duplicadas omitidas)`
+                                : '';
+                            Utils.showNotification(`${restoredCount} capturas y ${restoredArrivalsCount} llegadas restauradas para la fecha ${formattedDate}${duplicatesInfo}. Puedes editarlas ahora.`, 'success');
                         } else {
                             Utils.showNotification('No se pudieron restaurar las capturas', 'error');
                         }
