@@ -80,6 +80,18 @@ const Utils = {
         return parseFloat(t) || 0;
     },
 
+    /**
+     * Parsea amount a número para sumas. Evita concatenación cuando amount es string.
+     * Maneja números, strings y strings con comas como separador de miles.
+     */
+    parseAmount(val) {
+        if (val == null || val === '') return 0;
+        if (typeof val === 'number') return Number.isFinite(val) ? val : 0;
+        const str = String(val).replace(/,/g, '');
+        const n = parseFloat(str);
+        return Number.isFinite(n) ? n : 0;
+    },
+
     // Escapar HTML para prevenir XSS
     escapeHtml(text) {
         if (text == null || text === undefined) return '';
