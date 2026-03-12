@@ -12,6 +12,9 @@ const getIO = (req) => {
 
 const logReportsOperation = createOperationLogger('reports');
 const isDebugReports = process.env.DEBUG_REPORTS === 'true';
+
+// Validar UUID para evitar errores de tipo en PostgreSQL (e.g. guide_ids legacy)
+const isValidUUID = (uuid) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(uuid || ''));
 const debugReportsLog = (...args) => {
   if (isDebugReports) {
     console.log(...args);
@@ -21,13 +24,6 @@ const debugReportsWarn = (...args) => {
   if (isDebugReports) {
     console.warn(...args);
   }
-};
-
-// Validador de UUID: retorna true si es un UUID válido
-const isValidUUID = (uuid) => {
-  if (!uuid || typeof uuid !== 'string') return false;
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  return uuidRegex.test(uuid);
 };
 
 const loadQuickCaptureDetails = async (captureId) => {
@@ -366,12 +362,10 @@ router.post('/quick-captures', requireBranchAccess, async (req, res) => {
 
     const finalBranchId = branch_id || req.user.branchId;
 
-    // Validar que guide_id sea un UUID válido si se proporciona
-    // Si no es válido (ej: "guide_9"), convertir a null
-    const validGuideId = guide_id && isValidUUID(guide_id) ? guide_id : null;
     if (guide_id && !isValidUUID(guide_id)) {
-      console.warn(`⚠️ guide_id inválido ignorado: "${guide_id}" (debe ser UUID válido o null)`);
+      console.warn(`⚠️ guide_id inválido ignorado (POST /quick-captures): "${guide_id}"`);
     }
+    const validGuideId = guide_id && isValidUUID(guide_id) ? guide_id : null;
 
     const result = await client.query(
       `INSERT INTO quick_captures (
@@ -413,7 +407,6 @@ router.post('/quick-captures', requireBranchAccess, async (req, res) => {
 
     res.status(201).json(capture);
 
-    // Emitir evento Socket de forma asincronizada (sin bloquear la respuesta)
     setImmediate(async () => {
       try {
         const io = getIO(req);
@@ -438,7 +431,7 @@ router.post('/quick-captures', requireBranchAccess, async (req, res) => {
           captureId: capture.id,
           message: postCommitError.message
         });
-        console.error('⚠️ Captura creada pero fallo post-commit:', postCommitError.message);
+        console.error('Captura rápida creada pero fallaron efectos post-commit:', postCommitError);
       }
     });
   } catch (error) {
@@ -547,13 +540,6 @@ router.put('/quick-captures/:id', requireBranchAccess, async (req, res) => {
 
     const { id } = req.params;
     const updateData = req.body;
-    
-    // Validar guide_id si se proporciona: debe ser UUID válido o null
-    if (updateData.guide_id && !isValidUUID(updateData.guide_id)) {
-      console.warn(`⚠️ guide_id inválido ignorado en actualización: "${updateData.guide_id}"`);
-      updateData.guide_id = null;
-    }
-    
     logReportsOperation('quick_capture_update_started', {
       captureId: id,
       userId: req.user.id
@@ -594,6 +580,15 @@ router.put('/quick-captures/:id', requireBranchAccess, async (req, res) => {
         if (field === 'payments' && updateData[field]) {
           fields.push(`${field} = $${paramCount}`);
           values.push(JSON.stringify(updateData[field]));
+        } else if (field === 'guide_id') {
+          if (updateData[field] && !isValidUUID(updateData[field])) {
+            console.warn(`⚠️ guide_id inválido ignorado (PUT /quick-captures): "${updateData[field]}"`);
+            fields.push(`${field} = $${paramCount}`);
+            values.push(null);
+          } else {
+            fields.push(`${field} = $${paramCount}`);
+            values.push(updateData[field]);
+          }
         } else {
           fields.push(`${field} = $${paramCount}`);
           values.push(updateData[field]);
@@ -624,8 +619,6 @@ router.put('/quick-captures/:id', requireBranchAccess, async (req, res) => {
 
     res.json(updated);
 
-    // Emitir evento Socket de forma asincronizada (sin bloquear la respuesta)
-    // Esto evita saturar el pool de conexiones esperando loadQuickCaptureDetails
     setImmediate(async () => {
       try {
         const io = getIO(req);
@@ -650,7 +643,7 @@ router.put('/quick-captures/:id', requireBranchAccess, async (req, res) => {
           captureId: id,
           message: postCommitError.message
         });
-        console.error('⚠️ Captura actualizada pero fallo post-commit:', postCommitError.message);
+        console.error('Captura rápida actualizada pero fallaron efectos post-commit:', postCommitError);
       }
     });
   } catch (error) {
@@ -1206,8 +1199,7 @@ router.delete('/archived-quick-captures/:id', requireBranchAccess, async (req, r
 
     res.json({ message: 'Reporte archivado eliminado correctamente', id });
 
-    // Emitir evento Socket de forma asincronizada (sin bloquear la respuesta)
-    setImmediate(() => {
+    setImmediate(async () => {
       try {
         const io = getIO(req);
         logReportsOperation('archived_report_delete_committed', {
