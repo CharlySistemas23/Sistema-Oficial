@@ -422,6 +422,13 @@ const SyncManager = {
                                 }
                                 payload.items = normalizedItems;
 
+                                if (!Array.isArray(payload.items) || payload.items.length === 0) {
+                                    console.warn(`⚠️ sale ${item.entity_id} sin items válidos. Eliminando de cola para evitar reintentos infinitos.`);
+                                    await DB.delete('sync_queue', item.id);
+                                    this.syncQueue = this.syncQueue.filter(q => q.id !== item.id);
+                                    continue;
+                                }
+
                                 // Payments: si no vienen en payload, cargar store payments
                                 if (!Array.isArray(payload.payments)) {
                                     try {
@@ -429,6 +436,13 @@ const SyncManager = {
                                     } catch (e) {
                                         payload.payments = [];
                                     }
+                                }
+
+                                if (!Array.isArray(payload.payments) || payload.payments.length === 0) {
+                                    console.warn(`⚠️ sale ${item.entity_id} sin pagos válidos. Eliminando de cola para evitar reintentos infinitos.`);
+                                    await DB.delete('sync_queue', item.id);
+                                    this.syncQueue = this.syncQueue.filter(q => q.id !== item.id);
+                                    continue;
                                 }
 
                                 const created = await API.createSale(payload);
