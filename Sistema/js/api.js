@@ -1,5 +1,8 @@
 // API Client - Cliente para comunicación con el backend en tiempo real
 
+// URL del servidor Railway. Se usa como fallback para nuevos equipos sin configuración.
+const DEFAULT_RAILWAY_URL = 'https://backend-production-6260.up.railway.app';
+
 const API = {
     baseURL: null,
     token: null,
@@ -12,11 +15,14 @@ const API = {
         try {
             const urlSetting = await DB.get('settings', 'api_url');
             const savedURL = urlSetting?.value || null;
+
+            // Usar URL guardada o por defecto (nuevos equipos quedan conectados automáticamente)
+            const rawURL = savedURL || DEFAULT_RAILWAY_URL;
             
             // CRÍTICO: Asegurar que la URL esté correctamente formateada
-            if (savedURL) {
+            if (rawURL) {
                 // Limpiar la URL: eliminar espacios, barras finales, etc.
-                let cleanURL = savedURL.trim();
+                let cleanURL = rawURL.trim();
                 // Asegurar que tenga protocolo
                 if (!cleanURL.startsWith('http://') && !cleanURL.startsWith('https://')) {
                     cleanURL = 'https://' + cleanURL;
@@ -40,8 +46,10 @@ const API = {
                         console.log(`🔄 URL corregida y guardada: ${cleanURL}`);
                     }
                 }
-            } else {
-                this.baseURL = null;
+            }
+            // Si no había URL guardada, persistir la por defecto para próximas cargas
+            if (!savedURL && this.baseURL) {
+                await DB.put('settings', { key: 'api_url', value: this.baseURL }).catch(() => {});
             }
             
             // Cargar token guardado
@@ -139,14 +147,14 @@ const API = {
         if (!this.baseURL && typeof DB !== 'undefined') {
             try {
                 const urlSetting = await DB.get('settings', 'api_url');
-                this.baseURL = urlSetting?.value || null;
+                this.baseURL = urlSetting?.value || DEFAULT_RAILWAY_URL;
             } catch (error) {
                 console.error('Error obteniendo URL desde DB:', error);
+                this.baseURL = DEFAULT_RAILWAY_URL;
             }
         }
-        
         if (!this.baseURL) {
-            throw new Error('URL del API no configurada');
+            this.baseURL = DEFAULT_RAILWAY_URL;
         }
 
         try {
@@ -185,7 +193,7 @@ const API = {
             // Asegurar que baseURL esté configurado
             if (!this.baseURL) {
                 const urlSetting = await DB.get('settings', 'api_url');
-                this.baseURL = urlSetting?.value || null;
+                this.baseURL = urlSetting?.value || DEFAULT_RAILWAY_URL;
             }
 
             // Inicializar socket
