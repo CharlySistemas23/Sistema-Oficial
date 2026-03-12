@@ -6,6 +6,9 @@ var BranchManager = window.BranchManager || {
     currentBranchId: null,
     currentBranch: null,
     userBranches: [], // Sucursales a las que tiene acceso el usuario
+    _updateBranchSelectorPromise: null,
+    _lastBranchSelectorFetchAt: 0,
+    _branchSelectorCacheMs: 5000,
 
     /**
      * Inicializar BranchManager
@@ -438,50 +441,71 @@ var BranchManager = window.BranchManager || {
      * Actualizar botones de sucursal en topbar (SOLO para master_admin)
      */
     async updateBranchSelector() {
-        const container = document.getElementById('branch-buttons-container');
-        
-        if (!container) return;
-        
-        // SOLO mostrar para master_admin
-        const isMasterAdmin = (typeof UserManager !== 'undefined' && (
-            UserManager.currentUser?.role === 'master_admin' ||
-            UserManager.currentUser?.is_master_admin ||
-            UserManager.currentUser?.isMasterAdmin ||
-            UserManager.currentEmployee?.role === 'master_admin'
-        ));
-        
-        if (isMasterAdmin) {
-            // Intentar cargar sucursales desde API si está disponible
-            let branches = [];
-            if (typeof API !== 'undefined' && API.baseURL && API.token) {
-                try {
-                    branches = await API.getBranches() || [];
-                    // Guardar en IndexedDB como caché
-                    for (const branch of branches) {
-                        await DB.put('catalog_branches', branch);
+        if (this._updateBranchSelectorPromise) {
+            return await this._updateBranchSelectorPromise;
+        }
+
+        this._updateBranchSelectorPromise = (async () => {
+            const container = document.getElementById('branch-buttons-container');
+            
+            if (!container) return;
+            
+            // SOLO mostrar para master_admin
+            const isMasterAdmin = (typeof UserManager !== 'undefined' && (
+                UserManager.currentUser?.role === 'master_admin' ||
+                UserManager.currentUser?.is_master_admin ||
+                UserManager.currentUser?.isMasterAdmin ||
+                UserManager.currentEmployee?.role === 'master_admin'
+            ));
+            
+            if (isMasterAdmin) {
+                // Intentar cargar sucursales desde API si está disponible.
+                // Reutilizar caché corta para absorber llamadas consecutivas de init/socket/UI.
+                let branches = [];
+                const canUseApi = typeof API !== 'undefined' && API.baseURL && API.token;
+                const shouldRefreshFromApi = canUseApi && (Date.now() - this._lastBranchSelectorFetchAt >= this._branchSelectorCacheMs);
+
+                if (shouldRefreshFromApi) {
+                    try {
+                        branches = await API.getBranches() || [];
+                        this._lastBranchSelectorFetchAt = Date.now();
+                        // Guardar en IndexedDB como caché
+                        for (const branch of branches) {
+                            await DB.put('catalog_branches', branch);
+                        }
+                    } catch (apiError) {
+                        console.warn('Error cargando sucursales desde API, usando local:', apiError);
+                        branches = await DB.getAll('catalog_branches') || [];
                     }
-                } catch (apiError) {
-                    console.warn('Error cargando sucursales desde API, usando local:', apiError);
+                } else {
                     branches = await DB.getAll('catalog_branches') || [];
-                }
-            } else {
-                branches = await DB.getAll('catalog_branches') || [];
-            }
-            
-            const activeBranches = branches.filter(b => b.active !== false);
-            
-            // Mostrar botones siempre para master_admin (incluso si solo hay 1)
-            if (activeBranches.length > 0) {
-                // Remover listener anterior si existe para evitar duplicados
-                if (container._branchClickHandler) {
-                    container.removeEventListener('click', container._branchClickHandler, true);
+                    if (branches.length === 0 && canUseApi) {
+                        try {
+                            branches = await API.getBranches() || [];
+                            this._lastBranchSelectorFetchAt = Date.now();
+                            for (const branch of branches) {
+                                await DB.put('catalog_branches', branch);
+                            }
+                        } catch (apiError) {
+                            console.warn('Error cargando sucursales desde API, usando local:', apiError);
+                        }
+                    }
                 }
                 
-                // Mostrar botones para master_admin
-                container.style.display = 'flex';
-                container.innerHTML = activeBranches.map(b => {
-                    const isActive = b.id === this.currentBranchId;
-                    return `
+                const activeBranches = branches.filter(b => b.active !== false);
+                
+                // Mostrar botones siempre para master_admin (incluso si solo hay 1)
+                if (activeBranches.length > 0) {
+                    // Remover listener anterior si existe para evitar duplicados
+                    if (container._branchClickHandler) {
+                        container.removeEventListener('click', container._branchClickHandler, true);
+                    }
+                    
+                    // Mostrar botones para master_admin
+                    container.style.display = 'flex';
+                    container.innerHTML = activeBranches.map(b => {
+                        const isActive = b.id === this.currentBranchId;
+                        return `
                         <button 
                             class="branch-btn ${isActive ? 'active' : ''}" 
                             data-branch-id="${b.id}"
@@ -491,30 +515,39 @@ var BranchManager = window.BranchManager || {
                             ${b.name}
                         </button>
                     `;
-                }).join('');
-                
-                // Configurar event listener usando event delegation
-                container._branchClickHandler = async (e) => {
-                    const btn = e.target.closest('.branch-btn');
-                    if (!btn) return;
+                    }).join('');
                     
-                    e.preventDefault();
-                    e.stopPropagation();
-                    e.stopImmediatePropagation();
+                    // Configurar event listener usando event delegation
+                    container._branchClickHandler = async (e) => {
+                        const btn = e.target.closest('.branch-btn');
+                        if (!btn) return;
+                        
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.stopImmediatePropagation();
+                        
+                        const branchId = btn.getAttribute('data-branch-id');
+                        if (branchId && branchId !== this.currentBranchId) {
+                            await this.handleBranchChange(branchId);
+                        }
+                    };
                     
-                    const branchId = btn.getAttribute('data-branch-id');
-                    if (branchId && branchId !== this.currentBranchId) {
-                        await this.handleBranchChange(branchId);
+                    // Usar capture phase para interceptar antes que otros listeners
+                    container.addEventListener('click', container._branchClickHandler, true);
+                    
+                    // Actualizar estado visual de los botones
+                    this.updateBranchButtons();
+                } else {
+                    // Si no hay sucursales, ocultar los botones
+                    container.style.display = 'none';
+                    // Remover listener si existe
+                    if (container._branchClickHandler) {
+                        container.removeEventListener('click', container._branchClickHandler, true);
+                        container._branchClickHandler = null;
                     }
-                };
-                
-                // Usar capture phase para interceptar antes que otros listeners
-                container.addEventListener('click', container._branchClickHandler, true);
-                
-                // Actualizar estado visual de los botones
-                this.updateBranchButtons();
+                }
             } else {
-                // Si no hay sucursales, ocultar los botones
+                // No es master_admin, ocultar el selector
                 container.style.display = 'none';
                 // Remover listener si existe
                 if (container._branchClickHandler) {
@@ -522,14 +555,12 @@ var BranchManager = window.BranchManager || {
                     container._branchClickHandler = null;
                 }
             }
-        } else {
-            // No es master_admin, ocultar el selector
-            container.style.display = 'none';
-            // Remover listener si existe
-            if (container._branchClickHandler) {
-                container.removeEventListener('click', container._branchClickHandler, true);
-                container._branchClickHandler = null;
-            }
+        })();
+
+        try {
+            return await this._updateBranchSelectorPromise;
+        } finally {
+            this._updateBranchSelectorPromise = null;
         }
     },
 
