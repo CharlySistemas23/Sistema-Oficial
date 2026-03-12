@@ -60,9 +60,17 @@ const SyncManager = {
                     }
                     
                     // Sincronizar en background (no bloquear init para Cache-First)
+                    // IMPORTANTE: no promover automáticamente datos locales históricos/mock al servidor,
+                    // a menos que se habilite explícitamente.
                     if (API.baseURL) {
+                        const autoBootstrapSyncEnabled =
+                            localStorage.getItem('AUTO_BOOTSTRAP_SYNC_LOCAL_DATA') === 'true' ||
+                            window.AUTO_BOOTSTRAP_SYNC_LOCAL_DATA === true;
+
                         Promise.resolve().then(async () => {
-                            await this.syncLocalDataToServer();
+                            if (autoBootstrapSyncEnabled) {
+                                await this.syncLocalDataToServer();
+                            }
                             await this.syncPending();
                         }).catch(e => console.warn('Sync init background:', e));
                     }
