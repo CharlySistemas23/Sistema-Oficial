@@ -201,20 +201,23 @@ const Branches = {
                                 }
                             }
                         }
-                        
+
+                        // MEGA BUG FIX: Fetch server branches ONCE before loop, not for each branch
+                        let serverBranchesCache = [];
+                        try {
+                            serverBranchesCache = await API.getBranches() || [];
+                        } catch (e) {
+                            console.warn('[Paso 1 Branches] No se pudo obtener sucursales del servidor:', e);
+                        }
+
                         let uploadedCount = 0;
                         for (const [key, localBranch] of branchesByKey) {
                             try {
                                 console.log(`📤 [Paso 1 Branches] Subiendo sucursal local al servidor: ${localBranch.id}`);
-                                
+
                                 let serverBranch = null;
-                                if (localBranch.name) {
-                                    try {
-                                        const serverBranches = await API.getBranches();
-                                        if (serverBranches && serverBranches.length > 0) {
-                                            serverBranch = serverBranches.find(b => b.name === localBranch.name);
-                                        }
-                                    } catch (e) {}
+                                if (localBranch.name && serverBranchesCache.length > 0) {
+                                    serverBranch = serverBranchesCache.find(b => b.name === localBranch.name);
                                 }
                                 
                                 if (serverBranch && serverBranch.id) {
