@@ -679,13 +679,19 @@ const UserManager = {
         // PRIORITARIO: Si hay sesión activa (token), verificar y restaurar antes de mostrar código/login.
         // Así al recargar la página se muestra el contenido directamente sin pedir código ni usuario.
         if (apiToken && typeof API !== 'undefined') {
-            // Asegurar que API.baseURL esté cargado
+            // Asegurar que API.baseURL esté cargado (fallback a URL de Railway por defecto)
             if (!API.baseURL && typeof DB !== 'undefined') {
                 try {
                     const urlSetting = await DB.get('settings', 'api_url');
-                    API.baseURL = urlSetting?.value || null;
+                    const DEFAULT_RAILWAY_URL = 'https://backend-production-6260.up.railway.app';
+                    API.baseURL = urlSetting?.value || DEFAULT_RAILWAY_URL;
+                    // Persistir para próximas cargas
+                    if (!urlSetting?.value) {
+                        await DB.put('settings', { key: 'api_url', value: API.baseURL }).catch(() => {});
+                    }
                 } catch (e) {
                     console.warn('Error cargando API.baseURL desde DB:', e);
+                    API.baseURL = 'https://backend-production-6260.up.railway.app';
                 }
             }
             
@@ -697,6 +703,14 @@ const UserManager = {
                     if (verifyResult && verifyResult.user) {
                         // Token válido, restaurar sesión desde el servidor
                         const user = verifyResult.user;
+
+                        // Renovar token si el servidor emitió uno nuevo (expiración próxima)
+                        if (verifyResult.newToken) {
+                            API.token = verifyResult.newToken;
+                            localStorage.setItem('api_token', verifyResult.newToken);
+                            console.log('🔄 Token renovado automáticamente');
+                        }
+
                         const isMasterAdmin = user.isMasterAdmin || user.is_master_admin || user.role === 'master_admin';
                         
                         // Si el usuario viene del servidor y no tiene pin_hash, generarlo con PIN por defecto
