@@ -5,14 +5,15 @@ const { Pool } = pg;
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-  max: 10, // Reducir máximo de conexiones para Railway (evitar agotamiento)
-  idleTimeoutMillis: 20000, // Cerrar conexiones inactivas después de 20 segundos
-  connectionTimeoutMillis: 5000, // Fallar más rápido cuando PostgreSQL no responde
+  max: 20, // Aumentar máximo de conexiones para soportar múltiples usuarios simultáneamente
+  min: 2, // Mantener al menos 2 conexiones calientes
+  idleTimeoutMillis: 30000, // Cerrar conexiones inactivas después de 30 segundos
+  connectionTimeoutMillis: 10000, // Aumentar timeout para Railway (más tolerante con latencia)
   keepAlive: true,
   keepAliveInitialDelayMillis: 10000, // Mantener conexiones vivas
   // Configuraciones adicionales para Railway
-  statement_timeout: 30000, // Timeout de 30 segundos para queries
-  query_timeout: 30000,
+  statement_timeout: 45000, // Timeout de 45 segundos para queries (más generoso)
+  query_timeout: 45000,
 });
 
 const isConnectionError = (error) => {
