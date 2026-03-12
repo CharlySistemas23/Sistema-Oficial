@@ -8004,10 +8004,23 @@ const Reports = {
                     if (typeof API !== 'undefined' && API.baseURL && API.token && API.createQuickCapture) {
                         try {
                             console.log('📤 Sincronizando captura con servidor...');
+                            
+                            // Validar que guide_id sea UUID válido, si no convertir a null
+                            const isValidUUID = (value) => {
+                                if (!value || typeof value !== 'string') return false;
+                                const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+                                return uuidRegex.test(value);
+                            };
+                            
+                            const guideIdToSend = savedCapture.guide_id && isValidUUID(savedCapture.guide_id) ? savedCapture.guide_id : null;
+                            if (savedCapture.guide_id && !isValidUUID(savedCapture.guide_id)) {
+                                console.warn(`⚠️ guide_id inválido ignorado: "${savedCapture.guide_id}" (enviando null en su lugar)`);
+                            }
+                            
                             const serverCapture = await API.createQuickCapture({
                                 branch_id: savedCapture.branch_id,
                                 seller_id: savedCapture.seller_id,
-                                guide_id: savedCapture.guide_id,
+                                guide_id: guideIdToSend,
                                 agency_id: savedCapture.agency_id,
                                 product: savedCapture.product,
                                 quantity: savedCapture.quantity,
@@ -10240,13 +10253,26 @@ const Reports = {
                     // 2. Sincronizar con servidor (bidireccional)
                     if (typeof API !== 'undefined' && API.baseURL && API.token) {
                         try {
+                            // Validar UUID helper
+                            const isValidUUID = (value) => {
+                                if (!value || typeof value !== 'string') return false;
+                                const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+                                return uuidRegex.test(value);
+                            };
+                            
                             // Si tiene server_id, actualizar en servidor
                             if (capture.server_id && API.updateQuickCapture) {
                                 console.log('📤 Sincronizando edición con servidor...');
+                                
+                                const guideIdToSend = capture.guide_id && isValidUUID(capture.guide_id) ? capture.guide_id : null;
+                                if (capture.guide_id && !isValidUUID(capture.guide_id)) {
+                                    console.warn(`⚠️ guide_id inválido ignorado en actualización: "${capture.guide_id}"`);
+                                }
+                                
                                 await API.updateQuickCapture(capture.server_id, {
                                     branch_id: capture.branch_id,
                                     seller_id: capture.seller_id,
-                                    guide_id: capture.guide_id,
+                                    guide_id: guideIdToSend,
                                     agency_id: capture.agency_id,
                                     product: capture.product,
                                     quantity: capture.quantity,
@@ -12287,18 +12313,32 @@ const Reports = {
                 let syncedCount = 0;
                 let failedCount = 0;
                 
+                // Validar UUID helper
+                const isValidUUID = (value) => {
+                    if (!value || typeof value !== 'string') return false;
+                    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+                    return uuidRegex.test(value);
+                };
+                
                 for (const capture of captures) {
                     try {
+                        // Limpiar guide_id si no es UUID válido
+                        const cleanCapture = { ...capture };
+                        if (cleanCapture.guide_id && !isValidUUID(cleanCapture.guide_id)) {
+                            console.warn(`⚠️ guide_id inválido en captura ${capture.id}: "${cleanCapture.guide_id}" → null`);
+                            cleanCapture.guide_id = null;
+                        }
+                        
                         // Verificar si ya existe en el servidor (tiene server_id)
                         if (capture.server_id) {
                             // Actualizar captura existente
                             if (API.updateQuickCapture) {
-                                await API.updateQuickCapture(capture.server_id, capture);
+                                await API.updateQuickCapture(capture.server_id, cleanCapture);
                                 syncedCount++;
                             }
                         } else {
                             // Crear nueva captura en el servidor
-                            const serverCapture = await API.createQuickCapture(capture);
+                            const serverCapture = await API.createQuickCapture(cleanCapture);
                             if (serverCapture && serverCapture.id) {
                                 // Actualizar la captura local con el server_id
                                 capture.server_id = serverCapture.id;
