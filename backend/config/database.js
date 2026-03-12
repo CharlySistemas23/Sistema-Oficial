@@ -1,12 +1,25 @@
 import pg from 'pg';
 const { Pool } = pg;
 
+const isRailway = Boolean(
+  process.env.RAILWAY_ENVIRONMENT_ID ||
+  process.env.RAILWAY_PROJECT_ID ||
+  process.env.RAILWAY_SERVICE_ID ||
+  process.env.RAILWAY_PUBLIC_DOMAIN
+);
+
+const useSSL = process.env.DB_SSL === 'false'
+  ? false
+  : (process.env.NODE_ENV === 'production' || isRailway)
+    ? { rejectUnauthorized: false }
+    : false;
+
 // Configuración de la conexión a PostgreSQL optimizada para Railway
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-  max: 20, // Múltiples usuarios simultáneos (varias estaciones)
-  min: 2, // Mantener 2 conexiones calientes para respuesta rápida
+  ssl: useSSL,
+  max: parseInt(process.env.DB_POOL_MAX || '8', 10), // Evitar saturar límites de Railway/Postgres
+  min: parseInt(process.env.DB_POOL_MIN || '0', 10), // No reservar conexiones si no se están usando
   idleTimeoutMillis: 30000, // Cerrar conexiones inactivas después de 30 segundos
   connectionTimeoutMillis: 10000, // Timeout tolerante para Railway con latencia
   keepAlive: true,
@@ -39,8 +52,8 @@ pool.on('error', (err, client) => {
   // No terminar el proceso
 });
 
-// Manejo de eventos del pool (solo en desarrollo o para errores críticos)
-if (process.env.NODE_ENV !== 'production' || process.env.DEBUG_DB === 'true') {
+// Manejo de eventos del pool solo en modo debug explícito.
+if (process.env.DEBUG_DB === 'true') {
   pool.on('connect', (client) => {
     console.log('✅ Nueva conexión PostgreSQL establecida');
   });
