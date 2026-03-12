@@ -23,6 +23,13 @@ const debugReportsWarn = (...args) => {
   }
 };
 
+// Validador de UUID: retorna true si es un UUID válido
+const isValidUUID = (uuid) => {
+  if (!uuid || typeof uuid !== 'string') return false;
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(uuid);
+};
+
 const loadQuickCaptureDetails = async (captureId) => {
   const captureWithDetails = await query(
     `SELECT 
@@ -359,6 +366,13 @@ router.post('/quick-captures', requireBranchAccess, async (req, res) => {
 
     const finalBranchId = branch_id || req.user.branchId;
 
+    // Validar que guide_id sea un UUID válido si se proporciona
+    // Si no es válido (ej: "guide_9"), convertir a null
+    const validGuideId = guide_id && isValidUUID(guide_id) ? guide_id : null;
+    if (guide_id && !isValidUUID(guide_id)) {
+      console.warn(`⚠️ guide_id inválido ignorado: "${guide_id}" (debe ser UUID válido o null)`);
+    }
+
     const result = await client.query(
       `INSERT INTO quick_captures (
         branch_id, seller_id, guide_id, agency_id, product, quantity, currency,
@@ -370,7 +384,7 @@ router.post('/quick-captures', requireBranchAccess, async (req, res) => {
       [
         finalBranchId,
         seller_id || null,
-        guide_id || null,
+        validGuideId,
         agency_id || null,
         product,
         quantity,
@@ -530,6 +544,13 @@ router.put('/quick-captures/:id', requireBranchAccess, async (req, res) => {
 
     const { id } = req.params;
     const updateData = req.body;
+    
+    // Validar guide_id si se proporciona: debe ser UUID válido o null
+    if (updateData.guide_id && !isValidUUID(updateData.guide_id)) {
+      console.warn(`⚠️ guide_id inválido ignorado en actualización: "${updateData.guide_id}"`);
+      updateData.guide_id = null;
+    }
+    
     logReportsOperation('quick_capture_update_started', {
       captureId: id,
       userId: req.user.id
