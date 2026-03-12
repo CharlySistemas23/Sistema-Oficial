@@ -7,6 +7,9 @@ const Customers = {
     currentView: 'table', // 'table' o 'cards'
     selectedCustomers: new Set(),
     sortConfig: { field: 'totalSpent', direction: 'desc' },
+    _demoDataListenerAttached: false,
+    _saleCompletedListenerAttached: false,
+    _socketListenersAttached: false,
     
     async init() {
         try {
@@ -47,11 +50,14 @@ const Customers = {
     },
 
     setupEventListeners() {
-        window.addEventListener('demo-data-loaded', () => {
-            if (this.initialized) {
-                this.loadCustomers();
-            }
-        });
+        if (!this._demoDataListenerAttached) {
+            this._demoDataListenerAttached = true;
+            window.addEventListener('demo-data-loaded', () => {
+                if (this.initialized) {
+                    this.loadCustomers();
+                }
+            });
+        }
         
         // Escuchar eventos Socket.IO para actualización en tiempo real
         this.setupSocketListeners();
@@ -181,7 +187,8 @@ const Customers = {
         document.getElementById('customer-min-value')?.addEventListener('input', Utils.debounce(() => this.loadCustomers(), 500));
 
         // Escuchar eventos de ventas para actualizar historial de clientes
-        if (typeof Utils !== 'undefined' && Utils.EventBus) {
+        if (typeof Utils !== 'undefined' && Utils.EventBus && !this._saleCompletedListenerAttached) {
+            this._saleCompletedListenerAttached = true;
             // Usar debounce para evitar recargas excesivas
             let saleUpdateTimeout = null;
             Utils.EventBus.on('sale-completed', async (data) => {
@@ -210,6 +217,10 @@ const Customers = {
 
     async loadCustomers() {
         try {
+            if (typeof UI !== 'undefined' && UI.currentModule !== 'customers') {
+                return;
+            }
+
             // Configurar dropdown de sucursal PRIMERO (antes de leer su valor)
             await this.setupBranchFilter();
             
@@ -572,6 +583,9 @@ const Customers = {
             const customersList = document.getElementById('customers-list');
             const customersModule = document.querySelector('.customers-module');
             if (!customersList || !customersModule) {
+                if (typeof UI !== 'undefined' && UI.currentModule !== 'customers') {
+                    return;
+                }
                 console.warn('⚠️ customers-list o customers-module no encontrado, reconfigurando UI...');
                 this.setupEventListeners();
                 // Esperar a que el DOM se actualice
@@ -853,6 +867,9 @@ const Customers = {
     displayCustomersTable(customers) {
         const container = document.getElementById('customers-list');
         if (!container) {
+            if (typeof UI !== 'undefined' && UI.currentModule !== 'customers') {
+                return;
+            }
             console.error('❌ customers-list no encontrado en displayCustomersTable');
             return;
         }
@@ -2030,10 +2047,17 @@ const Customers = {
     },
 
     setupSocketListeners() {
+        if (this._socketListenersAttached) {
+            return;
+        }
+
+        this._socketListenersAttached = true;
+
         // Escuchar eventos Socket.IO para actualización en tiempo real
         // Eventos de clientes de todas las sucursales (master_admin)
-        if (typeof UserManager !== 'undefined' && UserManager.currentUser?.is_master_admin) {
-            window.addEventListener('customer-updated-all-branches', async (e) => {
+        window.addEventListener('customer-updated-all-branches', async (e) => {
+                const isMasterAdmin = typeof UserManager !== 'undefined' && UserManager.currentUser?.is_master_admin;
+                if (!isMasterAdmin || (typeof UI !== 'undefined' && UI.currentModule !== 'customers')) return;
                 const { branchId, action, customer } = e.detail;
                 if (this.initialized) {
                     console.log(`👤 Customers: Cliente actualizado en sucursal ${branchId} (${action})`);
@@ -2043,10 +2067,10 @@ const Customers = {
                     }, 300);
                 }
             });
-        }
         
         // Eventos de clientes locales (para usuarios normales o master_admin viendo su sucursal)
         window.addEventListener('customer-updated', async (e) => {
+            if (typeof UI !== 'undefined' && UI.currentModule !== 'customers') return;
             if (this.initialized) {
                 const { customer } = e.detail || {};
                 const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
