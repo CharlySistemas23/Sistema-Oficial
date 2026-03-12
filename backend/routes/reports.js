@@ -1204,27 +1204,30 @@ router.delete('/archived-quick-captures/:id', requireBranchAccess, async (req, r
     await client.query('COMMIT');
     transactionCommitted = true;
 
-    try {
-      const io = getIO(req);
-      logReportsOperation('archived_report_delete_committed', {
-        reportId: id,
-        branchId: report.branch_id,
-        userId: req.user.id
-      });
-      if (io) {
-        io.to(`branch:${report.branch_id}`).emit('archived_report_deleted', { report_id: id });
-        io.to('master_admin').emit('archived_report_deleted', { report_id: id });
-      }
-    } catch (postCommitError) {
-      logReportsOperation('archived_report_delete_post_commit_failed', {
-        reportId: id,
-        branchId: report.branch_id,
-        message: postCommitError.message
-      });
-      debugReportsWarn('⚠️ Error emitiendo evento Socket.IO para reporte archivado eliminado:', postCommitError);
-    }
-
     res.json({ message: 'Reporte archivado eliminado correctamente', id });
+
+    // Emitir evento Socket de forma asincronizada (sin bloquear la respuesta)
+    setImmediate(() => {
+      try {
+        const io = getIO(req);
+        logReportsOperation('archived_report_delete_committed', {
+          reportId: id,
+          branchId: report.branch_id,
+          userId: req.user.id
+        });
+        if (io) {
+          io.to(`branch:${report.branch_id}`).emit('archived_report_deleted', { report_id: id });
+          io.to('master_admin').emit('archived_report_deleted', { report_id: id });
+        }
+      } catch (postCommitError) {
+        logReportsOperation('archived_report_delete_post_commit_failed', {
+          reportId: id,
+          branchId: report.branch_id,
+          message: postCommitError.message
+        });
+        debugReportsWarn('⚠️ Error emitiendo evento Socket.IO para reporte archivado eliminado:', postCommitError);
+      }
+    });
   } catch (error) {
     if (!transactionCommitted) {
       await safeRollback(client, 'reports');
