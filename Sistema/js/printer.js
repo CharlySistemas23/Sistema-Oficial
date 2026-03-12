@@ -338,19 +338,62 @@ const Printer = {
             }
             
             // Verificar que los items estén guardados
-            const items = await DB.query('sale_items', 'sale_id', sale.id) || [];
+            let items = await DB.query('sale_items', 'sale_id', sale.id) || [];
+            let payments = await DB.query('payments', 'sale_id', sale.id) || [];
+
             if (items.length === 0) {
-                console.warn('Advertencia: No se encontraron items para la venta. Intentando obtener desde sale.id');
-                // Si no hay items, intentar obtener desde el objeto sale directamente
-                if (!sale.items || sale.items.length === 0) {
+                console.warn('Advertencia: No se encontraron items locales. Intentando hidratar datos para impresión...');
+
+                // 1) Usar items incluidos en el objeto de venta
+                if (Array.isArray(sale.items) && sale.items.length > 0) {
+                    items = sale.items;
+                }
+
+                // 2) Si sigue vacío, intentar obtener detalle desde API y cachearlo localmente
+                if (items.length === 0 && typeof API !== 'undefined' && API.baseURL && API.token && typeof API.getSale === 'function') {
+                    try {
+                        const detailedSale = await API.getSale(sale.id);
+                        if (detailedSale) {
+                            sale = { ...sale, ...detailedSale };
+                            await DB.put('sales', sale, { autoBranchId: false });
+
+                            if (Array.isArray(detailedSale.items) && detailedSale.items.length > 0) {
+                                items = detailedSale.items;
+                                for (const item of detailedSale.items) {
+                                    await DB.put('sale_items', {
+                                        ...(item || {}),
+                                        id: item?.id || Utils.generateId(),
+                                        sale_id: sale.id,
+                                        created_at: item?.created_at || new Date().toISOString()
+                                    }, { autoBranchId: false });
+                                }
+                            }
+
+                            if (Array.isArray(detailedSale.payments) && detailedSale.payments.length > 0) {
+                                payments = detailedSale.payments;
+                                for (const payment of detailedSale.payments) {
+                                    await DB.put('payments', {
+                                        ...(payment || {}),
+                                        id: payment?.id || Utils.generateId(),
+                                        sale_id: sale.id,
+                                        created_at: payment?.created_at || new Date().toISOString()
+                                    }, { autoBranchId: false });
+                                }
+                            }
+                        }
+                    } catch (hydrateError) {
+                        console.warn('No se pudo hidratar detalle de venta para impresión:', hydrateError);
+                    }
+                }
+
+                if (items.length === 0) {
                     console.error('Error: No hay items para imprimir');
                     Utils.showNotification('Error: No hay items para imprimir.', 'error');
                     return;
                 }
             }
-            
+
             // Verificar que los pagos estén guardados
-            const payments = await DB.query('payments', 'sale_id', sale.id) || [];
             if (payments.length === 0) {
                 console.warn('Advertencia: No se encontraron pagos para la venta');
             }
