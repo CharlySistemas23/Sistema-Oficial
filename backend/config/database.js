@@ -5,14 +5,14 @@ const { Pool } = pg;
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-  max: 20, // Aumentar máximo de conexiones para soportar múltiples usuarios simultáneamente
-  min: 2, // Mantener al menos 2 conexiones calientes
+  max: 20, // Múltiples usuarios simultáneos (varias estaciones)
+  min: 2, // Mantener 2 conexiones calientes para respuesta rápida
   idleTimeoutMillis: 30000, // Cerrar conexiones inactivas después de 30 segundos
-  connectionTimeoutMillis: 10000, // Aumentar timeout para Railway (más tolerante con latencia)
+  connectionTimeoutMillis: 10000, // Timeout tolerante para Railway con latencia
   keepAlive: true,
   keepAliveInitialDelayMillis: 10000, // Mantener conexiones vivas
   // Configuraciones adicionales para Railway
-  statement_timeout: 45000, // Timeout de 45 segundos para queries (más generoso)
+  statement_timeout: 45000, // Timeout generoso para queries complejas
   query_timeout: 45000,
 });
 
