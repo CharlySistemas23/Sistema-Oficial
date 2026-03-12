@@ -4620,68 +4620,30 @@ const Settings = {
         });
 
         try {
-            // ========== SINCRONIZACIÓN BIDIRECCIONAL ==========
-            // PASO 1: Subir reglas locales que NO están en el servidor
+            // ========== SINCRONIZACIÓN CONTROLADA ==========
+            // Encolar reglas pendientes para que las procese SyncManager, que sí mapea IDs legacy a UUID.
             try {
-                if (typeof API !== 'undefined' && API.baseURL && API.token && API.createArrivalRule && API.updateArrivalRule) {
-                    console.log('📤 [Paso 1 Arrival Rules] Buscando reglas locales que no están en el servidor...');
-                    
+                const now = Date.now();
+                const shouldQueuePendingSync = !this._arrivalRulesQueueSyncAt || (now - this._arrivalRulesQueueSyncAt) > 15000;
+                if (shouldQueuePendingSync && typeof window.SyncManager !== 'undefined' && window.SyncManager.addToQueue) {
+                    const isUUID = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || ''));
                     const allLocalRules = await DB.getAll('arrival_rate_rules') || [];
-                    const unsyncedRules = allLocalRules.filter(r => {
-                        if (!r || !r.id) return false;
-                        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(r.id));
-                        return !isUUID || !r.server_id;
-                    });
-                    
-                    console.log(`📊 [Paso 1 Arrival Rules] Encontradas ${unsyncedRules.length} reglas locales sin sincronizar`);
-                    
-                    if (unsyncedRules.length > 0) {
-                        const rulesByKey = new Map();
-                        for (const localRule of unsyncedRules) {
-                            const key = `${localRule.agency_id || 'no-agency'}_${localRule.branch_id || 'no-branch'}_${localRule.min_passengers || 0}_${localRule.max_passengers || 999}_${localRule.unit_type || 'any'}`;
-                            if (!rulesByKey.has(key)) {
-                                rulesByKey.set(key, localRule);
-                            } else {
-                                const existing = rulesByKey.get(key);
-                                const existingUpdated = existing.updated_at ? new Date(existing.updated_at) : new Date(0);
-                                const currentUpdated = localRule.updated_at ? new Date(localRule.updated_at) : new Date(0);
-                                if (currentUpdated > existingUpdated) {
-                                    rulesByKey.set(key, localRule);
-                                }
-                            }
+                    const pendingRules = allLocalRules.filter(r => r && r.id && (r.sync_status === 'pending' || !r.server_id || !isUUID(r.id)));
+
+                    if (pendingRules.length > 0) {
+                        console.log(`📋 [Arrival Rules] Encolando ${pendingRules.length} reglas pendientes para sincronización controlada`);
+                        for (const rule of pendingRules) {
+                            await window.SyncManager.addToQueue('arrival_rate_rule', rule.id);
                         }
-                        
-                        let uploadedCount = 0;
-                        for (const [key, localRule] of rulesByKey) {
-                            try {
-                                console.log(`📤 [Paso 1 Arrival Rules] Subiendo regla local al servidor: ${localRule.id}`);
-                                
-                                const createdRule = await API.createArrivalRule(localRule);
-                                if (createdRule && createdRule.id) {
-                                    const allLocalRules = await DB.getAll('arrival_rate_rules') || [];
-                                    const rulesToUpdate = allLocalRules.filter(r => {
-                                        const rKey = `${r.agency_id || 'no-agency'}_${r.branch_id || 'no-branch'}_${r.min_passengers || 0}_${r.max_passengers || 999}_${r.unit_type || 'any'}`;
-                                        return rKey === key;
-                                    });
-                                    
-                                    for (const ruleToUpdate of rulesToUpdate) {
-                                        ruleToUpdate.server_id = createdRule.id;
-                                        ruleToUpdate.id = createdRule.id;
-                                        ruleToUpdate.sync_status = 'synced';
-                                        await DB.put('arrival_rate_rules', ruleToUpdate);
-                                    }
-                                    uploadedCount++;
-                                }
-                            } catch (uploadError) {
-                                console.error(`❌ [Paso 1 Arrival Rules] Error subiendo regla ${localRule.id}:`, uploadError);
-                            }
+                        this._arrivalRulesQueueSyncAt = now;
+
+                        if (!window.SyncManager.isSyncing && typeof window.SyncManager.syncPending === 'function') {
+                            Promise.resolve().then(() => window.SyncManager.syncPending()).catch(() => {});
                         }
-                        
-                        console.log(`✅ [Paso 1 Arrival Rules] Sincronización local→servidor completada: ${uploadedCount} reglas subidas`);
                     }
                 }
             } catch (error) {
-                console.error('❌ [Paso 1 Arrival Rules] Error sincronizando reglas locales al servidor:', error);
+                console.error('❌ [Arrival Rules] Error preparando sincronización controlada:', error);
             }
 
             // CACHE-FIRST: leer de IndexedDB primero
