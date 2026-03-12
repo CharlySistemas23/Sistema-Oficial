@@ -240,15 +240,21 @@ const App = {
                     await BranchManager.updateBranchSelector();
                 }
 
-                // Después de cargar sucursales del servidor, sincronizar las locales que no existen
+                // No promover automáticamente datos locales históricos/mock al servidor en producción.
                 if (typeof window.SyncManager !== 'undefined' && window.SyncManager.syncLocalDataToServer) {
-                    setTimeout(async () => {
-                        try {
-                            await window.SyncManager.syncLocalDataToServer();
-                        } catch (error) {
-                            console.warn('Error sincronizando datos locales:', error);
-                        }
-                    }, 3000); // Esperar 3 segundos para que termine la carga inicial
+                    const autoBootstrapSyncEnabled =
+                        localStorage.getItem('AUTO_BOOTSTRAP_SYNC_LOCAL_DATA') === 'true' ||
+                        window.AUTO_BOOTSTRAP_SYNC_LOCAL_DATA === true;
+
+                    if (autoBootstrapSyncEnabled) {
+                        setTimeout(async () => {
+                            try {
+                                await window.SyncManager.syncLocalDataToServer();
+                            } catch (error) {
+                                console.warn('Error sincronizando datos locales:', error);
+                            }
+                        }, 3000); // Esperar 3 segundos para que termine la carga inicial
+                    }
                 }
 
                 // Validate system configuration for multi-branch
@@ -497,11 +503,17 @@ const App = {
             // Load demo data if needed (DESACTIVADO - usar Settings > Limpiar Datos Mock para limpiar)
             // await this.loadDemoData();
             
-            // SIEMPRE cargar datos básicos del sistema (vendedores, guías, reglas de llegadas, costos)
-            // Hacerlo en background para no bloquear la inicialización
-            this.loadSystemData().catch(e => {
-                console.error('Error cargando datos del sistema en background:', e);
-            });
+            // No sembrar datos automáticamente en producción para evitar "mock"/pendientes al iniciar.
+            // Se puede habilitar manualmente en localhost con ENABLE_SYSTEM_SEED=true.
+            const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+            const enableSystemSeed = localStorage.getItem('ENABLE_SYSTEM_SEED') === 'true' || window.ENABLE_SYSTEM_SEED === true;
+            if (isLocalHost && enableSystemSeed) {
+                this.loadSystemData().catch(e => {
+                    console.error('Error cargando datos del sistema en background:', e);
+                });
+            } else {
+                console.log('ℹ️ Auto-sembrado de datos del sistema deshabilitado (producción).');
+            }
             
             // Inicializar ProfitCalculator para escuchar eventos
             if (typeof ProfitCalculator !== 'undefined' && ProfitCalculator.init) {
