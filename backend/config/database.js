@@ -67,13 +67,25 @@ if (process.env.DEBUG_DB === 'true') {
 }
 
 // Función para ejecutar queries con reintentos automáticos
-export const query = async (text, params, retries = 2) => {
+export const query = async (text, params, retries = 2, timeoutMs = null) => {
   const start = Date.now();
   let lastError;
   
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      const res = await pool.query(text, params);
+      let queryPromise = pool.query(text, params);
+      
+      // ⚡ PERFORMANCE: Timeout más agresivo para queries críticas (ej: auth)
+      if (timeoutMs) {
+        queryPromise = Promise.race([
+          queryPromise,
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error(`Query timeout after ${timeoutMs}ms`)), timeoutMs)
+          )
+        ]);
+      }
+      
+      const res = await queryPromise;
       const duration = Date.now() - start;
       
       // Solo loguear queries lentas o en modo debug
