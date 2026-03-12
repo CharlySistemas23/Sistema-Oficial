@@ -543,9 +543,24 @@ async function checkAndMigrate() {
 
   try {
     const { Pool } = await import('pg');
+    const isRailway = Boolean(
+      process.env.RAILWAY_ENVIRONMENT_ID ||
+      process.env.RAILWAY_PROJECT_ID ||
+      process.env.RAILWAY_SERVICE_ID ||
+      process.env.RAILWAY_PUBLIC_DOMAIN
+    );
+    const migrationSSL = process.env.DB_SSL === 'false'
+      ? false
+      : (process.env.NODE_ENV === 'production' || isRailway)
+        ? { rejectUnauthorized: false }
+        : false;
     const pool = new Pool({
       connectionString: process.env.DATABASE_URL,
-      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+      ssl: migrationSSL,
+      max: 1,
+      min: 0,
+      idleTimeoutMillis: 10000,
+      connectionTimeoutMillis: 15000
     });
 
     console.log('🔄 Iniciando verificación y migración de base de datos...');
