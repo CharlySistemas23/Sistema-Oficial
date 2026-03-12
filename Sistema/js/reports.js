@@ -13801,14 +13801,18 @@ const Reports = {
     },
 
     async deleteArchivedReport(reportId) {
-        // Usar server_id para la API solo si el reporte fue sincronizado (evita 404 en reportes solo locales)
+        // Obtener el reporte local PARA OBTENER server_id Y METADATOS
+        let report = null;
         let apiId = null;
+        
         try {
-            const report = await DB.get('archived_quick_captures', reportId);
+            report = await DB.get('archived_quick_captures', reportId);
             if (report?.server_id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(report.server_id))) {
                 apiId = report.server_id;
             }
-        } catch (_) {}
+        } catch (dbErr) {
+            console.warn(`⚠️ Reporte local no encontrado (${reportId}), intentaré eliminar del servidor si está disponible`, dbErr);
+        }
         
         // Crear modal de confirmación personalizado (bien posicionado)
         const confirmModal = document.createElement('div');
@@ -13826,7 +13830,7 @@ const Reports = {
                         ¿Estás seguro de que deseas eliminar este reporte archivado?
                     </p>
                     <p style="margin: var(--spacing-sm) 0 0 0; font-size: 13px; line-height: 1.5; color: var(--color-danger);">
-                        <strong>Esta acción no se puede deshacer.</strong>
+                        <strong>Esta acción se eliminar tanto del servidor como del dispositivo local.</strong>
                     </p>
                 </div>
                 <div class="modal-footer" style="padding: var(--spacing-md); border-top: 1px solid var(--color-border-light); display: flex; gap: var(--spacing-sm); justify-content: flex-end;">
@@ -13843,10 +13847,57 @@ const Reports = {
             document.getElementById('delete-archived-confirm-btn').onclick = async () => {
                 confirmModal.remove();
                 try {
-                    const report = await DB.get('archived_quick_captures', reportId);
-                    // Registrar eliminación INMEDIATAMENTE para evitar que loadArchivedReports re-inserte al sincronizar
-                    const deletedId = `archived_deleted_${apiId || reportId}`;
+                    let deletedFromServer = false;
+                    let deletedFromLocal = false;
+                    
+                    // PASO 1: Intentar eliminar del servidor (usar server_id si está disponible)
+                    if ((apiId || reportId) && typeof API !== 'undefined' && API.baseURL && API.token && typeof API.deleteArchivedReport === 'function') {
+                        // Intentar primero con server_id, después con reportId local como fallback
+                        const idsToTry = apiId ? [apiId, reportId] : [reportId];
+                        
+                        for (const idToDelete of idsToTry) {
+                            try {
+                                console.log(`📤 Intentando eliminar reporte del servidor (ID: ${idToDelete})...`);
+                                await API.deleteArchivedReport(idToDelete);
+                                console.log(`✅ Reporte eliminado del servidor: ${idToDelete}`);
+                                deletedFromServer = true;
+                                break; // Éxito, no reintentar con otro ID
+                            } catch (apiErr) {
+                                const is404 = apiErr?.status === 404 || apiErr?.message?.includes('Reporte archivado no encontrado') || apiErr?.message?.includes('no encontrado');
+                                const isTimeout = apiErr?.message?.includes('timeout');
+                                
+                                if (is404 && idToDelete === reportId && apiId) {
+                                    // El ID local no existe, intentar con server_id a continuación
+                                    console.log(`ℹ️ Reporte no encontrado con ID local, probando con server_id...`);
+                                    continue;
+                                } else if (is404) {
+                                    console.log(`ℹ️ Reporte no estaba en el servidor (ya eliminado o nunca sincronizado)`);
+                                    deletedFromServer = true; // Considerar como "eliminado" si no existe
+                                    break;
+                                } else if (isTimeout) {
+                                    console.warn(`⚠️ Timeout eliminando del servidor (${idToDelete}). Continuando con eliminación local...`);
+                                    break; // No reintentar más
+                                } else {
+                                    console.warn(`⚠️ Error eliminando del servidor (${idToDelete}):`, apiErr?.message);
+                                }
+                            }
+                        }
+                    } else {
+                        console.log('ℹ️ Sin ID de servidor o API no disponible, eliminando solo localmente...');
+                    }
+                    
+                    // PASO 2: Siempre eliminar del local (funciona si existe)
                     try {
+                        await DB.delete('archived_quick_captures', reportId);
+                        console.log(`✅ Reporte eliminado del almacenamiento local: ${reportId}`);
+                        deletedFromLocal = true;
+                    } catch (dbErr) {
+                        console.warn(`⚠️ Error eliminando del almacenamiento local:`, dbErr);
+                    }
+                    
+                    // PASO 3: Registrar eliminación en sync_deleted_items (para futuras sincronizaciones)
+                    try {
+                        const deletedId = `archived_deleted_${Date.now()}_${reportId}`;
                         await DB.put('sync_deleted_items', {
                             id: deletedId,
                             entity_type: 'archived_quick_capture',
@@ -13858,27 +13909,19 @@ const Reports = {
                             },
                             deleted_at: new Date().toISOString()
                         });
-                    } catch (e) { console.warn('Error guardando sync_deleted_items para reporte archivado:', e); }
-                    // Eliminar del servidor solo si el reporte fue sincronizado (apiId); si es solo local, no llamar API
-                    if (apiId && typeof API !== 'undefined' && API.baseURL && API.token && typeof API.deleteArchivedReport === 'function') {
-                        try {
-                            await API.deleteArchivedReport(apiId);
-                            console.log('✅ Reporte archivado eliminado del servidor:', reportId);
-                        } catch (apiErr) {
-                            if (apiErr?.status === 404 || apiErr?.message?.includes('Reporte archivado no encontrado')) {
-                                console.log('ℹ️ Reporte no encontrado en servidor, eliminando solo local');
-                            } else {
-                                console.warn('⚠️ No se pudo eliminar del servidor (se elimina localmente):', apiErr);
-                            }
-                        }
+                    } catch (e) { 
+                        console.warn('Error registrando eliminación en sync_deleted_items:', e); 
                     }
-                    // Siempre eliminar localmente (funciona para reportes sincronizados y solo locales)
-                    await DB.delete('archived_quick_captures', reportId);
-                    Utils.showNotification('Reporte archivado eliminado', 'success');
-                    await this.loadArchivedReports();
+                    
+                    if (deletedFromLocal || deletedFromServer) {
+                        Utils.showNotification('✅ Reporte archivado eliminado correctamente', 'success');
+                        await this.loadArchivedReports();
+                    } else {
+                        Utils.showNotification('⚠️ No se pudo eliminar el reporte (no encontrado)', 'warning');
+                    }
                 } catch (error) {
-                    console.error('Error eliminando reporte archivado:', error);
-                    Utils.showNotification('Error al eliminar: ' + error.message, 'error');
+                    console.error('❌ Error eliminando reporte archivado:', error);
+                    Utils.showNotification('❌ Error al eliminar: ' + error.message, 'error');
                 }
                 resolve();
             };
