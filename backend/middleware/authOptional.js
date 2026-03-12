@@ -148,69 +148,76 @@ export const authenticateOptional = async (req, res, next) => {
     const branchId = req.headers['x-branch-id'] || req.query.branch_id || req.body.branch_id;
     
     if (username) {
-      // Buscar usuario por username
-      const userResult = await query(
-        `SELECT u.*, e.branch_id, e.branch_ids, e.role as employee_role
-         FROM users u
-         LEFT JOIN employees e ON u.employee_id = e.id
-         WHERE u.username = $1 AND u.active = true`,
-        [username]
-      );
+      try {
+        // ⚡ Same timeout as token auth - fail fast
+        const userResult = await query(
+          `SELECT u.*, e.branch_id, e.branch_ids, e.role as employee_role
+           FROM users u
+           LEFT JOIN employees e ON u.employee_id = e.id
+           WHERE u.username = $1 AND u.active = true`,
+          [username],
+          0,  // NO retries
+          1000  // 1 segundo timeout
+        );
 
-      if (userResult.rows.length > 0) {
-        const user = userResult.rows[0];
-        const role = user.role || user.employee_role;
-        const isMasterAdmin = role === 'master_admin';
+        if (userResult && userResult.rows && userResult.rows.length > 0) {
+          const user = userResult.rows[0];
+          const role = user.role || user.employee_role;
+          const isMasterAdmin = role === 'master_admin';
 
-        if (isMasterAdmin && requireTokenForMasterAdmin) {
-          return res.status(401).json({ error: 'master_admin requiere token válido en producción' });
-        }
-
-        const rawUserBranchId = normalizeBranchId(user.branch_id);
-        const userBranchIds = Array.isArray(user.branch_ids)
-          ? user.branch_ids.map(b => normalizeBranchId(b)).filter(Boolean)
-          : (rawUserBranchId ? [rawUserBranchId] : []);
-
-        let userBranchId = normalizeBranchId(branchId) || rawUserBranchId;
-        if (!userBranchId && userBranchIds.length > 0) userBranchId = userBranchIds[0];
-
-        // Si se envió branch_id, verificar que el usuario tenga acceso
-        if (branchId && !isMasterAdmin) {
-          const bid = normalizeBranchId(branchId);
-          if (bid && !userBranchIds.includes(bid)) {
-            return res.status(403).json({ error: 'Usuario no tiene acceso a esta sucursal' });
+          if (isMasterAdmin && requireTokenForMasterAdmin) {
+            return res.status(401).json({ error: 'master_admin requiere token válido en producción' });
           }
-        }
 
-        req.user = {
-          id: user.id,
-          username: user.username,
-          employeeId: user.employee_id,
-          role,
-          branchId: userBranchId,
-          branchIds: userBranchIds.length ? userBranchIds : (rawUserBranchId ? [rawUserBranchId] : []),
-          isMasterAdmin,
-          authenticated: false // Indica que fue autenticado sin token
-        };
-        return next();
-      } else {
-        if (!allowUnsafeFallbackAuth) {
-          return res.status(401).json({ error: 'Usuario no válido. Inicia sesión nuevamente.' });
-        }
+          const rawUserBranchId = normalizeBranchId(user.branch_id);
+          const userBranchIds = Array.isArray(user.branch_ids)
+            ? user.branch_ids.map(b => normalizeBranchId(b)).filter(Boolean)
+            : (rawUserBranchId ? [rawUserBranchId] : []);
 
-        // Solo en modo fallback inseguro (desarrollo o override explícito)
-        req.user = {
-          id: null,
-          username: username,
-          employeeId: null,
-          role: 'employee',
-          branchId: normalizeBranchId(branchId),
-          branchIds: branchId ? [normalizeBranchId(branchId)].filter(Boolean) : [],
-          isMasterAdmin: false,
-          authenticated: false,
-          isTemporary: true // Indica que es un usuario temporal
-        };
-        return next();
+          let userBranchId = normalizeBranchId(branchId) || rawUserBranchId;
+          if (!userBranchId && userBranchIds.length > 0) userBranchId = userBranchIds[0];
+
+          // Si se envió branch_id, verificar que el usuario tenga acceso
+          if (branchId && !isMasterAdmin) {
+            const bid = normalizeBranchId(branchId);
+            if (bid && !userBranchIds.includes(bid)) {
+              return res.status(403).json({ error: 'Usuario no tiene acceso a esta sucursal' });
+            }
+          }
+
+          req.user = {
+            id: user.id,
+            username: user.username,
+            employeeId: user.employee_id,
+            role,
+            branchId: userBranchId,
+            branchIds: userBranchIds.length ? userBranchIds : (rawUserBranchId ? [rawUserBranchId] : []),
+            isMasterAdmin,
+            authenticated: false // Indica que fue autenticado sin token
+          };
+          return next();
+        } else {
+          if (!allowUnsafeFallbackAuth) {
+            return res.status(401).json({ error: 'Usuario no válido. Inicia sesión nuevamente.' });
+          }
+
+          // Solo en modo fallback inseguro (desarrollo o override explícito)
+          req.user = {
+            id: null,
+            username: username,
+            employeeId: null,
+            role: 'employee',
+            branchId: normalizeBranchId(branchId),
+            branchIds: branchId ? [normalizeBranchId(branchId)].filter(Boolean) : [],
+            isMasterAdmin: false,
+            authenticated: false,
+            isTemporary: true // Indica que es un usuario temporal
+          };
+          return next();
+        }
+      } catch (dbError) {
+        // ⚡ Si username auth falla, continuar sin usuario
+        console.warn('⚠️ [Username Auth Timeout] BD no respondió, continuando sin auth:', dbError.message);
       }
     }
 
