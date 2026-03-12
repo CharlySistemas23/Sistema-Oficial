@@ -8162,7 +8162,10 @@ const Reports = {
 
             captures = captures.filter(filterCaptureForSelectedDate);
 
-            if (captures.length === 0 && !skipRemoteLookup) {
+            // IMPORTANTE: siempre intentar mezclar con servidor para la fecha seleccionada.
+            // Si solo rehidratamos cuando no hay datos locales, master_admin puede quedarse con
+            // una vista parcial cuando otro equipo creó capturas y este cliente perdió el evento Socket.
+            if (!skipRemoteLookup) {
                 const hydratedCount = await this.hydrateQuickCapturesForDate(selectedDate, currentBranchId, isMasterAdmin);
                 if (hydratedCount > 0) {
                     const reloadedCaptures = await DB.getAll('temp_quick_captures') || [];
@@ -8344,7 +8347,10 @@ const Reports = {
                 return 0;
             }
 
-            const filters = {};
+            const normalizedSelectedDate = String(selectedDate || '').split('T')[0];
+            const filters = {
+                date: normalizedSelectedDate
+            };
             if (!isMasterAdmin && currentBranchId) {
                 filters.branch_id = currentBranchId;
             }
@@ -8354,7 +8360,6 @@ const Reports = {
                 return 0;
             }
 
-            const normalizedSelectedDate = String(selectedDate || '').split('T')[0];
             const capturesForDate = serverCaptures.filter(capture => {
                 const captureDate = (capture?.original_report_date || capture?.date || '').split('T')[0];
                 return captureDate === normalizedSelectedDate;
