@@ -1,6 +1,24 @@
 import jwt from 'jsonwebtoken';
 import { query } from '../config/database.js';
 
+// ⚡ PERFORMANCE FIX: Cache usuario by token para evitar query BD en cada request
+const userCache = new Map();
+const CACHE_TTL = 30000; // 30 segundos
+
+const getCachedUser = (token) => {
+  const entry = userCache.get(token);
+  if (!entry) return null;
+  if (Date.now() - entry.timestamp > CACHE_TTL) {
+    userCache.delete(token);
+    return null;
+  }
+  return entry.user;
+};
+
+const setCachedUser = (token, user) => {
+  userCache.set(token, { user, timestamp: Date.now() });
+};
+
 // Normalizar UUID a minúsculas para comparaciones consistentes (BD vs headers/query)
 const normalizeBranchId = (id) => {
   if (id == null || id === '') return null;
@@ -50,16 +68,33 @@ export const authenticateOptional = async (req, res, next) => {
         }
 
         if (decoded) {
-          const userResult = await query(
-            `SELECT u.*, e.branch_id, e.branch_ids, e.role as employee_role
-             FROM users u
-             LEFT JOIN employees e ON u.employee_id = e.id
-             WHERE u.id = $1 AND u.active = true`,
-            [decoded.userId]
-          );
+          // ⚡ PERFORMANCE: Buscar en cache primero
+          let user = getCachedUser(token);
+          
+          if (!user) {
+            try {
+              const userResult = await query(
+                `SELECT u.*, e.branch_id, e.branch_ids, e.role as employee_role
+                 FROM users u
+                 LEFT JOIN employees e ON u.employee_id = e.id
+                 WHERE u.id = $1 AND u.active = true`,
+                [decoded.userId],
+                1,  // solo 1 reintento para auth (no blockear)
+                3000  // 3 segundo timeout para autenticación (fallback rápido)
+              );
 
-          if (userResult.rows.length > 0) {
-            const user = userResult.rows[0];
+              if (userResult.rows.length > 0) {
+                user = userResult.rows[0];
+                // ⚡ Cache el usuario por 30s
+                setCachedUser(token, user);
+              }
+            } catch (dbError) {
+              // Si la BD está down, continuar sin usuario pero sin bloquear
+              console.warn('⚠️ Auth DB failed (fallback to no auth):', dbError.message);
+            }
+          }
+
+          if (user) {
             const role = user.role || user.employee_role;
             const isMasterAdmin = role === 'master_admin';
             const headerBranchId = normalizeBranchId(req.headers['x-branch-id']);
