@@ -411,33 +411,36 @@ router.post('/quick-captures', requireBranchAccess, async (req, res) => {
     await client.query('COMMIT');
     transactionCommitted = true;
 
-    try {
-      const io = getIO(req);
-      const captureData = await loadQuickCaptureDetails(capture.id);
-      logReportsOperation('quick_capture_create_committed', {
-        captureId: capture.id,
-        branchId: finalBranchId,
-        userId: req.user.id
-      });
-
-      if (io && captureData) {
-        if (finalBranchId) {
-          io.to(`branch:${finalBranchId}`).emit('quick_capture_created', { capture: captureData });
-        }
-        io.to('master_admin').emit('quick_capture_created', { capture: captureData });
-        if (req.user.id) {
-          io.to(`user:${req.user.id}`).emit('quick_capture_created', { capture: captureData });
-        }
-      }
-    } catch (postCommitError) {
-      logReportsOperation('quick_capture_create_post_commit_failed', {
-        captureId: capture.id,
-        message: postCommitError.message
-      });
-      console.error('Captura rápida creada pero fallaron efectos post-commit:', postCommitError);
-    }
-
     res.status(201).json(capture);
+
+    // Emitir evento Socket de forma asincronizada (sin bloquear la respuesta)
+    setImmediate(async () => {
+      try {
+        const io = getIO(req);
+        const captureData = await loadQuickCaptureDetails(capture.id);
+        logReportsOperation('quick_capture_create_committed', {
+          captureId: capture.id,
+          branchId: finalBranchId,
+          userId: req.user.id
+        });
+
+        if (io && captureData) {
+          if (finalBranchId) {
+            io.to(`branch:${finalBranchId}`).emit('quick_capture_created', { capture: captureData });
+          }
+          io.to('master_admin').emit('quick_capture_created', { capture: captureData });
+          if (req.user.id) {
+            io.to(`user:${req.user.id}`).emit('quick_capture_created', { capture: captureData });
+          }
+        }
+      } catch (postCommitError) {
+        logReportsOperation('quick_capture_create_post_commit_failed', {
+          captureId: capture.id,
+          message: postCommitError.message
+        });
+        console.error('⚠️ Captura creada pero fallo post-commit:', postCommitError.message);
+      }
+    });
   } catch (error) {
     if (!transactionCommitted) {
       await safeRollback(client);
@@ -619,33 +622,37 @@ router.put('/quick-captures/:id', requireBranchAccess, async (req, res) => {
     await client.query('COMMIT');
     transactionCommitted = true;
 
-    try {
-      const io = getIO(req);
-      const captureData = await loadQuickCaptureDetails(id);
-      logReportsOperation('quick_capture_update_committed', {
-        captureId: id,
-        branchId: updated.branch_id,
-        userId: req.user.id
-      });
-
-      if (io && captureData) {
-        if (updated.branch_id) {
-          io.to(`branch:${updated.branch_id}`).emit('quick_capture_updated', { capture: captureData });
-        }
-        io.to('master_admin').emit('quick_capture_updated', { capture: captureData });
-        if (updated.created_by) {
-          io.to(`user:${updated.created_by}`).emit('quick_capture_updated', { capture: captureData });
-        }
-      }
-    } catch (postCommitError) {
-      logReportsOperation('quick_capture_update_post_commit_failed', {
-        captureId: id,
-        message: postCommitError.message
-      });
-      console.error('Captura rápida actualizada pero fallaron efectos post-commit:', postCommitError);
-    }
-
     res.json(updated);
+
+    // Emitir evento Socket de forma asincronizada (sin bloquear la respuesta)
+    // Esto evita saturar el pool de conexiones esperando loadQuickCaptureDetails
+    setImmediate(async () => {
+      try {
+        const io = getIO(req);
+        const captureData = await loadQuickCaptureDetails(id);
+        logReportsOperation('quick_capture_update_committed', {
+          captureId: id,
+          branchId: updated.branch_id,
+          userId: req.user.id
+        });
+
+        if (io && captureData) {
+          if (updated.branch_id) {
+            io.to(`branch:${updated.branch_id}`).emit('quick_capture_updated', { capture: captureData });
+          }
+          io.to('master_admin').emit('quick_capture_updated', { capture: captureData });
+          if (updated.created_by) {
+            io.to(`user:${updated.created_by}`).emit('quick_capture_updated', { capture: captureData });
+          }
+        }
+      } catch (postCommitError) {
+        logReportsOperation('quick_capture_update_post_commit_failed', {
+          captureId: id,
+          message: postCommitError.message
+        });
+        console.error('⚠️ Captura actualizada pero fallo post-commit:', postCommitError.message);
+      }
+    });
   } catch (error) {
     if (!transactionCommitted) {
       await safeRollback(client);
