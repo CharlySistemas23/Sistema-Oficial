@@ -3509,10 +3509,50 @@ Object.assign(POS, {
     },
 
     async reprintTicket(saleId) {
-        const sale = await DB.get('sales', saleId);
-        if (sale) {
-            await Printer.printTicket(sale);
+        let sale = await DB.get('sales', saleId);
+        if (!sale) {
+            Utils.showNotification('Venta no encontrada', 'error');
+            return;
         }
+
+        try {
+            const localItems = await DB.query('sale_items', 'sale_id', saleId) || [];
+            const needsHydration = localItems.length === 0;
+
+            if (needsHydration && typeof API !== 'undefined' && API.baseURL && API.token && typeof API.getSale === 'function') {
+                const detailedSale = await API.getSale(saleId);
+                if (detailedSale) {
+                    sale = { ...sale, ...detailedSale };
+                    await DB.put('sales', sale, { autoBranchId: false });
+
+                    if (Array.isArray(detailedSale.items) && detailedSale.items.length > 0) {
+                        for (const item of detailedSale.items) {
+                            await DB.put('sale_items', {
+                                ...(item || {}),
+                                id: item?.id || Utils.generateId(),
+                                sale_id: saleId,
+                                created_at: item?.created_at || new Date().toISOString()
+                            }, { autoBranchId: false });
+                        }
+                    }
+
+                    if (Array.isArray(detailedSale.payments) && detailedSale.payments.length > 0) {
+                        for (const payment of detailedSale.payments) {
+                            await DB.put('payments', {
+                                ...(payment || {}),
+                                id: payment?.id || Utils.generateId(),
+                                sale_id: saleId,
+                                created_at: payment?.created_at || new Date().toISOString()
+                            }, { autoBranchId: false });
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn('No se pudo hidratar venta para reimpresión:', e);
+        }
+
+        await Printer.printTicket(sale);
     },
 
     // ==================== ELIMINAR Y EDITAR VENTAS (MASTER ADMIN) ====================
