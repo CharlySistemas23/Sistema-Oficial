@@ -3,6 +3,8 @@
 const Repairs = {
     initialized: false,
     isExporting: false, // Flag para prevenir múltiples exportaciones simultáneas
+    _branchChangedHandler: null,
+    _socketListenersAttached: false,
     
     async init() {
         try {
@@ -21,11 +23,14 @@ const Repairs = {
             this.initialized = true;
             
             // Escuchar cambios de sucursal para recargar reparaciones
-            window.addEventListener('branch-changed', async () => {
-                if (this.initialized) {
-                    await this.loadRepairs();
-                }
-            });
+            if (!this._branchChangedHandler) {
+                this._branchChangedHandler = async () => {
+                    if (this.initialized && (typeof UI === 'undefined' || UI.currentModule === 'repairs')) {
+                        await this.loadRepairs();
+                    }
+                };
+                window.addEventListener('branch-changed', this._branchChangedHandler);
+            }
             
             // Escuchar eventos Socket.IO para actualización en tiempo real
             this.setupSocketListeners();
@@ -112,6 +117,10 @@ const Repairs = {
 
     async loadRepairs() {
         try {
+            if (typeof UI !== 'undefined' && UI.currentModule !== 'repairs') {
+                return;
+            }
+
             // Obtener sucursal actual
             const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
             
@@ -420,6 +429,9 @@ const Repairs = {
     async displayRepairs(repairs) {
         const container = document.getElementById('repairs-list');
         if (!container) {
+            if (typeof UI !== 'undefined' && UI.currentModule !== 'repairs') {
+                return;
+            }
             console.error('❌ repairs-list no encontrado en displayRepairs');
             // Intentar reconfigurar UI
             const content = document.getElementById('module-content');
@@ -1210,7 +1222,10 @@ const Repairs = {
         }
         
         // Escuchar cambios de sucursal desde el header para sincronizar el dropdown
-        window.addEventListener('branch-changed', async (e) => {
+        if (this._branchFilterSyncHandler) {
+            window.removeEventListener('branch-changed', this._branchFilterSyncHandler);
+        }
+        this._branchFilterSyncHandler = async (e) => {
             const updatedFilter = document.getElementById('repair-branch-filter');
             if (updatedFilter && e.detail && e.detail.branchId) {
                 // Sincronizar dropdown con la sucursal seleccionada en el header
@@ -1218,14 +1233,21 @@ const Repairs = {
                 // Recargar reparaciones con el nuevo filtro
                 await this.loadRepairs();
             }
-        });
+        };
+        window.addEventListener('branch-changed', this._branchFilterSyncHandler);
     },
 
     setupSocketListeners() {
+        if (this._socketListenersAttached) {
+            return;
+        }
+        this._socketListenersAttached = true;
+
         // Escuchar eventos Socket.IO para actualización en tiempo real
         // Eventos de reparaciones de todas las sucursales (master_admin)
-        if (typeof UserManager !== 'undefined' && UserManager.currentUser?.is_master_admin) {
-            window.addEventListener('repair-updated-all-branches', async (e) => {
+        window.addEventListener('repair-updated-all-branches', async (e) => {
+                const isMasterAdmin = typeof UserManager !== 'undefined' && UserManager.currentUser?.is_master_admin;
+                if (!isMasterAdmin || (typeof UI !== 'undefined' && UI.currentModule !== 'repairs')) return;
                 const { branchId, action, repair } = e.detail;
                 if (this.initialized) {
                     console.log(`🔧 Repairs: Reparación actualizada en sucursal ${branchId} (${action})`);
@@ -1235,10 +1257,10 @@ const Repairs = {
                     }, 300);
                 }
             });
-        }
         
         // Eventos de reparaciones locales (para usuarios normales o master_admin viendo su sucursal)
         window.addEventListener('repair-updated', async (e) => {
+            if (typeof UI !== 'undefined' && UI.currentModule !== 'repairs') return;
             if (this.initialized) {
                 const { repair } = e.detail || {};
                 const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
