@@ -10466,10 +10466,12 @@ const Reports = {
             }
 
             // Calcular todos los datos del reporte
-            const exchangeRates = await DB.query('exchange_rates_daily', 'date', normalizedSelectedDate) || [];
-            const todayRate = exchangeRates[0] || { usd_to_mxn: 20.0, cad_to_mxn: 15.0 };
-            const usdRate = todayRate.usd_to_mxn || 20.0;
-            const cadRate = todayRate.cad_to_mxn || 15.0;
+            // IMPORTANTE: Usar el MISMO método de obtención de tipos de cambio que se usa en pantalla
+            // para garantizar consistencia entre visualización y archivo
+            const exchangeRatesInfo = await this.getExchangeRatesForDate(selectedDate);
+            const usdRate = exchangeRatesInfo?.usd || 18.0;
+            const cadRate = exchangeRatesInfo?.cad || 13.0;
+            console.log(`💱 Tipos de cambio para archivado (${normalizedSelectedDate}): USD=${usdRate}, CAD=${cadRate}`);
 
             const totals = { USD: 0, MXN: 0, CAD: 0 };
             let totalQuantity = 0;
