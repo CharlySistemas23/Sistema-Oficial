@@ -3081,13 +3081,16 @@ Object.assign(POS, {
         const raw = String(barcode || '').trim().replace(/\r?\n/g, '');
         if (!raw) return false;
 
-        const norm = v => String(v || '').trim().replace(/\r?\n/g, '');
+        const norm = v => String(v || '')
+            .trim()
+            .replace(/\r?\n/g, '')
+            .replace(/[\s\-_]/g, '')
+            .toUpperCase();
         const matchesCode = (item, val) => {
             const b = norm(item.barcode);
             const c = norm(item.code);
             const v = norm(val);
-            return b === v || c === v ||
-                b.toLowerCase() === v.toLowerCase() || c.toLowerCase() === v.toLowerCase();
+            return (b && b === v) || (c && c === v);
         };
         const genGuide = g => (Utils.generateGuideBarcode && Utils.generateGuideBarcode(g)) || '';
         const genAgency = a => (Utils.generateAgencyBarcode && Utils.generateAgencyBarcode(a)) || '';
@@ -3095,12 +3098,24 @@ Object.assign(POS, {
         const matchesGenerated = (item, val, genFn) => norm(genFn(item)) === norm(val);
 
         const findByBarcode = async (store, genFn) => {
-            let r = await DB.getByIndex(store, 'barcode', raw);
-            if (!r) {
-                const all = await DB.getAll(store, null, null, { filterByBranch: false }) || [];
-                r = all.find(x => matchesCode(x, raw) || (genFn && matchesGenerated(x, raw, genFn)));
-            }
-            return r;
+            const all = await DB.getAll(store, null, null, { filterByBranch: false }) || [];
+            const direct = await DB.getByIndex(store, 'barcode', raw);
+            const candidates = all.filter(x => {
+                if (!x) return false;
+                if (direct && x.id === direct.id) return true;
+                return matchesCode(x, raw) || (genFn && matchesGenerated(x, raw, genFn));
+            });
+
+            if (candidates.length === 0) return null;
+
+            const activeCandidates = candidates.filter(x => x.active !== false);
+            const ordered = (activeCandidates.length > 0 ? activeCandidates : candidates)
+                .sort((a, b) => {
+                    const aUpdated = a.updated_at ? new Date(a.updated_at).getTime() : 0;
+                    const bUpdated = b.updated_at ? new Date(b.updated_at).getTime() : 0;
+                    return bUpdated - aUpdated;
+                });
+            return ordered[0] || null;
         };
 
         // 1. Agencia
