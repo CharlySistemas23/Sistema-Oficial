@@ -3081,29 +3081,33 @@ Object.assign(POS, {
         const raw = String(barcode || '').trim().replace(/\r?\n/g, '');
         if (!raw) return false;
 
-        const norm = v => String(v || '')
+        const norm = v => Utils.normalizeBarcodeValue ? Utils.normalizeBarcodeValue(v) : String(v || '')
             .trim()
             .replace(/\r?\n/g, '')
             .replace(/[\s\-_]/g, '')
             .toUpperCase();
+        const getCandidates = (item, type, genFn) => {
+            const utilsCandidates = Utils.getEntityBarcodeCandidates ? Utils.getEntityBarcodeCandidates(item, type) : [];
+            const fallback = genFn ? [genFn(item)] : [];
+            return Array.from(new Set([...utilsCandidates, ...fallback.map(value => norm(value)).filter(Boolean)]));
+        };
         const matchesCode = (item, val) => {
-            const b = norm(item.barcode);
-            const c = norm(item.code);
             const v = norm(val);
-            return (b && b === v) || (c && c === v);
+            const candidates = [norm(item.barcode), norm(item.code), norm(item.codigo)].filter(Boolean);
+            return candidates.includes(v);
         };
         const genGuide = g => (Utils.generateGuideBarcode && Utils.generateGuideBarcode(g)) || '';
         const genAgency = a => (Utils.generateAgencyBarcode && Utils.generateAgencyBarcode(a)) || '';
         const genSeller = s => (Utils.generateSellerBarcode && Utils.generateSellerBarcode(s)) || '';
-        const matchesGenerated = (item, val, genFn) => norm(genFn(item)) === norm(val);
+        const matchesGenerated = (item, val, type, genFn) => getCandidates(item, type, genFn).includes(norm(val));
 
-        const findByBarcode = async (store, genFn) => {
+        const findByBarcode = async (store, type, genFn) => {
             const all = await DB.getAll(store, null, null, { filterByBranch: false }) || [];
             const direct = await DB.getByIndex(store, 'barcode', raw);
             const candidates = all.filter(x => {
                 if (!x) return false;
                 if (direct && x.id === direct.id) return true;
-                return matchesCode(x, raw) || (genFn && matchesGenerated(x, raw, genFn));
+                return matchesCode(x, raw) || (genFn && matchesGenerated(x, raw, type, genFn));
             });
 
             if (candidates.length === 0) return null;
@@ -3119,21 +3123,21 @@ Object.assign(POS, {
         };
 
         // 1. Agencia
-        let agency = await findByBarcode('catalog_agencies', genAgency);
+        let agency = await findByBarcode('catalog_agencies', 'agency', genAgency);
         if (agency && agency.active !== false) {
             await this.setAgency(agency);
             return true;
         }
 
         // 2. Guía
-        let guide = await findByBarcode('catalog_guides', genGuide);
+        let guide = await findByBarcode('catalog_guides', 'guide', genGuide);
         if (guide && guide.active !== false) {
             await this.setGuide(guide);
             return true;
         }
 
         // 3. Vendedor
-        let seller = await findByBarcode('catalog_sellers', genSeller);
+        let seller = await findByBarcode('catalog_sellers', 'seller', genSeller);
         if (seller && seller.active !== false) {
             await this.setSeller(seller);
             return true;
