@@ -3,6 +3,10 @@
 const Branches = {
     initialized: false,
     branches: [],
+    isLoading: false,
+    pendingReload: false,
+    syncInProgress: false,
+    lastLocalToServerSyncAt: 0,
 
     async init() {
         try {
@@ -168,13 +172,28 @@ const Branches = {
             return;
         }
 
+        if (this.isLoading) {
+            this.pendingReload = true;
+            console.log('⏳ [Branches] load ya en progreso, se agenda recarga pendiente');
+            return;
+        }
+
+        this.isLoading = true;
+
         try {
             console.log('🔄 Cargando sucursales...');
             
             // ========== SINCRONIZACIÓN BIDIRECCIONAL ==========
             // PASO 1: Subir sucursales locales que NO están en el servidor
             try {
-                if (typeof API !== 'undefined' && API.baseURL && API.token && API.createBranch && API.updateBranch) {
+                const now = Date.now();
+                const syncCooldownMs = 15000;
+                const canRunLocalToServerSync =
+                    !this.syncInProgress &&
+                    (now - this.lastLocalToServerSyncAt >= syncCooldownMs);
+
+                if (typeof API !== 'undefined' && API.baseURL && API.token && API.createBranch && API.updateBranch && canRunLocalToServerSync) {
+                    this.syncInProgress = true;
                     console.log('📤 [Paso 1 Branches] Buscando sucursales locales que no están en el servidor...');
                     
                     const allLocalBranches = await DB.getAll('catalog_branches') || [];
@@ -235,10 +254,19 @@ const Branches = {
                                         });
                                         
                                         for (const branchToUpdate of branchesToUpdate) {
-                                            branchToUpdate.server_id = updatedBranch.id;
-                                            branchToUpdate.id = updatedBranch.id;
-                                            branchToUpdate.sync_status = 'synced';
-                                            await DB.put('catalog_branches', branchToUpdate);
+                                            const oldId = branchToUpdate.id;
+                                            const nextBranch = {
+                                                ...branchToUpdate,
+                                                server_id: updatedBranch.id,
+                                                id: updatedBranch.id,
+                                                sync_status: 'synced'
+                                            };
+                                            if (oldId && oldId !== updatedBranch.id) {
+                                                try {
+                                                    await DB.delete('catalog_branches', oldId);
+                                                } catch (e) {}
+                                            }
+                                            await DB.put('catalog_branches', nextBranch);
                                         }
                                         uploadedCount++;
                                     }
@@ -252,10 +280,19 @@ const Branches = {
                                         });
                                         
                                         for (const branchToUpdate of branchesToUpdate) {
-                                            branchToUpdate.server_id = createdBranch.id;
-                                            branchToUpdate.id = createdBranch.id;
-                                            branchToUpdate.sync_status = 'synced';
-                                            await DB.put('catalog_branches', branchToUpdate);
+                                            const oldId = branchToUpdate.id;
+                                            const nextBranch = {
+                                                ...branchToUpdate,
+                                                server_id: createdBranch.id,
+                                                id: createdBranch.id,
+                                                sync_status: 'synced'
+                                            };
+                                            if (oldId && oldId !== createdBranch.id) {
+                                                try {
+                                                    await DB.delete('catalog_branches', oldId);
+                                                } catch (e) {}
+                                            }
+                                            await DB.put('catalog_branches', nextBranch);
                                         }
                                         uploadedCount++;
                                     }
@@ -267,9 +304,15 @@ const Branches = {
                         
                         console.log(`✅ [Paso 1 Branches] Sincronización local→servidor completada: ${uploadedCount} sucursales subidas`);
                     }
+
+                    this.lastLocalToServerSyncAt = Date.now();
+                    this.syncInProgress = false;
+                } else if (!canRunLocalToServerSync) {
+                    console.log('⏱️ [Paso 1 Branches] Sync local→server omitida por cooldown');
                 }
             } catch (error) {
                 console.error('❌ [Paso 1 Branches] Error sincronizando sucursales locales al servidor:', error);
+                this.syncInProgress = false;
             }
 
             // CACHE-FIRST: Cargar desde IndexedDB primero
@@ -292,7 +335,8 @@ const Branches = {
                             const beforeIds = new Set(this.branches.map(b => b.id));
                             const afterIds = new Set(fresh.map(b => b.id));
                             if (beforeIds.size !== afterIds.size || [...beforeIds].some(id => !afterIds.has(id))) {
-                                await this.loadBranches();
+                                this.branches = fresh;
+                                this.displayBranches();
                             }
                         } catch (e) { console.warn('Sync branches background:', e); }
                     }).catch(e => console.warn('Sync branches background:', e));
@@ -397,6 +441,12 @@ const Branches = {
                     <br><small style="margin-top: var(--spacing-xs); display: block;">Verifica la consola para más detalles</small>
                 </div>
             `;
+        } finally {
+            this.isLoading = false;
+            if (this.pendingReload) {
+                this.pendingReload = false;
+                setTimeout(() => this.loadBranches(), 250);
+            }
         }
     },
 
