@@ -920,6 +920,14 @@ const Utils = {
             .replace(/[^A-Z0-9]/g, '');
     },
 
+    normalizeBarcodeValue(value) {
+        return String(value || '')
+            .trim()
+            .replace(/\r?\n/g, '')
+            .replace(/[\s\-_]/g, '')
+            .toUpperCase();
+    },
+
     buildStableBarcode(prefix, entity, fallbackLabel) {
         const idToken = this.sanitizeBarcodeToken(entity?.id);
         const nameToken = this.sanitizeBarcodeToken(entity?.name || fallbackLabel || 'CATALOG');
@@ -933,6 +941,43 @@ const Utils = {
         const hashToken = (hash >>> 0).toString(36).toUpperCase().padStart(6, '0').slice(-6);
         const tailToken = (idToken || nameToken).slice(-8).padStart(8, '0');
         return `${prefix}${tailToken}${hashToken}`;
+    },
+
+    getEntityBarcodeCandidates(entity, type) {
+        const normalizedType = String(type || '').toLowerCase();
+        const prefix = normalizedType === 'seller' ? 'SELL' : normalizedType === 'guide' ? 'GUIDE' : normalizedType === 'agency' ? 'AG' : '';
+        const variants = new Set();
+        const addVariant = (value) => {
+            const normalized = this.normalizeBarcodeValue(value);
+            if (normalized) variants.add(normalized);
+        };
+
+        const nameToken = this.sanitizeBarcodeToken(entity?.name);
+        const firstNameToken = this.sanitizeBarcodeToken(String(entity?.name || '').split(/\s+/)[0]);
+        const codeToken = this.sanitizeBarcodeToken(entity?.code || entity?.codigo);
+        const idToken = this.sanitizeBarcodeToken(entity?.id);
+
+        addVariant(entity?.barcode);
+        addVariant(entity?.code);
+        addVariant(entity?.codigo);
+
+        if (prefix) {
+            addVariant(this.buildStableBarcode(prefix, entity, normalizedType.toUpperCase()));
+
+            const seedTokens = [nameToken, firstNameToken, codeToken, idToken].filter(Boolean);
+            for (const seed of seedTokens) {
+                addVariant(`${prefix}${seed}`);
+                addVariant(`${prefix}${seed.slice(0, 8)}`);
+                addVariant(`${prefix}${seed.slice(0, 10)}`);
+
+                const maxLen = Math.min(seed.length, 10);
+                for (let len = 4; len <= maxLen; len++) {
+                    addVariant(`${prefix}${seed.slice(0, len)}`);
+                }
+            }
+        }
+
+        return Array.from(variants);
     },
 
     // Generar código de barras para vendedor
