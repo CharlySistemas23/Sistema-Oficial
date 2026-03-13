@@ -914,16 +914,33 @@ const Utils = {
         return afterDiscount * (multiplier || 0) / 100;
     },
 
+    sanitizeBarcodeToken(value) {
+        return String(value || '')
+            .toUpperCase()
+            .replace(/[^A-Z0-9]/g, '');
+    },
+
+    buildStableBarcode(prefix, entity, fallbackLabel) {
+        const idToken = this.sanitizeBarcodeToken(entity?.id);
+        const nameToken = this.sanitizeBarcodeToken(entity?.name || fallbackLabel || 'CATALOG');
+        const baseToken = idToken || nameToken || Date.now().toString();
+
+        let hash = 2166136261;
+        for (let i = 0; i < baseToken.length; i++) {
+            hash ^= baseToken.charCodeAt(i);
+            hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+        }
+        const hashToken = (hash >>> 0).toString(36).toUpperCase().padStart(6, '0').slice(-6);
+        const tailToken = (idToken || nameToken).slice(-8).padStart(8, '0');
+        return `${prefix}${tailToken}${hashToken}`;
+    },
+
     // Generar código de barras para vendedor
     generateSellerBarcode(seller) {
         if (seller.barcode && seller.barcode.trim() !== '' && seller.barcode !== 'Sin código') {
             return seller.barcode;
         }
-        // Usar ID o nombre para generar código único
-        const base = seller.id ? seller.id.replace(/[^A-Z0-9]/gi, '').substring(0, 8).toUpperCase() : 
-                     seller.name ? seller.name.replace(/[^A-Z0-9]/gi, '').substring(0, 8).toUpperCase() : 
-                     Date.now().toString().slice(-6);
-        return `SELL${base}`;
+        return this.buildStableBarcode('SELL', seller, 'SELLER');
     },
 
     // Generar código de barras para guía
@@ -931,11 +948,7 @@ const Utils = {
         if (guide.barcode && guide.barcode.trim() !== '' && guide.barcode !== 'Sin código') {
             return guide.barcode;
         }
-        // Usar ID o nombre para generar código único
-        const base = guide.id ? guide.id.replace(/[^A-Z0-9]/gi, '').substring(0, 8).toUpperCase() : 
-                     guide.name ? guide.name.replace(/[^A-Z0-9]/gi, '').substring(0, 8).toUpperCase() : 
-                     Date.now().toString().slice(-6);
-        return `GUIDE${base}`;
+        return this.buildStableBarcode('GUIDE', guide, 'GUIDE');
     },
 
     // Generar código de barras para agencia
@@ -943,11 +956,7 @@ const Utils = {
         if (agency.barcode && agency.barcode.trim() !== '' && agency.barcode !== 'Sin código') {
             return agency.barcode;
         }
-        // Usar ID o nombre para generar código único
-        const base = agency.id ? agency.id.replace(/[^A-Z0-9]/gi, '').substring(0, 8).toUpperCase() : 
-                     agency.name ? agency.name.replace(/[^A-Z0-9]/gi, '').substring(0, 8).toUpperCase() : 
-                     Date.now().toString().slice(-6);
-        return `AG${base}`;
+        return this.buildStableBarcode('AG', agency, 'AGENCY');
     },
 
     // Generar código de barras para empleado
