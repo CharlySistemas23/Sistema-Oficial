@@ -9,6 +9,8 @@ const API = {
     socket: null,
     reconnectAttempts: 0,
     maxReconnectAttempts: 5,
+    authErrorBackoffUntil: 0,
+    authErrorBackoffMs: 15000,
 
     async init() {
         // Cargar configuración desde settings
@@ -654,8 +656,13 @@ const API = {
                             // Notificar al módulo de branches si está cargado
                             if (typeof Branches !== 'undefined' && Branches.loadBranches) {
                                 // Pequeño delay para asegurar que IndexedDB se actualizó
+                                // Solo recargar si el módulo está activo y no hay carga en curso
                                 setTimeout(() => {
-                                    Branches.loadBranches();
+                                    const isBranchesModuleActive = typeof UI !== 'undefined' && UI.currentModule === 'branches';
+                                    const canReload = !Branches.isLoading && !Branches.syncInProgress;
+                                    if (isBranchesModuleActive && canReload) {
+                                        Branches.loadBranches();
+                                    }
                                 }, 100);
                             }
                             
@@ -669,7 +676,10 @@ const API = {
                             console.warn('⚠️ Master admin conectado pero no hay sucursales activas en el servidor');
                             // Aún así, intentar cargar desde API o IndexedDB
                             if (typeof Branches !== 'undefined' && Branches.loadBranches) {
-                                Branches.loadBranches();
+                                const isBranchesModuleActive = typeof UI !== 'undefined' && UI.currentModule === 'branches';
+                                if (isBranchesModuleActive && !Branches.isLoading && !Branches.syncInProgress) {
+                                    Branches.loadBranches();
+                                }
                             }
                         }
                     } else {
@@ -679,7 +689,10 @@ const API = {
                         }
                         // Intentar cargar desde API o IndexedDB
                         if (typeof Branches !== 'undefined' && Branches.loadBranches) {
-                            Branches.loadBranches();
+                            const isBranchesModuleActive = typeof UI !== 'undefined' && UI.currentModule === 'branches';
+                            if (isBranchesModuleActive && !Branches.isLoading && !Branches.syncInProgress) {
+                                Branches.loadBranches();
+                            }
                         }
                     }
                 }
@@ -732,7 +745,8 @@ const API = {
                     // Recargar módulo de branches si está activo
                     // ⚡ ANTI-LOOP: Agregar debounce para evitar recargas en bucle (500ms mínimo entre recargas)
                     if (typeof Branches !== 'undefined' && Branches.loadBranches && typeof UI !== 'undefined' && UI.currentModule === 'branches') {
-                        if (!window.__lastBranchReload || Date.now() - window.__lastBranchReload > 500) {
+                        const canReload = !Branches.isLoading && !Branches.syncInProgress;
+                        if (canReload && (!window.__lastBranchReload || Date.now() - window.__lastBranchReload > 2000)) {
                             console.log('🔄 Recargando módulo de sucursales...');
                             window.__lastBranchReload = Date.now();
                             setTimeout(() => Branches.loadBranches(), 100);
@@ -785,6 +799,16 @@ const API = {
     async request(endpoint, options = {}) {
         if (!this.baseURL) {
             throw new Error('URL del API no configurada');
+        }
+
+        const now = Date.now();
+        const isAuthEndpoint = endpoint.includes('/api/auth/login') || endpoint.includes('/api/auth/verify');
+        if (!isAuthEndpoint && this.authErrorBackoffUntil && now < this.authErrorBackoffUntil) {
+            const waitMs = this.authErrorBackoffUntil - now;
+            const err = new Error(`Backoff temporal de autenticación (${Math.ceil(waitMs / 1000)}s)`);
+            err.status = 503;
+            err.code = 'AUTH_BACKOFF';
+            throw err;
         }
 
         const url = `${this.baseURL}${endpoint}`;
@@ -894,6 +918,7 @@ const API = {
                 }
                 
                 if (response.status === 401) {
+                    this.authErrorBackoffUntil = Date.now() + this.authErrorBackoffMs;
                     // Token expirado, pero no cerrar sesión si estamos usando fallback
                     if (this.token) {
                         console.warn('⚠️ Token expirado (401). Limpiando token...');
@@ -944,6 +969,14 @@ const API = {
                     errorMsg = errorText;
                 }
 
+                if (
+                    response.status === 401 ||
+                    response.status === 403 ||
+                    (response.status >= 500 && String(errorMsg || '').toLowerCase().includes('autenticación'))
+                ) {
+                    this.authErrorBackoffUntil = Date.now() + this.authErrorBackoffMs;
+                }
+
                 if (isImportantRequest) {
                     console.error(`❌ Error en request: ${errorMsg}`);
                     if (errorPayload && errorPayload.errors) {
@@ -971,6 +1004,10 @@ const API = {
             return result;
         } catch (error) {
             clearTimeout(timeoutId);
+
+            if (String(error?.message || '').toLowerCase().includes('autenticación')) {
+                this.authErrorBackoffUntil = Date.now() + this.authErrorBackoffMs;
+            }
             
             // Log detallado de errores
             if (isImportantRequest) {
