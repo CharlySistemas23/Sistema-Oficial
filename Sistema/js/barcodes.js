@@ -352,12 +352,47 @@
         }
     },
 
+    async findInventoryItemByScanCode(scanCode, format = 'CODE128') {
+        try {
+            const code = String(scanCode || '').trim().replace(/\r?\n/g, '');
+            if (!code) return null;
+
+            if (format === 'EAN8') {
+                return await this.findItemByEAN8(code);
+            }
+
+            let item = await DB.getByIndex('inventory_items', 'barcode', code);
+            if (item) return item;
+
+            const allItems = await DB.getAll('inventory_items', null, null, { filterByBranch: false }) || [];
+            const norm = v => String(v || '').trim().replace(/\r?\n/g, '');
+            const lowerCode = code.toLowerCase();
+
+            return allItems.find(invItem => {
+                const barcode = norm(invItem.barcode);
+                const sku = norm(invItem.sku);
+
+                if (barcode === code || sku === code) return true;
+                if (barcode.toLowerCase() === lowerCode || sku.toLowerCase() === lowerCode) return true;
+
+                const barcodeAsEAN8 = this.toEAN8(barcode);
+                const skuAsEAN8 = this.toEAN8(sku);
+                if (barcodeAsEAN8 === code || skuAsEAN8 === code) return true;
+
+                return false;
+            }) || null;
+        } catch (e) {
+            console.error('Error buscando item por código escaneado:', e);
+            return null;
+        }
+    },
+
     async handlePOSScan(barcode, format) {
         try {
             // Si es EAN8 (8 dígitos), buscar primero en inventario (productos), luego en guías/vendedores/agencias
             const barcodeClean = String(barcode || '').trim().replace(/\r?\n/g, '');
             if (format === 'EAN8') {
-                const item = await this.findItemByEAN8(barcodeClean);
+                const item = await this.findInventoryItemByScanCode(barcodeClean, 'EAN8');
                 if (item) {
                     if (item.status === 'disponible') {
                         if (window.POS && window.POS.cart) {
@@ -375,6 +410,12 @@
                     }
                     return;
                 }
+
+                if (window.POS?.trySetGuideAgencyOrSellerByBarcode) {
+                    const matchedCatalog = await window.POS.trySetGuideAgencyOrSellerByBarcode(barcodeClean);
+                    if (matchedCatalog) return;
+                }
+
                 // Si no es producto, intentar guía/vendedor/agencia (pueden usar códigos numéricos de 8 dígitos)
                 const norm = v => String(v || '').trim().replace(/\r?\n/g, '');
                 const matchesCode = (item, val) => {
@@ -434,6 +475,12 @@
                 }
                 return r;
             };
+
+            if (window.POS?.trySetGuideAgencyOrSellerByBarcode) {
+                const matchedCatalog = await window.POS.trySetGuideAgencyOrSellerByBarcode(barcodeClean);
+                if (matchedCatalog) return;
+            }
+
             // PASO 0: Verificar si es una agencia (ANTES de guías, para que tenga prioridad)
             let agency = await findByBarcode('catalog_agencies', barcodeClean);
             if (agency && agency.active) {
@@ -478,7 +525,7 @@
             }
             
             // PASO 3: Buscar producto (CODE128 también puede ser producto)
-            const item = await DB.getByIndex('inventory_items', 'barcode', barcodeClean);
+            const item = await this.findInventoryItemByScanCode(barcodeClean, 'CODE128');
             if (item) {
                 if (item.status === 'disponible') {
                     // Verificar si ya está en el carrito
@@ -677,7 +724,7 @@
             }
             
             // Buscar en inventario
-            const item = await DB.getByIndex('inventory_items', 'barcode', barcode);
+            const item = await this.findInventoryItemByScanCode(barcode, 'CODE128');
             if (item) {
                 Utils.showNotification(`Pieza encontrada: ${item.name}`, 'success');
                 // Switch to inventory module
