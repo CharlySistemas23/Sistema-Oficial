@@ -20,7 +20,7 @@ const setCachedUser = (token, user) => {
 };
 
 // Normalizar UUID a minúsculas para comparaciones consistentes (BD vs headers/query)
-const normalizeBranchId = (id) => {
+export const normalizeBranchId = (id) => {
   if (id == null || id === '') return null;
   const s = String(id).trim();
   return s ? s.toLowerCase() : null;
