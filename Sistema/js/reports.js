@@ -9026,22 +9026,27 @@ const Reports = {
                 }
             }
 
-            // Cargar agencias para formulario de llegadas (filtrar duplicados)
+            // Cargar agencias para formulario de llegadas (solo agencias permitidas y sin duplicados)
             const allAgencies = await DB.getAll('catalog_agencies') || [];
-            const seenAgencyNames = new Set();
-            const agencies = allAgencies.filter(a => {
-                if (!a || !a.name) return false;
-                const normalizedName = a.name.trim().toUpperCase();
-                if (seenAgencyNames.has(normalizedName)) {
-                    return false;
-                }
-                seenAgencyNames.add(normalizedName);
-                return true;
-            });
+            const agencies = this.filterAllowedAgencies(allAgencies);
+
             const agencySelect = document.getElementById('qc-arrival-agency');
             if (agencySelect) {
-                agencySelect.innerHTML = '<option value="">Seleccionar...</option>' +
+                agencySelect.innerHTML = '<option value="">Seleccionar agencia...</option>' +
                     agencies.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+                console.log(`✅ [Llegadas] ${agencies.length} agencias permitidas cargadas: ${agencies.map(a => a.name).join(', ')}`);
+            }
+
+            // Cargar guías (se filtrarán por agencia cuando se seleccione una)
+            const guideSelect = document.getElementById('qc-arrival-guide');
+            if (guideSelect) {
+                const preSelectedAgencyId = agencySelect?.value;
+                if (preSelectedAgencyId) {
+                    console.log(`🔍 [Llegadas] Agencia pre-seleccionada detectada: ${preSelectedAgencyId}, cargando guías...`);
+                    await this.loadGuidesForAgencyInArrivalsForm(preSelectedAgencyId);
+                } else {
+                    await this.loadGuidesForAgencyInArrivalsForm(null);
+                }
             }
         } catch (error) {
             console.error('Error cargando catálogos de llegadas:', error);
