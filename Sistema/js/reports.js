@@ -6916,56 +6916,61 @@ const Reports = {
             return this.normalizeCatalogName(withoutAgencySuffix);
         };
 
-        const assignedOrder = new Map(
-            assignedGuideNames.map((name, index) => [normalizeGuideBaseName(name), index])
-        );
+        const catalogGuides = (guides || []).filter(g => g && g.name);
+        if (!catalogGuides.length) return [];
 
-        const findAssignedOrder = (guideName) => {
-            const guideNorm = normalizeGuideBaseName(guideName);
-            if (!guideNorm) return null;
+        const usedGuideIds = new Set();
+        const resolvedGuides = [];
 
-            if (assignedOrder.has(guideNorm)) {
-                return assignedOrder.get(guideNorm);
-            }
+        const findBestGuideMatch = (targetName) => {
+            const targetNorm = normalizeGuideBaseName(targetName);
+            if (!targetNorm) return null;
 
-            // Fallback flexible para variaciones como puntos, abreviaciones o sufijos
-            for (const [assignedNorm, order] of assignedOrder.entries()) {
-                if (guideNorm.includes(assignedNorm) || assignedNorm.includes(guideNorm)) {
-                    return order;
+            const tokenList = targetNorm
+                .split(/\s+/)
+                .map(t => t.trim())
+                .filter(Boolean);
+
+            let best = null;
+            let bestScore = -1;
+
+            for (const guide of catalogGuides) {
+                if (usedGuideIds.has(guide.id)) continue;
+
+                const guideNorm = normalizeGuideBaseName(guide.name);
+                if (!guideNorm) continue;
+
+                let score = 0;
+                if (guideNorm === targetNorm) score = 100;
+                else if (guideNorm.includes(targetNorm) || targetNorm.includes(guideNorm)) score = 80;
+                else {
+                    // Coincidencia por tokens significativos
+                    const matchedTokens = tokenList.filter(token => token.length >= 3 && guideNorm.includes(token)).length;
+                    if (matchedTokens > 0) {
+                        score = 40 + matchedTokens * 10;
+                    }
+                }
+
+                if (score > bestScore) {
+                    bestScore = score;
+                    best = guide;
                 }
             }
 
-            return null;
+            if (bestScore < 40) return null;
+            return best;
         };
 
-        const assignedGuides = [];
-        for (const guide of (guides || [])) {
-            if (!guide || (!guide.active && guide.active !== undefined)) continue;
-            const assignedIndex = findAssignedOrder(guide.name);
-            if (assignedIndex !== null) {
-                assignedGuides.push({ ...guide, _assignedIndex: assignedIndex });
+        // Construir lista en el mismo orden exacto de la asignación requerida
+        for (const targetGuideName of assignedGuideNames) {
+            const match = findBestGuideMatch(targetGuideName);
+            if (match) {
+                usedGuideIds.add(match.id);
+                resolvedGuides.push(match);
             }
         }
 
-        assignedGuides.sort((a, b) => {
-            if (a._assignedIndex !== b._assignedIndex) {
-                return a._assignedIndex - b._assignedIndex;
-            }
-            return String(a.name || '').localeCompare(String(b.name || ''));
-        });
-
-        // Eliminar duplicados por nombre normalizado (conservar el primero por orden asignado)
-        const uniqueGuides = [];
-        const seenNames = new Set();
-        for (const guide of assignedGuides) {
-            const normalizedName = normalizeGuideBaseName(guide.name);
-            if (seenNames.has(normalizedName)) continue;
-            seenNames.add(normalizedName);
-            delete guide._assignedIndex;
-            uniqueGuides.push(guide);
-        }
-
-        return uniqueGuides;
+        return resolvedGuides;
     },
 
     // Función auxiliar para filtrar y ordenar agencias permitidas
