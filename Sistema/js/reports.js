@@ -6574,6 +6574,15 @@ const Reports = {
             console.log(`   [Llegadas] Agencia seleccionada: ${selectedAgency.name} (ID: ${selectedAgency.id})`);
             console.log(`   [Llegadas] Total guías en DB: ${guides.length}`);
 
+            // Prioridad 1: usar asignación explícita agencia -> guías
+            const assignedGuides = this.getAssignedGuidesForAgency(guides, selectedAgency.name);
+            if (assignedGuides && assignedGuides.length > 0) {
+                guideSelect.innerHTML = '<option value="">Seleccionar...</option>' +
+                    assignedGuides.map(g => `<option value="${g.id}">${g.name}</option>`).join('');
+                console.log(`✅ [Llegadas] ${assignedGuides.length} guías cargados por asignación explícita para ${selectedAgency.name}`);
+                return;
+            }
+
             // Normalizar nombre de la agencia seleccionada para comparaciones
             const selectedNameNorm = String(selectedAgency.name || '').trim().toUpperCase().replace(/\s+/g, '');
             // IDs de todas las agencias con el mismo nombre (duplicados local vs servidor)
@@ -6734,6 +6743,15 @@ const Reports = {
 
             console.log(`   Agencia seleccionada: ${selectedAgency.name} (ID: ${selectedAgency.id})`);
 
+            // Prioridad 1: usar asignación explícita agencia -> guías
+            const assignedGuides = this.getAssignedGuidesForAgency(guides, selectedAgency.name);
+            if (assignedGuides && assignedGuides.length > 0) {
+                guideSelect.innerHTML = '<option value="">Ninguno</option>' +
+                    assignedGuides.map(g => `<option value="${g.id}">${g.name}</option>`).join('');
+                console.log(`✅ ${assignedGuides.length} guías cargados por asignación explícita para agencia ${selectedAgency.name}`);
+                return;
+            }
+
             // Filtrar guías por agencia seleccionada
             // Usar comparación flexible de IDs Y nombres de agencia
             const filteredGuides = guides.filter(g => {
@@ -6863,6 +6881,54 @@ const Reports = {
         return normalized1 === normalized2;
     },
 
+    normalizeCatalogName(value) {
+        return String(value || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toUpperCase()
+            .replace(/[^A-Z0-9]/g, '');
+    },
+
+    getAgencyGuideAssignments() {
+        return {
+            VERANOS: ['CARLOS SIS', 'MARIO RENDON', 'CHAVA', 'FREDY', 'NETO', 'EMMANUEL'],
+            TANITOURS: ['MARINA', 'GLORIA', 'DANIELA'],
+            DISCOVERY: ['RAMON', 'GUSTAVO SIS', 'GUSTAVO LEPE', 'NOVOA', 'ERIK', 'CHILO', 'FERMIN', 'EMMA', 'HERASMO'],
+            TRAVELEX: ['MIGUEL SUAREZ', 'SANTA', 'MIGUEL DELGADILLO', 'ANDRES CHAVEZ', 'SAREM', 'ZAVALA', 'TEMO', 'ROCIO', 'NETO', 'SEBASTIAN S'],
+            TB: ['MIGUEL IBARRA', 'ADAN', 'MIGUEL RAGA', 'GABINO', 'HECTOR SUAREZ', 'OSCAR', 'JOSE AVILES'],
+            TTF: ['HUGO', 'HILBERTO', 'JOSE MASIAS', 'DAVID BUSTOS', 'ALFONSO', 'DANIEL RIVERA', 'EDUARDO LEAL'],
+            TROPICALADVENTURE: ['GEOVANNY', 'GINA', 'JAVIER', 'JULIAN', 'LUKE', 'NANCY', 'NEYRA', 'ROGER']
+        };
+    },
+
+    getAssignedGuidesForAgency(guides, selectedAgencyName) {
+        const agencyAssignments = this.getAgencyGuideAssignments();
+        const selectedAgencyNorm = this.normalizeCatalogName(selectedAgencyName);
+        const assignedGuideNames = agencyAssignments[selectedAgencyNorm];
+
+        if (!assignedGuideNames || assignedGuideNames.length === 0) {
+            return null;
+        }
+
+        const assignedOrder = new Map(
+            assignedGuideNames.map((name, index) => [this.normalizeCatalogName(name), index])
+        );
+
+        const assignedGuides = (guides || []).filter(g => {
+            if (!g || (!g.active && g.active !== undefined)) return false;
+            const guideNameNorm = this.normalizeCatalogName(g.name);
+            return assignedOrder.has(guideNameNorm);
+        });
+
+        assignedGuides.sort((a, b) => {
+            const orderA = assignedOrder.get(this.normalizeCatalogName(a.name));
+            const orderB = assignedOrder.get(this.normalizeCatalogName(b.name));
+            return orderA - orderB;
+        });
+
+        return assignedGuides;
+    },
+
     // Función auxiliar para filtrar y ordenar agencias permitidas
     filterAllowedAgencies(allAgencies) {
         // Lista de agencias permitidas (en mayúsculas para comparación)
@@ -6951,10 +7017,16 @@ const Reports = {
             }
 
             // Filtrar guías por agencia seleccionada
-            const filteredGuides = guides.filter(g => {
+            let filteredGuides = guides.filter(g => {
                 if (!g.agency_id) return false;
                 return this.compareIds(g.agency_id, agencyId);
             });
+
+            // Prioridad 1: usar asignación explícita agencia -> guías
+            const assignedGuides = this.getAssignedGuidesForAgency(guides, selectedAgency.name);
+            if (assignedGuides && assignedGuides.length > 0) {
+                filteredGuides = assignedGuides;
+            }
 
             console.log(`   [Edición] Guías filtradas: ${filteredGuides.length}`);
 
