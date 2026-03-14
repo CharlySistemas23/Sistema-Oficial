@@ -6910,23 +6910,62 @@ const Reports = {
             return null;
         }
 
+        const normalizeGuideBaseName = (value) => {
+            const raw = String(value || '');
+            const withoutAgencySuffix = raw.replace(/\s*\([^)]*\)\s*$/g, '');
+            return this.normalizeCatalogName(withoutAgencySuffix);
+        };
+
         const assignedOrder = new Map(
-            assignedGuideNames.map((name, index) => [this.normalizeCatalogName(name), index])
+            assignedGuideNames.map((name, index) => [normalizeGuideBaseName(name), index])
         );
 
-        const assignedGuides = (guides || []).filter(g => {
-            if (!g || (!g.active && g.active !== undefined)) return false;
-            const guideNameNorm = this.normalizeCatalogName(g.name);
-            return assignedOrder.has(guideNameNorm);
-        });
+        const findAssignedOrder = (guideName) => {
+            const guideNorm = normalizeGuideBaseName(guideName);
+            if (!guideNorm) return null;
+
+            if (assignedOrder.has(guideNorm)) {
+                return assignedOrder.get(guideNorm);
+            }
+
+            // Fallback flexible para variaciones como puntos, abreviaciones o sufijos
+            for (const [assignedNorm, order] of assignedOrder.entries()) {
+                if (guideNorm.includes(assignedNorm) || assignedNorm.includes(guideNorm)) {
+                    return order;
+                }
+            }
+
+            return null;
+        };
+
+        const assignedGuides = [];
+        for (const guide of (guides || [])) {
+            if (!guide || (!guide.active && guide.active !== undefined)) continue;
+            const assignedIndex = findAssignedOrder(guide.name);
+            if (assignedIndex !== null) {
+                assignedGuides.push({ ...guide, _assignedIndex: assignedIndex });
+            }
+        }
 
         assignedGuides.sort((a, b) => {
-            const orderA = assignedOrder.get(this.normalizeCatalogName(a.name));
-            const orderB = assignedOrder.get(this.normalizeCatalogName(b.name));
-            return orderA - orderB;
+            if (a._assignedIndex !== b._assignedIndex) {
+                return a._assignedIndex - b._assignedIndex;
+            }
+            return String(a.name || '').localeCompare(String(b.name || ''));
         });
 
-        return assignedGuides;
+        // Eliminar duplicados por nombre normalizado (conservar el primero por orden asignado)
+        const uniqueGuides = [];
+        const seenNames = new Set();
+        for (const guide of assignedGuides) {
+            const normalizedName = normalizeGuideBaseName(guide.name);
+            if (seenNames.has(normalizedName)) continue;
+            seenNames.add(normalizedName);
+            delete guide._assignedIndex;
+            uniqueGuides.push(guide);
+        }
+
+        return uniqueGuides;
     },
 
     // Función auxiliar para filtrar y ordenar agencias permitidas
