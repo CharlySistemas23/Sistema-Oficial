@@ -28,35 +28,6 @@ const setCachedVerifyUser = (userId, user) => {
   verifyUserCache.set(key, { user, timestamp: Date.now() });
 };
 
-const isRailway = Boolean(
-  process.env.RAILWAY_ENVIRONMENT_ID ||
-  process.env.RAILWAY_PROJECT_ID ||
-  process.env.RAILWAY_SERVICE_ID ||
-  process.env.RAILWAY_PUBLIC_DOMAIN
-);
-const isProductionLike = process.env.NODE_ENV === 'production' || isRailway;
-
-const validateMaintenanceAccess = (req, res) => {
-  const enabled = process.env.ENABLE_AUTH_MAINTENANCE_ENDPOINTS === 'true';
-  if (!enabled) {
-    return res.status(404).json({ error: 'Ruta no encontrada' });
-  }
-
-  const expectedToken = process.env.AUTH_MAINTENANCE_TOKEN;
-  if (isProductionLike && (!expectedToken || typeof expectedToken !== 'string')) {
-    return res.status(403).json({ error: 'Mantenimiento deshabilitado en producción' });
-  }
-
-  if (expectedToken) {
-    const providedToken = req.headers['x-maintenance-token'];
-    if (!providedToken || providedToken !== expectedToken) {
-      return res.status(401).json({ error: 'Token de mantenimiento inválido' });
-    }
-  }
-
-  return null;
-};
-
 // Login
 router.post('/login', [
   body('username').notEmpty().withMessage('Usuario requerido'),
@@ -72,7 +43,7 @@ router.post('/login', [
 
     // Buscar usuario
     const userResult = await query(
-       `SELECT u.*, e.branch_id, e.branch_ids, e.role as employee_role, e.name as employee_name
+      `SELECT u.*, e.branch_id, e.role as employee_role, e.name as employee_name
        FROM users u
        LEFT JOIN employees e ON u.employee_id = e.id
        WHERE u.username = $1 AND u.active = true`,
@@ -212,7 +183,7 @@ router.get('/verify', async (req, res) => {
     let user = getCachedVerifyUser(decoded.userId);
     if (!user) {
       const userResult = await query(
-         `SELECT u.*, e.branch_id, e.branch_ids, e.role as employee_role, e.name as employee_name
+        `SELECT u.*, e.branch_id, e.branch_ids, e.role as employee_role, e.name as employee_name
          FROM users u
          LEFT JOIN employees e ON u.employee_id = e.id
          WHERE u.id = $1 AND u.active = true`,
@@ -237,27 +208,8 @@ router.get('/verify', async (req, res) => {
       ? user.permissions_by_branch
       : {};
 
-    // Renovar token automáticamente si expira en menos de 2 días (evita desconexiones en estaciones 24/7)
-    let newToken = null;
-    try {
-      const tokenExpiresAt = decoded.exp * 1000;
-      if (tokenExpiresAt - Date.now() < 2 * 24 * 60 * 60 * 1000) {
-        const jwtSecret = process.env.JWT_SECRET;
-        if (jwtSecret) {
-          newToken = jwt.sign(
-            { userId: user.id, username: user.username, role: userRole, employeeId: user.employee_id },
-            jwtSecret,
-            { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
-          );
-        }
-      }
-    } catch (renewError) {
-      console.warn('No se pudo renovar token:', renewError.message);
-    }
-
     res.json({
       valid: true,
-      newToken,
       user: {
         id: user.id,
         username: user.username,
@@ -293,8 +245,6 @@ router.get('/verify', async (req, res) => {
 // Endpoint temporal para crear usuario admin si no existe
 router.post('/ensure-admin', async (req, res) => {
   try {
-    const maintenanceError = validateMaintenanceAccess(req, res);
-    if (maintenanceError) return;
     
     // Verificar si el usuario master_admin existe
     const adminCheck = await query(`
@@ -432,8 +382,6 @@ router.post('/ensure-admin', async (req, res) => {
 // Endpoint temporal para limpiar usuarios (excepto master_admin)
 router.post('/cleanup-users', async (req, res) => {
   try {
-    const maintenanceError = validateMaintenanceAccess(req, res);
-    if (maintenanceError) return;
     console.log('🧹 Limpiando usuarios (excepto master_admin)...');
     
     // Obtener todos los usuarios
