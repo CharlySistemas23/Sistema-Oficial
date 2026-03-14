@@ -1393,34 +1393,34 @@ const Inventory = {
                 }
             }
             
-            // PASO 3: Eliminar duplicados antes de mostrar
-            // Agrupar por SKU + branch_id, manteniendo el más reciente o el sincronizado
-            const itemsByKey = new Map();
+            // PASO 3: Eliminar duplicados reales antes de mostrar
+            // IMPORTANTE: deduplicar por SKU + branch colapsa piezas distintas del mismo modelo.
+            // Para inventario, cada pieza debe conservarse; solo removemos duplicados por id.
+            const itemsById = new Map();
             for (const item of verifiedItems) {
-                const key = `${item.sku || item.id}_${item.branch_id || 'no-branch'}`;
-                
-                if (!itemsByKey.has(key)) {
-                    itemsByKey.set(key, item);
+                const key = String(item?.id || '');
+                if (!key) continue;
+
+                if (!itemsById.has(key)) {
+                    itemsById.set(key, item);
                 } else {
-                    const existing = itemsByKey.get(key);
-                    // Preferir el que tiene server_id (está sincronizado)
+                    const existing = itemsById.get(key);
                     if (item.server_id && !existing.server_id) {
-                        itemsByKey.set(key, item);
+                        itemsById.set(key, item);
                     } else if (existing.server_id && !item.server_id) {
-                        // Mantener el existente
+                        // Mantener existente
                     } else {
-                        // Si ambos tienen o no tienen server_id, usar el más reciente por updated_at
                         const existingUpdated = existing.updated_at ? new Date(existing.updated_at) : new Date(0);
                         const currentUpdated = item.updated_at ? new Date(item.updated_at) : new Date(0);
                         if (currentUpdated > existingUpdated) {
-                            itemsByKey.set(key, item);
+                            itemsById.set(key, item);
                         }
                     }
                 }
             }
-            
-            const uniqueItems = Array.from(itemsByKey.values());
-            console.log(`🔍 [Paso 3 Inventory] Deduplicación: ${verifiedItems.length} → ${uniqueItems.length} items únicos`);
+
+            const uniqueItems = Array.from(itemsById.values());
+            console.log(`🔍 [Paso 3 Inventory] Deduplicación por id: ${verifiedItems.length} → ${uniqueItems.length}`);
             
             // Ahora aplicar filtros
             let items = uniqueItems;
