@@ -28,6 +28,107 @@ Object.assign(POS, {
     _posGridDisplayLimit: 0,
     _lastPosItems: [],
 
+    isUUID(value) {
+        return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || ''));
+    },
+
+    getInventoryLocalId(item) {
+        return item?.local_inventory_id || item?.id || null;
+    },
+
+    getInventoryServerId(item) {
+        if (this.isUUID(item?.server_id)) return item.server_id;
+        if (this.isUUID(item?.id)) return item.id;
+        return null;
+    },
+
+    async hydrateLegacyCartItems(branchId = null) {
+        if (!this.cart.length || typeof API === 'undefined' || !API.baseURL || !API.token || !API.getInventoryItems) {
+            return 0;
+        }
+
+        let resolvedItems = 0;
+
+        for (const cartItem of this.cart) {
+            if (this.getInventoryServerId(cartItem)) {
+                if (!cartItem.local_inventory_id) {
+                    cartItem.local_inventory_id = cartItem.id;
+                }
+                continue;
+            }
+
+            const baseFilters = {};
+            if (branchId && this.isUUID(branchId)) {
+                baseFilters.branch_id = branchId;
+            }
+
+            const filtersList = [];
+            if (cartItem.sku) filtersList.push({ ...baseFilters, sku: cartItem.sku });
+            if (cartItem.barcode) filtersList.push({ ...baseFilters, barcode: cartItem.barcode });
+
+            let serverMatch = null;
+
+            for (const filters of filtersList) {
+                try {
+                    const matches = await API.getInventoryItems(filters);
+                    if (Array.isArray(matches) && matches.length > 0) {
+                        serverMatch = matches.find(match => {
+                            const sameSku = cartItem.sku && match.sku && String(match.sku) === String(cartItem.sku);
+                            const sameBarcode = cartItem.barcode && match.barcode && String(match.barcode) === String(cartItem.barcode);
+                            return sameSku || sameBarcode;
+                        }) || matches[0];
+                    }
+                } catch (error) {
+                    console.warn('POS: no se pudo resolver server_id para item legacy', {
+                        itemId: cartItem.id,
+                        sku: cartItem.sku,
+                        barcode: cartItem.barcode,
+                        error: error?.message || error
+                    });
+                }
+
+                if (serverMatch?.id && this.isUUID(serverMatch.id)) {
+                    break;
+                }
+            }
+
+            if (!serverMatch?.id || !this.isUUID(serverMatch.id)) {
+                continue;
+            }
+
+            cartItem.local_inventory_id = this.getInventoryLocalId(cartItem);
+            cartItem.server_id = serverMatch.id;
+            resolvedItems += 1;
+
+            const localItemId = this.getInventoryLocalId(cartItem);
+            if (!localItemId) continue;
+
+            try {
+                const localRecord = await DB.get('inventory_items', localItemId);
+                if (localRecord && localRecord.server_id !== serverMatch.id) {
+                    await DB.put('inventory_items', {
+                        ...localRecord,
+                        server_id: serverMatch.id,
+                        sync_status: localRecord.sync_status || 'synced',
+                        updated_at: new Date().toISOString()
+                    }, { autoBranchId: false });
+                }
+            } catch (error) {
+                console.warn('POS: no se pudo persistir server_id para item legacy', {
+                    itemId: localItemId,
+                    serverId: serverMatch.id,
+                    error: error?.message || error
+                });
+            }
+        }
+
+        if (resolvedItems > 0) {
+            this.saveCartToStorage();
+        }
+
+        return resolvedItems;
+    },
+
     async init() {
         // Verificar permiso
         if (typeof PermissionManager !== 'undefined' && !PermissionManager.hasPermission('pos.view')) {
@@ -1384,6 +1485,8 @@ Object.assign(POS, {
             // Agregar al carrito
             const cartItem = {
                 ...item,
+                local_inventory_id: item.id,
+                server_id: this.getInventoryServerId(item),
                 photo: photo,
                 price: salePrice,
                 quantity: 1,
@@ -1840,14 +1943,12 @@ Object.assign(POS, {
             Utils.showNotification(`Venta ${warnings.join(', ')}`, 'warning');
         }
 
-        const isUUID = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || ''));
-
         // Obtener datos
         const rawBranchId = typeof BranchManager !== 'undefined'
             ? BranchManager.getCurrentBranchId() 
             : (localStorage.getItem('current_branch_id') || null);
         // IMPORTANTE: el backend espera UUID en branch_id. Si no es UUID, omitir y dejar que el backend use req.user.branchId.
-        const branchId = isUUID(rawBranchId) ? rawBranchId : null;
+        const branchId = this.isUUID(rawBranchId) ? rawBranchId : null;
         // Usar vendedor escaneado, o si no hay, el usuario logueado como fallback
         const rawSellerId = this.currentSeller?.id || UserManager.currentUser?.employee_id || null;
         const rawAgencyId = this.currentAgency?.id || null;
@@ -1855,10 +1956,11 @@ Object.assign(POS, {
         const rawCustomerId = this.currentCustomer?.id || null;
 
         // IMPORTANTE: en backend estos ids son UUID. Si no son UUID, omitir (null/undefined).
-        const sellerId = isUUID(rawSellerId) ? rawSellerId : null;
-        const agencyId = isUUID(rawAgencyId) ? rawAgencyId : null;
-        const guideId = isUUID(rawGuideId) ? rawGuideId : null;
-        const customerId = isUUID(rawCustomerId) ? rawCustomerId : null;
+        const sellerId = this.isUUID(rawSellerId) ? rawSellerId : null;
+        const agencyId = this.isUUID(rawAgencyId) ? rawAgencyId : null;
+        const guideId = this.isUUID(rawGuideId) ? rawGuideId : null;
+        const customerId = this.isUUID(rawCustomerId) ? rawCustomerId : null;
+        await this.hydrateLegacyCartItems(branchId);
         const currency = 'MXN';
         // Obtener tipo de cambio del día actual (robusto)
         const today = Utils.formatDate(new Date(), 'YYYY-MM-DD');
@@ -1914,7 +2016,7 @@ Object.assign(POS, {
             status: 'completed',
             items: this.cart.map(item => ({
                 // item_id debe ser UUID para validar stock en servidor; si no lo es, omitir (el servidor guardará sku/name sin link)
-                item_id: isUUID(item.id) ? item.id : undefined,
+                item_id: this.getInventoryServerId(item) || undefined,
                 sku: item.sku,
                 name: item.name,
                 quantity: item.quantity,
@@ -1975,7 +2077,8 @@ Object.assign(POS, {
             // Crear items de venta (modo local)
             for (const item of this.cart) {
                 // Obtener item actualizado de la BD para obtener el costo
-                const currentItem = await DB.get('inventory_items', item.id);
+                const localInventoryId = this.getInventoryLocalId(item);
+                const currentItem = await DB.get('inventory_items', localInventoryId);
                 if (!currentItem) continue;
                 
                 const itemCost = currentItem?.cost || 0; // Costo de adquisición del item
@@ -1999,7 +2102,7 @@ Object.assign(POS, {
                 await DB.add('sale_items', {
                     id: Utils.generateId(),
                     sale_id: sale.id,
-                    item_id: item.id,
+                    item_id: localInventoryId,
                     quantity: item.quantity,
                     price: item.price, // Precio de venta
                     cost: itemCost, // Costo de adquisición (COGS)
@@ -2035,7 +2138,7 @@ Object.assign(POS, {
                 const logId = Utils.generateId();
                 await DB.add('inventory_logs', {
                     id: logId,
-                    item_id: item.id,
+                    item_id: localInventoryId,
                     action: 'vendida',
                     quantity: item.quantity,
                     stock_before: currentItem.stock_actual ?? 1,
@@ -2073,12 +2176,14 @@ Object.assign(POS, {
                 const existingLocalItems = await DB.query('sale_items', 'sale_id', sale.id) || [];
                 if (existingLocalItems.length === 0) {
                     for (const item of this.cart) {
-                        const currentItem = await DB.get('inventory_items', item.id);
+                        const localInventoryId = this.getInventoryLocalId(item);
+                        const currentItem = await DB.get('inventory_items', localInventoryId);
                         const itemCost = currentItem?.cost ?? item.cost ?? 0;
                         await DB.put('sale_items', {
                             id: Utils.generateId(),
                             sale_id: sale.id,
-                            item_id: item.id,
+                            item_id: localInventoryId,
+                            server_item_id: this.getInventoryServerId(item),
                             sku: item.sku,
                             name: item.name,
                             quantity: item.quantity,
@@ -2088,6 +2193,31 @@ Object.assign(POS, {
                             subtotal: item.subtotal,
                             created_at: new Date().toISOString()
                         }, { autoBranchId: false });
+
+                        if (currentItem) {
+                            const currentStock = currentItem.stock_actual ?? 1;
+                            const newStock = Math.max(0, currentStock - item.quantity);
+                            const newStatus = newStock <= 0 ? 'vendida' : 'disponible';
+                            const updatedItem = {
+                                ...currentItem,
+                                stock_actual: newStock,
+                                status: newStatus,
+                                updated_at: new Date().toISOString()
+                            };
+
+                            await DB.put('inventory_items', updatedItem);
+
+                            if (typeof Utils !== 'undefined' && Utils.EventBus) {
+                                Utils.EventBus.emit('inventory-updated', {
+                                    item: updatedItem,
+                                    isNew: false,
+                                    oldStatus: currentItem.status,
+                                    newStatus,
+                                    stockChange: item.quantity,
+                                    reason: 'venta_api'
+                                });
+                            }
+                        }
                     }
                 }
             } catch (e) {
@@ -2098,7 +2228,7 @@ Object.assign(POS, {
             // La API ya actualizó el stock, solo necesitamos calcular comisiones
             if (sale.items) {
                 for (const saleItem of sale.items) {
-                    const item = this.cart.find(c => c.id === saleItem.item_id);
+                    const item = this.cart.find(c => this.getInventoryServerId(c) === saleItem.item_id || c.id === saleItem.item_id);
                     if (item) {
                         const itemCost = saleItem.cost || 0;
                         totalCOGS += itemCost * saleItem.quantity;
@@ -2200,7 +2330,7 @@ Object.assign(POS, {
         this.showSuccessOverlay(sale);
 
         // Reset
-        const itemIds = this.cart.map(c => c.id);
+        const itemIds = this.cart.map(c => this.getInventoryLocalId(c)).filter(Boolean);
         this.resetForm();
         itemIds.forEach(id => this.updateProductCard(id, false));
         await this.updateTodaySalesCount();
