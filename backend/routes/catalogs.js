@@ -5,6 +5,33 @@ import { body, validationResult } from 'express-validator';
 
 const router = express.Router();
 
+const columnExistenceCache = new Map();
+
+async function tableHasColumn(tableName, columnName) {
+  const cacheKey = `${tableName}.${columnName}`;
+  if (columnExistenceCache.has(cacheKey)) {
+    return columnExistenceCache.get(cacheKey);
+  }
+
+  try {
+    const result = await query(
+      `SELECT 1
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = $1
+         AND column_name = $2
+       LIMIT 1`,
+      [tableName, columnName]
+    );
+    const exists = result.rows.length > 0;
+    columnExistenceCache.set(cacheKey, exists);
+    return exists;
+  } catch (error) {
+    console.warn(`No se pudo verificar columna ${cacheKey}:`, error.message);
+    return false;
+  }
+}
+
 // Resuelve agency_id: si no es UUID, busca por code en catalog_agencies
 async function resolveAgencyId(agencyId) {
   if (!agencyId) return null;
@@ -22,13 +49,14 @@ async function resolveAgencyId(agencyId) {
 router.get('/agencies', async (req, res) => {
   try {
     const { search, active } = req.query;
+    const agenciesHasBranchId = await tableHasColumn('catalog_agencies', 'branch_id');
     
     let sql = 'SELECT * FROM catalog_agencies WHERE 1=1';
     const params = [];
     let paramCount = 1;
 
     // ✅ NUEVO: Filtrar por sucursal del usuario si no es master_admin
-    if (!req.user?.isMasterAdmin && req.user?.branchId) {
+    if (agenciesHasBranchId && !req.user?.isMasterAdmin && req.user?.branchId) {
       sql += ` AND (branch_id = $${paramCount} OR branch_id IS NULL)`;
       params.push(req.user.branchId);
       paramCount++;
@@ -225,6 +253,7 @@ router.get('/guides', async (req, res) => {
   try {
     const { search, agency_id: rawAgencyId, active } = req.query;
     const agency_id = rawAgencyId ? await resolveAgencyId(rawAgencyId) : null;
+    const guidesHasBranchId = await tableHasColumn('catalog_guides', 'branch_id');
 
     let sql = `
       SELECT g.*, a.name as agency_name
@@ -236,7 +265,7 @@ router.get('/guides', async (req, res) => {
     let paramCount = 1;
 
     // ✅ NUEVO: Filtrar por sucursal del usuario si no es master_admin
-    if (!req.user?.isMasterAdmin && req.user?.branchId) {
+    if (guidesHasBranchId && !req.user?.isMasterAdmin && req.user?.branchId) {
       sql += ` AND (g.branch_id = $${paramCount} OR g.branch_id IS NULL)`;
       params.push(req.user.branchId);
       paramCount++;
@@ -450,13 +479,14 @@ router.delete('/guides/:id', requireMasterAdmin, async (req, res) => {
 router.get('/sellers', async (req, res) => {
   try {
     const { search, active } = req.query;
+    const sellersHasBranchId = await tableHasColumn('catalog_sellers', 'branch_id');
     
     let sql = 'SELECT * FROM catalog_sellers WHERE 1=1';
     const params = [];
     let paramCount = 1;
 
     // ✅ NUEVO: Filtrar por sucursal del usuario si no es master_admin
-    if (!req.user?.isMasterAdmin && req.user?.branchId) {
+    if (sellersHasBranchId && !req.user?.isMasterAdmin && req.user?.branchId) {
       sql += ` AND (branch_id = $${paramCount} OR branch_id IS NULL)`;
       params.push(req.user.branchId);
       paramCount++;
