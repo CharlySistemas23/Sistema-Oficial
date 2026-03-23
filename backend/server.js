@@ -1,4 +1,4 @@
-﻿import express from 'express';
+import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
@@ -57,15 +57,45 @@ const isProductionLike = process.env.NODE_ENV === 'production' || isRailway;
 // Railway usa un solo proxy, as├¡ que 1 es suficiente y m├ís seguro que true
 app.set('trust proxy', 1);
 
+const normalizeOrigin = (rawOrigin) => {
+  if (!rawOrigin) return null;
+
+  let cleanOrigin = String(rawOrigin).trim();
+  if (!cleanOrigin) return null;
+
+  if (!cleanOrigin.startsWith('http://') && !cleanOrigin.startsWith('https://')) {
+    cleanOrigin = `https://${cleanOrigin}`;
+  }
+
+  return cleanOrigin.replace(/\/+$/, '');
+};
+
+const parseOriginListFromEnv = (value) => (value || '')
+  .split(',')
+  .map(o => normalizeOrigin(o))
+  .filter(Boolean);
+
 const parseConfiguredOrigins = () => {
-  const fromEnv = (process.env.ALLOWED_ORIGINS || process.env.CORS_ORIGIN || '')
-    .split(',')
-    .map(o => o.trim())
-    .filter(Boolean);
+  const fromEnv = parseOriginListFromEnv(process.env.ALLOWED_ORIGINS || process.env.CORS_ORIGIN || '');
 
   const autoOrigins = [];
   if (process.env.RAILWAY_PUBLIC_DOMAIN) {
-    autoOrigins.push(`https://${process.env.RAILWAY_PUBLIC_DOMAIN}`);
+    const railwayOrigin = normalizeOrigin(process.env.RAILWAY_PUBLIC_DOMAIN);
+    if (railwayOrigin) autoOrigins.push(railwayOrigin);
+  }
+
+  const frontendDomainHints = [
+    process.env.FRONTEND_URL,
+    process.env.PUBLIC_URL,
+    process.env.APP_URL,
+    process.env.VERCEL_URL
+  ];
+
+  for (const hint of frontendDomainHints) {
+    const parsed = normalizeOrigin(hint);
+    if (parsed) {
+      autoOrigins.push(parsed);
+    }
   }
 
   const merged = Array.from(new Set([...fromEnv, ...autoOrigins]));
