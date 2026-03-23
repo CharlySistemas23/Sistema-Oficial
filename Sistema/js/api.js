@@ -1,9 +1,9 @@
 // API Client - Cliente para comunicación con el backend en tiempo real
 
 // URL del servidor Railway. Se usa como fallback para nuevos equipos sin configuración.
-const DEFAULT_RAILWAY_URL = 'https://system-production-bec2.up.railway.app';
+const DEFAULT_RAILWAY_URL = 'https://backend-production-6260.up.railway.app';
 const LEGACY_RAILWAY_URLS = new Set([
-    'https://backend-production-6260.up.railway.app'
+    'https://system-production-bec2.up.railway.app'
 ]);
 const ELECTRON_PROXY_URL = 'http://127.0.0.1:19200/proxy';
 
