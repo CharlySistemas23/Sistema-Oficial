@@ -29,6 +29,20 @@ function normalizeApiURL(rawURL) {
     return cleanURL.replace(/\/+$/, '');
 }
 
+function isDesktopOnlyApiURL(rawURL) {
+    const normalized = normalizeApiURL(rawURL);
+    if (!normalized) return false;
+
+    try {
+        const parsed = new URL(normalized);
+        const host = parsed.hostname;
+        const isLocalHost = host === '127.0.0.1' || host === 'localhost';
+        return isLocalHost;
+    } catch (error) {
+        return false;
+    }
+}
+
 function isLegacyApiURL(rawURL) {
     const normalized = normalizeApiURL(rawURL);
     return normalized ? LEGACY_RAILWAY_URLS.has(normalized) : false;
@@ -56,7 +70,12 @@ const API = {
 
             const urlSetting = await DB.get('settings', 'api_url');
             const savedURL = urlSetting?.value || null;
-            const migratedSavedURL = isLegacyApiURL(savedURL) ? null : savedURL;
+            const savedURLInvalidForWeb = !isElectronDesktopRuntime() && isDesktopOnlyApiURL(savedURL);
+            const migratedSavedURL = (isLegacyApiURL(savedURL) || savedURLInvalidForWeb) ? null : savedURL;
+
+            if (savedURLInvalidForWeb) {
+                console.warn(`⚠️ URL local detectada en modo web (${savedURL}). Se restaurará URL pública por defecto.`);
+            }
 
             // Usar URL guardada o por defecto (nuevos equipos quedan conectados automáticamente)
             const rawURL = isElectronDesktopRuntime()
@@ -176,13 +195,18 @@ const API = {
 
     // Autenticación
     async login(username, password) {
+        const isDesktopRuntime = isElectronDesktopRuntime();
         // Asegurar que baseURL esté sincronizado con DB
         if (!this.baseURL && typeof DB !== 'undefined') {
             try {
                 const urlSetting = await DB.get('settings', 'api_url');
-                this.baseURL = isLegacyApiURL(urlSetting?.value)
+                const savedURL = urlSetting?.value;
+                const shouldFallbackToDefault = isLegacyApiURL(savedURL)
+                    || (!isDesktopRuntime && isDesktopOnlyApiURL(savedURL));
+
+                this.baseURL = shouldFallbackToDefault
                     ? DEFAULT_RAILWAY_URL
-                    : (normalizeApiURL(urlSetting?.value) || DEFAULT_RAILWAY_URL);
+                    : (normalizeApiURL(savedURL) || DEFAULT_RAILWAY_URL);
             } catch (error) {
                 console.error('Error obteniendo URL desde DB:', error);
                 this.baseURL = DEFAULT_RAILWAY_URL;
@@ -245,6 +269,19 @@ const API = {
 
             return data;
         } catch (error) {
+            const shouldRetryWithDefault = !isDesktopRuntime
+                && this.baseURL
+                && this.baseURL !== DEFAULT_RAILWAY_URL
+                && (error.name === 'AbortError' || String(error?.message || '').includes('Failed to fetch'));
+
+            if (shouldRetryWithDefault) {
+                console.warn(`⚠️ Login falló contra ${this.baseURL}. Reintentando con URL por defecto...`);
+                this.baseURL = DEFAULT_RAILWAY_URL;
+                await DB.put('settings', { key: 'api_url', value: this.baseURL }).catch(() => {});
+
+                return this.login(username, password);
+            }
+
             if (error.name === 'AbortError') {
                 throw new Error('Tiempo de espera agotado. El servidor no responde.');
             }
