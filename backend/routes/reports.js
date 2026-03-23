@@ -454,51 +454,63 @@ router.post('/quick-captures', requireBranchAccess, async (req, res) => {
 router.get('/quick-captures', requireBranchAccess, async (req, res) => {
   try {
     const { branch_id, date_from, date_to, date, created_by } = req.query;
-    
-    let branchFilter = '';
+
+    const whereConditions = [];
     const params = [];
     let paramCount = 1;
 
     if (req.user.isMasterAdmin) {
       if (branch_id) {
-        branchFilter = `WHERE qc.branch_id = $${paramCount}`;
+        whereConditions.push(`qc.branch_id = $${paramCount}`);
         params.push(branch_id);
         paramCount++;
       }
     } else {
       // Usuarios normales: obtener capturas de su sucursal O capturas creadas por ellos (independientemente de la sucursal)
       // Esto permite que un usuario vea sus capturas en diferentes computadoras/sucursales
-      branchFilter = `WHERE (qc.branch_id = $${paramCount}`;
+      let userScopeCondition = `(qc.branch_id = $${paramCount}`;
       params.push(req.user.branchId);
       paramCount++;
       
       // Si el usuario tiene ID, también incluir sus capturas creadas por él
       if (req.user.id) {
-        branchFilter += ` OR qc.created_by = $${paramCount}`;
+        userScopeCondition += ` OR qc.created_by = $${paramCount}`;
         params.push(req.user.id);
         paramCount++;
       }
-      branchFilter += ')';
+      userScopeCondition += ')';
+      whereConditions.push(userScopeCondition);
     }
 
     // Filtro por fecha específica
     if (date) {
-      branchFilter += ` AND qc.date = $${paramCount}`;
+      whereConditions.push(`(qc.date = $${paramCount} OR qc.original_report_date = $${paramCount})`);
       params.push(date);
       paramCount++;
     } else {
       // Filtro por rango de fechas
       if (date_from) {
-        branchFilter += ` AND qc.date >= $${paramCount}`;
+        whereConditions.push(`COALESCE(qc.original_report_date, qc.date) >= $${paramCount}`);
         params.push(date_from);
         paramCount++;
       }
       if (date_to) {
-        branchFilter += ` AND qc.date <= $${paramCount}`;
+        whereConditions.push(`COALESCE(qc.original_report_date, qc.date) <= $${paramCount}`);
         params.push(date_to);
         paramCount++;
       }
     }
+
+    // Filtro opcional por creador
+    if (created_by) {
+      whereConditions.push(`qc.created_by = $${paramCount}`);
+      params.push(created_by);
+      paramCount++;
+    }
+
+    const whereClause = whereConditions.length > 0
+      ? `WHERE ${whereConditions.join(' AND ')}`
+      : '';
 
     const result = await query(
       `SELECT 
@@ -512,7 +524,7 @@ router.get('/quick-captures', requireBranchAccess, async (req, res) => {
       LEFT JOIN catalog_sellers s ON qc.seller_id = s.id
       LEFT JOIN catalog_guides g ON qc.guide_id = g.id
       LEFT JOIN catalog_agencies a ON qc.agency_id = a.id
-      ${branchFilter}
+      ${whereClause}
       ORDER BY qc.date DESC, qc.created_at DESC`,
       params
     );
