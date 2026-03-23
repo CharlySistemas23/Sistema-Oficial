@@ -67,6 +67,69 @@ const Reports = {
 
         return { sellerCommission, guideCommission };
     },
+
+    buildSaleItemsBySaleId(allSaleItems = []) {
+        const bySaleId = new Map();
+        for (const saleItem of (allSaleItems || [])) {
+            if (!saleItem || !saleItem.sale_id) continue;
+            const saleId = String(saleItem.sale_id);
+            if (!bySaleId.has(saleId)) {
+                bySaleId.set(saleId, []);
+            }
+            bySaleId.get(saleId).push(saleItem);
+        }
+        return bySaleId;
+    },
+
+    resolveSaleCommissionAmounts(sale, saleItemsBySaleId = null) {
+        const saleId = sale?.id != null ? String(sale.id) : null;
+        const saleItems = saleId && saleItemsBySaleId
+            ? (saleItemsBySaleId.get(saleId) || [])
+            : [];
+
+        let sellerFromItems = 0;
+        let guideFromItems = 0;
+        let totalOnlyFromItems = 0;
+
+        for (const saleItem of saleItems) {
+            const sellerCommission = Number(saleItem?.seller_commission) || 0;
+            const guideCommission = Number(saleItem?.guide_commission) || 0;
+
+            sellerFromItems += sellerCommission;
+            guideFromItems += guideCommission;
+
+            if (sellerCommission === 0 && guideCommission === 0) {
+                totalOnlyFromItems += (typeof Utils !== 'undefined' && Utils.getSaleItemCommission)
+                    ? (Number(Utils.getSaleItemCommission(saleItem)) || 0)
+                    : (Number(saleItem?.commission_amount) || 0);
+            }
+        }
+
+        if (sellerFromItems > 0 || guideFromItems > 0) {
+            return {
+                seller: sellerFromItems,
+                guide: guideFromItems,
+                total: sellerFromItems + guideFromItems
+            };
+        }
+
+        if (totalOnlyFromItems > 0) {
+            return {
+                seller: totalOnlyFromItems,
+                guide: 0,
+                total: totalOnlyFromItems
+            };
+        }
+
+        const sellerFromSale = Number(sale?.seller_commission) || 0;
+        const guideFromSale = Number(sale?.guide_commission) || 0;
+
+        return {
+            seller: sellerFromSale,
+            guide: guideFromSale,
+            total: sellerFromSale + guideFromSale
+        };
+    },
     
     async init() {
         try {
@@ -1946,31 +2009,22 @@ const Reports = {
             }
         }
 
-        // Calcular comisiones desde sale_items (más preciso)
+        const saleItemsBySaleId = this.buildSaleItemsBySaleId(saleItems);
+
+        // Calcular comisiones de forma homologada (prioriza sale_items, fallback a cabecera de venta)
         const commissionsBreakdown = {
             sellers: 0,
             guides: 0,
             total: 0
         };
+        const saleCommissionsById = new Map();
+
         for (const sale of sales) {
-            const items = saleItems.filter(si => si.sale_id === sale.id);
-            for (const item of items) {
-                if (typeof Utils !== 'undefined' && Utils.getSaleItemCommission) {
-                    commissionsBreakdown.total += Utils.getSaleItemCommission(item);
-                } else if (item.commission_amount) {
-                    commissionsBreakdown.total += Number(item.commission_amount) || 0;
-                } else {
-                    commissionsBreakdown.total += (Number(item.seller_commission) || 0) + (Number(item.guide_commission) || 0);
-                }
-            }
-        }
-        // Si no hay comisiones en sale_items, usar los valores de las ventas (fallback)
-        if (commissionsBreakdown.total === 0) {
-        sales.forEach(sale => {
-            commissionsBreakdown.sellers += sale.seller_commission || 0;
-            commissionsBreakdown.guides += sale.guide_commission || 0;
-        });
-        commissionsBreakdown.total = commissionsBreakdown.sellers + commissionsBreakdown.guides;
+            const resolved = this.resolveSaleCommissionAmounts(sale, saleItemsBySaleId);
+            saleCommissionsById.set(String(sale.id), resolved);
+            commissionsBreakdown.sellers += resolved.seller;
+            commissionsBreakdown.guides += resolved.guide;
+            commissionsBreakdown.total += resolved.total;
         }
 
         // Obtener costos del período del reporte (llegadas y operativos)
@@ -2358,6 +2412,7 @@ const Reports = {
                                 const seller = sellers.find(s => s.id === sale.seller_id);
                                 const agency = agencies.find(a => a.id === sale.agency_id);
                                 const guide = guides.find(g => g.id === sale.guide_id);
+                                const saleCommissions = saleCommissionsById.get(String(sale.id)) || { seller: 0, guide: 0, total: 0 };
                                 return `
                                     <tr>
                                         <td>${sale.folio || 'N/A'}</td>
@@ -2368,8 +2423,8 @@ const Reports = {
                                         <td>${guide?.name || 'N/A'}</td>
                                         <td>${sale.passengers || 1}</td>
                                         <td style="font-weight: 600;">${Utils.formatCurrency(sale.total)}</td>
-                                        <td style="color: var(--color-primary); font-weight: 500;">${Utils.formatCurrency(sale.seller_commission || 0)}</td>
-                                        <td style="color: var(--color-success); font-weight: 500;">${Utils.formatCurrency(sale.guide_commission || 0)}</td>
+                                        <td style="color: var(--color-primary); font-weight: 500;">${Utils.formatCurrency(saleCommissions.seller || 0)}</td>
+                                        <td style="color: var(--color-success); font-weight: 500;">${Utils.formatCurrency(saleCommissions.guide || 0)}</td>
                                         <td><span class="status-badge status-${(typeof Utils !== 'undefined' && Utils.isSaleCompleted && Utils.isSaleCompleted(sale)) || sale.status === 'completada' || sale.status === 'completed' ? 'disponible' : sale.status === 'apartada' ? 'reservado' : 'cancelado'}">${sale.status === 'completed' ? 'Completada' : sale.status}</span></td>
                                     </tr>
                                 `;
@@ -4781,39 +4836,14 @@ const Reports = {
             const sellers = await DB.getAll('catalog_sellers') || [];
             const guides = await DB.getAll('catalog_guides') || [];
             const allSaleItems = await DB.getAll('sale_items') || [];
+            const saleItemsBySaleId = this.buildSaleItemsBySaleId(allSaleItems);
+            const resolvedCommissionsBySaleId = new Map();
 
             for (const sale of sales) {
-                let sellerComm = sale.seller_commission != null && sale.seller_commission > 0 ? Number(sale.seller_commission) : 0;
-                let guideComm = sale.guide_commission != null && sale.guide_commission > 0 ? Number(sale.guide_commission) : 0;
-
-                const needsCalculation = (sellerComm === 0 && (sale.seller_id || sale.guide_id)) || (guideComm === 0 && (sale.seller_id || sale.guide_id));
-
-                if (needsCalculation) {
-                    const saleItems = allSaleItems.filter(si => si.sale_id === sale.id);
-
-                    // Opción A: suma desde sale_items persistidos
-                    const sumFromItems = saleItems.reduce((acc, si) => {
-                        acc.seller += Number(si.seller_commission) || 0;
-                        acc.guide += Number(si.guide_commission) || 0;
-                        if ((Number(si.seller_commission) || 0) === 0 && (Number(si.guide_commission) || 0) === 0) {
-                            acc.totalOnly += (typeof Utils !== 'undefined' && Utils.getSaleItemCommission)
-                                ? Utils.getSaleItemCommission(si)
-                                : (Number(si.commission_amount) || 0);
-                        }
-                        return acc;
-                    }, { seller: 0, guide: 0, totalOnly: 0 });
-
-                    if (sumFromItems.seller > 0 || sumFromItems.guide > 0) {
-                        sellerComm = sumFromItems.seller;
-                        guideComm = sumFromItems.guide;
-                    } else if (sumFromItems.totalOnly > 0) {
-                        sellerComm = sumFromItems.totalOnly;
-                        guideComm = 0;
-                    } else {
-                        sellerComm = 0;
-                        guideComm = 0;
-                    }
-                }
+                const resolved = this.resolveSaleCommissionAmounts(sale, saleItemsBySaleId);
+                const sellerComm = resolved.seller;
+                const guideComm = resolved.guide;
+                resolvedCommissionsBySaleId.set(String(sale.id), resolved);
 
                 commissionsBreakdown.sellers += sellerComm;
                 commissionsBreakdown.guides += guideComm;
@@ -4974,8 +5004,9 @@ const Reports = {
                                     const branch = branches.find(b => b.id === sale.branch_id);
                                     const seller = sellers.find(s => s.id === sale.seller_id);
                                     const guide = guides.find(g => g.id === sale.guide_id);
-                                    const sellerComm = sale.seller_commission || 0;
-                                    const guideComm = sale.guide_commission || 0;
+                                    const resolved = resolvedCommissionsBySaleId.get(String(sale.id)) || { seller: 0, guide: 0, total: 0 };
+                                    const sellerComm = resolved.seller;
+                                    const guideComm = resolved.guide;
                                     return `
                                         <tr>
                                             <td>${sale.folio || 'N/A'}</td>
@@ -5058,11 +5089,14 @@ const Reports = {
         const sellers = await DB.getAll('catalog_sellers');
         const guides = await DB.getAll('catalog_guides');
         const branches = await DB.getAll('catalog_branches');
+        const allSaleItems = await DB.getAll('sale_items') || [];
+        const saleItemsBySaleId = this.buildSaleItemsBySaleId(allSaleItems);
 
         const exportData = sales.map(sale => {
             const branch = branches.find(b => b.id === sale.branch_id);
             const seller = sellers.find(s => s.id === sale.seller_id);
             const guide = guides.find(g => g.id === sale.guide_id);
+            const resolved = this.resolveSaleCommissionAmounts(sale, saleItemsBySaleId);
             return {
                 'Folio': sale.folio || 'N/A',
                 'Fecha': Utils.formatDate(sale.created_at, 'DD/MM/YYYY'),
@@ -5070,9 +5104,9 @@ const Reports = {
                 'Vendedor': seller?.name || 'N/A',
                 'Guía': guide?.name || 'N/A',
                 'Total Venta': sale.total || 0,
-                'Comisión Vendedor': sale.seller_commission || 0,
-                'Comisión Guía': sale.guide_commission || 0,
-                'Total Comisiones': (sale.seller_commission || 0) + (sale.guide_commission || 0)
+                'Comisión Vendedor': resolved.seller || 0,
+                'Comisión Guía': resolved.guide || 0,
+                'Total Comisiones': resolved.total || 0
             };
         });
 
@@ -9862,11 +9896,10 @@ const Reports = {
             const agencies = await DB.getAll('catalog_agencies') || [];
 
             // Obtener tipo de cambio del día (usar la fecha de las capturas)
-            const captureDate = captures[0]?.date || this.getLocalDateStr();
-            const exchangeRates = await DB.query('exchange_rates_daily', 'date', captureDate) || [];
-            const todayRate = exchangeRates[0] || { usd_to_mxn: 20.0, cad_to_mxn: 15.0 };
-            const usdRate = todayRate.usd_to_mxn || 20.0;
-            const cadRate = todayRate.cad_to_mxn || 15.0;
+            const captureDate = (captures[0]?.original_report_date || captures[0]?.date || this.getLocalDateStr()).split('T')[0];
+            const exchangeRates = await this.getExchangeRatesForDate(captureDate);
+            const usdRate = exchangeRates?.usd || 18.0;
+            const cadRate = exchangeRates?.cad || 13.0;
 
             // Calcular comisiones por vendedor y guía
             const sellerCommissions = {};
@@ -10579,7 +10612,7 @@ const Reports = {
             
             let captures = await DB.getAll('temp_quick_captures') || [];
             captures = captures.filter(c => {
-                const captureDate = c.date || c.original_report_date || '';
+                const captureDate = c.original_report_date || c.date || '';
                 return captureDate.split('T')[0] === normalizedSelectedDate;
             });
 
@@ -11834,23 +11867,20 @@ const Reports = {
                 return;
             }
 
-            // Calcular todos los datos del reporte
-            const exchangeRates = await DB.query('exchange_rates_daily', 'date', normalizedSelectedDate) || [];
-            const todayRate = exchangeRates[0] || { usd_to_mxn: 20.0, cad_to_mxn: 15.0 };
-            const usdRate = todayRate.usd_to_mxn || 20.0;
-            const cadRate = todayRate.cad_to_mxn || 15.0;
+            // Calcular todos los datos del reporte con flujo homologado
+            const exchangeRates = await this.getExchangeRatesForDate(normalizedSelectedDate);
+            const usdRate = exchangeRates?.usd || 18.0;
+            const cadRate = exchangeRates?.cad || 13.0;
 
-            const totals = { USD: 0, MXN: 0, CAD: 0 };
-            let totalQuantity = 0;
+            const summary = this.calculateCaptureCurrencyTotals(captures, usdRate, cadRate);
+            const totals = summary.totals;
+            const totalQuantity = summary.totalQuantity;
+            const totalSalesMXN = summary.totalSalesMXN;
             let totalCOGS = 0;
 
             captures.forEach(c => {
-                totals[c.currency] = (totals[c.currency] || 0) + (parseFloat(c.total) || 0);
-                totalQuantity += c.quantity || 1;
                 totalCOGS += (parseFloat(c.merchandise_cost) || 0);
             });
-
-            const totalSalesMXN = totals.USD * usdRate + totals.MXN + totals.CAD * cadRate;
 
             // Calcular comisiones (usar misma lógica que loadQuickCaptureProfits)
             // IMPORTANTE: Las comisiones deben calcularse sobre el monto en MXN
