@@ -260,4 +260,11 @@ export const getClient = async (retries = 2) => {
   throw lastError;
 };
 
+export const getDatabaseDiagnostics = () => ({
+  pool: getPoolStats(),
+  connectionFailures: consecutiveConnectionFailures,
+  backoffUntil: globalBackoffUntil || null,
+  now: Date.now()
+});
+
 export default pool;
