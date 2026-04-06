@@ -445,39 +445,26 @@ const Dashboard = {
             }
             
             if (hasApi) {
-                Promise.resolve().then(async () => {
-                    try {
-                        const branchIdForAPI = viewAllBranches ? null : (filterBranchId || null);
-                        const metrics = await API.getDashboardMetrics({ branch_id: branchIdForAPI, date: todayStr });
-                        const freshSales = metrics.sales || [];
-                        const freshArrivals = metrics.arrivals || [];
-                        for (const sale of freshSales) { try { await DB.put('sales', sale); } catch (e) {} }
-                        for (const arrival of freshArrivals) { try { await DB.put('agency_arrivals', arrival); } catch (e) {} }
-                        // Evitar recursión: este sync corre dentro de loadDashboard().
-                        // Recargar aquí puede entrar en bucle (cache local histórica vs respuesta parcial de API).
-                        // Los cambios frescos se reflejan por auto-refresh/eventos o próxima navegación.
-                    } catch (e) {
-                        console.warn('Sync dashboard background:', e);
-                        this.nextAllowedLoadAt = Date.now() + this.loadCooldownMs;
-                    }
-                }).catch(e => {
-                    console.warn('Sync dashboard background:', e);
-                    this.nextAllowedLoadAt = Date.now() + this.loadCooldownMs;
-                });
-            }
-            
-            if (!hasCache && hasApi) {
                 try {
                     const branchIdForAPI = viewAllBranches ? null : (filterBranchId || null);
                     const metrics = await API.getDashboardMetrics({ branch_id: branchIdForAPI, date: todayStr });
-                    allSales = metrics.sales || [];
-                    todayArrivals = metrics.arrivals || [];
-                    todayPassengers = metrics.totalPassengers || 0;
-                    for (const sale of allSales) { try { await DB.put('sales', sale); } catch (e) {} }
-                    for (const arrival of todayArrivals) { try { await DB.put('agency_arrivals', arrival); } catch (e) {} }
-                    console.log(`✅ Métricas cargadas desde API: ${allSales.length} ventas, ${todayPassengers} pasajeros`);
+                    const freshSales = Array.isArray(metrics?.sales) ? metrics.sales : [];
+                    const freshArrivals = Array.isArray(metrics?.arrivals) ? metrics.arrivals : [];
+                    const freshPassengers = Number(metrics?.totalPassengers) || 0;
+
+                    // Priorizar datos frescos del servidor para pintar UI correcta.
+                    if (freshSales.length > 0 || freshArrivals.length > 0 || !hasCache) {
+                        allSales = freshSales;
+                        todayArrivals = freshArrivals;
+                        todayPassengers = freshPassengers;
+                    }
+
+                    for (const sale of freshSales) { try { await DB.put('sales', sale); } catch (e) {} }
+                    for (const arrival of freshArrivals) { try { await DB.put('agency_arrivals', arrival); } catch (e) {} }
+
+                    console.log(`✅ Dashboard desde API: ${allSales.length} ventas, ${todayPassengers} pasajeros`);
                 } catch (apiError) {
-                    console.warn('⚠️ Error cargando métricas desde API:', apiError);
+                    console.warn('⚠️ Error cargando métricas desde API (usando caché local):', apiError);
                     this.nextAllowedLoadAt = Date.now() + this.loadCooldownMs;
                 }
             }
@@ -521,12 +508,10 @@ const Dashboard = {
             // Obtener utilidad diaria usando ProfitCalculator (centralizado)
             let dailyProfit = null;
             try {
-                const normalizeBranch = (v) => (typeof Utils !== 'undefined' && Utils.normalizeBranchId ? Utils.normalizeBranchId(v) : String(v || '').trim().toLowerCase());
-                const normCategory = (v) => (typeof Utils !== 'undefined' && Utils.normalizeCategoryKey ? Utils.normalizeCategoryKey(v) : String(v || '').toLowerCase().replace(/\s+/g, '_'));
                 // Intentar obtener reporte existente primero
                 const profitReports = await DB.query('daily_profit_reports', 'date', todayStr) || [];
                 const todayProfit = !viewAllBranches
-                    ? profitReports.find(p => normalizeBranch(p.branch_id) === normalizeBranch(branchId) || !p.branch_id)
+                    ? profitReports.find(p => p.branch_id === branchId || !p.branch_id)
                     : null; // Vista consolidada: no usar reporte de una sola sucursal
                 
                 const revenue = (todayProfit?.revenue_sales_total ?? todayProfit?.revenue) || 0;
@@ -567,7 +552,7 @@ const Dashboard = {
                             arrival_costs: calc.arrivals || 0,
                             operating_costs: (calc.fixedCosts || 0) + (calc.variableCosts || 0),
                             commissions: (calc.commissionsSellers || 0) + (calc.commissionsGuides || 0),
-                            bank_commissions: calc.bankCommissions || 0,
+                            bank_commissions: 0, // Se calcula en calculateDailyProfit pero no está en calculations
                             gross_profit: calc.profit || 0,
                             net_profit: calc.profit || 0,
                             total_passengers: calc.passengers || 0
@@ -594,9 +579,7 @@ const Dashboard = {
                         for (const item of items) {
                             const unitCost = item.cost != null && item.cost !== '' ? Number(item.cost) : (inventoryItems.find(inv => inv.id === item.item_id)?.cost ?? 0);
                             merchandiseCostRealTime += unitCost * (item.quantity || 1);
-                            const commission = (typeof Utils !== 'undefined' && Utils.getSaleItemCommission)
-                                ? Utils.getSaleItemCommission(item)
-                                : (item.commission_amount ?? (item.guide_commission || 0) + (item.seller_commission || 0));
+                            const commission = item.commission_amount ?? (item.guide_commission || 0) + (item.seller_commission || 0);
                             if (commission) commissionsRealTime += Number(commission);
                         }
                         
@@ -636,7 +619,8 @@ const Dashboard = {
                             dateFrom: todayStr,
                             dateTo: todayStr
                         });
-                        const isArrivalCost = (cat) => normCategory(cat) === 'pago_llegadas';
+                        const normCat = (cat) => (cat || '').toLowerCase().replace(/\s+/g, '_');
+                        const isArrivalCost = (cat) => normCat(cat) === 'pago_llegadas';
                         // Obtener costos de llegadas desde cost_entries
                         const arrivalCostsFromEntries = todayCosts
                             .filter(c => isArrivalCost(c.category))
@@ -653,9 +637,9 @@ const Dashboard = {
                         // Calcular costos operativos (excluyendo llegadas que ya se contaron; insensible a mayúsculas)
                         operatingCostsRealTime = todayCosts
                             .filter(c => 
-                                normCategory(c.category) !== 'costo_ventas' && 
-                                normCategory(c.category) !== 'comisiones' && 
-                                normCategory(c.category) !== 'comisiones_bancarias' &&
+                                normCat(c.category) !== 'costo_ventas' && 
+                                normCat(c.category) !== 'comisiones' && 
+                                normCat(c.category) !== 'comisiones_bancarias' &&
                                 !isArrivalCost(c.category) // Ya se contaron arriba
                             )
                             .reduce((sum, c) => sum + (typeof Utils !== 'undefined' && Utils.parseAmount ? Utils.parseAmount(c.amount) : (parseFloat(c.amount) || 0)), 0);
@@ -874,18 +858,13 @@ const Dashboard = {
                 const parseAmt = (x) => (typeof Utils !== 'undefined' && Utils.parseAmount ? Utils.parseAmount(x) : (parseFloat(x) || 0));
                 totalCosts = thisMonthCosts.reduce((sum, c) => sum + parseAmt(c.amount), 0);
                 
-                // Desglose de costos alineado con contrato canónico
-                const norm = (v) => (typeof Utils !== 'undefined' && Utils.normalizeCategoryKey)
-                    ? Utils.normalizeCategoryKey(v)
-                    : (v || '').toLowerCase().replace(/\s+/g, '_');
-                const isOperational = (cat) => (typeof Utils !== 'undefined' && Utils.isOperationalCostCategory)
-                    ? Utils.isOperationalCostCategory(cat)
-                    : (norm(cat) !== 'costo_ventas' && norm(cat) !== 'comisiones' && norm(cat) !== 'comisiones_bancarias' && norm(cat) !== 'pago_llegadas');
+                // Desglose de costos (insensible a mayúsculas)
+                const norm = (v) => (v || '').toLowerCase().replace(/\s+/g, '_');
                 costBreakdown.fixed = thisMonthCosts
-                    .filter(c => norm(c.type) === 'fijo' && isOperational(c.category))
+                    .filter(c => norm(c.type) === 'fijo')
                     .reduce((sum, c) => sum + parseAmt(c.amount), 0);
                 costBreakdown.variable = thisMonthCosts
-                    .filter(c => norm(c.type) === 'variable' && isOperational(c.category))
+                    .filter(c => norm(c.type) === 'variable' && norm(c.category) !== 'costo_ventas' && norm(c.category) !== 'comisiones' && norm(c.category) !== 'comisiones_bancarias' && norm(c.category) !== 'pago_llegadas')
                     .reduce((sum, c) => sum + parseAmt(c.amount), 0);
                 costBreakdown.cogs = thisMonthCosts
                     .filter(c => norm(c.category) === 'costo_ventas')
