@@ -8,6 +8,8 @@ const router = express.Router();
 router.get('/metrics', authenticateOptional, async (req, res) => {
   try {
     const { branch_id, start_date, end_date, date } = req.query;
+    const appTimezone = process.env.APP_TIMEZONE || 'America/Mexico_City';
+    const targetDate = date || new Date().toISOString().split('T')[0];
     
     // Para master_admin: si branch_id no se envía o es null, significa vista consolidada (todas las sucursales)
     // Para usuarios normales: usar su branch_id asignado
@@ -23,57 +25,43 @@ router.get('/metrics', authenticateOptional, async (req, res) => {
       branchId = req.user.branchId;
     }
 
-    // Si es master admin y no se especifica branch_id, mostrar todas las sucursales
-    let branchFilter = '';
-    const params = [];
-    let paramCount = 1;
+    const statusCompletedClause = `LOWER(COALESCE(s.status, '')) IN ('completed', 'completada', 'completado')`;
+
+    const salesParams = [];
+    const salesConditions = [];
+    let salesParamCount = 1;
 
     if (req.user.isMasterAdmin) {
       if (branchId) {
-        branchFilter = `WHERE s.branch_id = $${paramCount}`;
-        params.push(branchId);
-        paramCount++;
+        salesConditions.push(`s.branch_id = $${salesParamCount}`);
+        salesParams.push(branchId);
+        salesParamCount++;
       }
-      // Si no hay branchId y es master admin, no filtrar por sucursal (vista consolidada)
     } else {
-      // Usuarios normales siempre filtran por su sucursal
       if (!req.user.branchId) {
         return res.status(400).json({ error: 'Usuario no tiene sucursal asignada' });
       }
-      branchFilter = `WHERE s.branch_id = $${paramCount}`;
-      params.push(req.user.branchId);
-      paramCount++;
+      salesConditions.push(`s.branch_id = $${salesParamCount}`);
+      salesParams.push(req.user.branchId);
+      salesParamCount++;
     }
 
     if (start_date) {
-      branchFilter += ` AND s.created_at >= $${paramCount}`;
-      params.push(start_date);
-      paramCount++;
+      salesConditions.push(`DATE(s.created_at AT TIME ZONE $${salesParamCount}) >= $${salesParamCount + 1}`);
+      salesParams.push(appTimezone, start_date);
+      salesParamCount += 2;
     }
 
     if (end_date) {
-      branchFilter += ` AND s.created_at <= $${paramCount}`;
-      params.push(end_date);
-      paramCount++;
+      salesConditions.push(`DATE(s.created_at AT TIME ZONE $${salesParamCount}) <= $${salesParamCount + 1}`);
+      salesParams.push(appTimezone, end_date);
+      salesParamCount += 2;
     }
 
-    // Ventas del día
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const todayEnd = new Date();
-    todayEnd.setHours(23, 59, 59, 999);
+    const salesWhere = salesConditions.length ? `WHERE ${salesConditions.join(' AND ')}` : 'WHERE 1=1';
 
-    const todayParams = [...params];
-    const todayParamCount = paramCount;
-    
-    let todayFilter = branchFilter;
-    if (todayFilter) {
-      todayFilter += ` AND s.created_at >= $${todayParamCount} AND s.created_at <= $${todayParamCount + 1}`;
-    } else {
-      todayFilter = `WHERE s.created_at >= $${todayParamCount} AND s.created_at <= $${todayParamCount + 1}`;
-    }
-    todayParams.push(todayStart.toISOString());
-    todayParams.push(todayEnd.toISOString());
+    const todayParams = [...salesParams, appTimezone, targetDate];
+    const todayWhere = `${salesWhere} AND DATE(s.created_at AT TIME ZONE $${todayParams.length - 1}) = $${todayParams.length}`;
 
     const salesTodayResult = await query(
       `SELECT 
@@ -81,17 +69,14 @@ router.get('/metrics', authenticateOptional, async (req, res) => {
         COALESCE(SUM(total), 0) as total_sales,
         COALESCE(AVG(total), 0) as avg_ticket
        FROM sales s
-       ${todayFilter}
-       AND s.status = 'completed'`,
+         ${todayWhere}
+         AND ${statusCompletedClause}`,
       todayParams
     );
 
     const salesToday = salesTodayResult.rows[0];
 
-    // Top vendedores (usar params originales sin fechas)
-    const sellersParams = start_date || end_date 
-      ? params.slice(0, params.length - (start_date ? 1 : 0) - (end_date ? 1 : 0))
-      : params;
+    const sellersParams = [...salesParams];
 
     const topSellersResult = await query(
       `SELECT 
@@ -100,16 +85,12 @@ router.get('/metrics', authenticateOptional, async (req, res) => {
         COALESCE(SUM(s.total), 0) as total_sales
        FROM sales s
        LEFT JOIN catalog_sellers cs ON s.seller_id = cs.id
-       ${branchFilter || 'WHERE 1=1'}
-       AND s.status = 'completed'
-       ${start_date ? `AND s.created_at >= $${sellersParams.length + 1}` : ''}
-       ${end_date ? `AND s.created_at <= $${sellersParams.length + (start_date ? 2 : 1)}` : ''}
+       ${salesWhere}
+       AND ${statusCompletedClause}
        GROUP BY cs.name
        ORDER BY total_sales DESC
        LIMIT 5`,
-      start_date || end_date 
-        ? [...sellersParams, ...(start_date ? [start_date] : []), ...(end_date ? [end_date] : [])]
-        : sellersParams
+      sellersParams
     );
 
     // Llegadas del día
@@ -123,11 +104,11 @@ router.get('/metrics', authenticateOptional, async (req, res) => {
         arrivalsParams.push(branchId);
         arrivalsParamCount++;
         arrivalsFilter += ` AND aa.date = $${arrivalsParamCount}`;
-        arrivalsParams.push(todayStart.toISOString().split('T')[0]);
+        arrivalsParams.push(targetDate);
       } else {
         // Vista consolidada: mostrar todas las sucursales
         arrivalsFilter = `WHERE aa.date = $${arrivalsParamCount}`;
-        arrivalsParams.push(todayStart.toISOString().split('T')[0]);
+        arrivalsParams.push(targetDate);
       }
     } else {
       if (!req.user.branchId) {
@@ -138,7 +119,7 @@ router.get('/metrics', authenticateOptional, async (req, res) => {
         arrivalsParams.push(req.user.branchId);
         arrivalsParamCount++;
         arrivalsFilter += ` AND aa.date = $${arrivalsParamCount}`;
-        arrivalsParams.push(todayStart.toISOString().split('T')[0]);
+        arrivalsParams.push(targetDate);
       }
     }
     
@@ -157,14 +138,10 @@ router.get('/metrics', authenticateOptional, async (req, res) => {
     const allSalesResult = await query(
       `SELECT s.*
        FROM sales s
-       ${branchFilter || 'WHERE 1=1'}
-       AND s.status = 'completed'
-       ${start_date ? `AND s.created_at >= $${paramCount}` : ''}
-       ${end_date ? `AND s.created_at <= $${paramCount + (start_date ? 1 : 0)}` : ''}
+       ${salesWhere}
+       AND ${statusCompletedClause}
        ORDER BY s.created_at DESC`,
-      start_date || end_date 
-        ? [...params, ...(start_date ? [start_date] : []), ...(end_date ? [end_date] : [])]
-        : params
+      salesParams
     );
 
     // Productos más vendidos
@@ -175,16 +152,12 @@ router.get('/metrics', authenticateOptional, async (req, res) => {
         COALESCE(SUM(si.subtotal), 0) as total_revenue
        FROM sale_items si
        INNER JOIN sales s ON si.sale_id = s.id
-       ${branchFilter || 'WHERE 1=1'}
-       AND s.status = 'completed'
-       ${start_date ? `AND s.created_at >= $${sellersParams.length + 1}` : ''}
-       ${end_date ? `AND s.created_at <= $${sellersParams.length + (start_date ? 2 : 1)}` : ''}
+       ${salesWhere}
+       AND ${statusCompletedClause}
        GROUP BY si.name
        ORDER BY quantity_sold DESC
        LIMIT 10`,
-      start_date || end_date 
-        ? [...sellersParams, ...(start_date ? [start_date] : []), ...(end_date ? [end_date] : [])]
-        : sellersParams
+      sellersParams
     );
 
     res.json({
