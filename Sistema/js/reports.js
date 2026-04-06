@@ -67,69 +67,6 @@ const Reports = {
 
         return { sellerCommission, guideCommission };
     },
-
-    buildSaleItemsBySaleId(allSaleItems = []) {
-        const bySaleId = new Map();
-        for (const saleItem of (allSaleItems || [])) {
-            if (!saleItem || !saleItem.sale_id) continue;
-            const saleId = String(saleItem.sale_id);
-            if (!bySaleId.has(saleId)) {
-                bySaleId.set(saleId, []);
-            }
-            bySaleId.get(saleId).push(saleItem);
-        }
-        return bySaleId;
-    },
-
-    resolveSaleCommissionAmounts(sale, saleItemsBySaleId = null) {
-        const saleId = sale?.id != null ? String(sale.id) : null;
-        const saleItems = saleId && saleItemsBySaleId
-            ? (saleItemsBySaleId.get(saleId) || [])
-            : [];
-
-        let sellerFromItems = 0;
-        let guideFromItems = 0;
-        let totalOnlyFromItems = 0;
-
-        for (const saleItem of saleItems) {
-            const sellerCommission = Number(saleItem?.seller_commission) || 0;
-            const guideCommission = Number(saleItem?.guide_commission) || 0;
-
-            sellerFromItems += sellerCommission;
-            guideFromItems += guideCommission;
-
-            if (sellerCommission === 0 && guideCommission === 0) {
-                totalOnlyFromItems += (typeof Utils !== 'undefined' && Utils.getSaleItemCommission)
-                    ? (Number(Utils.getSaleItemCommission(saleItem)) || 0)
-                    : (Number(saleItem?.commission_amount) || 0);
-            }
-        }
-
-        if (sellerFromItems > 0 || guideFromItems > 0) {
-            return {
-                seller: sellerFromItems,
-                guide: guideFromItems,
-                total: sellerFromItems + guideFromItems
-            };
-        }
-
-        if (totalOnlyFromItems > 0) {
-            return {
-                seller: totalOnlyFromItems,
-                guide: 0,
-                total: totalOnlyFromItems
-            };
-        }
-
-        const sellerFromSale = Number(sale?.seller_commission) || 0;
-        const guideFromSale = Number(sale?.guide_commission) || 0;
-
-        return {
-            seller: sellerFromSale,
-            guide: guideFromSale,
-            total: sellerFromSale + guideFromSale
-        };
-    },
     
     async init() {
         try {
@@ -806,68 +743,92 @@ const Reports = {
         
         console.log(`[Reports] Vista consolidada: ${viewAllBranches} (Admin: ${isMasterAdmin}, BranchId: ${branchId || 'Todas'})`);
         
-        // Si hay branchId específico, obtener todas las ventas y filtrar manualmente
-        // Si no hay branchId y es master_admin, obtener todas las ventas sin filtro
-        // Si no hay branchId y no es master_admin, usar el filtro automático de BranchManager
-        let sales;
-        if (branchId || (!branchId && !isMasterAdmin)) {
-            // Si hay branchId específico o no es master_admin, obtener todas y filtrar manualmente
-            sales = await DB.getAll('sales', null, null, { 
-                filterByBranch: false, // Desactivar filtro automático para usar el manual
-            branchIdField: 'branch_id' 
-        }) || [];
+        const normalizeStatus = (value) => {
+            const statusValue = String(value || '').toLowerCase();
+            if (!statusValue) return null;
+            if (statusValue === 'completada' || statusValue === 'completado') return 'completed';
+            return statusValue;
+        };
 
-        // Normalizar branch_id para comparación flexible
-        const normalizedBranchId = branchId ? String(branchId) : null;
+        let sales = [];
 
-        if (normalizedBranchId) {
-                // Filtrar por branch_id específico - ESTRICTO
-                const beforeFilter = sales.length;
-            sales = sales.filter(s => {
-                    // CRÍTICO: Excluir ventas sin branch_id cuando se filtra por sucursal específica
-                    if (!s.branch_id) {
-                        return false; // NO mostrar ventas sin branch_id
+        // Fuente primaria: API para evitar datos incompletos por desincronización local.
+        const hasApi = typeof API !== 'undefined' && API.baseURL && API.token && API.getSales;
+        if (hasApi) {
+            try {
+                const apiFilters = {
+                    branch_id: branchId || null,
+                    start_date: dateFrom || null,
+                    end_date: dateTo ? `${dateTo}T23:59:59` : null,
+                    status: normalizeStatus(status)
+                };
+                const apiSales = await API.getSales(apiFilters);
+                if (Array.isArray(apiSales)) {
+                    sales = apiSales;
+                    for (const sale of apiSales) {
+                        try { await DB.put('sales', sale); } catch (e) {}
                     }
-                    const saleBranchId = String(s.branch_id);
-                return saleBranchId === normalizedBranchId;
-            });
-                console.log(`📍 [Reports] Filtrado de ventas por sucursal: ${beforeFilter} → ${sales.length} (sucursal: ${normalizedBranchId})`);
-            } else if (!isMasterAdmin) {
-                // Si no es master_admin y no hay branchId específico, usar el actual de BranchManager
-                const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
-                if (currentBranchId) {
-                    const normalizedCurrent = String(currentBranchId);
-                    const beforeFilter = sales.length;
-                    sales = sales.filter(s => {
-                        // CRÍTICO: Excluir ventas sin branch_id para usuarios normales
-                        if (!s.branch_id) {
-                            return false; // NO mostrar ventas sin branch_id
-                        }
-                        const saleBranchId = String(s.branch_id);
-                        return saleBranchId === normalizedCurrent;
-                    });
-                    console.log(`📍 [Reports] Filtrado de ventas por sucursal (usuario normal): ${beforeFilter} → ${sales.length} (sucursal: ${normalizedCurrent})`);
-                } else {
-                    // Sin branch_id, no mostrar ventas (aislamiento estricto)
-                    sales = [];
                 }
+            } catch (apiError) {
+                console.warn('[Reports] API sales fallback a IndexedDB:', apiError?.message || apiError);
             }
-        } else {
-            // Master_admin sin branchId específico: obtener todas las ventas
-            sales = await DB.getAll('sales', null, null, { 
-                filterByBranch: false, 
-                branchIdField: 'branch_id' 
-            }) || [];
         }
 
-        if (dateFrom) {
-            sales = sales.filter(s => s.created_at >= dateFrom);
+        // Fallback a IndexedDB.
+        if (!Array.isArray(sales) || sales.length === 0) {
+            if (branchId || (!branchId && !isMasterAdmin)) {
+                sales = await DB.getAll('sales', null, null, {
+                    filterByBranch: false,
+                    branchIdField: 'branch_id'
+                }) || [];
+
+                const normalizedBranchId = branchId ? String(branchId) : null;
+                if (normalizedBranchId) {
+                    const beforeFilter = sales.length;
+                    sales = sales.filter(s => s.branch_id && String(s.branch_id) === normalizedBranchId);
+                    console.log(`📍 [Reports] Filtrado de ventas por sucursal: ${beforeFilter} → ${sales.length} (sucursal: ${normalizedBranchId})`);
+                } else if (!isMasterAdmin) {
+                    const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
+                    if (currentBranchId) {
+                        const normalizedCurrent = String(currentBranchId);
+                        const beforeFilter = sales.length;
+                        sales = sales.filter(s => s.branch_id && String(s.branch_id) === normalizedCurrent);
+                        console.log(`📍 [Reports] Filtrado de ventas por sucursal (usuario normal): ${beforeFilter} → ${sales.length} (sucursal: ${normalizedCurrent})`);
+                    } else {
+                        sales = [];
+                    }
+                }
+            } else {
+                sales = await DB.getAll('sales', null, null, {
+                    filterByBranch: false,
+                    branchIdField: 'branch_id'
+                }) || [];
+            }
         }
-        if (dateTo) {
-            sales = sales.filter(s => s.created_at <= dateTo + 'T23:59:59');
+
+        const parseDateMs = (value) => {
+            if (!value) return NaN;
+            const parsed = new Date(value).getTime();
+            return Number.isFinite(parsed) ? parsed : NaN;
+        };
+        const fromMs = dateFrom ? parseDateMs(`${dateFrom}T00:00:00`) : null;
+        const toMs = dateTo ? parseDateMs(`${dateTo}T23:59:59`) : null;
+
+        if (fromMs) {
+            sales = sales.filter(s => {
+                const saleMs = parseDateMs(s.created_at);
+                return Number.isFinite(saleMs) && saleMs >= fromMs;
+            });
+        }
+        if (toMs) {
+            sales = sales.filter(s => {
+                const saleMs = parseDateMs(s.created_at);
+                return Number.isFinite(saleMs) && saleMs <= toMs;
+            });
         }
         if (status) {
-            sales = sales.filter(s => s.status === status);
+            const normalizedStatus = normalizeStatus(status);
+            sales = sales.filter(s => String(s.status || '').toLowerCase() === normalizedStatus);
         }
 
         return sales;
@@ -1971,18 +1932,37 @@ const Reports = {
         const agencies = await DB.getAll('catalog_agencies');
         const guides = await DB.getAll('catalog_guides');
 
-        const totalSales = sales.reduce((sum, s) => sum + (s.total || 0), 0);
-        const totalPassengers = sales.reduce((sum, s) => sum + (s.passengers || 1), 0);
-        const avgTicket = totalPassengers > 0 ? totalSales / totalPassengers : 0;
-        const closeRate = totalPassengers > 0 ? (sales.length / totalPassengers) * 100 : 0;
+        const toNumber = (value) => {
+            const n = Number(value);
+            return Number.isFinite(n) ? n : 0;
+        };
+
+        const completedSales = sales.filter(s =>
+            (typeof Utils !== 'undefined' && Utils.isSaleCompleted
+                ? Utils.isSaleCompleted(s)
+                : ['completed', 'completada', 'completado'].includes(String(s.status || '').toLowerCase()))
+        );
+
+        const totalSales = completedSales.reduce((sum, s) => sum + toNumber(s.total), 0);
+        const passengerValues = completedSales.map(s => toNumber(s.passengers)).filter(v => v > 0);
+        const hasPassengerData = passengerValues.length > 0;
+        const totalPassengers = hasPassengerData
+            ? passengerValues.reduce((sum, v) => sum + v, 0)
+            : completedSales.length;
+        const avgTicket = completedSales.length > 0
+            ? (hasPassengerData ? totalSales / totalPassengers : totalSales / completedSales.length)
+            : 0;
+        const closeRate = hasPassengerData && totalPassengers > 0
+            ? (completedSales.length / totalPassengers) * 100
+            : 0;
 
         // Agrupar por sucursal si es master_admin y hay múltiples sucursales
-        const branchesInReport = new Set(sales.map(s => s.branch_id).filter(Boolean));
+        const branchesInReport = new Set(completedSales.map(s => s.branch_id).filter(Boolean));
         const showBranchBreakdown = isMasterAdmin && branchesInReport.size > 1 && (!branchIdForBanner || branchIdForBanner === 'all');
         
         let branchBreakdown = {};
         if (showBranchBreakdown) {
-            sales.forEach(sale => {
+            completedSales.forEach(sale => {
                 const branchId = sale.branch_id || 'sin_sucursal';
                 if (!branchBreakdown[branchId]) {
                     branchBreakdown[branchId] = {
@@ -1992,14 +1972,14 @@ const Reports = {
                     };
                 }
                 branchBreakdown[branchId].sales += 1;
-                branchBreakdown[branchId].total += sale.total || 0;
-                branchBreakdown[branchId].passengers += sale.passengers || 1;
+                branchBreakdown[branchId].total += toNumber(sale.total);
+                branchBreakdown[branchId].passengers += toNumber(sale.passengers) || 1;
             });
         }
 
         // Calcular COGS desde los items de venta (preferir cost en sale_item, fallback a inventario)
         let totalCOGS = 0;
-        for (const sale of sales) {
+        for (const sale of completedSales) {
             const saleItemsForSale = saleItems.filter(si => si.sale_id === sale.id);
             for (const item of saleItemsForSale) {
                 const unitCost = (item.cost != null && item.cost !== '')
@@ -2009,22 +1989,27 @@ const Reports = {
             }
         }
 
-        const saleItemsBySaleId = this.buildSaleItemsBySaleId(saleItems);
-
-        // Calcular comisiones de forma homologada (prioriza sale_items, fallback a cabecera de venta)
+        // Calcular comisiones desde sale_items (más preciso)
         const commissionsBreakdown = {
             sellers: 0,
             guides: 0,
             total: 0
         };
-        const saleCommissionsById = new Map();
-
-        for (const sale of sales) {
-            const resolved = this.resolveSaleCommissionAmounts(sale, saleItemsBySaleId);
-            saleCommissionsById.set(String(sale.id), resolved);
-            commissionsBreakdown.sellers += resolved.seller;
-            commissionsBreakdown.guides += resolved.guide;
-            commissionsBreakdown.total += resolved.total;
+        for (const sale of completedSales) {
+            const items = saleItems.filter(si => si.sale_id === sale.id);
+            for (const item of items) {
+                if (item.commission_amount) {
+                    commissionsBreakdown.total += item.commission_amount;
+                }
+            }
+        }
+        // Si no hay comisiones en sale_items, usar los valores de las ventas (fallback)
+        if (commissionsBreakdown.total === 0) {
+        completedSales.forEach(sale => {
+            commissionsBreakdown.sellers += sale.seller_commission || 0;
+            commissionsBreakdown.guides += sale.guide_commission || 0;
+        });
+        commissionsBreakdown.total = commissionsBreakdown.sellers + commissionsBreakdown.guides;
         }
 
         // Obtener costos del período del reporte (llegadas y operativos)
@@ -2038,87 +2023,47 @@ const Reports = {
             bankCommissions: 0
         };
         
-        if (sales.length > 0) {
-            const normalizeDate = (v) => (typeof Utils !== 'undefined' && Utils.normalizeDateKey)
-                ? Utils.normalizeDateKey(v)
-                : String(v || '').split('T')[0];
-            const normalizeBranch = (v) => (typeof Utils !== 'undefined' && Utils.normalizeBranchId)
-                ? Utils.normalizeBranchId(v)
-                : String(v || '').trim().toLowerCase();
-            const parseAmt = (v) => (typeof Utils !== 'undefined' && Utils.parseAmount)
-                ? Utils.parseAmount(v)
-                : (parseFloat(v) || 0);
-
+        if (completedSales.length > 0) {
             // Obtener fechas del reporte
-            const dates = sales.map(s => normalizeDate(s.created_at)).filter(Boolean).sort();
+            const dates = completedSales.map(s => String(s.created_at || '').split('T')[0]).filter(Boolean).sort();
             const dateFrom = dates[0];
             const dateTo = dates[dates.length - 1];
             
             // Obtener branchId del filtro o de las ventas
             const branchId = branchFilterValue && branchFilterValue !== 'all' ? branchFilterValue : 
                            (branchIdForBanner || (sales.length > 0 ? sales[0].branch_id : null));
-            const normalizedBranchId = normalizeBranch(branchId);
+            
+            // Obtener llegadas del período
+            const allArrivals = await DB.getAll('agency_arrivals', null, null, { 
+                filterByBranch: false, 
+                branchIdField: 'branch_id' 
+            }) || [];
+            const periodArrivals = allArrivals.filter(a => {
+                const arrivalDate = a.date || a.created_at?.split('T')[0];
+                return arrivalDate >= dateFrom && arrivalDate <= dateTo &&
+                       (branchId === null || !branchId || a.branch_id === branchId || !a.branch_id) &&
+                       a.passengers > 0 && a.units > 0;
+            });
+            costBreakdown.arrivals = periodArrivals.reduce((sum, a) => sum + (a.arrival_fee || a.calculated_fee || 0), 0);
             
             // Obtener costos operativos del período
             if (typeof Costs !== 'undefined') {
-                const reportCosts = await Costs.getFilteredCosts({
-                    branchId: branchId || null,
-                    dateFrom: dateFrom,
-                    dateTo: dateTo
-                });
-
-                // Llegadas: fuente autorizada = cost_entries.pago_llegadas
-                costBreakdown.arrivals = reportCosts
-                    .filter(c => (typeof Utils !== 'undefined' && Utils.isArrivalCostCategory)
-                        ? Utils.isArrivalCostCategory(c.category)
-                        : String(c.category || '').toLowerCase().replace(/\s+/g, '_') === 'pago_llegadas')
-                    .reduce((sum, c) => sum + parseAmt(c.amount), 0);
-
-                // Fallback llegadas desde agency_arrivals cuando no hay costos registrados
-                if (costBreakdown.arrivals === 0) {
-                    const allArrivals = await DB.getAll('agency_arrivals', null, null, {
-                        filterByBranch: false,
-                        branchIdField: 'branch_id'
-                    }) || [];
-                    const periodArrivals = allArrivals.filter(a => {
-                        const arrivalDate = normalizeDate(a.date || a.created_at);
-                        return arrivalDate >= dateFrom && arrivalDate <= dateTo &&
-                            (!normalizedBranchId || normalizeBranch(a.branch_id) === normalizedBranchId || !a.branch_id) &&
-                            a.passengers > 0 && a.units > 0;
-                    });
-                    costBreakdown.arrivals = periodArrivals.reduce((sum, a) => sum + parseAmt(a.arrival_fee || a.calculated_fee || a.amount), 0);
-                }
-
+            const reportCosts = await Costs.getFilteredCosts({
+                branchId: branchId || null,
+                dateFrom: dateFrom,
+                dateTo: dateTo
+            });
+            
                 // Desglose de costos operativos
-                costBreakdown.fixed = reportCosts
-                    .filter(c => {
-                        const isFixed = (typeof Utils !== 'undefined' && Utils.normalizeCostType)
-                            ? Utils.normalizeCostType(c.type) === 'fijo'
-                            : String(c.type || '').toLowerCase() === 'fijo';
-                        const isOperational = (typeof Utils !== 'undefined' && Utils.isOperationalCostCategory)
-                            ? Utils.isOperationalCostCategory(c.category)
-                            : true;
-                        return isFixed && isOperational;
-                    })
-                    .reduce((sum, c) => sum + parseAmt(c.amount), 0);
-
-                costBreakdown.variable = reportCosts
-                    .filter(c => {
-                        const isVariable = (typeof Utils !== 'undefined' && Utils.normalizeCostType)
-                            ? Utils.normalizeCostType(c.type) === 'variable'
-                            : String(c.type || '').toLowerCase() === 'variable';
-                        const isOperational = (typeof Utils !== 'undefined' && Utils.isOperationalCostCategory)
-                            ? Utils.isOperationalCostCategory(c.category)
-                            : true;
-                        return isVariable && isOperational;
-                    })
-                    .reduce((sum, c) => sum + parseAmt(c.amount), 0);
-
-                costBreakdown.bankCommissions = reportCosts
-                    .filter(c => (typeof Utils !== 'undefined' && Utils.normalizeCategoryKey)
-                        ? Utils.normalizeCategoryKey(c.category) === 'comisiones_bancarias'
-                        : String(c.category || '').toLowerCase().replace(/\s+/g, '_') === 'comisiones_bancarias')
-                    .reduce((sum, c) => sum + parseAmt(c.amount), 0);
+            costBreakdown.fixed = reportCosts
+                    .filter(c => c.type === 'fijo' && c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias')
+                .reduce((sum, c) => sum + (c.amount || 0), 0);
+            costBreakdown.variable = reportCosts
+                .filter(c => c.type === 'variable' && c.category !== 'costo_ventas' && c.category !== 'comisiones' && c.category !== 'comisiones_bancarias' && c.category !== 'pago_llegadas')
+                .reduce((sum, c) => sum + (c.amount || 0), 0);
+            costBreakdown.bankCommissions = reportCosts
+                .filter(c => c.category === 'comisiones_bancarias')
+                .reduce((sum, c) => sum + (c.amount || 0), 0);
             }
         }
         
@@ -2144,17 +2089,12 @@ const Reports = {
         
         // Ventas por día
         const dailyStats = {};
-        sales.forEach(sale => {
-            const date = (typeof Utils !== 'undefined' && Utils.normalizeDateKey)
-                ? Utils.normalizeDateKey(sale.created_at)
-                : String(sale.created_at || '').split('T')[0];
-            if (!date) return;
+        completedSales.forEach(sale => {
+            const date = sale.created_at.split('T')[0];
             if (!dailyStats[date]) {
                 dailyStats[date] = { total: 0, count: 0 };
             }
-            dailyStats[date].total += (typeof Utils !== 'undefined' && Utils.parseAmount)
-                ? Utils.parseAmount(sale.total)
-                : (sale.total || 0);
+            dailyStats[date].total += toNumber(sale.total);
             dailyStats[date].count += 1;
         });
         
@@ -2216,7 +2156,7 @@ const Reports = {
                             <tfoot>
                                 <tr style="border-top: 2px solid var(--color-border); font-weight: 700;">
                                     <td>TOTAL</td>
-                                    <td style="text-align: right;">${sales.length}</td>
+                                    <td style="text-align: right;">${completedSales.length}</td>
                                     <td style="text-align: right;">${Utils.formatCurrency(totalSales)}</td>
                                     <td style="text-align: right;">${totalPassengers}</td>
                                     <td style="text-align: right;">${Utils.formatCurrency(avgTicket)}</td>
@@ -2241,7 +2181,7 @@ const Reports = {
                     </div>
                     <div class="kpi-card" style="min-width: 0; width: 100%; box-sizing: border-box;">
                         <div class="kpi-label">Número de Ventas</div>
-                        <div class="kpi-value">${sales.length}</div>
+                        <div class="kpi-value">${completedSales.length}</div>
                     </div>
                     <div class="kpi-card" style="min-width: 0; width: 100%; box-sizing: border-box;">
                         <div class="kpi-label">Ticket Promedio</div>
@@ -2257,7 +2197,7 @@ const Reports = {
                 </div>
                 <div class="kpi-card" style="min-width: 0; width: 100%; box-sizing: border-box;">
                     <div class="kpi-label">Promedio por Venta</div>
-                    <div class="kpi-value">${sales.length > 0 ? Utils.formatCurrency(totalSales / sales.length) : '$0'}</div>
+                    <div class="kpi-value">${completedSales.length > 0 ? Utils.formatCurrency(totalSales / completedSales.length) : '$0'}</div>
                 </div>
                 <div class="kpi-card" style="min-width: 0; width: 100%; box-sizing: border-box;">
                     <div class="kpi-label">Total Costos</div>
@@ -2412,7 +2352,6 @@ const Reports = {
                                 const seller = sellers.find(s => s.id === sale.seller_id);
                                 const agency = agencies.find(a => a.id === sale.agency_id);
                                 const guide = guides.find(g => g.id === sale.guide_id);
-                                const saleCommissions = saleCommissionsById.get(String(sale.id)) || { seller: 0, guide: 0, total: 0 };
                                 return `
                                     <tr>
                                         <td>${sale.folio || 'N/A'}</td>
@@ -2423,8 +2362,8 @@ const Reports = {
                                         <td>${guide?.name || 'N/A'}</td>
                                         <td>${sale.passengers || 1}</td>
                                         <td style="font-weight: 600;">${Utils.formatCurrency(sale.total)}</td>
-                                        <td style="color: var(--color-primary); font-weight: 500;">${Utils.formatCurrency(saleCommissions.seller || 0)}</td>
-                                        <td style="color: var(--color-success); font-weight: 500;">${Utils.formatCurrency(saleCommissions.guide || 0)}</td>
+                                        <td style="color: var(--color-primary); font-weight: 500;">${Utils.formatCurrency(sale.seller_commission || 0)}</td>
+                                        <td style="color: var(--color-success); font-weight: 500;">${Utils.formatCurrency(sale.guide_commission || 0)}</td>
                                         <td><span class="status-badge status-${(typeof Utils !== 'undefined' && Utils.isSaleCompleted && Utils.isSaleCompleted(sale)) || sale.status === 'completada' || sale.status === 'completed' ? 'disponible' : sale.status === 'apartada' ? 'reservado' : 'cancelado'}">${sale.status === 'completed' ? 'Completada' : sale.status}</span></td>
                                     </tr>
                                 `;
@@ -2516,18 +2455,6 @@ const Reports = {
             let variableCostsDaily = 0;
             let arrivalCosts = 0;
             let bankCommissions = 0;
-            const normalizeCategory = (value) => (typeof Utils !== 'undefined' && Utils.normalizeCategoryKey)
-                ? Utils.normalizeCategoryKey(value)
-                : String(value || '').trim().toLowerCase().replace(/\s+/g, '_');
-            const isOperationalCost = (category) => (typeof Utils !== 'undefined' && Utils.isOperationalCostCategory)
-                ? Utils.isOperationalCostCategory(category)
-                : (normalizeCategory(category) !== 'costo_ventas' &&
-                   normalizeCategory(category) !== 'comisiones' &&
-                   normalizeCategory(category) !== 'comisiones_bancarias' &&
-                   normalizeCategory(category) !== 'pago_llegadas');
-            const parseAmount = (value) => (typeof Utils !== 'undefined' && Utils.parseAmount)
-                ? Utils.parseAmount(value)
-                : (parseFloat(value) || 0);
             
             // Calcular costos de llegadas desde cost_entries (fuente autorizada)
             const branchIdsForArrivals = branchId === null && branchIdsToInclude.length > 0 ? branchIdsToInclude : (branchId ? [branchId] : []);
@@ -2543,7 +2470,6 @@ const Reports = {
             const monthlyCosts = branchCosts.filter(c => {
                 const costDate = new Date(c.date || c.created_at);
                 return c.period_type === 'monthly' && 
-                       isOperationalCost(c.category) &&
                        c.recurring === true &&
                        costDate.getMonth() === targetDate.getMonth() &&
                        costDate.getFullYear() === targetDate.getFullYear();
@@ -2551,7 +2477,7 @@ const Reports = {
             for (const cost of monthlyCosts) {
                 // Usar 30 días fijos para prorrateo mensual (convención contable: $94,500/30 = $3,150)
                 const DAYS_PER_MONTH = 30;
-                fixedCostsDaily += parseAmount(cost.amount) / DAYS_PER_MONTH;
+                fixedCostsDaily += (cost.amount || 0) / DAYS_PER_MONTH;
             }
             
             // Costos semanales prorrateados
@@ -2560,26 +2486,24 @@ const Reports = {
                 const targetWeek = this.getWeekNumber(targetDate);
                 const costWeek = this.getWeekNumber(costDate);
                 return c.period_type === 'weekly' && 
-                       isOperationalCost(c.category) &&
                        c.recurring === true &&
                        targetWeek === costWeek &&
                        targetDate.getFullYear() === costDate.getFullYear();
             });
             for (const cost of weeklyCosts) {
-                fixedCostsDaily += parseAmount(cost.amount) / 7;
+                fixedCostsDaily += (cost.amount || 0) / 7;
             }
             
             // Costos anuales prorrateados
             const annualCosts = branchCosts.filter(c => {
                 const costDate = new Date(c.date || c.created_at);
                 return c.period_type === 'annual' && 
-                       isOperationalCost(c.category) &&
                        c.recurring === true &&
                        costDate.getFullYear() === targetDate.getFullYear();
             });
             for (const cost of annualCosts) {
                 const daysInYear = ((targetDate.getFullYear() % 4 === 0 && targetDate.getFullYear() % 100 !== 0) || (targetDate.getFullYear() % 400 === 0)) ? 366 : 365;
-                fixedCostsDaily += parseAmount(cost.amount) / daysInYear;
+                fixedCostsDaily += (cost.amount || 0) / daysInYear;
             }
             
             // Costos variables/diarios del día específico
@@ -2587,18 +2511,16 @@ const Reports = {
                 .filter(c => {
                     const costDate = c.date || c.created_at;
                     const costDateStr = costDate.split('T')[0];
-                    if (costDateStr !== dateStr) {
-                        return false;
-                    }
-                    const categoryKey = normalizeCategory(c.category);
-                    if (categoryKey === 'comisiones_bancarias') {
-                        bankCommissions += parseAmount(c.amount);
-                        return false;
-                    }
-                    return isOperationalCost(c.category) &&
+                    return costDateStr === dateStr &&
                            (c.period_type === 'one_time' || c.period_type === 'daily' || !c.period_type);
                 })
-                .reduce((sum, c) => sum + parseAmount(c.amount), 0);
+                .reduce((sum, c) => {
+                    // Separar comisiones bancarias
+                    if (c.category === 'comisiones_bancarias') {
+                        bankCommissions += (c.amount || 0);
+                    }
+                    return sum + (c.amount || 0);
+                }, 0);
             
             return { fixedCostsDaily, variableCostsDaily, arrivalCosts, bankCommissions };
         };
@@ -4832,18 +4754,57 @@ const Reports = {
             const sellerCommissions = {};
             const guideCommissions = {};
 
-            // Cargar catálogos para resolver nombres en el resumen
+            // Cargar catálogos antes del bucle para resolver nombres (agency, seller, guide) al calcular comisiones
             const sellers = await DB.getAll('catalog_sellers') || [];
             const guides = await DB.getAll('catalog_guides') || [];
+            const agencies = await DB.getAll('catalog_agencies') || [];
+            const branches = await DB.getAll('catalog_branches') || [];
             const allSaleItems = await DB.getAll('sale_items') || [];
-            const saleItemsBySaleId = this.buildSaleItemsBySaleId(allSaleItems);
-            const resolvedCommissionsBySaleId = new Map();
 
             for (const sale of sales) {
-                const resolved = this.resolveSaleCommissionAmounts(sale, saleItemsBySaleId);
-                const sellerComm = resolved.seller;
-                const guideComm = resolved.guide;
-                resolvedCommissionsBySaleId.set(String(sale.id), resolved);
+                let sellerComm = sale.seller_commission != null && sale.seller_commission > 0 ? Number(sale.seller_commission) : 0;
+                let guideComm = sale.guide_commission != null && sale.guide_commission > 0 ? Number(sale.guide_commission) : 0;
+
+                const needsCalculation = (sellerComm === 0 && (sale.seller_id || sale.guide_id)) || (guideComm === 0 && (sale.seller_id || sale.guide_id));
+
+                if (needsCalculation) {
+                    const saleItems = allSaleItems.filter(si => si.sale_id === sale.id);
+
+                    // Opción A: primero intentar suma desde sale_items si tienen comisiones guardadas
+                    const sumFromItems = saleItems.reduce((acc, si) => {
+                        acc.seller += Number(si.seller_commission) || 0;
+                        acc.guide += Number(si.guide_commission) || 0;
+                        return acc;
+                    }, { seller: 0, guide: 0 });
+
+                    if (sumFromItems.seller > 0 || sumFromItems.guide > 0) {
+                        sellerComm = sumFromItems.seller;
+                        guideComm = sumFromItems.guide;
+                    } else {
+                        // Usar reglas por nombre: calculateCommissionByRules(totalMXN, agencyName, sellerName, guideName)
+                        let agencyName = sale.agency_id ? (agencies.find(a => this.compareIds(a.id, sale.agency_id))?.name || null) : null;
+                        const guideRecord = sale.guide_id ? guides.find(g => this.compareIds(g.id, sale.guide_id)) : null;
+                        if (!agencyName && guideRecord?.agency_id) {
+                            agencyName = agencies.find(a => this.compareIds(a.id, guideRecord.agency_id))?.name || null;
+                        }
+                        const sellerName = sale.seller_id ? (sellers.find(s => this.compareIds(s.id, sale.seller_id))?.name || null) : null;
+                        const guideName = guideRecord?.name || null;
+                        if (!agencyName && guideName) {
+                            const guideNorm = guideName.trim().toUpperCase();
+                            agencyName = this.GUIDE_TO_AGENCY[guideNorm] || null;
+                        }
+                        const totalMXN = parseFloat(sale.total) || 0;
+                        const { sellerCommission, guideCommission } = this.calculateCommissionByRules(totalMXN, agencyName, sellerName, guideName);
+                        sellerComm = sellerCommission;
+                        guideComm = guideCommission;
+                    }
+
+                    sale.seller_commission = sellerComm;
+                    sale.guide_commission = guideComm;
+                    if (sellerComm > 0 || guideComm > 0) {
+                        await DB.put('sales', sale);
+                    }
+                }
 
                 commissionsBreakdown.sellers += sellerComm;
                 commissionsBreakdown.guides += guideComm;
@@ -5004,9 +4965,8 @@ const Reports = {
                                     const branch = branches.find(b => b.id === sale.branch_id);
                                     const seller = sellers.find(s => s.id === sale.seller_id);
                                     const guide = guides.find(g => g.id === sale.guide_id);
-                                    const resolved = resolvedCommissionsBySaleId.get(String(sale.id)) || { seller: 0, guide: 0, total: 0 };
-                                    const sellerComm = resolved.seller;
-                                    const guideComm = resolved.guide;
+                                    const sellerComm = sale.seller_commission || 0;
+                                    const guideComm = sale.guide_commission || 0;
                                     return `
                                         <tr>
                                             <td>${sale.folio || 'N/A'}</td>
@@ -5089,14 +5049,11 @@ const Reports = {
         const sellers = await DB.getAll('catalog_sellers');
         const guides = await DB.getAll('catalog_guides');
         const branches = await DB.getAll('catalog_branches');
-        const allSaleItems = await DB.getAll('sale_items') || [];
-        const saleItemsBySaleId = this.buildSaleItemsBySaleId(allSaleItems);
 
         const exportData = sales.map(sale => {
             const branch = branches.find(b => b.id === sale.branch_id);
             const seller = sellers.find(s => s.id === sale.seller_id);
             const guide = guides.find(g => g.id === sale.guide_id);
-            const resolved = this.resolveSaleCommissionAmounts(sale, saleItemsBySaleId);
             return {
                 'Folio': sale.folio || 'N/A',
                 'Fecha': Utils.formatDate(sale.created_at, 'DD/MM/YYYY'),
@@ -5104,9 +5061,9 @@ const Reports = {
                 'Vendedor': seller?.name || 'N/A',
                 'Guía': guide?.name || 'N/A',
                 'Total Venta': sale.total || 0,
-                'Comisión Vendedor': resolved.seller || 0,
-                'Comisión Guía': resolved.guide || 0,
-                'Total Comisiones': resolved.total || 0
+                'Comisión Vendedor': sale.seller_commission || 0,
+                'Comisión Guía': sale.guide_commission || 0,
+                'Total Comisiones': (sale.seller_commission || 0) + (sale.guide_commission || 0)
             };
         });
 
@@ -8291,7 +8248,6 @@ const Reports = {
     async loadQuickCaptureData(options = {}) {
         try {
             const skipRemoteLookup = options?.skipRemoteLookup === true;
-            const qcVerboseLogs = false;
             // Obtener la fecha del formulario o usar hoy por defecto
             const dateInput = document.getElementById('qc-date');
             const selectedDate = dateInput?.value || this.getLocalDateStr();
@@ -8316,9 +8272,7 @@ const Reports = {
                 // Normalizar fechas para comparación estricta (usar original_report_date si existe, sino date)
                 const captureDate = c.original_report_date || c.date;
                 if (!captureDate) {
-                    if (qcVerboseLogs) {
-                        console.warn('⚠️ Captura sin fecha:', c.id);
-                    }
+                    console.warn('⚠️ Captura sin fecha:', c.id);
                     return false;
                 }
                 const normalizedCaptureDate = captureDate.split('T')[0];
@@ -8331,9 +8285,7 @@ const Reports = {
                 
                 // Si es master admin, mostrar TODAS las capturas (incluso sin branch_id)
                 if (isMasterAdmin) {
-                    if (qcVerboseLogs) {
-                        console.log(`   ✅ Master admin: mostrando captura ${c.id} (branch_id: ${c.branch_id || 'sin sucursal'})`);
-                    }
+                    console.log(`   ✅ Master admin: mostrando captura ${c.id} (branch_id: ${c.branch_id || 'sin sucursal'})`);
                     return true;
                 }
                 
@@ -8346,33 +8298,23 @@ const Reports = {
                     // 1. Tiene branch_id y coincide con la sucursal actual
                     // 2. NO tiene branch_id (capturas legacy que se crearon antes de implementar el filtro)
                     if (captureBranchId && captureBranchId === currentBranchIdStr) {
-                        if (qcVerboseLogs) {
-                            console.log(`   ✅ Sucursal coincide: ${captureBranchId} === ${currentBranchIdStr}`);
-                        }
+                        console.log(`   ✅ Sucursal coincide: ${captureBranchId} === ${currentBranchIdStr}`);
                         return true;
                     } else if (!captureBranchId) {
                         // Capturas sin branch_id: incluir si el usuario está en una sucursal (legacy)
-                        if (qcVerboseLogs) {
-                            console.log(`   ✅ Captura sin branch_id (legacy), incluyendo para sucursal ${currentBranchIdStr}`);
-                        }
+                        console.log(`   ✅ Captura sin branch_id (legacy), incluyendo para sucursal ${currentBranchIdStr}`);
                         return true;
                     } else {
-                        if (qcVerboseLogs) {
-                            console.log(`   ❌ Sucursal no coincide: ${captureBranchId} !== ${currentBranchIdStr}`);
-                        }
+                        console.log(`   ❌ Sucursal no coincide: ${captureBranchId} !== ${currentBranchIdStr}`);
                         return false;
                     }
                 } else {
                     // Si no hay sucursal actual, mostrar solo capturas sin branch_id
                     if (!c.branch_id) {
-                        if (qcVerboseLogs) {
-                            console.log(`   ✅ Sin sucursal actual: mostrando captura sin branch_id`);
-                        }
+                        console.log(`   ✅ Sin sucursal actual: mostrando captura sin branch_id`);
                         return true;
                     }
-                    if (qcVerboseLogs) {
-                        console.log(`   ❌ Sin sucursal actual pero captura tiene branch_id: ${c.branch_id}`);
-                    }
+                    console.log(`   ❌ Sin sucursal actual pero captura tiene branch_id: ${c.branch_id}`);
                     return false;
                 }
             };
@@ -8410,17 +8352,40 @@ const Reports = {
                 return;
             }
 
-            // Calcular totales con la misma lógica unificada usada en PDF/archivado
+            // Calcular totales
+            const totals = {
+                USD: 0,
+                MXN: 0,
+                CAD: 0
+            };
+            let totalQuantity = 0;
+
+            // Obtener tipos de cambio para conversión (prioriza el display)
             const exchangeRates = await this.getExchangeRatesForDate(selectedDate);
             const usdRate = exchangeRates?.usd || 18.0;
             const cadRate = exchangeRates?.cad || 13.0;
             console.log(`💱 Tipos de cambio usados para ${selectedDate}: USD=${usdRate}, CAD=${cadRate}`);
 
-            const summary = this.calculateCaptureCurrencyTotals(captures, usdRate, cadRate);
-            const totals = summary.totals;
-            const totalQuantity = summary.totalQuantity;
-            const totalSalesMXN = summary.totalSalesMXN;
-            console.log(`💱 Total ventas convertido a MXN para ${selectedDate}: $${totalSalesMXN.toFixed(2)}`);
+            captures.forEach(c => {
+                // Si hay múltiples pagos con monedas individuales, calcular desde los pagos
+                if (c.payments && Array.isArray(c.payments) && c.payments.length > 0) {
+                    c.payments.forEach(payment => {
+                        const amount = parseFloat(payment.amount) || 0;
+                        const currency = payment.currency || c.currency || 'MXN';
+                        totals[currency] = (totals[currency] || 0) + amount;
+                    });
+                } else {
+                    // Fallback: usar total y currency de la captura (compatibilidad)
+                let captureTotal = c.total || 0;
+                captureTotal = parseFloat(captureTotal) || 0;
+                    const currency = c.currency || 'MXN';
+                    totals[currency] = (totals[currency] || 0) + captureTotal;
+                }
+                totalQuantity += c.quantity || 1;
+            });
+            
+            // El total en MXN ya está calculado en cada captura (c.total), así que sumamos directamente
+            const totalSalesMXN = captures.reduce((sum, c) => sum + (parseFloat(c.total) || 0), 0);
 
             // Renderizar tabla
             let html = `
@@ -9291,13 +9256,35 @@ const Reports = {
 
             console.log(`💱 Tipo de cambio usado para ${captureDate}: USD=${usdRate}, CAD=${cadRate}`);
 
-            // 2. Calcular totales con helper unificado (misma lógica que vista/PDF/archivado)
-            const summary = this.calculateCaptureCurrencyTotals(captures, usdRate, cadRate);
-            const totals = summary.totals;
+            // 2. Calcular totales de ventas por moneda (desde pagos individuales si existen)
+            const totals = { USD: 0, MXN: 0, CAD: 0 };
+            captures.forEach(c => {
+                // Si hay múltiples pagos con monedas individuales, calcular desde los pagos
+                if (c.payments && Array.isArray(c.payments) && c.payments.length > 0) {
+                    c.payments.forEach(payment => {
+                        const amount = parseFloat(payment.amount) || 0;
+                        const currency = payment.currency || c.currency || 'MXN';
+                        totals[currency] = (totals[currency] || 0) + amount;
+                    });
+                } else {
+                    // Fallback: usar el total y currency de la captura (compatibilidad)
+                let captureTotal = c.total || 0;
+                captureTotal = parseFloat(captureTotal) || 0;
+                    const currency = c.currency || 'MXN';
+                    totals[currency] = (totals[currency] || 0) + captureTotal;
+                }
+            });
 
-            // 3. Total de ventas en MXN consistente
-            const totalSalesMXN = summary.totalSalesMXN;
-            console.log(`💱 Total ventas unificado para ${captureDate}: $${totalSalesMXN.toFixed(2)} MXN`);
+            // 3. Calcular el total en MXN desde las capturas (ya convertido en cada captura)
+            // Sumar todos los totales de las capturas que ya están en MXN
+            const totalSalesMXN = captures.reduce((sum, c) => {
+                return sum + (parseFloat(c.total) || 0);
+            }, 0);
+            
+            // También calcular desde conversión manual para verificación
+            const totalSalesMXNCalculated = totals.USD * usdRate + totals.MXN + totals.CAD * cadRate;
+            console.log(`💱 Total calculado desde conversión: $${totalSalesMXNCalculated.toFixed(2)} MXN`);
+            console.log(`💱 Total desde capturas (ya convertido): $${totalSalesMXN.toFixed(2)} MXN`);
 
             // 4. Calcular comisiones totales (vendedores + guías)
             // IMPORTANTE: Las comisiones deben calcularse sobre el monto en MXN
@@ -9309,7 +9296,38 @@ const Reports = {
             
             let totalCommissions = 0;
             for (const capture of captures) {
-                const captureTotalMXN = this.getCaptureAmountsInMXN(capture, usdRate, cadRate).totalMXN;
+                // Calcular el total de la captura en MXN desde los pagos individuales
+                let captureTotalMXN = 0;
+                
+                if (capture.payments && Array.isArray(capture.payments) && capture.payments.length > 0) {
+                    // Si hay múltiples pagos, convertir cada uno a MXN según su moneda
+                    capture.payments.forEach(payment => {
+                        const amount = parseFloat(payment.amount) || 0;
+                        const currency = payment.currency || capture.currency || 'MXN';
+                        
+                        let amountMXN = amount;
+                        if (currency === 'USD') {
+                            amountMXN = amount * usdRate;
+                        } else if (currency === 'CAD') {
+                            amountMXN = amount * cadRate;
+                        }
+                        // Si es MXN, ya está en MXN
+                        
+                        captureTotalMXN += amountMXN;
+                    });
+                } else {
+                    // Fallback: usar el total y currency de la captura (compatibilidad)
+                    let captureTotal = capture.total || 0;
+                captureTotal = parseFloat(captureTotal) || 0;
+                
+                if (capture.currency === 'USD') {
+                    captureTotalMXN = captureTotal * usdRate;
+                } else if (capture.currency === 'CAD') {
+                    captureTotalMXN = captureTotal * cadRate;
+                    } else {
+                        captureTotalMXN = captureTotal; // MXN
+                    }
+                }
                 
                 // Si es venta de calle, aplicar reglas especiales de calle (solo para vendedores)
                 if (capture.is_street && capture.seller_id && captureTotalMXN > 0 && capture.payment_method) {
@@ -9453,16 +9471,6 @@ const Reports = {
                 const branchIdsToProcess = effectiveBranchIds.length > 0 ? effectiveBranchIds : (includeGlobalCosts ? [null] : []);
                 
                 for (const branchId of branchIdsToProcess) {
-                    const normalizeCategory = (value) => (typeof Utils !== 'undefined' && Utils.normalizeCategoryKey)
-                        ? Utils.normalizeCategoryKey(value)
-                        : String(value || '').trim().toLowerCase().replace(/\s+/g, '_');
-                    const isOperationalCost = (category) => (typeof Utils !== 'undefined' && Utils.isOperationalCostCategory)
-                        ? Utils.isOperationalCostCategory(category)
-                        : (normalizeCategory(category) !== 'costo_ventas' &&
-                           normalizeCategory(category) !== 'comisiones' &&
-                           normalizeCategory(category) !== 'comisiones_bancarias' &&
-                           normalizeCategory(category) !== 'pago_llegadas');
-
                     // CRÍTICO: Filtro estricto por sucursal
                     // Si branchId es null (costos globales), solo incluir costos sin branch_id
                     // Si branchId tiene valor, SOLO incluir costos de esa sucursal (excluir globales)
@@ -9485,7 +9493,7 @@ const Reports = {
                         const isMonthly = c.period_type === 'monthly';
                         // Aceptar si tiene recurring=true O si tiene type='fijo' (para compatibilidad)
                         const isRecurring = c.recurring === true || c.recurring === 'true' || c.type === 'fijo';
-                        const isValidCategory = isOperationalCost(c.category);
+                        const isValidCategory = c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias';
                         return isMonthly && isRecurring && isValidCategory;
                     }));
                     console.log(`   📅 Costos mensuales encontrados: ${monthlyCosts.length} (únicos tras deduplicar recurrentes)`);
@@ -9513,7 +9521,7 @@ const Reports = {
                         // Para costos recurrentes semanales, aplicar si están en el mismo año
                         const isWeekly = c.period_type === 'weekly';
                         const isRecurring = c.recurring === true || c.recurring === 'true' || c.type === 'fijo';
-                        const isValidCategory = isOperationalCost(c.category);
+                        const isValidCategory = c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias';
                         const isSameYear = targetDate.getFullYear() === costDate.getFullYear();
                         return isWeekly && isRecurring && isValidCategory && isSameYear;
                     }));
@@ -9538,7 +9546,7 @@ const Reports = {
                     const annualCosts = this.deduplicateRecurringCosts(branchCosts.filter(c => {
                         const isAnnual = c.period_type === 'annual' || c.period_type === 'yearly';
                         const isRecurring = c.recurring === true || c.recurring === 'true' || c.type === 'fijo';
-                        const isValidCategory = isOperationalCost(c.category);
+                        const isValidCategory = c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias';
                         return isAnnual && isRecurring && isValidCategory;
                         // Removido el filtro de año porque los costos recurrentes anuales se aplican siempre
                         // que estén activos para ese año
@@ -9564,26 +9572,34 @@ const Reports = {
                         const costDate = c.date || c.created_at;
                         const costDateStr = costDate.split('T')[0];
                         return costDateStr === captureDate &&
-                               isOperationalCost(c.category) &&
+                               c.category !== 'pago_llegadas' &&
+                               c.category !== 'comisiones_bancarias' &&
                                (c.period_type === 'one_time' || c.period_type === 'daily' || !c.period_type);
                     });
                     for (const cost of variableCosts) {
-                        const amount = parseFloat(cost.amount) || 0;
-                        variableCostsDaily += amount;
-                        variableCostsDetail.push({
-                            category: cost.category || 'Sin categoría',
-                            description: cost.description || cost.notes || '',
-                            amount: amount
-                        });
+                        if (cost.category === 'comisiones_bancarias') {
+                            bankCommissions += (cost.amount || 0);
+                        } else {
+                            const amount = cost.amount || 0;
+                            variableCostsDaily += amount;
+                            variableCostsDetail.push({
+                                category: cost.category || 'Sin categoría',
+                                description: cost.description || cost.notes || '',
+                                amount: amount
+                            });
+                        }
                     }
                 }
             } catch (e) {
                 console.warn('No se pudieron obtener costos operativos:', e);
             }
 
-            // No aplicar porcentaje fijo automático cuando no hay comisiones registradas.
-            // Para mantener consistencia canónica entre Dashboard/Costos/Reportes,
-            // solo usar comisiones bancarias realmente persistidas.
+            // Si no hay comisiones bancarias registradas en cost_entries, aplicar 4.5% fijo sobre ventas (temporal)
+            const BANK_COMMISSION_FALLBACK_RATE = 4.5;
+            if (bankCommissions <= 0 && totalSalesMXN > 0) {
+                bankCommissions = totalSalesMXN * (BANK_COMMISSION_FALLBACK_RATE / 100);
+                console.log(`   Comisiones Bancarias (${BANK_COMMISSION_FALLBACK_RATE}% fijo sobre ventas): $${bankCommissions.toFixed(2)}`);
+            }
             
             // 8. Gastos de caja (retiros) del día
             // Los retiros de caja también son gastos operativos que deben incluirse
@@ -9625,7 +9641,7 @@ const Reports = {
                 
                 // Sumar retiros y agregar al detalle
                 for (const withdrawal of dayWithdrawals) {
-                    const amount = parseFloat(withdrawal.amount) || 0;
+                    const amount = withdrawal.amount || 0;
                     cashExpenses += amount;
                     const session = daySessions.find(s => s.id === withdrawal.session_id);
                     const branch = session?.branch_id ? branches.find(b => b.id === session.branch_id) : null;
@@ -9896,10 +9912,11 @@ const Reports = {
             const agencies = await DB.getAll('catalog_agencies') || [];
 
             // Obtener tipo de cambio del día (usar la fecha de las capturas)
-            const captureDate = (captures[0]?.original_report_date || captures[0]?.date || this.getLocalDateStr()).split('T')[0];
-            const exchangeRates = await this.getExchangeRatesForDate(captureDate);
-            const usdRate = exchangeRates?.usd || 18.0;
-            const cadRate = exchangeRates?.cad || 13.0;
+            const captureDate = captures[0]?.date || this.getLocalDateStr();
+            const exchangeRates = await DB.query('exchange_rates_daily', 'date', captureDate) || [];
+            const todayRate = exchangeRates[0] || { usd_to_mxn: 20.0, cad_to_mxn: 15.0 };
+            const usdRate = todayRate.usd_to_mxn || 20.0;
+            const cadRate = todayRate.cad_to_mxn || 15.0;
 
             // Calcular comisiones por vendedor y guía
             const sellerCommissions = {};
@@ -10558,22 +10575,18 @@ const Reports = {
                 return;
             }
 
-            // Calcular totales con flujo unificado
-            const exchangeRates = await this.getExchangeRatesForDate(selectedDate);
-            const usdRate = exchangeRates?.usd || 18.0;
-            const cadRate = exchangeRates?.cad || 13.0;
-            const summary = this.calculateCaptureCurrencyTotals(captures, usdRate, cadRate);
-            const totals = summary.totals;
+            // Calcular totales
+            const totals = { USD: 0, MXN: 0, CAD: 0 };
+            captures.forEach(c => {
+                const totalNum = parseFloat(c.total) || 0;
+                totals[c.currency] = (totals[c.currency] || 0) + totalNum;
+            });
 
             // Crear CSV
             let csv = 'Fecha,Hora,Sucursal,Vendedor,Guía,Agencia,Producto,Cantidad,Moneda,Total\n';
             captures.forEach(c => {
                 const time = new Date(c.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
-                const captureAmounts = this.getCaptureAmountsInMXN(c, usdRate, cadRate);
-                const currencyLabel = captureAmounts.isMixedCurrency
-                    ? 'MIXTO'
-                    : captureAmounts.currency;
-                csv += `${c.date},${time},"${c.branch_name || ''}","${c.seller_name || ''}","${c.guide_name || ''}","${c.agency_name || ''}","${c.product}",${c.quantity},${currencyLabel},${captureAmounts.totalMXN.toFixed(2)}\n`;
+                csv += `${c.date},${time},"${c.branch_name || ''}","${c.seller_name || ''}","${c.guide_name || ''}","${c.agency_name || ''}","${c.product}",${c.quantity},${c.currency},${(parseFloat(c.total) || 0).toFixed(2)}\n`;
             });
 
             csv += `\n,,RESUMEN\n`;
@@ -10612,7 +10625,7 @@ const Reports = {
             
             let captures = await DB.getAll('temp_quick_captures') || [];
             captures = captures.filter(c => {
-                const captureDate = c.original_report_date || c.date || '';
+                const captureDate = c.date || c.original_report_date || '';
                 return captureDate.split('T')[0] === normalizedSelectedDate;
             });
 
@@ -10629,22 +10642,23 @@ const Reports = {
             const cadRate = exchangeRatesInfo?.cad || 13.0;
             console.log(`💱 Tipos de cambio para archivado (${normalizedSelectedDate}): USD=${usdRate}, CAD=${cadRate}`);
 
-            const summary = this.calculateCaptureCurrencyTotals(captures, usdRate, cadRate);
-            const totals = summary.totals;
-            const totalQuantity = summary.totalQuantity;
+            const totals = { USD: 0, MXN: 0, CAD: 0 };
+            let totalQuantity = 0;
             let totalCOGS = 0;
 
             captures.forEach(c => {
+                totals[c.currency] = (totals[c.currency] || 0) + (parseFloat(c.total) || 0);
+                totalQuantity += c.quantity || 1;
                 totalCOGS += (parseFloat(c.merchandise_cost) || 0);
             });
 
-            const totalSalesMXN = summary.totalSalesMXN;
+            const totalSalesMXN = totals.USD * usdRate + totals.MXN + totals.CAD * cadRate;
 
             // Calcular comisiones
             const commissionRules = await DB.getAll('commission_rules') || [];
             let totalCommissions = 0;
             for (const capture of captures) {
-                const capTotal = this.getCaptureAmountsInMXN(capture, usdRate, cadRate).totalMXN;
+                const capTotal = parseFloat(capture.total) || 0;
                 if (capture.seller_id && capTotal > 0) {
                     const sellerRule = commissionRules.find(r => 
                         r.entity_type === 'seller' && r.entity_id === capture.seller_id
@@ -10756,7 +10770,10 @@ const Reports = {
                 console.warn('Error calculando costos operativos:', e);
             }
 
-            // No aplicar fallback porcentual fijo para evitar desalineación con Dashboard/Costos.
+            // Si no hay comisiones bancarias registradas, aplicar 4.5% fijo sobre ventas (temporal)
+            if (bankCommissions <= 0 && totalSalesMXN > 0) {
+                bankCommissions = totalSalesMXN * 0.045;
+            }
 
             const grossProfit = totalSalesMXN - totalCOGS - totalCommissions;
             const netProfit = grossProfit - totalArrivalCosts - totalOperatingCosts - bankCommissions;
@@ -11227,10 +11244,28 @@ const Reports = {
                 }
 
                 const time = new Date(c.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
-                const captureAmounts = this.getCaptureAmountsInMXN(c, usdRateForDisplay, cadRateForDisplay);
-                const originalAmount = captureAmounts.originalAmount;
-                const totalMXN = captureAmounts.totalMXN;
-                const currency = captureAmounts.currency;
+                let originalAmount = 0;
+                let totalMXN = parseFloat(c.total) || 0;
+                const currency = c.currency || 'MXN';
+                const capturePayments = this.normalizeCapturePayments(c);
+                if (capturePayments.length > 0) {
+                    let totalOriginal = 0;
+                    let totalMXNFromPayments = 0;
+                    capturePayments.forEach(payment => {
+                        const amount = parseFloat(payment.amount) || 0;
+                        const payCurrency = payment.currency || currency;
+                        totalOriginal += amount;
+                        if (payCurrency === 'USD') totalMXNFromPayments += amount * usdRateForDisplay;
+                        else if (payCurrency === 'CAD') totalMXNFromPayments += amount * cadRateForDisplay;
+                        else totalMXNFromPayments += amount;
+                    });
+                    originalAmount = totalOriginal;
+                    totalMXN = totalMXNFromPayments;
+                } else {
+                    if (currency === 'USD') originalAmount = totalMXN / usdRateForDisplay;
+                    else if (currency === 'CAD') originalAmount = totalMXN / cadRateForDisplay;
+                    else originalAmount = totalMXN;
+                }
                 capturesTotalMXN += totalMXN;
 
                 // Zebra striping
@@ -11255,9 +11290,7 @@ const Reports = {
                 doc.text((c.notes || '-').substring(0, 10), captCol6X, y + 5);
                 doc.text(String(c.quantity || 1), captCol7X, y + 5, { align: 'right' });
 
-                const currencyDisplay = captureAmounts.isMixedCurrency
-                    ? `MIXTO (${captureAmounts.nonZeroCurrencies.map(([cur, amount]) => `${cur} $${amount.toFixed(2)}`).join(' + ')})`
-                    : `${currency !== 'MXN' ? currency : 'MXN'} $${originalAmount.toFixed(2)}`;
+                const currencyDisplay = `${currency !== 'MXN' ? currency : 'MXN'} $${originalAmount.toFixed(2)}`;
                 doc.setTextColor(80, 80, 90);
                 doc.text(currencyDisplay, captCol8X + captCol8Width / 2, y + 5, { align: 'center', maxWidth: captCol8Width });
 
@@ -11267,9 +11300,7 @@ const Reports = {
 
                 doc.setFont('helvetica', 'normal');
                 doc.setTextColor(60, 60, 70);
-                const origText = captureAmounts.isMixedCurrency
-                    ? captureAmounts.nonZeroCurrencies.map(([cur, amount]) => `$${amount.toFixed(2)} ${cur}`).join(' + ')
-                    : (currency !== 'MXN' ? `$${originalAmount.toFixed(2)} ${currency}` : `$${originalAmount.toFixed(2)}`);
+                const origText = currency !== 'MXN' ? `$${originalAmount.toFixed(2)} ${currency}` : `$${originalAmount.toFixed(2)}`;
                 doc.text(origText, captCol10X + captCol10Width, y + 5, { align: 'right', maxWidth: captCol10Width });
                 doc.setTextColor(0, 0, 0);
 
@@ -11304,7 +11335,17 @@ const Reports = {
             const guideCommissions = {};
 
             for (const capture of captures) {
-                const captureTotalMXN = this.getCaptureAmountsInMXN(capture, usdRate, cadRate).totalMXN;
+                // Convertir total de captura a MXN
+                // IMPORTANTE: Asegurar que capture.total sea un número
+                const captureTotal = parseFloat(capture.total) || 0;
+                let captureTotalMXN = 0;
+                if (capture.currency === 'USD') {
+                    captureTotalMXN = captureTotal * usdRate;
+                } else if (capture.currency === 'CAD') {
+                    captureTotalMXN = captureTotal * cadRate;
+                } else {
+                    captureTotalMXN = captureTotal; // Ya está en MXN
+                }
 
                 if (capture.seller_id && captureTotalMXN > 0) {
                     if (!sellerCommissions[capture.seller_id]) {
@@ -11696,17 +11737,30 @@ const Reports = {
                     // Por ahora, verificar en settings si hay una comisión bancaria configurada por defecto
                     if (capture.payment_method && capture.payment_method !== 'cash') {
                         // Calcular comisión bancaria sobre el total convertido a MXN
-                        const captureTotalMXN = this.getCaptureAmountsInMXN(capture, usdRate, cadRate).totalMXN;
+                        // IMPORTANTE: Asegurar que capture.total sea un número
+                        const captureTotal = parseFloat(capture.total) || 0;
+                        let captureTotalMXN = 0;
+                        if (capture.currency === 'USD') {
+                            captureTotalMXN = captureTotal * usdRate;
+                        } else if (capture.currency === 'CAD') {
+                            captureTotalMXN = captureTotal * cadRate;
+                        } else {
+                            captureTotalMXN = captureTotal;
+                        }
                         
-                        // Buscar configuración de comisión bancaria; sin configuración, no estimar automáticamente
+                        // Buscar configuración de comisión bancaria; si no existe, usar 4.5% fijo (temporal)
                         const bankCommissionSetting = await DB.get('settings', 'bank_commission_default_rate');
-                        const bankCommissionRate = bankCommissionSetting?.value ? parseFloat(bankCommissionSetting.value) : 0;
+                        const bankCommissionRate = bankCommissionSetting?.value ? parseFloat(bankCommissionSetting.value) : 4.5;
                         if (bankCommissionRate > 0) {
                             bankCommissions += (captureTotalMXN * bankCommissionRate) / 100;
                         }
                     }
                 }
-                // No aplicar fallback porcentual fijo sobre ventas cuando faltan comisiones registradas.
+                // Si aún no hay comisiones bancarias (sin payment_method o sin capturas con tarjeta), aplicar 4.5% fijo sobre total ventas
+                const BANK_COMMISSION_FALLBACK_RATE = 4.5;
+                if (bankCommissions <= 0 && totalSalesMXN > 0) {
+                    bankCommissions = totalSalesMXN * (BANK_COMMISSION_FALLBACK_RATE / 100);
+                }
             } catch (e) {
                 console.warn('No se pudieron obtener costos operativos:', e);
             }
@@ -11867,20 +11921,23 @@ const Reports = {
                 return;
             }
 
-            // Calcular todos los datos del reporte con flujo homologado
-            const exchangeRates = await this.getExchangeRatesForDate(normalizedSelectedDate);
-            const usdRate = exchangeRates?.usd || 18.0;
-            const cadRate = exchangeRates?.cad || 13.0;
+            // Calcular todos los datos del reporte
+            const exchangeRates = await DB.query('exchange_rates_daily', 'date', normalizedSelectedDate) || [];
+            const todayRate = exchangeRates[0] || { usd_to_mxn: 20.0, cad_to_mxn: 15.0 };
+            const usdRate = todayRate.usd_to_mxn || 20.0;
+            const cadRate = todayRate.cad_to_mxn || 15.0;
 
-            const summary = this.calculateCaptureCurrencyTotals(captures, usdRate, cadRate);
-            const totals = summary.totals;
-            const totalQuantity = summary.totalQuantity;
-            const totalSalesMXN = summary.totalSalesMXN;
+            const totals = { USD: 0, MXN: 0, CAD: 0 };
+            let totalQuantity = 0;
             let totalCOGS = 0;
 
             captures.forEach(c => {
+                totals[c.currency] = (totals[c.currency] || 0) + (parseFloat(c.total) || 0);
+                totalQuantity += c.quantity || 1;
                 totalCOGS += (parseFloat(c.merchandise_cost) || 0);
             });
+
+            const totalSalesMXN = totals.USD * usdRate + totals.MXN + totals.CAD * cadRate;
 
             // Calcular comisiones (usar misma lógica que loadQuickCaptureProfits)
             // IMPORTANTE: Las comisiones deben calcularse sobre el monto en MXN
@@ -12125,9 +12182,9 @@ const Reports = {
                     });
                     for (const cost of variableCosts) {
                         if (cost.category === 'comisiones_bancarias') {
-                            bankCommissions += (parseFloat(cost.amount) || 0);
+                            bankCommissions += (cost.amount || 0);
                         } else {
-                            variableCostsDaily += (parseFloat(cost.amount) || 0);
+                            variableCostsDaily += (cost.amount || 0);
                         }
                     }
                 }
@@ -12169,7 +12226,10 @@ const Reports = {
                 console.warn('Error calculando costos operativos:', e);
             }
 
-            // No aplicar fallback porcentual fijo para evitar desalineación con Dashboard/Costos.
+            // Si no hay comisiones bancarias registradas, aplicar 4.5% fijo sobre ventas (temporal)
+            if (bankCommissions <= 0 && totalSalesMXN > 0) {
+                bankCommissions = totalSalesMXN * 0.045;
+            }
             
             // Total de costos operativos (variables + fijos)
             const totalOperatingCosts = variableCostsDaily + fixedCostsProrated;
@@ -13621,10 +13681,29 @@ const Reports = {
                 const time = c.created_at ? new Date(c.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '-';
                 
                 // Calcular valores originales y convertidos
-                const captureAmounts = this.getCaptureAmountsInMXN(c, usdRateForDisplay, cadRateForDisplay);
-                const originalAmount = captureAmounts.originalAmount;
-                const totalMXN = captureAmounts.totalMXN;
-                const currency = captureAmounts.currency;
+                let originalAmount = 0;
+                let totalMXN = parseFloat(c.total) || 0;
+                const currency = c.currency || 'MXN';
+                
+                const capturePayments = this.normalizeCapturePayments(c);
+                if (capturePayments.length > 0) {
+                    let totalOriginal = 0;
+                    let totalMXNFromPayments = 0;
+                    capturePayments.forEach(payment => {
+                        const amount = parseFloat(payment.amount) || 0;
+                        const payCurrency = payment.currency || currency;
+                        totalOriginal += amount;
+                        if (payCurrency === 'USD') totalMXNFromPayments += amount * usdRateForDisplay;
+                        else if (payCurrency === 'CAD') totalMXNFromPayments += amount * cadRateForDisplay;
+                        else totalMXNFromPayments += amount;
+                    });
+                    originalAmount = totalOriginal;
+                    totalMXN = totalMXNFromPayments;
+                } else {
+                    if (currency === 'USD') originalAmount = totalMXN / usdRateForDisplay;
+                    else if (currency === 'CAD') originalAmount = totalMXN / cadRateForDisplay;
+                    else originalAmount = totalMXN;
+                }
                 capturesTotalMXN += totalMXN;
 
                 if (index % 2 === 0) {
@@ -13649,9 +13728,7 @@ const Reports = {
                 doc.text((c.notes || '-').substring(0, 10), captCol6X, y + 5);
                 doc.text(String(c.quantity || 1), captCol7X, y + 5, { align: 'right' });
 
-                const currencyDisplay = captureAmounts.isMixedCurrency
-                    ? `MIXTO (${captureAmounts.nonZeroCurrencies.map(([cur, amount]) => `${cur} $${amount.toFixed(2)}`).join(' + ')})`
-                    : `${currency !== 'MXN' ? currency : 'MXN'} $${originalAmount.toFixed(2)}`;
+                const currencyDisplay = `${currency !== 'MXN' ? currency : 'MXN'} $${originalAmount.toFixed(2)}`;
                 doc.setTextColor(80, 80, 90);
                 doc.text(currencyDisplay, captCol8X + captCol8Width / 2, y + 5, { align: 'center', maxWidth: captCol8Width });
 
@@ -13661,9 +13738,7 @@ const Reports = {
 
                 doc.setFont('helvetica', 'normal');
                 doc.setTextColor(60, 60, 70);
-                const origText = captureAmounts.isMixedCurrency
-                    ? captureAmounts.nonZeroCurrencies.map(([cur, amount]) => `$${amount.toFixed(2)} ${cur}`).join(' + ')
-                    : (currency !== 'MXN' ? `$${originalAmount.toFixed(2)} ${currency}` : `$${originalAmount.toFixed(2)}`);
+                const origText = currency !== 'MXN' ? `$${originalAmount.toFixed(2)} ${currency}` : `$${originalAmount.toFixed(2)}`;
                 doc.text(origText, captCol10X + captCol10Width, y + 5, { align: 'right', maxWidth: captCol10Width });
                 doc.setTextColor(0, 0, 0);
 
@@ -14106,56 +14181,6 @@ const Reports = {
         }
 
         return [];
-    },
-
-    getCaptureAmountsInMXN(capture, usdRate = 18.0, cadRate = 13.0) {
-        const safeUsdRate = parseFloat(usdRate) || 18.0;
-        const safeCadRate = parseFloat(cadRate) || 13.0;
-        const captureCurrencyRaw = (capture?.currency || 'MXN').toUpperCase();
-        const captureCurrency = ['USD', 'MXN', 'CAD'].includes(captureCurrencyRaw) ? captureCurrencyRaw : 'MXN';
-
-        const totalsByCurrency = { USD: 0, MXN: 0, CAD: 0 };
-        let totalMXN = 0;
-
-        const payments = this.normalizeCapturePayments(capture);
-        if (payments.length > 0) {
-            payments.forEach(payment => {
-                const amount = parseFloat(payment?.amount) || 0;
-                const paymentCurrencyRaw = (payment?.currency || captureCurrency).toUpperCase();
-                const paymentCurrency = ['USD', 'MXN', 'CAD'].includes(paymentCurrencyRaw) ? paymentCurrencyRaw : 'MXN';
-
-                totalsByCurrency[paymentCurrency] += amount;
-                if (paymentCurrency === 'USD') totalMXN += amount * safeUsdRate;
-                else if (paymentCurrency === 'CAD') totalMXN += amount * safeCadRate;
-                else totalMXN += amount;
-            });
-        } else {
-            const captureTotal = parseFloat(capture?.total) || 0;
-            if (captureCurrency === 'USD') {
-                const originalAmount = parseFloat(capture?.original_amount) || (captureTotal / safeUsdRate);
-                totalsByCurrency.USD += originalAmount;
-                totalMXN += originalAmount * safeUsdRate;
-            } else if (captureCurrency === 'CAD') {
-                const originalAmount = parseFloat(capture?.original_amount) || (captureTotal / safeCadRate);
-                totalsByCurrency.CAD += originalAmount;
-                totalMXN += originalAmount * safeCadRate;
-            } else {
-                totalsByCurrency.MXN += captureTotal;
-                totalMXN += captureTotal;
-            }
-        }
-
-        const originalAmount = totalsByCurrency[captureCurrency] || 0;
-        const nonZeroCurrencies = Object.entries(totalsByCurrency).filter(([, amount]) => amount > 0.000001);
-
-        return {
-            currency: captureCurrency,
-            originalAmount,
-            totalMXN,
-            totalsByCurrency,
-            nonZeroCurrencies,
-            isMixedCurrency: nonZeroCurrencies.length > 1
-        };
     },
 
     calculateCaptureCurrencyTotals(captures, usdRate = 18.0, cadRate = 13.0) {
