@@ -18,23 +18,82 @@ const useSSL = process.env.DB_SSL === 'false'
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: useSSL,
-  max: 5, // Limitar a 5 conexiones máximas para evitar saturación en Railway
-  min: 1, // Solo 1 conexión mínima
-  idleTimeoutMillis: 30000, // Dar más margen para liberar conexiones
-  connectionTimeoutMillis: 20000, // Más tiempo para conectar
+  max: parseInt(process.env.DB_POOL_MAX || '5', 10),
+  min: parseInt(process.env.DB_POOL_MIN || '1', 10),
+  idleTimeoutMillis: parseInt(process.env.DB_IDLE_TIMEOUT_MS || '30000', 10),
+  connectionTimeoutMillis: parseInt(process.env.DB_CONNECT_TIMEOUT_MS || '20000', 10),
   keepAlive: true,
   keepAliveInitialDelayMillis: 10000,
-  statement_timeout: 60000, // Más tiempo para queries largas
-  query_timeout: 60000,
-  maxUses: 2000, // Reciclar conexiones más seguido
+  statement_timeout: parseInt(process.env.DB_STATEMENT_TIMEOUT_MS || '60000', 10),
+  query_timeout: parseInt(process.env.DB_QUERY_TIMEOUT_MS || '60000', 10),
+  maxUses: parseInt(process.env.DB_MAX_USES || '2000', 10),
 });
 
-const RETRY_BASE_MS = 600;
-const RETRY_MAX_MS = 2000;
-const DEFAULT_RETRIES = 1;
+const RETRY_BASE_MS = parseInt(process.env.DB_RETRY_BASE_MS || '600', 10);
+const RETRY_MAX_MS = parseInt(process.env.DB_RETRY_MAX_MS || '3000', 10);
+const DEFAULT_RETRIES = parseInt(process.env.DB_QUERY_RETRIES || '1', 10);
+const APP_QUERY_TIMEOUT_MS = parseInt(process.env.DB_APP_QUERY_TIMEOUT_MS || '60000', 10);
+const SLOW_QUERY_MS = parseInt(process.env.DB_SLOW_QUERY_MS || '1500', 10);
+
+const CB_QUEUE_LIMIT = parseInt(process.env.DB_POOL_QUEUE_LIMIT || '6', 10);
+const CB_FAILURE_THRESHOLD = parseInt(process.env.DB_CB_FAILURE_THRESHOLD || '10', 10);
+const CB_RECOVERY_MS = parseInt(process.env.DB_CB_RECOVERY_MS || '5000', 10);
 
 let consecutiveConnectionFailures = 0;
 let globalBackoffUntil = 0;
+
+const cb = {
+  state: 'CLOSED',
+  openedAt: 0,
+
+  check() {
+    if (this.state === 'CLOSED' && pool.waitingCount >= CB_QUEUE_LIMIT) {
+      this.trip(`pool queue saturation (${pool.waitingCount})`);
+    }
+
+    if (this.state === 'OPEN') {
+      if (Date.now() - this.openedAt >= CB_RECOVERY_MS) {
+        this.state = 'HALF_OPEN';
+        console.warn('[DB] circuit breaker -> HALF_OPEN');
+        return;
+      }
+
+      const err = new Error('Database temporarily unavailable. Please retry shortly.');
+      err.code = 'CIRCUIT_OPEN';
+      err.status = 503;
+      throw err;
+    }
+  },
+
+  trip(reason) {
+    if (this.state !== 'OPEN') {
+      this.state = 'OPEN';
+      this.openedAt = Date.now();
+      console.error(`[DB] circuit breaker -> OPEN (${reason})`);
+    }
+  },
+
+  success() {
+    if (this.state !== 'CLOSED') {
+      console.log('[DB] circuit breaker -> CLOSED');
+    }
+    this.state = 'CLOSED';
+    consecutiveConnectionFailures = 0;
+    globalBackoffUntil = 0;
+  },
+
+  failure() {
+    consecutiveConnectionFailures += 1;
+    if (this.state === 'HALF_OPEN' || consecutiveConnectionFailures >= CB_FAILURE_THRESHOLD) {
+      this.trip(`${consecutiveConnectionFailures} consecutive connection failures`);
+    }
+  }
+};
+
+const summarizeQuery = (text) => {
+  const oneLine = String(text || '').replace(/\s+/g, ' ').trim();
+  return oneLine.length > 180 ? `${oneLine.slice(0, 180)}...` : oneLine;
+};
 
 const isConnectionError = (error) => {
   const message = String(error?.message || '').toLowerCase();
@@ -65,6 +124,8 @@ const getPoolStats = () => ({
   waitingCount: pool.waitingCount
 });
 
+const isDbBusy = () => pool.waitingCount >= CB_QUEUE_LIMIT;
+
 // Manejo de errores de conexión mejorado
 pool.on('error', (err, client) => {
   // Solo loguear errores críticos, no todos los errores de conexión
@@ -92,14 +153,17 @@ if (process.env.DEBUG_DB === 'true') {
 }
 
 // Función para ejecutar queries con reintentos automáticos y logs detallados
-export const query = async (text, params, retries = 2, timeoutMs = null) => {
+export const query = async (text, params, retries = DEFAULT_RETRIES, timeoutMs = null) => {
   const start = Date.now();
   let lastError;
   const maxAttempts = Math.max(1, Number(retries ?? DEFAULT_RETRIES) || 0);
   const effectiveTimeout = Number.isFinite(Number(timeoutMs)) && Number(timeoutMs) > 0
     ? Number(timeoutMs)
-    : 60000; // 60 segundos por default
+    : APP_QUERY_TIMEOUT_MS;
+  const queryPreview = summarizeQuery(text);
   const now = Date.now();
+
+  cb.check();
 
   if (globalBackoffUntil > now) {
     const waitLeft = globalBackoffUntil - now;
@@ -118,10 +182,9 @@ export const query = async (text, params, retries = 2, timeoutMs = null) => {
         }, effectiveTimeout);
       }
 
-      // Log pool stats ANTES de ejecutar la query
       if (process.env.DEBUG_DB === 'true') {
         console.log('[DB] Antes de query', {
-          text: text?.slice?.(0, 100),
+          text: queryPreview,
           pool: getPoolStats(),
           attempt
         });
@@ -135,13 +198,11 @@ export const query = async (text, params, retries = 2, timeoutMs = null) => {
 
       if (timeoutId) clearTimeout(timeoutId);
       const duration = Date.now() - start;
-      consecutiveConnectionFailures = 0;
-      globalBackoffUntil = 0;
+      cb.success();
 
-      // Loguear queries lentas o en modo debug
-      if (duration > 1000 || process.env.DEBUG_DB === 'true') {
+      if (duration > SLOW_QUERY_MS || process.env.DEBUG_DB === 'true') {
         console.log('[DB] Query ejecutada', {
-          text: text?.slice?.(0, 100),
+          text: queryPreview,
           duration: `${duration}ms`,
           rows: res.rowCount,
           attempt,
@@ -161,15 +222,17 @@ export const query = async (text, params, retries = 2, timeoutMs = null) => {
         lastError = error;
       }
 
-      // Si es un error de conexión, reintentar
       if (isConnectionError(lastError)) {
-        consecutiveConnectionFailures += 1;
+        cb.failure();
       }
 
       if (isConnectionError(lastError) && attempt < maxAttempts) {
         const waitTime = calculateBackoff(attempt, consecutiveConnectionFailures);
         globalBackoffUntil = Date.now() + waitTime;
-        console.warn(`[DB] ⚠️ Error de conexión en query (intento ${attempt}/${maxAttempts}), reintentando en ${waitTime}ms...`, getPoolStats(), { text: text?.slice?.(0, 100) });
+        console.warn(`[DB] Error de conexión en query (intento ${attempt}/${maxAttempts}), reintentando en ${waitTime}ms...`, {
+          pool: getPoolStats(),
+          text: queryPreview
+        });
         await new Promise(resolve => setTimeout(resolve, waitTime));
         continue;
       }
@@ -179,15 +242,15 @@ export const query = async (text, params, retries = 2, timeoutMs = null) => {
         globalBackoffUntil = Date.now() + coolDown;
       }
 
-      // Si no es un error de conexión o se agotaron los reintentos, lanzar error
       if (attempt === maxAttempts) {
         console.error('[DB] Error ejecutando query después de reintentos:', {
           error: lastError.message,
-          code: lastError.code,
+          code: lastError.code || null,
           attempts: attempt,
           pool: getPoolStats(),
           connectionFailures: consecutiveConnectionFailures,
-          text: text?.slice?.(0, 100)
+          queueSaturated: isDbBusy(),
+          text: queryPreview
         });
       }
 
@@ -199,15 +262,23 @@ export const query = async (text, params, retries = 2, timeoutMs = null) => {
 };
 
 // Función para obtener un cliente del pool (para transacciones) con reintentos
-export const getClient = async (retries = 2) => {
+export const getClient = async (retries = DEFAULT_RETRIES) => {
+  cb.check();
   let lastError;
   const maxAttempts = Math.max(1, Number(retries ?? DEFAULT_RETRIES) || 0);
+  const now = Date.now();
+
+  if (globalBackoffUntil > now) {
+    const waitLeft = globalBackoffUntil - now;
+    const backoffError = new Error(`DB connection backoff active for ${waitLeft}ms`);
+    backoffError.code = 'DB_BACKOFF_ACTIVE';
+    throw backoffError;
+  }
   
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       const client = await pool.connect();
-      consecutiveConnectionFailures = 0;
-      globalBackoffUntil = 0;
+      cb.success();
       const originalQuery = client.query.bind(client);
       const originalRelease = client.release.bind(client);
       
@@ -246,7 +317,7 @@ export const getClient = async (retries = 2) => {
       
       // Si es un error de conexión, reintentar
       if (isConnectionError(error) && attempt < maxAttempts) {
-        consecutiveConnectionFailures += 1;
+        cb.failure();
         const waitTime = calculateBackoff(attempt, consecutiveConnectionFailures);
         console.warn(`⚠️ Error obteniendo cliente (intento ${attempt}/${maxAttempts}), reintentando en ${waitTime}ms...`);
         await new Promise(resolve => setTimeout(resolve, waitTime));
@@ -256,7 +327,7 @@ export const getClient = async (retries = 2) => {
       if (attempt === maxAttempts) {
         console.error('Error obteniendo cliente después de reintentos:', {
           error: error.message,
-          code: error.code,
+          code: error.code || null,
           attempts: attempt,
           pool: getPoolStats(),
           connectionFailures: consecutiveConnectionFailures
@@ -272,6 +343,13 @@ export const getClient = async (retries = 2) => {
 
 export const getDatabaseDiagnostics = () => ({
   pool: getPoolStats(),
+  breaker: {
+    state: cb.state,
+    openedAt: cb.openedAt || null,
+    queueLimit: CB_QUEUE_LIMIT,
+    failureThreshold: CB_FAILURE_THRESHOLD,
+    recoveryMs: CB_RECOVERY_MS
+  },
   connectionFailures: consecutiveConnectionFailures,
   backoffUntil: globalBackoffUntil || null,
   now: Date.now()
