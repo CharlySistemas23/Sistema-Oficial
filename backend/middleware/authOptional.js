@@ -36,6 +36,27 @@ const isProduction = process.env.NODE_ENV === 'production' || isRailway;
 const allowUnsafeFallbackAuth = !isProduction || process.env.ALLOW_UNSAFE_FALLBACK_AUTH === 'true';
 const requireTokenForMasterAdmin = isProduction && process.env.ALLOW_MASTER_ADMIN_HEADER_AUTH !== 'true';
 const AUTH_OPTIONAL_BUILD = 'auth-optional-hotfix-2026-03-13-01';
+const AUTH_DB_BACKOFF_MS = parseInt(process.env.AUTH_DB_BACKOFF_MS || '2000', 10);
+
+let authDbBackoffUntil = 0;
+
+const isDbConnectivityIssue = (error) => {
+  const message = String(error?.message || '').toLowerCase();
+  return (
+    error?.code === 'DB_BACKOFF_ACTIVE' ||
+    error?.code === 'CIRCUIT_OPEN' ||
+    error?.code === 'ETIMEDOUT' ||
+    error?.code === 'ECONNREFUSED' ||
+    message.includes('timeout exceeded when trying to connect') ||
+    message.includes('connection')
+  );
+};
+
+const setAuthDbBackoff = () => {
+  authDbBackoffUntil = Date.now() + AUTH_DB_BACKOFF_MS;
+};
+
+const isAuthDbBackoffActive = () => authDbBackoffUntil > Date.now();
 
 console.log(`🔧 authOptional cargado: ${AUTH_OPTIONAL_BUILD}`);
 
@@ -57,6 +78,10 @@ export const authenticateOptional = async (req, res, next) => {
     const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
 
     if (token) {
+      if (isAuthDbBackoffActive() && !allowUnsafeFallbackAuth) {
+        return res.status(503).json({ error: 'Base de datos no disponible temporalmente', code: 'DB_UNAVAILABLE' });
+      }
+
       const secret = process.env.JWT_SECRET;
       if (!secret || typeof secret !== 'string') {
         console.error('JWT_SECRET no configurado en variables de entorno');
@@ -92,9 +117,13 @@ export const authenticateOptional = async (req, res, next) => {
                 setCachedUser(token, user);
               }
             } catch (dbError) {
-              // ⚡ DB TIMEOUT RESILIENCE: Si la BD falla, permanecer sin usuario pero sin bloquear
-              // El usuario puede hacer operaciones sin auth (cache-first fallback)
-              console.warn('⚠️ Auth DB timeout/down (fallback to cache-first):', dbError?.message || dbError);
+              if (isDbConnectivityIssue(dbError)) {
+                setAuthDbBackoff();
+                if (!allowUnsafeFallbackAuth) {
+                  return res.status(503).json({ error: 'Base de datos no disponible temporalmente', code: 'DB_UNAVAILABLE' });
+                }
+              }
+              console.warn('⚠️ Auth DB timeout/down:', dbError?.message || dbError);
             }
           }
 
@@ -153,6 +182,10 @@ export const authenticateOptional = async (req, res, next) => {
     const branchId = req.headers['x-branch-id'] || req.query?.branch_id || req.body?.branch_id;
     
     if (username) {
+      if (isAuthDbBackoffActive() && !allowUnsafeFallbackAuth) {
+        return res.status(503).json({ error: 'Base de datos no disponible temporalmente', code: 'DB_UNAVAILABLE' });
+      }
+
       try {
         // ⚡ Same timeout as token auth - fail fast
         const userResult = await query(
@@ -225,8 +258,13 @@ export const authenticateOptional = async (req, res, next) => {
           return next();
         }
       } catch (dbError) {
-        // ⚡ Si username auth falla, continuar sin usuario
-        console.warn('⚠️ [Username Auth Timeout] BD no respondió, continuando sin auth:', dbError?.message || dbError);
+        if (isDbConnectivityIssue(dbError)) {
+          setAuthDbBackoff();
+          if (!allowUnsafeFallbackAuth) {
+            return res.status(503).json({ error: 'Base de datos no disponible temporalmente', code: 'DB_UNAVAILABLE' });
+          }
+        }
+        console.warn('⚠️ [Username Auth Timeout] BD no respondió:', dbError?.message || dbError);
       }
     }
 
