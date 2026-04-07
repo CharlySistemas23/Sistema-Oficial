@@ -698,6 +698,19 @@ const Dashboard = {
                     total_passengers: todayPassengers || 0
                 };
             }
+
+            // Sanity check: si ProfitCalculator devolvió revenue=0 pero hay ventas reales del día,
+            // override con todayTotal (ya calculado correctamente a partir de todaySales).
+            // Esto ocurre cuando branch_id en IndexedDB no coincide con el branchId actual.
+            if (dailyProfit.revenue === 0 && todayTotal > 0) {
+                dailyProfit.revenue = todayTotal;
+                // Recalcular utilidades con el ingreso correcto
+                dailyProfit.gross_profit = todayTotal - dailyProfit.merchandise_cost - dailyProfit.commissions;
+                dailyProfit.net_profit = dailyProfit.gross_profit
+                    - dailyProfit.arrival_costs
+                    - dailyProfit.operating_costs
+                    - dailyProfit.bank_commissions;
+            }
             
             const monthTotal = thisMonthSales.reduce((sum, s) => sum + (Utils.getSaleTotal ? Utils.getSaleTotal(s) : (parseFloat(s.total) || 0)), 0);
             const lastMonthTotal = lastMonthSales.reduce((sum, s) => sum + (Utils.getSaleTotal ? Utils.getSaleTotal(s) : (parseFloat(s.total) || 0)), 0);
