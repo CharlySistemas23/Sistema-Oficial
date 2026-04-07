@@ -1952,7 +1952,7 @@ const Reports = {
         const avgTicket = completedSales.length > 0
             ? (hasPassengerData ? totalSales / totalPassengers : totalSales / completedSales.length)
             : 0;
-        const closeRate = hasPassengerData && totalPassengers > 0
+        let closeRate = hasPassengerData && totalPassengers > 0
             ? (completedSales.length / totalPassengers) * 100
             : 0;
 
@@ -2044,7 +2044,11 @@ const Reports = {
                        (branchId === null || !branchId || a.branch_id === branchId || !a.branch_id) &&
                        a.passengers > 0 && a.units > 0;
             });
-            costBreakdown.arrivals = periodArrivals.reduce((sum, a) => sum + (a.arrival_fee || a.calculated_fee || 0), 0);
+            const periodPassengers = periodArrivals.reduce((sum, a) => sum + (parseInt(a.passengers) || 0), 0);
+            if (periodPassengers > 0) {
+                closeRate = (completedSales.length / periodPassengers) * 100;
+            }
+            costBreakdown.arrivals = periodArrivals.reduce((sum, a) => sum + (parseFloat(a.arrival_fee || a.calculated_fee) || 0), 0);
             
             // Obtener costos operativos del período
             if (typeof Costs !== 'undefined') {
@@ -2057,13 +2061,13 @@ const Reports = {
                 // Desglose de costos operativos
             costBreakdown.fixed = reportCosts
                     .filter(c => c.type === 'fijo' && c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias')
-                .reduce((sum, c) => sum + (c.amount || 0), 0);
+                .reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0);
             costBreakdown.variable = reportCosts
                 .filter(c => c.type === 'variable' && c.category !== 'costo_ventas' && c.category !== 'comisiones' && c.category !== 'comisiones_bancarias' && c.category !== 'pago_llegadas')
-                .reduce((sum, c) => sum + (c.amount || 0), 0);
+                .reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0);
             costBreakdown.bankCommissions = reportCosts
                 .filter(c => c.category === 'comisiones_bancarias')
-                .reduce((sum, c) => sum + (c.amount || 0), 0);
+                .reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0);
             }
         }
         
