@@ -509,25 +509,29 @@ const Dashboard = {
             let dailyProfit = null;
             try {
                 // Intentar obtener reporte existente primero
-                const profitReports = await DB.query('daily_profit_reports', 'date', todayStr) || [];
-                const todayProfit = !viewAllBranches
-                    ? profitReports.find(p => p.branch_id === branchId || !p.branch_id)
-                    : null; // Vista consolidada: no usar reporte de una sola sucursal
-                
-                const revenue = (todayProfit?.revenue_sales_total ?? todayProfit?.revenue) || 0;
-                const operatingCosts = (todayProfit?.fixed_costs_daily || 0) + (todayProfit?.variable_costs_daily || 0);
-                const isReportAnomalous = (revenue === 0 && operatingCosts > 0) ||
-                    (revenue > 0 && operatingCosts > revenue * 3);
-
-                if (isReportAnomalous && todayProfit?.id) {
-                    try {
-                        await DB.delete('daily_profit_reports', todayProfit.id);
-                    } catch (e) {
-                        console.warn('Error eliminando reporte anómalo:', e);
+                // Envolver en try/catch propio: el store daily_profit_reports puede no existir en el browser
+                let todayProfit = null;
+                try {
+                    const profitReports = await DB.query('daily_profit_reports', 'date', todayStr) || [];
+                    todayProfit = !viewAllBranches
+                        ? profitReports.find(p => p.branch_id === branchId || !p.branch_id)
+                        : null;
+                    if (todayProfit) {
+                        const revenue = (todayProfit?.revenue_sales_total ?? todayProfit?.revenue) || 0;
+                        const operatingCosts = (todayProfit?.fixed_costs_daily || 0) + (todayProfit?.variable_costs_daily || 0);
+                        const isReportAnomalous = (revenue === 0 && operatingCosts > 0) ||
+                            (revenue > 0 && operatingCosts > revenue * 3);
+                        if (isReportAnomalous) {
+                            try { await DB.delete('daily_profit_reports', todayProfit.id); } catch (_) {}
+                            todayProfit = null;
+                        }
                     }
+                } catch (_dbErr) {
+                    // El store o índice no existe; continuar con cálculo manual
+                    todayProfit = null;
                 }
 
-                if (todayProfit && !viewAllBranches && !isReportAnomalous) {
+                if (todayProfit && !viewAllBranches) {
                     // Usar reporte existente si está disponible y no es sospechoso
                     dailyProfit = {
                         revenue: todayProfit.revenue_sales_total || todayProfit.revenue || 0,
