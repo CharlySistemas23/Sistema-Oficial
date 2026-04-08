@@ -1192,23 +1192,28 @@ const Costs = {
             
             let generated = 0;
             
+            // Clave de deduplicación: evita que múltiples entradas históricas de la misma
+            // categoría+sucursal generen varias copias en la misma ejecución
+            const processedKeys = new Set();
+            
             for (const cost of recurringCosts) {
-                const costDate = new Date(cost.date || cost.created_at);
-                const costMonth = costDate.getMonth();
-                const costYear = costDate.getFullYear();
-                
                 if (cost.period_type === 'monthly') {
-                    // Verificar si ya existe el costo del mes actual
-                    const existing = allCosts.find(c => 
-                        c.category === cost.category &&
-                        c.branch_id === cost.branch_id &&
-                        c.period_type === 'monthly' &&
-                        c.recurring === true &&
-                        c.auto_generate === true
-                    );
+                    const key = `monthly_${cost.category}_${cost.branch_id || 'null'}_${cost.amount}`;
+                    if (processedKeys.has(key)) continue;
+                    processedKeys.add(key);
                     
-                    if (!existing || (existing && new Date(existing.date || existing.created_at).getMonth() !== currentMonth)) {
-                        // Generar costo del mes actual
+                    // Verificar si YA existe el costo del MES Y AÑO actual (check completo de fecha)
+                    const existing = allCosts.find(c => {
+                        const d = new Date(c.date || c.created_at);
+                        return c.category === cost.category &&
+                               c.branch_id === cost.branch_id &&
+                               c.period_type === 'monthly' &&
+                               c.recurring === true &&
+                               d.getMonth() === currentMonth &&
+                               d.getFullYear() === currentYear;
+                    });
+                    
+                    if (!existing) {
                         const newCost = {
                             id: Utils.generateId(),
                             type: cost.type,
@@ -1223,14 +1228,18 @@ const Costs = {
                             created_at: new Date().toISOString(),
                             sync_status: 'pending'
                         };
-                        await DB.add('cost_entries', newCost);
+                        // DB.put en vez de DB.add para evitar duplicados en IDB si se llama más de una vez
+                        await DB.put('cost_entries', newCost);
                         await SyncManager.addToQueue('cost_entry', newCost.id);
+                        allCosts.push(newCost); // Actualizar memoria para que el check de las siguientes iteraciones lo vea
                         generated++;
                     }
                 } else if (cost.period_type === 'weekly') {
-                    // Verificar si ya existe el costo de la semana actual
                     const weekStart = this.getWeekStart(today);
                     const weekStartStr = Utils.formatDate(weekStart, 'YYYY-MM-DD');
+                    const key = `weekly_${cost.category}_${cost.branch_id || 'null'}_${weekStartStr}`;
+                    if (processedKeys.has(key)) continue;
+                    processedKeys.add(key);
                     
                     const existing = allCosts.find(c => {
                         const cDate = new Date(c.date || c.created_at);
@@ -1257,8 +1266,9 @@ const Costs = {
                             created_at: new Date().toISOString(),
                             sync_status: 'pending'
                         };
-                        await DB.add('cost_entries', newCost);
+                        await DB.put('cost_entries', newCost);
                         await SyncManager.addToQueue('cost_entry', newCost.id);
+                        allCosts.push(newCost); // Actualizar memoria
                         generated++;
                     }
                 }
