@@ -34,6 +34,11 @@ const Costs = {
         // Luego aplicaremos el filtro manualmente para tener control total
         let costs = await DB.getAll('cost_entries') || [];
 
+        // Excluir plantillas de costos recurrentes (recurring:true + auto_generate:true sin generated_from).
+        // Estas son solo DEFINICIONES — sus instancias generadas (auto_generate:true, generated_from:id)
+        // son los gastos reales que sí deben aparecer en los totales.
+        costs = costs.filter(c => !(c.recurring === true && c.auto_generate === true && !c.generated_from));
+
         // Normalizar branch_id para comparación flexible (case-insensitive para compatibilidad)
         const normalizedBranchId = branchId ? String(branchId).trim().toLowerCase() : null;
 
@@ -91,6 +96,13 @@ const Costs = {
             }
             
             this.setupUI();
+            // Limpiar entradas recurrentes duplicadas (arrastradas de bug previo) — solo una vez por sesión
+            if (!sessionStorage.getItem('recurring_cleanup_done')) {
+                try {
+                    await this.cleanupDuplicateRecurringCosts();
+                    sessionStorage.setItem('recurring_cleanup_done', '1');
+                } catch (_) {}
+            }
             await this.loadTab('costs');
             this.initialized = true;
         
@@ -1203,12 +1215,13 @@ const Costs = {
                     processedKeys.add(key);
                     
                     // Verificar si YA existe el costo del MES Y AÑO actual (check completo de fecha)
+                    // Nota: las instancias generadas tienen recurring:false, por eso no se filtra por recurring
                     const existing = allCosts.find(c => {
                         const d = new Date(c.date || c.created_at);
                         return c.category === cost.category &&
                                c.branch_id === cost.branch_id &&
                                c.period_type === 'monthly' &&
-                               c.recurring === true &&
+                               c.auto_generate === true &&
                                d.getMonth() === currentMonth &&
                                d.getFullYear() === currentYear;
                     });
@@ -1222,8 +1235,9 @@ const Costs = {
                             branch_id: cost.branch_id,
                             date: `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`,
                             period_type: 'monthly',
-                            recurring: true,
-                            auto_generate: true,
+                            recurring: false,       // instancia generada, NO es plantilla
+                            auto_generate: true,    // marca para deduplicación
+                            generated_from: cost.id, // referencia a la plantilla original
                             notes: cost.notes || '',
                             created_at: new Date().toISOString(),
                             sync_status: 'pending'
@@ -1247,7 +1261,7 @@ const Costs = {
                         return c.category === cost.category &&
                                c.branch_id === cost.branch_id &&
                                c.period_type === 'weekly' &&
-                               c.recurring === true &&
+                               c.auto_generate === true &&
                                Utils.formatDate(cWeekStart, 'YYYY-MM-DD') === weekStartStr;
                     });
                     
@@ -1260,8 +1274,9 @@ const Costs = {
                             branch_id: cost.branch_id,
                             date: weekStartStr,
                             period_type: 'weekly',
-                            recurring: true,
-                            auto_generate: true,
+                            recurring: false,       // instancia generada, NO es plantilla
+                            auto_generate: true,    // marca para deduplicación
+                            generated_from: cost.id,
                             notes: cost.notes || '',
                             created_at: new Date().toISOString(),
                             sync_status: 'pending'
@@ -1279,6 +1294,76 @@ const Costs = {
         } catch (e) {
             console.error('Error generating recurring costs:', e);
             Utils.showNotification('Error al generar costos recurrentes', 'error');
+        }
+    },
+
+    /**
+     * Elimina entradas duplicadas de costos recurrentes en IndexedDB.
+     * Mantiene solo UNA entrada por (categoría + sucursal + mes + año) para mensuales
+     * y por (categoría + sucursal + semana) para semanales.
+     */
+    async cleanupDuplicateRecurringCosts() {
+        try {
+            const allCosts = await DB.getAll('cost_entries') || [];
+            const generated = allCosts.filter(c => c.auto_generate === true);
+            if (generated.length === 0) return;
+
+            const toDelete = new Set();
+            const monthlyGroup = {};
+            const weeklyGroup = {};
+
+            for (const c of generated) {
+                const d = new Date(c.date || c.created_at);
+                if (isNaN(d.getTime())) continue;
+
+                if (c.period_type === 'monthly') {
+                    const key = `${c.category}|${c.branch_id || ''}|${c.amount}|${d.getFullYear()}|${d.getMonth()}`;
+                    if (!monthlyGroup[key]) monthlyGroup[key] = [];
+                    monthlyGroup[key].push(c);
+                } else if (c.period_type === 'weekly') {
+                    const weekStart = this.getWeekStart(d);
+                    const ws = Utils.formatDate(weekStart, 'YYYY-MM-DD');
+                    const key = `${c.category}|${c.branch_id || ''}|${c.amount}|${ws}`;
+                    if (!weeklyGroup[key]) weeklyGroup[key] = [];
+                    weeklyGroup[key].push(c);
+                }
+            }
+
+            const dedup = (group) => {
+                for (const entries of Object.values(group)) {
+                    if (entries.length <= 1) continue;
+                    // Mantener el más reciente, eliminar el resto
+                    entries.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+                    for (let i = 1; i < entries.length; i++) {
+                        toDelete.add(entries[i].id);
+                    }
+                }
+            };
+            dedup(monthlyGroup);
+            dedup(weeklyGroup);
+
+            if (toDelete.size === 0) return;
+
+            console.warn(`🧹 Limpiando ${toDelete.size} costos recurrentes duplicados...`);
+            for (const id of toDelete) {
+                try {
+                    await DB.delete('cost_entries', id);
+                    // Registrar eliminación para que SyncManager la propague al backend
+                    if (typeof SyncManager !== 'undefined') {
+                        try {
+                            await DB.put('sync_deleted_items', {
+                                id, entity_type: 'cost_entry',
+                                deleted_at: new Date().toISOString(),
+                                metadata: { logical_cleanup: true }
+                            });
+                            await SyncManager.addToQueue('cost_entry', id, 'delete');
+                        } catch (_) {}
+                    }
+                } catch (_) {}
+            }
+            console.log(`✅ Limpieza completada. Eliminados: ${toDelete.size} duplicados.`);
+        } catch (e) {
+            console.error('Error en cleanupDuplicateRecurringCosts:', e);
         }
     },
 
