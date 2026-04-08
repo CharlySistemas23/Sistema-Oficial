@@ -2025,13 +2025,16 @@ const Reports = {
         
         if (completedSales.length > 0) {
             // Obtener fechas del reporte
-            const dates = completedSales.map(s => String(s.created_at || '').split('T')[0]).filter(Boolean).sort();
-            const dateFrom = dates[0];
-            const dateTo = dates[dates.length - 1];
+            // Usar el rango de fechas del formulario (fuente de verdad para costos del período)
+            const costsDateFrom = dateFrom || (completedSales.map(s => String(s.created_at || '').split('T')[0]).filter(Boolean).sort()[0]);
+            const costsDateTo = dateTo || (completedSales.map(s => String(s.created_at || '').split('T')[0]).filter(Boolean).sort().slice(-1)[0]);
             
-            // Obtener branchId del filtro o de las ventas
-            const branchId = branchFilterValue && branchFilterValue !== 'all' ? branchFilterValue : 
-                           (branchIdForBanner || (sales.length > 0 ? sales[0].branch_id : null));
+            // branchId para costos: usar SOLO el filtro del formulario (branchIdForBanner ya maneja
+            // null para "todas las sucursales" y un ID específico para sucursal concreta).
+            // No usar sales[0].branch_id como fallback: si es vista consolidada debe ser null.
+            const branchId = (branchFilterValue && branchFilterValue !== 'all')
+                ? branchFilterValue
+                : branchIdForBanner;
             
             // Obtener llegadas del período
             const allArrivals = await DB.getAll('agency_arrivals', null, null, { 
@@ -2040,7 +2043,7 @@ const Reports = {
             }) || [];
             const periodArrivals = allArrivals.filter(a => {
                 const arrivalDate = a.date || a.created_at?.split('T')[0];
-                return arrivalDate >= dateFrom && arrivalDate <= dateTo &&
+                return arrivalDate >= costsDateFrom && arrivalDate <= costsDateTo &&
                        (branchId === null || !branchId || a.branch_id === branchId) &&
                        a.passengers > 0 && a.units > 0;
             });
@@ -2054,8 +2057,8 @@ const Reports = {
             if (typeof Costs !== 'undefined') {
             const reportCosts = await Costs.getFilteredCosts({
                 branchId: branchId || null,
-                dateFrom: dateFrom,
-                dateTo: dateTo
+                dateFrom: costsDateFrom,
+                dateTo: costsDateTo
             });
             
                 // Desglose de costos operativos
