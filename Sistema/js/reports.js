@@ -869,7 +869,7 @@ const Reports = {
         const completedSales = sales.filter(s => (typeof Utils !== 'undefined' && Utils.isSaleCompleted ? Utils.isSaleCompleted(s) : (s.status === 'completada' || s.status === 'completed')));
         
         const totalSales = completedSales.reduce((sum, s) => sum + (s.total || 0), 0);
-        const totalPassengers = completedSales.reduce((sum, s) => sum + (s.passengers || 1), 0);
+        const totalPassengers = completedSales.reduce((sum, s) => sum + (parseInt(s.passengers) || 0), 0);
         const avgTicket = totalPassengers > 0 ? totalSales / totalPassengers : 0;
 
         // Obtener costos del mes actual
@@ -885,7 +885,7 @@ const Reports = {
                 dateTo: Utils.formatDate(monthEnd, 'YYYY-MM-DD')
             });
             
-            totalCosts = monthCosts.reduce((sum, c) => sum + (c.amount || 0), 0);
+            totalCosts = monthCosts.reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0);
         }
 
         const branches = await DB.getAll('catalog_branches') || [];
@@ -1948,7 +1948,7 @@ const Reports = {
         const hasPassengerData = passengerValues.length > 0;
         const totalPassengers = hasPassengerData
             ? passengerValues.reduce((sum, v) => sum + v, 0)
-            : completedSales.length;
+            : 0; // Sin datos de pasajeros en ventas — no usar conteo de ventas como sustituto
         const avgTicket = completedSales.length > 0
             ? (hasPassengerData ? totalSales / totalPassengers : totalSales / completedSales.length)
             : 0;
