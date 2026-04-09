@@ -1946,9 +1946,9 @@ const Reports = {
         const totalSales = completedSales.reduce((sum, s) => sum + toNumber(s.total), 0);
         const passengerValues = completedSales.map(s => toNumber(s.passengers)).filter(v => v > 0);
         const hasPassengerData = passengerValues.length > 0;
-        const totalPassengers = hasPassengerData
+        let totalPassengers = hasPassengerData
             ? passengerValues.reduce((sum, v) => sum + v, 0)
-            : 0; // Sin datos de pasajeros en ventas — no usar conteo de ventas como sustituto
+            : 0; // Sin datos de pasajeros en ventas — se actualiza con llegadas del período más abajo
         const avgTicket = completedSales.length > 0
             ? (hasPassengerData ? totalSales / totalPassengers : totalSales / completedSales.length)
             : 0;
@@ -2045,11 +2045,13 @@ const Reports = {
                 const arrivalDate = a.date || a.created_at?.split('T')[0];
                 return arrivalDate >= costsDateFrom && arrivalDate <= costsDateTo &&
                        (branchId === null || !branchId || a.branch_id === branchId) &&
-                       a.passengers > 0 && a.units > 0;
+                       a.passengers > 0;
             });
             const periodPassengers = periodArrivals.reduce((sum, a) => sum + (parseInt(a.passengers) || 0), 0);
             if (periodPassengers > 0) {
                 closeRate = (completedSales.length / periodPassengers) * 100;
+                // Si las ventas no tienen campo pasajeros, usar total de llegadas para mostrar en reporte
+                if (!hasPassengerData) totalPassengers = periodPassengers;
             }
             costBreakdown.arrivals = periodArrivals.reduce((sum, a) => sum + (parseFloat(a.arrival_fee || a.calculated_fee) || 0), 0);
             
@@ -2070,6 +2072,10 @@ const Reports = {
                 .reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0);
             costBreakdown.bankCommissions = reportCosts
                 .filter(c => c.category === 'comisiones_bancarias')
+                .reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0);
+            // pago_llegadas registrado en Costos se suma al desglose de Llegadas (no va en Fijo ni Variable)
+            costBreakdown.arrivals += reportCosts
+                .filter(c => c.category === 'pago_llegadas')
                 .reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0);
             }
         }
