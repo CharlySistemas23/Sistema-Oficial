@@ -241,7 +241,13 @@ const Branches = {
 
                                 let serverBranch = null;
                                 if (localBranch.name && serverBranchesCache.length > 0) {
-                                    serverBranch = serverBranchesCache.find(b => b.name === localBranch.name);
+                                    const localNameNorm = String(localBranch.name).trim().toLowerCase();
+                                    const localCodeNorm = String(localBranch.code || '').trim().toLowerCase();
+                                    // Match case-insensitive por nombre O código para evitar duplicados con distinto capitalizado
+                                    serverBranch = serverBranchesCache.find(b =>
+                                        String(b.name || '').trim().toLowerCase() === localNameNorm ||
+                                        (localCodeNorm && String(b.code || '').trim().toLowerCase() === localCodeNorm)
+                                    );
                                 }
                                 
                                 if (serverBranch && serverBranch.id) {
