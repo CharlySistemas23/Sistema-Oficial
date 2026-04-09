@@ -492,7 +492,12 @@ var BranchManager = window.BranchManager || {
                     }
                 }
                 
-                const activeBranches = branches.filter(b => b.active !== false);
+                // Deduplicar por id antes de filtrar (evita botones duplicados si IDB tiene entradas repetidas)
+                const uniqueBranchesMap = new Map();
+                for (const b of branches) {
+                    if (!uniqueBranchesMap.has(b.id)) uniqueBranchesMap.set(b.id, b);
+                }
+                const activeBranches = [...uniqueBranchesMap.values()].filter(b => b.active !== false);
                 
                 // Mostrar botones siempre para master_admin (incluso si solo hay 1)
                 if (activeBranches.length > 0) {
