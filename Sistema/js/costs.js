@@ -34,10 +34,7 @@ const Costs = {
         // Luego aplicaremos el filtro manualmente para tener control total
         let costs = await DB.getAll('cost_entries') || [];
 
-        // Excluir plantillas de costos recurrentes (recurring:true + auto_generate:true sin generated_from).
-        // Estas son solo DEFINICIONES — sus instancias generadas (auto_generate:true, generated_from:id)
-        // son los gastos reales que sí deben aparecer en los totales.
-        costs = costs.filter(c => !(c.recurring === true && c.auto_generate === true && !c.generated_from));
+        // No hay filtro de plantillas aquí — la deduplicación se aplica al final del bloque.
 
         // Normalizar branch_id para comparación flexible (case-insensitive para compatibilidad)
         const normalizedBranchId = branchId ? String(branchId).trim().toLowerCase() : null;
@@ -74,6 +71,22 @@ const Costs = {
         if (category) {
             costs = costs.filter(c => c.category === category);
         }
+
+        // Deduplicar entradas auto-generadas: mismo (categoria+sucursal+monto+mes) cuenta una sola vez.
+        // Esto limpia duplicados del bug previo de generateRecurringCosts sin perder gastos reales.
+        const manualCosts = costs.filter(c => !c.auto_generate);
+        const autoCosts = costs.filter(c => c.auto_generate);
+        const seen = new Map();
+        for (const c of autoCosts) {
+            const d = new Date(c.date || c.created_at);
+            const periodKey = isNaN(d.getTime()) ? 'nodate' : `${d.getFullYear()}-${d.getMonth()}`;
+            const key = `${c.category}|${c.branch_id || ''}|${c.amount}|${periodKey}`;
+            const existing = seen.get(key);
+            if (!existing || new Date(c.created_at) > new Date(existing.created_at)) {
+                seen.set(key, c);
+            }
+        }
+        costs = [...manualCosts, ...seen.values()];
 
         return costs;
     },
