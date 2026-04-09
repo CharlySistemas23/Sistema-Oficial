@@ -28,13 +28,14 @@ var BranchManager = window.BranchManager || {
                     if (Array.isArray(serverBranches) && serverBranches.length > 0) {
                         for (const b of serverBranches) {
                             if (b?.id) {
-                                await DB.put('catalog_branches', b, { autoBranchId: false });
+                                // Marcar como synced para que branches.js no las re-suba al servidor
+                                await DB.put('catalog_branches', { ...b, server_id: b.id, sync_status: 'synced' }, { autoBranchId: false });
                             }
                         }
-                        // Limpiar branches legacy si existen
+                        // Limpiar branches legacy (branch1/branch2/etc.) de IDB
                         const localBranches = await DB.getAll('catalog_branches') || [];
                         for (const lb of localBranches) {
-                            if (lb?.id && /^branch\\d+$/i.test(String(lb.id))) {
+                            if (lb?.id && /^branch\d+$/i.test(String(lb.id))) {
                                 try { await DB.delete('catalog_branches', lb.id); } catch (e) {}
                             }
                         }
