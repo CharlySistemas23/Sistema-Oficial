@@ -6581,6 +6581,8 @@ const ReportsQuickCapture = {
             });
 
             const totalSalesMXN = currencySummary.totalSalesMXN;
+            // capture.total siempre está en MXN (convertido al momento del registro)
+            const getCaptureTotalMXN = (capture) => parseFloat(capture.total) || 0;
 
             // Calcular comisiones (usar misma lógica que loadQuickCaptureProfits)
             // IMPORTANTE: Las comisiones deben calcularse sobre el monto en MXN
