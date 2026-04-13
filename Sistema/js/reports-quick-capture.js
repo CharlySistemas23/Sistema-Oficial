@@ -7406,8 +7406,6 @@ const ReportsQuickCapture = {
             );
             if (!confirmed) return;
 
-            Utils.showNotification('Recalculando comisiones de todos los reportes...', 'info');
-
             const allReports = await DB.getAll('archived_quick_captures') || [];
             const reportsWithCaptures = allReports.filter(r => r.captures && r.captures.length > 0);
 
@@ -7415,6 +7413,27 @@ const ReportsQuickCapture = {
                 Utils.showNotification('No hay reportes con capturas para recalcular.', 'warning');
                 return;
             }
+
+            // Descargar respaldo JSON antes de modificar cualquier dato
+            try {
+                const backupData = JSON.stringify(reportsWithCaptures, null, 2);
+                const blob = new Blob([backupData], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                const dateStr = new Date().toISOString().split('T')[0];
+                a.href = url;
+                a.download = `respaldo-reportes-${dateStr}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                Utils.showNotification('✅ Respaldo descargado. Iniciando recálculo...', 'success');
+            } catch (backupError) {
+                console.error('Error generando respaldo:', backupError);
+                Utils.showNotification('No se pudo generar el respaldo. Cancela si quieres intentarlo de nuevo.', 'warning');
+            }
+
+            Utils.showNotification('Recalculando comisiones de todos los reportes...', 'info');
 
             // Cargar catálogos una sola vez
             const commissionRules = await DB.getAll('commission_rules') || [];
