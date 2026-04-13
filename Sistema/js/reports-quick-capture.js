@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 // reports-quick-capture.js - Captura Rapida + Sincronizacion
 // Extension de Reports. Cargar DESPUES de reports.js
 // ============================================================
@@ -3290,17 +3290,10 @@ const ReportsQuickCapture = {
                     return false; // Filtro estricto por fecha
                 }
                 
-                // Filtrar por guía si hay uno seleccionado en el formulario
-                if (selectedGuideId) {
-                    if (!a.guide_id || String(a.guide_id) !== String(selectedGuideId)) {
-                        return false; // Excluir llegadas de otros guías
-                    }
-                }
-                
-                // Filtrar por agencia si hay una seleccionada en el formulario (y no hay guía seleccionado)
-                if (!selectedGuideId && selectedAgencyId) {
+                // Filtrar por agencia si hay una seleccionada en el formulario
+                if (selectedAgencyId) {
                     if (!a.agency_id || String(a.agency_id) !== String(selectedAgencyId)) {
-                        return false; // Excluir llegadas de otras agencias
+                        return false;
                     }
                 }
                 
@@ -3345,12 +3338,6 @@ const ReportsQuickCapture = {
 
                     if (selectedAgencyId && c.agency_id && String(c.agency_id) !== String(selectedAgencyId)) {
                         return false;
-                    }
-
-                    if (selectedGuideId) {
-                        if (!c.guide_id || String(c.guide_id) !== String(selectedGuideId)) {
-                            return false;
-                        }
                     }
 
                     return true;
@@ -5300,17 +5287,16 @@ const ReportsQuickCapture = {
             const cadRate = exchangeRatesInfo?.cad || 13.0;
             console.log(`💱 Tipos de cambio para archivado (${normalizedSelectedDate}): USD=${usdRate}, CAD=${cadRate}`);
 
-            const totals = { USD: 0, MXN: 0, CAD: 0 };
-            let totalQuantity = 0;
+            const currencySummary = this.calculateCaptureCurrencyTotals(captures, usdRate, cadRate);
+            const totals = currencySummary.totals;
+            const totalQuantity = currencySummary.totalQuantity;
             let totalCOGS = 0;
 
             captures.forEach(c => {
-                totals[c.currency] = (totals[c.currency] || 0) + (parseFloat(c.total) || 0);
-                totalQuantity += c.quantity || 1;
                 totalCOGS += (parseFloat(c.merchandise_cost) || 0);
             });
 
-            const totalSalesMXN = totals.USD * usdRate + totals.MXN + totals.CAD * cadRate;
+            const totalSalesMXN = currencySummary.totalSalesMXN;
 
             // Calcular comisiones
             const commissionRules = await DB.getAll('commission_rules') || [];
@@ -6585,17 +6571,16 @@ const ReportsQuickCapture = {
             const usdRate = todayRate.usd_to_mxn || 20.0;
             const cadRate = todayRate.cad_to_mxn || 15.0;
 
-            const totals = { USD: 0, MXN: 0, CAD: 0 };
-            let totalQuantity = 0;
+            const currencySummary = this.calculateCaptureCurrencyTotals(captures, usdRate, cadRate);
+            const totals = currencySummary.totals;
+            const totalQuantity = currencySummary.totalQuantity;
             let totalCOGS = 0;
 
             captures.forEach(c => {
-                totals[c.currency] = (totals[c.currency] || 0) + (parseFloat(c.total) || 0);
-                totalQuantity += c.quantity || 1;
                 totalCOGS += (parseFloat(c.merchandise_cost) || 0);
             });
 
-            const totalSalesMXN = totals.USD * usdRate + totals.MXN + totals.CAD * cadRate;
+            const totalSalesMXN = currencySummary.totalSalesMXN;
 
             // Calcular comisiones (usar misma lógica que loadQuickCaptureProfits)
             // IMPORTANTE: Las comisiones deben calcularse sobre el monto en MXN
@@ -6611,14 +6596,8 @@ const ReportsQuickCapture = {
             const guideCommissions = {};
             
             for (const capture of captures) {
-                // Convertir el total de la captura a MXN antes de calcular comisiones
-                const capTotal = parseFloat(capture.total) || 0;
-                let captureTotalMXN = capTotal;
-                if (capture.currency === 'USD') {
-                    captureTotalMXN = capTotal * usdRate;
-                } else if (capture.currency === 'CAD') {
-                    captureTotalMXN = capTotal * cadRate;
-                }
+                // Calcular el total en MXN usando los pagos originales o el total ya almacenado
+                const captureTotalMXN = getCaptureTotalMXN(capture);
                 
                 // Si es venta de calle, aplicar reglas especiales de calle (solo para vendedores)
                 if (capture.is_street && capture.seller_id && captureTotalMXN > 0 && capture.payment_method) {
@@ -6924,12 +6903,7 @@ const ReportsQuickCapture = {
                             total_ventas_mxn: 0
                         };
                     }
-                    let captureTotalMXN = parseFloat(capture.total) || 0;
-                    if (capture.currency === 'USD') {
-                        captureTotalMXN = (parseFloat(capture.total) || 0) * usdRate;
-                    } else if (capture.currency === 'CAD') {
-                        captureTotalMXN = (parseFloat(capture.total) || 0) * cadRate;
-                    }
+                    const captureTotalMXN = getCaptureTotalMXN(capture);
                     salesByAgency[capture.agency_id].ventas++;
                     salesByAgency[capture.agency_id].total_ventas_mxn += captureTotalMXN;
                 }
@@ -6975,12 +6949,7 @@ const ReportsQuickCapture = {
                             total_ventas_mxn: 0
                         };
                     }
-                    let captureTotalMXN = parseFloat(capture.total) || 0;
-                    if (capture.currency === 'USD') {
-                        captureTotalMXN = (parseFloat(capture.total) || 0) * usdRate;
-                    } else if (capture.currency === 'CAD') {
-                        captureTotalMXN = (parseFloat(capture.total) || 0) * cadRate;
-                    }
+                    const captureTotalMXN = getCaptureTotalMXN(capture);
                     salesByGuide[capture.guide_id].ventas++;
                     salesByGuide[capture.guide_id].total_ventas_mxn += captureTotalMXN;
                 }
@@ -7026,12 +6995,7 @@ const ReportsQuickCapture = {
                             total_ventas_mxn: 0
                         };
                     }
-                    let captureTotalMXN = parseFloat(capture.total) || 0;
-                    if (capture.currency === 'USD') {
-                        captureTotalMXN = (parseFloat(capture.total) || 0) * usdRate;
-                    } else if (capture.currency === 'CAD') {
-                        captureTotalMXN = (parseFloat(capture.total) || 0) * cadRate;
-                    }
+                    const captureTotalMXN = getCaptureTotalMXN(capture);
                     salesBySeller[capture.seller_id].ventas++;
                     salesBySeller[capture.seller_id].total_ventas_mxn += captureTotalMXN;
                 }
