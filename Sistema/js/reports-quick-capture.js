@@ -347,9 +347,14 @@ const ReportsQuickCapture = {
                             <i class="fas fa-history" style="color: var(--color-primary); margin-right: 4px; font-size: 11px;"></i> Historial de Reportes Archivados
                         </h3>
                     </div>
-                    <button class="btn-secondary btn-sm" onclick="window.Reports.loadArchivedReports()" title="Actualizar historial" style="font-weight: 600; padding: 6px 10px; font-size: 11px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                        <i class="fas fa-sync-alt"></i> Actualizar
-                    </button>
+                    <div style="display: flex; gap: 6px;">
+                        <button class="btn-secondary btn-sm" onclick="window.Reports.recalculateAllArchivedCommissions()" title="Recalcular comisiones de todos los reportes archivados" style="font-weight: 600; padding: 6px 10px; font-size: 11px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); color: var(--color-warning, #e67e22);">
+                            <i class="fas fa-calculator"></i> Recalcular Comisiones
+                        </button>
+                        <button class="btn-secondary btn-sm" onclick="window.Reports.loadArchivedReports()" title="Actualizar historial" style="font-weight: 600; padding: 6px 10px; font-size: 11px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                            <i class="fas fa-sync-alt"></i> Actualizar
+                        </button>
+                    </div>
                 </div>
                 <div id="archived-reports-list">
                     <div style="text-align: center; padding: var(--spacing-lg); color: var(--color-text-secondary);">
@@ -7391,6 +7396,155 @@ const ReportsQuickCapture = {
             };
             document.addEventListener('keydown', escHandler);
         });
+    },
+
+    async recalculateAllArchivedCommissions() {
+        try {
+            const confirmed = await Utils.confirm(
+                '¿Recalcular las comisiones de TODOS los reportes archivados? Esto corregirá los montos inflados de reportes anteriores.',
+                'Recalcular Comisiones'
+            );
+            if (!confirmed) return;
+
+            Utils.showNotification('Recalculando comisiones de todos los reportes...', 'info');
+
+            const allReports = await DB.getAll('archived_quick_captures') || [];
+            const reportsWithCaptures = allReports.filter(r => r.captures && r.captures.length > 0);
+
+            if (reportsWithCaptures.length === 0) {
+                Utils.showNotification('No hay reportes con capturas para recalcular.', 'warning');
+                return;
+            }
+
+            // Cargar catálogos una sola vez
+            const commissionRules = await DB.getAll('commission_rules') || [];
+            const agencies = await DB.getAll('catalog_agencies') || [];
+            const sellers = await DB.getAll('catalog_sellers') || [];
+            const guides = await DB.getAll('catalog_guides') || [];
+
+            let updatedCount = 0;
+
+            for (const report of reportsWithCaptures) {
+                const captures = report.captures;
+                const usdRate = report.exchange_rates?.usd || 20.0;
+                const cadRate = report.exchange_rates?.cad || 15.0;
+
+                let totalCommissions = 0;
+                const sellerCommissions = {};
+                const guideCommissions = {};
+
+                for (const capture of captures) {
+                    // capture.total siempre está en MXN — usar directamente sin multiplicar por tipo de cambio
+                    const captureTotalMXN = parseFloat(capture.total) || 0;
+
+                    if (capture.is_street && capture.seller_id && captureTotalMXN > 0 && capture.payment_method) {
+                        let streetCommission = 0;
+                        if (capture.payment_method === 'card') {
+                            streetCommission = captureTotalMXN * (1 - 0.045) * 0.12;
+                        } else if (capture.payment_method === 'cash') {
+                            streetCommission = captureTotalMXN * 0.14;
+                        }
+                        totalCommissions += streetCommission;
+                    } else {
+                        const agency = agencies.find(a => a.id === capture.agency_id);
+                        const seller = sellers.find(s => s.id === capture.seller_id);
+                        const guide = guides.find(g => g.id === capture.guide_id);
+                        const agencyName = agency?.name || null;
+                        const sellerName = seller?.name || null;
+                        const guideName = guide?.name || null;
+
+                        const commissionsByRules = this.calculateCommissionByRules(captureTotalMXN, agencyName, sellerName, guideName);
+
+                        // Comisión del vendedor
+                        if (capture.seller_id && captureTotalMXN > 0 && !capture.is_street) {
+                            let sellerCommission = commissionsByRules.sellerCommission;
+                            if (sellerCommission === 0) {
+                                const sellerRule = commissionRules.find(r => r.entity_type === 'seller' && r.entity_id === capture.seller_id)
+                                    || commissionRules.find(r => r.entity_type === 'seller' && r.entity_id === null);
+                                if (sellerRule) {
+                                    const afterDiscount = captureTotalMXN * (1 - ((sellerRule.discount_pct || 0) / 100));
+                                    sellerCommission = afterDiscount * ((sellerRule.multiplier || 1) / 100);
+                                }
+                            }
+                            if (sellerCommission > 0) {
+                                totalCommissions += sellerCommission;
+                                if (!sellerCommissions[capture.seller_id]) {
+                                    sellerCommissions[capture.seller_id] = { seller, total: 0, sales: 0, commissions: {} };
+                                }
+                                sellerCommissions[capture.seller_id].total += sellerCommission;
+                                sellerCommissions[capture.seller_id].sales += 1;
+                                const cur = capture.currency || 'MXN';
+                                if (!sellerCommissions[capture.seller_id].commissions[cur]) sellerCommissions[capture.seller_id].commissions[cur] = 0;
+                                sellerCommissions[capture.seller_id].commissions[cur] += cur === 'USD' ? sellerCommission / usdRate : cur === 'CAD' ? sellerCommission / cadRate : sellerCommission;
+                            }
+                        }
+
+                        // Comisión del guía
+                        if (capture.guide_id && captureTotalMXN > 0) {
+                            let guideCommission = commissionsByRules.guideCommission;
+                            if (guideCommission === 0) {
+                                const guideRule = commissionRules.find(r => r.entity_type === 'guide' && r.entity_id === capture.guide_id)
+                                    || commissionRules.find(r => r.entity_type === 'guide' && r.entity_id === null);
+                                if (guideRule) {
+                                    const afterDiscount = captureTotalMXN * (1 - ((guideRule.discount_pct || 0) / 100));
+                                    guideCommission = afterDiscount * ((guideRule.multiplier || 1) / 100);
+                                }
+                            }
+                            if (guideCommission > 0) {
+                                totalCommissions += guideCommission;
+                                if (!guideCommissions[capture.guide_id]) {
+                                    guideCommissions[capture.guide_id] = { guide, total: 0, sales: 0, commissions: {} };
+                                }
+                                guideCommissions[capture.guide_id].total += guideCommission;
+                                guideCommissions[capture.guide_id].sales += 1;
+                                const cur = capture.currency || 'MXN';
+                                if (!guideCommissions[capture.guide_id].commissions[cur]) guideCommissions[capture.guide_id].commissions[cur] = 0;
+                                guideCommissions[capture.guide_id].commissions[cur] += cur === 'USD' ? guideCommission / usdRate : cur === 'CAD' ? guideCommission / cadRate : guideCommission;
+                            }
+                        }
+                    }
+                }
+
+                // Recalcular ganancia usando los valores ya guardados en el reporte
+                const totalSalesMXN = report.total_sales_mxn || 0;
+                const totalCOGS = report.total_cogs || 0;
+                const totalArrivalCosts = report.total_arrival_costs || 0;
+                const totalOperatingCosts = report.total_operating_costs || 0;
+                let bankCommissions = report.bank_commissions || 0;
+                if (bankCommissions <= 0 && totalSalesMXN > 0) bankCommissions = totalSalesMXN * 0.045;
+
+                const grossProfit = totalSalesMXN - totalCOGS - totalCommissions;
+                const netProfit = grossProfit - totalArrivalCosts - totalOperatingCosts - bankCommissions;
+
+                report.total_commissions = parseFloat(totalCommissions.toFixed(2));
+                report.seller_commissions = Object.values(sellerCommissions).map(s => ({
+                    seller_id: s.seller?.id,
+                    seller_name: s.seller?.name,
+                    total: s.total,
+                    sales: s.sales,
+                    commissions: s.commissions
+                }));
+                report.guide_commissions = Object.values(guideCommissions).map(g => ({
+                    guide_id: g.guide?.id,
+                    guide_name: g.guide?.name,
+                    total: g.total,
+                    sales: g.sales,
+                    commissions: g.commissions
+                }));
+                report.gross_profit = parseFloat(grossProfit.toFixed(2));
+                report.net_profit = parseFloat(netProfit.toFixed(2));
+                report.recalculated_at = new Date().toISOString();
+
+                await DB.put('archived_quick_captures', report);
+                updatedCount++;
+            }
+
+            Utils.showNotification(`✅ ${updatedCount} reportes recalculados correctamente.`, 'success');
+            await this.loadArchivedReports();
+        } catch (error) {
+            console.error('Error recalculando comisiones:', error);
+            Utils.showNotification('Error al recalcular: ' + error.message, 'error');
+        }
     },
 
     async clearQuickCapture() {
