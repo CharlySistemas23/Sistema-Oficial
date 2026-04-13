@@ -7401,22 +7401,62 @@ const ReportsQuickCapture = {
     async recalculateAllArchivedCommissions() {
         try {
             const confirmed = await Utils.confirm(
-                '¿Recalcular las comisiones de TODOS los reportes archivados? Esto corregirá los montos inflados de reportes anteriores.',
+                '¿Recalcular las comisiones de TODOS los reportes archivados? Se actualizarán también en el servidor.',
                 'Recalcular Comisiones'
             );
             if (!confirmed) return;
 
-            const allReports = await DB.getAll('archived_quick_captures') || [];
-            const reportsWithCaptures = allReports.filter(r => r.captures && r.captures.length > 0);
-
-            if (reportsWithCaptures.length === 0) {
-                Utils.showNotification('No hay reportes con capturas para recalcular.', 'warning');
-                return;
+            // Primero descargar reportes frescos del servidor para tener las capturas actualizadas
+            Utils.showNotification('Descargando reportes del servidor...', 'info');
+            let allReports = [];
+            try {
+                if (typeof API !== 'undefined' && API.getArchivedReports) {
+                    const serverReports = await API.getArchivedReports({}) || [];
+                    for (const sr of serverReports) {
+                        const reportDate = this.getArchivedReportDate(sr);
+                        const branchId = sr.branch_id;
+                        const existingLocal = await DB.getAll('archived_quick_captures') || [];
+                        const existing = existingLocal.find(r => this.getArchivedReportDate(r) === reportDate && r.branch_id === branchId);
+                        const localReport = {
+                            id: existing ? existing.id : (branchId && reportDate ? `report_${reportDate}_${branchId}` : sr.id),
+                            date: reportDate,
+                            branch_id: branchId,
+                            archived_by: sr.archived_by,
+                            total_captures: sr.total_captures || 0,
+                            total_quantity: sr.total_quantity || 0,
+                            total_sales_mxn: sr.total_sales_mxn || 0,
+                            total_cogs: sr.total_cogs || 0,
+                            total_commissions: sr.total_commissions || 0,
+                            total_arrival_costs: sr.total_arrival_costs || 0,
+                            total_operating_costs: sr.total_operating_costs || 0,
+                            variable_costs_daily: sr.variable_costs_daily || 0,
+                            fixed_costs_prorated: sr.fixed_costs_prorated || 0,
+                            bank_commissions: sr.bank_commissions || 0,
+                            gross_profit: sr.gross_profit || 0,
+                            net_profit: sr.net_profit || 0,
+                            exchange_rates: sr.exchange_rates || {},
+                            captures: this.normalizeArchivedArray(sr.captures),
+                            daily_summary: this.normalizeArchivedArray(sr.daily_summary),
+                            seller_commissions: this.normalizeArchivedArray(sr.seller_commissions),
+                            guide_commissions: this.normalizeArchivedArray(sr.guide_commissions),
+                            arrivals: this.normalizeArchivedArray(sr.arrivals),
+                            metrics: sr.metrics || {},
+                            archived_at: sr.archived_at || sr.created_at || new Date().toISOString(),
+                            server_id: sr.id,
+                            sync_status: 'synced'
+                        };
+                        await DB.put('archived_quick_captures', localReport);
+                    }
+                }
+                allReports = await DB.getAll('archived_quick_captures') || [];
+            } catch (e) {
+                console.warn('No se pudo descargar del servidor, usando local:', e);
+                allReports = await DB.getAll('archived_quick_captures') || [];
             }
 
             // Descargar respaldo JSON antes de modificar cualquier dato
             try {
-                const backupData = JSON.stringify(reportsWithCaptures, null, 2);
+                const backupData = JSON.stringify(allReports, null, 2);
                 const blob = new Blob([backupData], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
@@ -7427,13 +7467,18 @@ const ReportsQuickCapture = {
                 a.click();
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
-                Utils.showNotification('✅ Respaldo descargado. Iniciando recálculo...', 'success');
             } catch (backupError) {
                 console.error('Error generando respaldo:', backupError);
-                Utils.showNotification('No se pudo generar el respaldo. Cancela si quieres intentarlo de nuevo.', 'warning');
             }
 
-            Utils.showNotification('Recalculando comisiones de todos los reportes...', 'info');
+            const reportsWithCaptures = allReports.filter(r => r.captures && r.captures.length > 0);
+
+            if (reportsWithCaptures.length === 0) {
+                Utils.showNotification('No hay reportes con capturas para recalcular. Los reportes anteriores no tienen datos individuales de ventas guardados.', 'warning');
+                return;
+            }
+
+            Utils.showNotification(`Recalculando ${reportsWithCaptures.length} reportes...`, 'info');
 
             // Cargar catálogos una sola vez
             const commissionRules = await DB.getAll('commission_rules') || [];
@@ -7442,6 +7487,7 @@ const ReportsQuickCapture = {
             const guides = await DB.getAll('catalog_guides') || [];
 
             let updatedCount = 0;
+            let serverUpdatedCount = 0;
 
             for (const report of reportsWithCaptures) {
                 const captures = report.captures;
@@ -7525,11 +7571,11 @@ const ReportsQuickCapture = {
                 }
 
                 // Recalcular ganancia usando los valores ya guardados en el reporte
-                const totalSalesMXN = report.total_sales_mxn || 0;
-                const totalCOGS = report.total_cogs || 0;
-                const totalArrivalCosts = report.total_arrival_costs || 0;
-                const totalOperatingCosts = report.total_operating_costs || 0;
-                let bankCommissions = report.bank_commissions || 0;
+                const totalSalesMXN = parseFloat(report.total_sales_mxn) || 0;
+                const totalCOGS = parseFloat(report.total_cogs) || 0;
+                const totalArrivalCosts = parseFloat(report.total_arrival_costs) || 0;
+                const totalOperatingCosts = parseFloat(report.total_operating_costs) || 0;
+                let bankCommissions = parseFloat(report.bank_commissions) || 0;
                 if (bankCommissions <= 0 && totalSalesMXN > 0) bankCommissions = totalSalesMXN * 0.045;
 
                 const grossProfit = totalSalesMXN - totalCOGS - totalCommissions;
@@ -7552,13 +7598,33 @@ const ReportsQuickCapture = {
                 }));
                 report.gross_profit = parseFloat(grossProfit.toFixed(2));
                 report.net_profit = parseFloat(netProfit.toFixed(2));
+                report.bank_commissions = parseFloat(bankCommissions.toFixed(2));
                 report.recalculated_at = new Date().toISOString();
 
+                // Guardar localmente
                 await DB.put('archived_quick_captures', report);
                 updatedCount++;
+
+                // Actualizar en el servidor para que la sync no sobreescriba el fix
+                if (report.server_id && typeof API !== 'undefined' && API.updateArchivedReport) {
+                    try {
+                        await API.updateArchivedReport(report.server_id, {
+                            total_commissions: report.total_commissions,
+                            seller_commissions: report.seller_commissions,
+                            guide_commissions: report.guide_commissions,
+                            gross_profit: report.gross_profit,
+                            net_profit: report.net_profit,
+                            bank_commissions: report.bank_commissions
+                        });
+                        serverUpdatedCount++;
+                        console.log(`✅ Servidor actualizado: ${report.server_id} (${report.date})`);
+                    } catch (serverError) {
+                        console.warn(`⚠️ No se pudo actualizar en servidor: ${report.server_id}:`, serverError.message);
+                    }
+                }
             }
 
-            Utils.showNotification(`✅ ${updatedCount} reportes recalculados correctamente.`, 'success');
+            Utils.showNotification(`✅ ${updatedCount} reportes recalculados (${serverUpdatedCount} actualizados en servidor).`, 'success');
             await this.loadArchivedReports();
         } catch (error) {
             console.error('Error recalculando comisiones:', error);
