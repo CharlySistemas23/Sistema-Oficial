@@ -5930,6 +5930,7 @@ const Reports = {
             let totalCommissions = 0;
             let totalArrivalCosts = 0;
             let totalOperatingCosts = 0;
+            let totalBankCommissions = 0;
             let grossProfit = 0;
             let netProfit = 0;
             const dailySummary = [];
@@ -5950,6 +5951,7 @@ const Reports = {
                 totalCommissions += parseFloat(report.total_commissions || 0);
                 totalArrivalCosts += parseFloat(report.total_arrival_costs || 0);
                 totalOperatingCosts += parseFloat(report.total_operating_costs || 0);
+                totalBankCommissions += parseFloat(report.bank_commissions || 0);
                 grossProfit += parseFloat(report.gross_profit || 0);
                 netProfit += parseFloat(report.net_profit || 0);
 
@@ -6104,6 +6106,7 @@ const Reports = {
                 total_commissions: parseFloat(totalCommissions.toFixed(2)),
                 total_arrival_costs: parseFloat(totalArrivalCosts.toFixed(2)),
                 total_operating_costs: parseFloat(totalOperatingCosts.toFixed(2)),
+                total_bank_commissions: parseFloat(totalBankCommissions.toFixed(2)),
                 gross_profit: parseFloat(grossProfit.toFixed(2)),
                 net_profit: parseFloat(netProfit.toFixed(2)),
                 daily_summary: dailySummary,
@@ -6942,6 +6945,9 @@ const Reports = {
             const totalArrival = parseFloat(report.total_arrival_costs) || 0;
             const totalOps = parseFloat(report.total_operating_costs) || 0;
             const netProfit = parseFloat(report.net_profit) || 0;
+            // Comisiones bancarias: campo explícito o inferido del gap P&L
+            const totalBankComm = parseFloat(report.total_bank_commissions || 0) ||
+                Math.max(0, grossProfit - totalArrival - totalOps - netProfit);
             const grossMarginPct = totalSalesMXN > 0 ? (grossProfit / totalSalesMXN * 100) : 0;
             const netMarginPct = totalSalesMXN > 0 ? (netProfit / totalSalesMXN * 100) : 0;
 
@@ -6964,7 +6970,7 @@ const Reports = {
                 return yh + plLineH;
             };
 
-            const plBox = 8 * plLineH + 4;
+            const plBox = (totalBankComm > 0 ? 9 : 8) * plLineH + 4;
             doc.setFillColor(248, 255, 250);
             doc.rect(margin, y, pageWidth - margin * 2, plBox, 'F');
             doc.setDrawColor(180, 215, 185);
@@ -6978,6 +6984,9 @@ const Reports = {
             y = drawPLRow(`= Utilidad Bruta  (${grossMarginPct.toFixed(1)}%)`, fmt(grossProfit), y, { bold: true, color: gcol, bgColor: [236, 252, 243] });
             y = drawPLRow('(-) Costos de Llegadas:', fmt(totalArrival), y, { indent: 8 });
             y = drawPLRow('(-) Costos Operativos:', fmt(totalOps), y, { indent: 8 });
+            if (totalBankComm > 0) {
+                y = drawPLRow('(-) Comisiones Bancarias (TPV):', fmt(totalBankComm), y, { indent: 8 });
+            }
             doc.setFillColor(212, 160, 23); doc.rect(margin, y, pageWidth - margin * 2, 0.8, 'F'); y += 1;
             const ncol = netProfit >= 0 ? [27, 80, 160] : [170, 30, 30];
             const nbg = netProfit >= 0 ? [232, 244, 255] : [255, 235, 235];
