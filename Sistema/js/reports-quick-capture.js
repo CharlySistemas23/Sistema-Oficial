@@ -7625,7 +7625,8 @@ const ReportsQuickCapture = {
             }
 
             Utils.showNotification(`✅ ${updatedCount} reportes recalculados (${serverUpdatedCount} actualizados en servidor).`, 'success');
-            await this.loadArchivedReports();
+            // skipSync=true para no sobreescribir los datos corregidos con la sync del servidor
+            await this.loadArchivedReports(true);
         } catch (error) {
             console.error('Error recalculando comisiones:', error);
             Utils.showNotification('Error al recalcular: ' + error.message, 'error');
@@ -7663,12 +7664,15 @@ const ReportsQuickCapture = {
         }
     },
 
-    async loadArchivedReports() {
+    async loadArchivedReports(skipServerSync = false) {
         try {
             const container = document.getElementById('archived-reports-list');
             if (!container) return;
 
             // PASO 1: Sincronizar reportes locales que NO están en el servidor (subirlos)
+            if (skipServerSync) {
+                console.log('⏭️ [loadArchivedReports] Saltando sync del servidor (skipServerSync=true)');
+            } else
             try {
                 if (typeof API !== 'undefined' && API.baseURL && API.saveArchivedReport) {
                     console.log('📤 [Paso 1] Buscando reportes locales que no están en el servidor...');
@@ -7797,6 +7801,7 @@ const ReportsQuickCapture = {
             }
 
             // PASO 2: Sincronizar reportes archivados desde el servidor (descargarlos)
+            if (!skipServerSync)
             try {
                 if (typeof API !== 'undefined' && API.baseURL && API.token && API.getArchivedReports) {
                     console.log('📥 [Paso 2] Sincronizando reportes archivados desde el servidor...');
