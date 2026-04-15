@@ -4218,26 +4218,28 @@ const ReportsQuickCapture = {
                     }
 
                     // B) COSTOS VARIABLES DEL DÍA (registrados hoy)
+                    const isRecurringFixedLocal = c => (c.recurring === true || c.recurring === 'true' || c.type === 'fijo');
                     const variableCosts = branchCosts.filter(c => {
                         const costDate = c.date || c.created_at;
                         const costDateStr = costDate.split('T')[0];
+                        const cat = (c.category || '').toLowerCase();
                         return costDateStr === captureDate &&
-                               c.category !== 'pago_llegadas' &&
-                               c.category !== 'comisiones_bancarias' &&
+                               cat !== 'pago_llegadas' &&
+                               cat !== 'comisiones_bancarias' &&
+                               cat !== 'comisiones' &&
+                               cat !== 'costo_ventas' &&
+                               cat !== 'cogs' &&
+                               !isRecurringFixedLocal(c) &&
                                (c.period_type === 'one_time' || c.period_type === 'daily' || !c.period_type);
                     });
                     for (const cost of variableCosts) {
-                        if (cost.category === 'comisiones_bancarias') {
-                            bankCommissions += (cost.amount || 0);
-                        } else {
-                            const amount = cost.amount || 0;
-                            variableCostsDaily += amount;
-                            variableCostsDetail.push({
-                                category: cost.category || 'Sin categoría',
-                                description: cost.description || cost.notes || '',
-                                amount: amount
-                            });
-                        }
+                        const amount = parseFloat(cost.amount) || 0;
+                        variableCostsDaily += amount;
+                        variableCostsDetail.push({
+                            category: cost.category || 'Sin categoría',
+                            description: cost.description || cost.notes || '',
+                            amount: amount
+                        });
                     }
                 }
             } catch (e) {
@@ -6351,13 +6353,19 @@ const ReportsQuickCapture = {
                     }
 
                     // B) COSTOS VARIABLES DEL DÍA (registrados en la fecha seleccionada)
+                    const isRecurringFixedPdf = c => (c.recurring === true || c.recurring === 'true' || c.type === 'fijo');
                     const variableCosts = branchCosts.filter(c => {
                         const costDate = c.date || c.created_at;
                         const costDateStr = costDate.split('T')[0];
                         const normalizedSelectedDate = selectedDate.split('T')[0];
+                        const cat = (c.category || '').toLowerCase();
                         return costDateStr === normalizedSelectedDate &&
-                               c.category !== 'pago_llegadas' && // Excluir llegadas (se calculan por separado)
-                               c.category !== 'comisiones_bancarias' && // Excluir comisiones bancarias
+                               cat !== 'pago_llegadas' &&
+                               cat !== 'comisiones_bancarias' &&
+                               cat !== 'comisiones' &&
+                               cat !== 'costo_ventas' &&
+                               cat !== 'cogs' &&
+                               !isRecurringFixedPdf(c) &&
                                (c.period_type === 'one_time' || c.period_type === 'daily' || !c.period_type);
                     });
                     for (const cost of variableCosts) {
@@ -6816,20 +6824,22 @@ const ReportsQuickCapture = {
                     }
 
                     // B) COSTOS VARIABLES DEL DÍA (usar fecha seleccionada)
+                    const isRecurringFixedArchive = c => (c.recurring === true || c.recurring === 'true' || c.type === 'fijo');
                     const variableCosts = branchCosts.filter(c => {
                         const costDate = c.date || c.created_at;
                         const costDateStr = costDate.split('T')[0];
+                        const cat = (c.category || '').toLowerCase();
                         return costDateStr === normalizedSelectedDate &&
-                               c.category !== 'pago_llegadas' &&
-                               c.category !== 'comisiones_bancarias' &&
+                               cat !== 'pago_llegadas' &&
+                               cat !== 'comisiones_bancarias' &&
+                               cat !== 'comisiones' &&
+                               cat !== 'costo_ventas' &&
+                               cat !== 'cogs' &&
+                               !isRecurringFixedArchive(c) &&
                                (c.period_type === 'one_time' || c.period_type === 'daily' || !c.period_type);
                     });
                     for (const cost of variableCosts) {
-                        if (cost.category === 'comisiones_bancarias') {
-                            bankCommissions += (cost.amount || 0);
-                        } else {
-                            variableCostsDaily += (cost.amount || 0);
-                        }
+                        variableCostsDaily += (parseFloat(cost.amount) || 0);
                     }
                 }
                 
