@@ -5971,67 +5971,151 @@ const Reports = {
                 }
 
                 // Agregar métricas del reporte (si existen)
-                if (report.metrics) {
-                    // Métricas generales: sumar pasajeros
-                    if (report.metrics.general && report.metrics.general.total_pasajeros) {
+                if (report.metrics || report.captures) {
+                    // Métricas generales: sumar pasajeros (las capturas individuales no tienen pax)
+                    if (report.metrics?.general?.total_pasajeros) {
                         totalPassengers += parseInt(report.metrics.general.total_pasajeros || 0);
                     }
 
-                    // Agregar métricas por agencia
-                    if (report.metrics.por_agencia && Array.isArray(report.metrics.por_agencia)) {
-                        report.metrics.por_agencia.forEach(agencyMetric => {
-                            const agencyId = agencyMetric.agency_id;
-                            if (!metricsByAgency[agencyId]) {
-                                metricsByAgency[agencyId] = {
-                                    agency_id: agencyId,
-                                    agency_name: agencyMetric.agency_name || 'Desconocida',
-                                    ventas: 0,
-                                    total_ventas_mxn: 0,
-                                    pasajeros: 0
-                                };
+                    // Construir mapa de nombres y pasajeros desde metrics (la fuente correcta para esos datos)
+                    const agencyNameMap = {};
+                    const guideNameMap = {};
+                    const guideAgencyMap = {};
+                    const sellerNameMap = {};
+                    const agencyPaxFromMetrics = {};
+                    const guidePaxFromMetrics = {};
+
+                    if (report.metrics) {
+                        (report.metrics.por_agencia || []).forEach(a => {
+                            if (a.agency_id) {
+                                agencyNameMap[a.agency_id] = a.agency_name || 'Desconocida';
+                                agencyPaxFromMetrics[a.agency_id] = (agencyPaxFromMetrics[a.agency_id] || 0) + parseInt(a.pasajeros || 0);
                             }
-                            metricsByAgency[agencyId].ventas += parseInt(agencyMetric.ventas || 0);
-                            metricsByAgency[agencyId].total_ventas_mxn += parseFloat(agencyMetric.total_ventas_mxn || 0);
-                            metricsByAgency[agencyId].pasajeros += parseInt(agencyMetric.pasajeros || 0);
+                        });
+                        (report.metrics.por_guia || []).forEach(g => {
+                            if (g.guide_id) {
+                                guideNameMap[g.guide_id] = g.guide_name || 'Desconocido';
+                                guideAgencyMap[g.guide_id] = { agency_id: g.agency_id, agency_name: g.agency_name || 'Desconocida' };
+                                guidePaxFromMetrics[g.guide_id] = (guidePaxFromMetrics[g.guide_id] || 0) + parseInt(g.pasajeros || 0);
+                            }
+                        });
+                        (report.metrics.por_vendedor || []).forEach(s => {
+                            if (s.seller_id) sellerNameMap[s.seller_id] = s.seller_name || 'Desconocido';
                         });
                     }
 
-                    // Agregar métricas por guía
-                    if (report.metrics.por_guia && Array.isArray(report.metrics.por_guia)) {
-                        report.metrics.por_guia.forEach(guideMetric => {
-                            const guideId = guideMetric.guide_id;
-                            if (!metricsByGuide[guideId]) {
-                                metricsByGuide[guideId] = {
-                                    guide_id: guideId,
-                                    guide_name: guideMetric.guide_name || 'Desconocido',
-                                    agency_id: guideMetric.agency_id,
-                                    agency_name: guideMetric.agency_name || 'Desconocida',
-                                    ventas: 0,
-                                    total_ventas_mxn: 0,
-                                    pasajeros: 0
-                                };
-                            }
-                            metricsByGuide[guideId].ventas += parseInt(guideMetric.ventas || 0);
-                            metricsByGuide[guideId].total_ventas_mxn += parseFloat(guideMetric.total_ventas_mxn || 0);
-                            metricsByGuide[guideId].pasajeros += parseInt(guideMetric.pasajeros || 0);
-                        });
-                    }
+                    const capturesToProcess = report.captures && Array.isArray(report.captures) && report.captures.length > 0
+                        ? report.captures : null;
 
-                    // Agregar métricas por vendedor
-                    if (report.metrics.por_vendedor && Array.isArray(report.metrics.por_vendedor)) {
-                        report.metrics.por_vendedor.forEach(sellerMetric => {
-                            const sellerId = sellerMetric.seller_id;
-                            if (!metricsBySeller[sellerId]) {
-                                metricsBySeller[sellerId] = {
-                                    seller_id: sellerId,
-                                    seller_name: sellerMetric.seller_name || 'Desconocido',
-                                    ventas: 0,
-                                    total_ventas_mxn: 0
-                                };
+                    if (capturesToProcess) {
+                        // Recomputar totales desde capturas individuales para evitar datos acumulados
+                        // incorrectos que puedan estar almacenados en report.metrics.
+                        // capture.total ya está en MXN (convertido al registrar la captura).
+                        capturesToProcess.forEach(capture => {
+                            const totalMXN = parseFloat(capture.total) || 0;
+
+                            // Por agencia
+                            const agencyId = capture.agency_id;
+                            if (agencyId) {
+                                if (!metricsByAgency[agencyId]) {
+                                    metricsByAgency[agencyId] = {
+                                        agency_id: agencyId,
+                                        agency_name: agencyNameMap[agencyId] || 'Desconocida',
+                                        ventas: 0, total_ventas_mxn: 0, pasajeros: 0
+                                    };
+                                }
+                                metricsByAgency[agencyId].ventas++;
+                                metricsByAgency[agencyId].total_ventas_mxn += totalMXN;
                             }
-                            metricsBySeller[sellerId].ventas += parseInt(sellerMetric.ventas || 0);
-                            metricsBySeller[sellerId].total_ventas_mxn += parseFloat(sellerMetric.total_ventas_mxn || 0);
+
+                            // Por guía
+                            const guideId = capture.guide_id;
+                            if (guideId) {
+                                if (!metricsByGuide[guideId]) {
+                                    const ga = guideAgencyMap[guideId] || { agency_id: capture.agency_id, agency_name: agencyNameMap[capture.agency_id] || 'Desconocida' };
+                                    metricsByGuide[guideId] = {
+                                        guide_id: guideId,
+                                        guide_name: guideNameMap[guideId] || 'Desconocido',
+                                        agency_id: ga.agency_id,
+                                        agency_name: ga.agency_name,
+                                        ventas: 0, total_ventas_mxn: 0, pasajeros: 0
+                                    };
+                                }
+                                metricsByGuide[guideId].ventas++;
+                                metricsByGuide[guideId].total_ventas_mxn += totalMXN;
+                            }
+
+                            // Por vendedor
+                            const sellerId = capture.seller_id;
+                            if (sellerId) {
+                                if (!metricsBySeller[sellerId]) {
+                                    metricsBySeller[sellerId] = {
+                                        seller_id: sellerId,
+                                        seller_name: sellerNameMap[sellerId] || 'Desconocido',
+                                        ventas: 0, total_ventas_mxn: 0
+                                    };
+                                }
+                                metricsBySeller[sellerId].ventas++;
+                                metricsBySeller[sellerId].total_ventas_mxn += totalMXN;
+                            }
                         });
+
+                        // Añadir pasajeros desde metrics (no están en capturas individuales)
+                        Object.entries(agencyPaxFromMetrics).forEach(([id, pax]) => {
+                            if (metricsByAgency[id]) metricsByAgency[id].pasajeros += pax;
+                        });
+                        Object.entries(guidePaxFromMetrics).forEach(([id, pax]) => {
+                            if (metricsByGuide[id]) metricsByGuide[id].pasajeros += pax;
+                        });
+
+                    } else if (report.metrics) {
+                        // Fallback: usar metrics pre-computados si no hay captures disponibles
+                        if (report.metrics.por_agencia && Array.isArray(report.metrics.por_agencia)) {
+                            report.metrics.por_agencia.forEach(agencyMetric => {
+                                const agencyId = agencyMetric.agency_id;
+                                if (!metricsByAgency[agencyId]) {
+                                    metricsByAgency[agencyId] = {
+                                        agency_id: agencyId,
+                                        agency_name: agencyMetric.agency_name || 'Desconocida',
+                                        ventas: 0, total_ventas_mxn: 0, pasajeros: 0
+                                    };
+                                }
+                                metricsByAgency[agencyId].ventas += parseInt(agencyMetric.ventas || 0);
+                                metricsByAgency[agencyId].total_ventas_mxn += parseFloat(agencyMetric.total_ventas_mxn || 0);
+                                metricsByAgency[agencyId].pasajeros += parseInt(agencyMetric.pasajeros || 0);
+                            });
+                        }
+                        if (report.metrics.por_guia && Array.isArray(report.metrics.por_guia)) {
+                            report.metrics.por_guia.forEach(guideMetric => {
+                                const guideId = guideMetric.guide_id;
+                                if (!metricsByGuide[guideId]) {
+                                    metricsByGuide[guideId] = {
+                                        guide_id: guideId,
+                                        guide_name: guideMetric.guide_name || 'Desconocido',
+                                        agency_id: guideMetric.agency_id,
+                                        agency_name: guideMetric.agency_name || 'Desconocida',
+                                        ventas: 0, total_ventas_mxn: 0, pasajeros: 0
+                                    };
+                                }
+                                metricsByGuide[guideId].ventas += parseInt(guideMetric.ventas || 0);
+                                metricsByGuide[guideId].total_ventas_mxn += parseFloat(guideMetric.total_ventas_mxn || 0);
+                                metricsByGuide[guideId].pasajeros += parseInt(guideMetric.pasajeros || 0);
+                            });
+                        }
+                        if (report.metrics.por_vendedor && Array.isArray(report.metrics.por_vendedor)) {
+                            report.metrics.por_vendedor.forEach(sellerMetric => {
+                                const sellerId = sellerMetric.seller_id;
+                                if (!metricsBySeller[sellerId]) {
+                                    metricsBySeller[sellerId] = {
+                                        seller_id: sellerId,
+                                        seller_name: sellerMetric.seller_name || 'Desconocido',
+                                        ventas: 0, total_ventas_mxn: 0
+                                    };
+                                }
+                                metricsBySeller[sellerId].ventas += parseInt(sellerMetric.ventas || 0);
+                                metricsBySeller[sellerId].total_ventas_mxn += parseFloat(sellerMetric.total_ventas_mxn || 0);
+                            });
+                        }
                     }
                 }
             });
