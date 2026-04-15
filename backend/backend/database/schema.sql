@@ -1354,6 +1354,22 @@ BEGIN
     END IF;
 END $$;
 
+-- Agregar columna created_by a historical_quick_capture_reports si no existe
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 
+        FROM information_schema.columns 
+        WHERE table_name = 'historical_quick_capture_reports' 
+        AND column_name = 'created_by'
+    ) THEN
+        ALTER TABLE historical_quick_capture_reports 
+        ADD COLUMN created_by UUID REFERENCES users(id) ON DELETE SET NULL;
+        
+        RAISE NOTICE 'Columna created_by agregada a historical_quick_capture_reports';
+    END IF;
+END $$;
+
 -- ============================================
 -- DATOS INICIALES
 -- ============================================
