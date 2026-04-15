@@ -6120,6 +6120,71 @@ const Reports = {
                 }
             });
 
+            // ── Recalcular costos operativos desde cost_entries actuales ──────────────
+            // Los valores almacenados en cada archivo diario pueden estar desactualizados
+            // (si los costos recurrentes se agregaron/modificaron después de archivar ese día).
+            // Para el histórico mensual se aplica cada costo recurrente UNA VEZ por mes cubierto,
+            // y los costos variables se suman solo si caen dentro del rango de fechas.
+            try {
+                const allCostEntries = await DB.getAll('cost_entries') || [];
+                const [dfY2, dfM2, dfD2] = dateFrom.split('-').map(Number);
+                const [dtY2, dtM2, dtD2] = dateTo.split('-').map(Number);
+                const dfMs = new Date(dfY2, dfM2 - 1, dfD2);
+                const dtMs = new Date(dtY2, dtM2 - 1, dtD2);
+                const periodDays = Math.round((dtMs - dfMs) / 86400000) + 1;
+
+                // Contar meses calendario cubiertos (para aplicar fijos mensuales exactamente N veces)
+                let monthsCovered = (dtY2 - dfY2) * 12 + (dtM2 - dfM2) + 1;
+
+                let freshOpCosts = 0;
+
+                let filteredCosts = currentBranchId
+                    ? allCostEntries.filter(c => c.branch_id && String(c.branch_id) === String(currentBranchId))
+                    : allCostEntries;
+                if (typeof this.deduplicateCosts === 'function') filteredCosts = this.deduplicateCosts(filteredCosts);
+
+                const isRecurringFixed = c => (c.recurring === true || c.recurring === 'true' || c.type === 'fijo');
+                const isValidOpCategory = c => c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias';
+
+                // Mensuales → aplicar una vez por mes cubierto
+                const monthlyRec = typeof this.deduplicateRecurringCosts === 'function'
+                    ? this.deduplicateRecurringCosts(filteredCosts.filter(c => c.period_type === 'monthly' && isRecurringFixed(c) && isValidOpCategory(c)))
+                    : filteredCosts.filter(c => c.period_type === 'monthly' && isRecurringFixed(c) && isValidOpCategory(c));
+                for (const c of monthlyRec) freshOpCosts += (parseFloat(c.amount) || 0) * monthsCovered;
+
+                // Semanales → proporcional a semanas en el período
+                const weeklyRec = typeof this.deduplicateRecurringCosts === 'function'
+                    ? this.deduplicateRecurringCosts(filteredCosts.filter(c => c.period_type === 'weekly' && isRecurringFixed(c) && isValidOpCategory(c)))
+                    : filteredCosts.filter(c => c.period_type === 'weekly' && isRecurringFixed(c) && isValidOpCategory(c));
+                for (const c of weeklyRec) freshOpCosts += (parseFloat(c.amount) || 0) * (periodDays / 7);
+
+                // Anuales → proporcional a días en el período
+                const annualRec = typeof this.deduplicateRecurringCosts === 'function'
+                    ? this.deduplicateRecurringCosts(filteredCosts.filter(c => (c.period_type === 'annual' || c.period_type === 'yearly') && isRecurringFixed(c) && isValidOpCategory(c)))
+                    : filteredCosts.filter(c => (c.period_type === 'annual' || c.period_type === 'yearly') && isRecurringFixed(c) && isValidOpCategory(c));
+                for (const c of annualRec) freshOpCosts += (parseFloat(c.amount) || 0) * (periodDays / 365);
+
+                // Variables / únicos dentro del rango
+                const variableInRange = filteredCosts.filter(c => {
+                    const cd = (c.date || c.created_at || '').split('T')[0];
+                    return cd >= dateFrom && cd <= dateTo &&
+                           isValidOpCategory(c) &&
+                           (c.period_type === 'one_time' || c.period_type === 'daily' || !c.period_type);
+                });
+                for (const c of variableInRange) freshOpCosts += (parseFloat(c.amount) || 0);
+
+                if (freshOpCosts > 0) {
+                    console.log(`💰 Costos operativos recalculados desde cost_entries: $${freshOpCosts.toFixed(2)} (reemplaza suma de archivos: $${totalOperatingCosts.toFixed(2)})`);
+                    totalOperatingCosts = freshOpCosts;
+                    // Recalcular utilidades con el valor correcto
+                    grossProfit = totalSalesMXN - totalCOGS - totalCommissions;
+                    netProfit = grossProfit - totalArrivalCosts - totalOperatingCosts - totalBankCommissions;
+                }
+            } catch (opCostErr) {
+                console.warn('No se pudo recalcular costos operativos desde cost_entries, usando suma de archivos:', opCostErr);
+            }
+            // ── Fin recálculo costos operativos ──────────────────────────────────────
+
             // Calcular métricas agregadas finales
             const aggregatedMetrics = {
                 general: {
