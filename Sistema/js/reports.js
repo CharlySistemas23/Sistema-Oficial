@@ -6133,8 +6133,8 @@ const Reports = {
                 const dtMs = new Date(dtY2, dtM2 - 1, dtD2);
                 const periodDays = Math.round((dtMs - dfMs) / 86400000) + 1;
 
-                // Contar meses calendario cubiertos (para aplicar fijos mensuales exactamente N veces)
-                let monthsCovered = (dtY2 - dfY2) * 12 + (dtM2 - dfM2) + 1;
+                // Contar meses calendario cubiertos
+                const monthsCovered = (dtY2 - dfY2) * 12 + (dtM2 - dfM2) + 1;
 
                 let freshOpCosts = 0;
 
@@ -6146,37 +6146,57 @@ const Reports = {
                 const isRecurringFixed = c => (c.recurring === true || c.recurring === 'true' || c.type === 'fijo');
                 const isValidOpCategory = c => c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias';
 
-                // Mensuales → aplicar una vez por mes cubierto
-                const monthlyRec = typeof this.deduplicateRecurringCosts === 'function'
-                    ? this.deduplicateRecurringCosts(filteredCosts.filter(c => c.period_type === 'monthly' && isRecurringFixed(c) && isValidOpCategory(c)))
-                    : filteredCosts.filter(c => c.period_type === 'monthly' && isRecurringFixed(c) && isValidOpCategory(c));
+                // Dedup por concepto: branch + category + description, conservando la entrada MÁS RECIENTE.
+                // Esto evita que un mismo costo recurrente se cuente varias veces cuando cambió de monto
+                // en distintos meses (la clave estándar incluye amount y falla en ese caso).
+                const dedupByConcept = (costs) => {
+                    const map = {};
+                    for (const c of costs) {
+                        const desc = (c.description || c.name || c.notes || '').trim().toLowerCase().slice(0, 80);
+                        const key = `${c.branch_id || ''}_${c.category || ''}_${desc}`;
+                        const existing = map[key];
+                        if (!existing) {
+                            map[key] = c;
+                        } else {
+                            const et = new Date(existing.updated_at || existing.created_at || 0).getTime();
+                            const ct = new Date(c.updated_at || c.created_at || 0).getTime();
+                            if (ct > et) map[key] = c;
+                        }
+                    }
+                    return Object.values(map);
+                };
+
+                // Mensuales → una vez por mes cubierto
+                const monthlyRec = dedupByConcept(
+                    filteredCosts.filter(c => c.period_type === 'monthly' && isRecurringFixed(c) && isValidOpCategory(c))
+                );
                 for (const c of monthlyRec) freshOpCosts += (parseFloat(c.amount) || 0) * monthsCovered;
 
                 // Semanales → proporcional a semanas en el período
-                const weeklyRec = typeof this.deduplicateRecurringCosts === 'function'
-                    ? this.deduplicateRecurringCosts(filteredCosts.filter(c => c.period_type === 'weekly' && isRecurringFixed(c) && isValidOpCategory(c)))
-                    : filteredCosts.filter(c => c.period_type === 'weekly' && isRecurringFixed(c) && isValidOpCategory(c));
+                const weeklyRec = dedupByConcept(
+                    filteredCosts.filter(c => c.period_type === 'weekly' && isRecurringFixed(c) && isValidOpCategory(c))
+                );
                 for (const c of weeklyRec) freshOpCosts += (parseFloat(c.amount) || 0) * (periodDays / 7);
 
                 // Anuales → proporcional a días en el período
-                const annualRec = typeof this.deduplicateRecurringCosts === 'function'
-                    ? this.deduplicateRecurringCosts(filteredCosts.filter(c => (c.period_type === 'annual' || c.period_type === 'yearly') && isRecurringFixed(c) && isValidOpCategory(c)))
-                    : filteredCosts.filter(c => (c.period_type === 'annual' || c.period_type === 'yearly') && isRecurringFixed(c) && isValidOpCategory(c));
+                const annualRec = dedupByConcept(
+                    filteredCosts.filter(c => (c.period_type === 'annual' || c.period_type === 'yearly') && isRecurringFixed(c) && isValidOpCategory(c))
+                );
                 for (const c of annualRec) freshOpCosts += (parseFloat(c.amount) || 0) * (periodDays / 365);
 
-                // Variables / únicos dentro del rango
+                // Variables / únicos dentro del rango (excluir fijos aunque no tengan period_type)
                 const variableInRange = filteredCosts.filter(c => {
                     const cd = (c.date || c.created_at || '').split('T')[0];
                     return cd >= dateFrom && cd <= dateTo &&
                            isValidOpCategory(c) &&
+                           !isRecurringFixed(c) &&
                            (c.period_type === 'one_time' || c.period_type === 'daily' || !c.period_type);
                 });
                 for (const c of variableInRange) freshOpCosts += (parseFloat(c.amount) || 0);
 
                 if (freshOpCosts > 0) {
-                    console.log(`💰 Costos operativos recalculados desde cost_entries: $${freshOpCosts.toFixed(2)} (reemplaza suma de archivos: $${totalOperatingCosts.toFixed(2)})`);
+                    console.log(`💰 Costos operativos recalculados: $${freshOpCosts.toFixed(2)} (mensuales×${monthsCovered}: $${monthlyRec.reduce((s,c)=>s+(parseFloat(c.amount)||0),0).toFixed(2)}, variables: $${variableInRange.reduce((s,c)=>s+(parseFloat(c.amount)||0),0).toFixed(2)})`);
                     totalOperatingCosts = freshOpCosts;
-                    // Recalcular utilidades con el valor correcto
                     grossProfit = totalSalesMXN - totalCOGS - totalCommissions;
                     netProfit = grossProfit - totalArrivalCosts - totalOperatingCosts - totalBankCommissions;
                 }
