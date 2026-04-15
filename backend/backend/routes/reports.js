@@ -1166,6 +1166,7 @@ router.put('/archived-quick-captures/:id', requireBranchAccess, async (req, res)
   try {
     const { id } = req.params;
     const {
+      total_sales_mxn,
       total_commissions,
       seller_commissions,
       guide_commissions,
@@ -1190,16 +1191,18 @@ router.put('/archived-quick-captures/:id', requireBranchAccess, async (req, res)
 
     const result = await query(
       `UPDATE archived_quick_capture_reports
-       SET total_commissions = COALESCE($1, total_commissions),
-           seller_commissions = COALESCE($2, seller_commissions),
-           guide_commissions = COALESCE($3, guide_commissions),
-           gross_profit = COALESCE($4, gross_profit),
-           net_profit = COALESCE($5, net_profit),
-           bank_commissions = COALESCE($6, bank_commissions),
+       SET total_sales_mxn = COALESCE($1, total_sales_mxn),
+           total_commissions = COALESCE($2, total_commissions),
+           seller_commissions = COALESCE($3, seller_commissions),
+           guide_commissions = COALESCE($4, guide_commissions),
+           gross_profit = COALESCE($5, gross_profit),
+           net_profit = COALESCE($6, net_profit),
+           bank_commissions = COALESCE($7, bank_commissions),
            updated_at = NOW()
-       WHERE id = $7
+       WHERE id = $8
        RETURNING *`,
       [
+        total_sales_mxn != null ? parseFloat(total_sales_mxn) : null,
         total_commissions != null ? parseFloat(total_commissions) : null,
         seller_commissions != null ? JSON.stringify(seller_commissions) : null,
         guide_commissions != null ? JSON.stringify(guide_commissions) : null,
