@@ -8129,8 +8129,11 @@ const ReportsQuickCapture = {
                                                 <button class="btn-primary btn-xs" onclick="window.Reports.viewArchivedReport('${report.id}')" title="Ver Detalles">
                                                     <i class="fas fa-eye"></i>
                                                 </button>
-                                                <button class="btn-success btn-xs" onclick="window.Reports.restoreArchivedReport('${report.id}')" title="Restaurar y Editar">
-                                                    <i class="fas fa-edit"></i>
+                                                <button class="btn-success btn-xs" onclick="window.Reports.restoreArchivedReport('${report.id}')" title="Restaurar al Temp (editar capturas)">
+                                                    <i class="fas fa-undo"></i>
+                                                </button>
+                                                <button class="btn-xs" onclick="window.Reports.editArchivedReport('${report.id}')" title="Editar Valores Directamente" style="background: var(--color-warning, #e67e22); color: white; border: none; border-radius: 4px; cursor: pointer; padding: 4px 6px; font-size: 11px;">
+                                                    <i class="fas fa-sliders-h"></i>
                                                 </button>
                                                 <button class="btn-secondary btn-xs" onclick="window.Reports.exportArchivedReportPDF('${report.id}')" title="Exportar PDF">
                                                     <i class="fas fa-file-pdf"></i>
@@ -8159,6 +8162,183 @@ const ReportsQuickCapture = {
                     </div>
                 `;
             }
+        }
+    },
+
+    async editArchivedReport(reportId) {
+        try {
+            const report = await DB.get('archived_quick_captures', reportId);
+            if (!report) {
+                Utils.showNotification('Reporte no encontrado', 'error');
+                return;
+            }
+
+            const normalizedDate = this.getArchivedReportDate(report);
+            const dateStr = normalizedDate ? this.formatDateWithoutTimezone(normalizedDate) : 'Sin fecha';
+
+            const f = v => (parseFloat(v) || 0).toFixed(2);
+
+            const existingModal = document.getElementById('edit-archived-report-modal');
+            if (existingModal) existingModal.remove();
+
+            const modal = document.createElement('div');
+            modal.className = 'modal';
+            modal.id = 'edit-archived-report-modal';
+            modal.style.cssText = 'display:flex; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:9999; align-items:center; justify-content:center;';
+            modal.innerHTML = `
+                <div class="modal-content" style="max-width:640px; width:94%; max-height:90vh; overflow-y:auto; border-radius:10px; background:var(--color-bg-card); box-shadow:0 8px 32px rgba(0,0,0,0.3);">
+                    <div class="modal-header" style="padding:16px 20px; border-bottom:1px solid var(--color-border); display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <h3 style="margin:0; font-size:15px; font-weight:700;"><i class="fas fa-sliders-h" style="color:var(--color-warning,#e67e22); margin-right:6px;"></i>Editar Reporte Archivado</h3>
+                            <div style="font-size:11px; color:var(--color-text-secondary); margin-top:2px;">${dateStr} &nbsp;·&nbsp; ID: ${reportId.substring(0,8)}…</div>
+                        </div>
+                        <button onclick="document.getElementById('edit-archived-report-modal').remove()" style="background:none; border:none; font-size:18px; cursor:pointer; color:var(--color-text-secondary);">&times;</button>
+                    </div>
+                    <div style="padding:20px;">
+                        <div style="background:var(--color-warning-light,#fff3cd); border:1px solid var(--color-warning,#e67e22); border-radius:6px; padding:10px 14px; margin-bottom:16px; font-size:12px; display:flex; gap:8px; align-items:flex-start;">
+                            <i class="fas fa-info-circle" style="color:var(--color-warning,#e67e22); margin-top:1px; flex-shrink:0;"></i>
+                            <span>Los cambios se guardan en local y en el servidor. El <strong>Histórico</strong> leerá automáticamente estos valores actualizados.</span>
+                        </div>
+
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;">
+                            <div>
+                                <label style="font-size:11px; font-weight:600; text-transform:uppercase; color:var(--color-text-secondary); display:block; margin-bottom:4px;">Ventas Totales (MXN)</label>
+                                <input type="number" id="ea-total-sales" step="0.01" value="${f(report.total_sales_mxn)}" style="width:100%; padding:8px; border:1px solid var(--color-border); border-radius:6px; font-size:13px; box-sizing:border-box;" oninput="window.Reports._eaAutoCalc()">
+                            </div>
+                            <div>
+                                <label style="font-size:11px; font-weight:600; text-transform:uppercase; color:var(--color-text-secondary); display:block; margin-bottom:4px;">Costo de Ventas (COGS)</label>
+                                <input type="number" id="ea-total-cogs" step="0.01" value="${f(report.total_cogs)}" style="width:100%; padding:8px; border:1px solid var(--color-border); border-radius:6px; font-size:13px; box-sizing:border-box;" oninput="window.Reports._eaAutoCalc()">
+                            </div>
+                            <div>
+                                <label style="font-size:11px; font-weight:600; text-transform:uppercase; color:var(--color-text-secondary); display:block; margin-bottom:4px;">Comisiones Totales</label>
+                                <input type="number" id="ea-total-commissions" step="0.01" value="${f(report.total_commissions)}" style="width:100%; padding:8px; border:1px solid var(--color-border); border-radius:6px; font-size:13px; box-sizing:border-box;" oninput="window.Reports._eaAutoCalc()">
+                            </div>
+                            <div>
+                                <label style="font-size:11px; font-weight:600; text-transform:uppercase; color:var(--color-text-secondary); display:block; margin-bottom:4px;">Costos de Llegadas</label>
+                                <input type="number" id="ea-total-arrival-costs" step="0.01" value="${f(report.total_arrival_costs)}" style="width:100%; padding:8px; border:1px solid var(--color-border); border-radius:6px; font-size:13px; box-sizing:border-box;" oninput="window.Reports._eaAutoCalc()">
+                            </div>
+                            <div>
+                                <label style="font-size:11px; font-weight:600; text-transform:uppercase; color:var(--color-text-secondary); display:block; margin-bottom:4px;">Costos Variables Diarios</label>
+                                <input type="number" id="ea-variable-costs" step="0.01" value="${f(report.variable_costs_daily)}" style="width:100%; padding:8px; border:1px solid var(--color-border); border-radius:6px; font-size:13px; box-sizing:border-box;" oninput="window.Reports._eaAutoCalc()">
+                            </div>
+                            <div>
+                                <label style="font-size:11px; font-weight:600; text-transform:uppercase; color:var(--color-text-secondary); display:block; margin-bottom:4px;">Costos Fijos Prorrateados</label>
+                                <input type="number" id="ea-fixed-costs" step="0.01" value="${f(report.fixed_costs_prorated)}" style="width:100%; padding:8px; border:1px solid var(--color-border); border-radius:6px; font-size:13px; box-sizing:border-box;" oninput="window.Reports._eaAutoCalc()">
+                            </div>
+                            <div>
+                                <label style="font-size:11px; font-weight:600; text-transform:uppercase; color:var(--color-text-secondary); display:block; margin-bottom:4px;">Comisiones Bancarias</label>
+                                <input type="number" id="ea-bank-commissions" step="0.01" value="${f(report.bank_commissions)}" style="width:100%; padding:8px; border:1px solid var(--color-border); border-radius:6px; font-size:13px; box-sizing:border-box;" oninput="window.Reports._eaAutoCalc()">
+                            </div>
+                            <div>
+                                <label style="font-size:11px; font-weight:600; text-transform:uppercase; color:var(--color-text-secondary); display:block; margin-bottom:4px;">Costos Operativos Totales <span style="font-weight:400; font-style:italic;">(referencia)</span></label>
+                                <input type="number" id="ea-total-operating-costs" step="0.01" value="${f(report.total_operating_costs)}" style="width:100%; padding:8px; border:1px solid var(--color-border); border-radius:6px; font-size:13px; box-sizing:border-box; color:var(--color-text-secondary);">
+                            </div>
+                        </div>
+
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; background:var(--color-bg-secondary); border-radius:8px; padding:12px; margin-bottom:16px;">
+                            <div>
+                                <label style="font-size:11px; font-weight:600; text-transform:uppercase; color:var(--color-success); display:block; margin-bottom:4px;">✦ Utilidad Bruta (auto)</label>
+                                <input type="number" id="ea-gross-profit" step="0.01" value="${f(report.gross_profit)}" style="width:100%; padding:8px; border:2px solid var(--color-success); border-radius:6px; font-size:14px; font-weight:700; box-sizing:border-box; color:var(--color-success);">
+                            </div>
+                            <div>
+                                <label style="font-size:11px; font-weight:600; text-transform:uppercase; color:var(--color-primary); display:block; margin-bottom:4px;">✦ Utilidad Neta (auto)</label>
+                                <input type="number" id="ea-net-profit" step="0.01" value="${f(report.net_profit)}" style="width:100%; padding:8px; border:2px solid var(--color-primary); border-radius:6px; font-size:14px; font-weight:700; box-sizing:border-box; color:var(--color-primary);">
+                            </div>
+                        </div>
+                        <p style="font-size:11px; color:var(--color-text-secondary); margin:0 0 16px 0; text-align:center;">
+                            U. Bruta = Ventas − COGS − Comisiones − Llegadas &nbsp;|&nbsp; U. Neta = U. Bruta − Variables − Fijos − Bancarias
+                        </p>
+
+                        <div style="display:flex; gap:10px; justify-content:flex-end;">
+                            <button onclick="document.getElementById('edit-archived-report-modal').remove()" style="padding:9px 18px; border:1px solid var(--color-border); background:var(--color-bg); color:var(--color-text); border-radius:6px; cursor:pointer; font-size:13px;">Cancelar</button>
+                            <button onclick="window.Reports.saveArchivedReportEdits('${reportId}')" style="padding:9px 20px; background:var(--color-primary); color:white; border:none; border-radius:6px; cursor:pointer; font-size:13px; font-weight:600;">
+                                <i class="fas fa-save"></i> Guardar Cambios
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+        } catch (error) {
+            console.error('Error abriendo editor de reporte archivado:', error);
+            Utils.showNotification('Error al abrir el editor: ' + error.message, 'error');
+        }
+    },
+
+    _eaAutoCalc() {
+        const g = id => parseFloat(document.getElementById(id)?.value) || 0;
+        const sales = g('ea-total-sales');
+        const cogs = g('ea-total-cogs');
+        const comm = g('ea-total-commissions');
+        const arrivals = g('ea-total-arrival-costs');
+        const varCosts = g('ea-variable-costs');
+        const fixedCosts = g('ea-fixed-costs');
+        const bankComm = g('ea-bank-commissions');
+
+        const grossProfit = sales - cogs - comm - arrivals;
+        const totalOpCosts = varCosts + fixedCosts;
+        const netProfit = grossProfit - totalOpCosts - bankComm;
+
+        const gpEl = document.getElementById('ea-gross-profit');
+        const npEl = document.getElementById('ea-net-profit');
+        const opEl = document.getElementById('ea-total-operating-costs');
+        if (gpEl) gpEl.value = grossProfit.toFixed(2);
+        if (npEl) npEl.value = netProfit.toFixed(2);
+        if (opEl) opEl.value = totalOpCosts.toFixed(2);
+    },
+
+    async saveArchivedReportEdits(reportId) {
+        try {
+            const g = id => parseFloat(document.getElementById(id)?.value) || 0;
+
+            const updates = {
+                total_sales_mxn: g('ea-total-sales'),
+                total_cogs: g('ea-total-cogs'),
+                total_commissions: g('ea-total-commissions'),
+                total_arrival_costs: g('ea-total-arrival-costs'),
+                variable_costs_daily: g('ea-variable-costs'),
+                fixed_costs_prorated: g('ea-fixed-costs'),
+                bank_commissions: g('ea-bank-commissions'),
+                total_operating_costs: g('ea-total-operating-costs'),
+                gross_profit: g('ea-gross-profit'),
+                net_profit: g('ea-net-profit'),
+                manually_edited: true
+            };
+
+            // 1) Actualizar IndexedDB local con marca de recálculo manual
+            const report = await DB.get('archived_quick_captures', reportId);
+            if (!report) throw new Error('Reporte no encontrado en local');
+
+            const updatedReport = {
+                ...report,
+                ...updates,
+                recalculated_at: new Date().toISOString()
+            };
+            await DB.put('archived_quick_captures', updatedReport);
+            console.log('✅ Reporte archivado actualizado en IndexedDB local');
+
+            // 2) Sincronizar al servidor si hay server_id
+            const serverId = report.server_id || reportId;
+            const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(serverId));
+            if (isUUID && typeof API !== 'undefined' && API.updateArchivedReport) {
+                try {
+                    await API.updateArchivedReport(serverId, updates);
+                    console.log('✅ Reporte archivado sincronizado al servidor');
+                } catch (serverError) {
+                    console.warn('⚠️ Error sincronizando al servidor (guardado localmente):', serverError.message);
+                    Utils.showNotification('Guardado localmente. Error de sincronización con el servidor.', 'warning');
+                }
+            }
+
+            document.getElementById('edit-archived-report-modal')?.remove();
+            Utils.showNotification('Reporte actualizado correctamente. El Histórico reflejará los nuevos valores.', 'success');
+
+            // Recargar la lista de archivados
+            await this.loadArchivedReports(true);
+        } catch (error) {
+            console.error('Error guardando edición de reporte archivado:', error);
+            Utils.showNotification('Error al guardar: ' + error.message, 'error');
         }
     },
 
