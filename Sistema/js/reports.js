@@ -6074,16 +6074,17 @@ const Reports = {
 
             // Generar nombre del período automáticamente
             let periodName = '';
+            // Parsear en tiempo local para evitar error de zona horaria UTC
+            const [pfY, pfM, pfD] = dateFrom.split('-').map(Number);
+            const pfDate = new Date(pfY, pfM - 1, pfD);
             if (periodType === 'monthly') {
-                const date = new Date(dateFrom);
                 const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-                periodName = `${monthNames[date.getMonth()]} ${date.getFullYear()}`;
+                periodName = `${monthNames[pfDate.getMonth()]} ${pfDate.getFullYear()}`;
             } else if (periodType === 'yearly') {
-                periodName = new Date(dateFrom).getFullYear().toString();
+                periodName = pfDate.getFullYear().toString();
             } else if (periodType === 'quarterly') {
-                const date = new Date(dateFrom);
-                const quarter = Math.floor(date.getMonth() / 3) + 1;
-                periodName = `Q${quarter} ${date.getFullYear()}`;
+                const quarter = Math.floor(pfDate.getMonth() / 3) + 1;
+                periodName = `Q${quarter} ${pfDate.getFullYear()}`;
             } else if (periodType === 'weekly') {
                 periodName = `Semana ${dateFrom} a ${dateTo}`;
             } else {
@@ -6935,7 +6936,7 @@ const Reports = {
             doc.setTextColor(0, 0, 0);
 
             // ========== SECCIÓN P&L ==========
-            checkPage(60);
+            checkPage(110);
             y = drawSectionTitle('ESTADO DE RESULTADOS', y);
 
             const totalSalesMXN = parseFloat(report.total_sales_mxn) || 0;
