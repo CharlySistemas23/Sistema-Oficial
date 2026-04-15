@@ -6144,7 +6144,16 @@ const Reports = {
                 if (typeof this.deduplicateCosts === 'function') filteredCosts = this.deduplicateCosts(filteredCosts);
 
                 const isRecurringFixed = c => (c.recurring === true || c.recurring === 'true' || c.type === 'fijo');
-                const isValidOpCategory = c => c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias';
+                // Excluir: llegadas y comisiones bancarias (se usan por separado),
+                // comisiones por venta y costo_ventas/COGS (ya están en totalCommissions y totalCOGS)
+                const isValidOpCategory = c => {
+                    const cat = (c.category || '').toLowerCase();
+                    return cat !== 'pago_llegadas' &&
+                           cat !== 'comisiones_bancarias' &&
+                           cat !== 'comisiones' &&
+                           cat !== 'costo_ventas' &&
+                           cat !== 'cogs';
+                };
 
                 // Dedup por concepto: branch + category + description, conservando la entrada MÁS RECIENTE.
                 // Esto evita que un mismo costo recurrente se cuente varias veces cuando cambió de monto
