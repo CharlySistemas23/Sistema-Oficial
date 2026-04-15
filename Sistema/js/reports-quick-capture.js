@@ -7610,27 +7610,55 @@ const ReportsQuickCapture = {
                 await DB.put('archived_quick_captures', report);
                 updatedCount++;
 
-                // Actualizar en el servidor para que la sync no sobreescriba el fix
-                if (report.server_id && typeof API !== 'undefined' && API.updateArchivedReport) {
+                // Subir al servidor usando POST (upsert por fecha+sucursal).
+                // El endpoint POST busca si ya existe un reporte para esa fecha+sucursal y lo actualiza,
+                // o lo crea nuevo si no existe. Esto es más robusto que PUT /:id porque no depende
+                // de que el server_id local sea válido en la BD actual.
+                if (typeof API !== 'undefined' && API.saveArchivedReport) {
                     try {
-                        await API.updateArchivedReport(report.server_id, {
+                        const reportDate = report.date || report.report_date || '';
+                        const serverResult = await API.saveArchivedReport({
+                            report_date: reportDate,
+                            branch_id: report.branch_id,
+                            total_captures: report.total_captures || (report.captures ? report.captures.length : 0),
+                            total_quantity: report.total_quantity || 0,
                             total_sales_mxn: report.total_sales_mxn,
+                            total_cogs: report.total_cogs || 0,
                             total_commissions: report.total_commissions,
-                            seller_commissions: report.seller_commissions,
-                            guide_commissions: report.guide_commissions,
+                            total_arrival_costs: report.total_arrival_costs || 0,
+                            total_operating_costs: report.total_operating_costs || 0,
+                            variable_costs_daily: report.variable_costs_daily || 0,
+                            fixed_costs_prorated: report.fixed_costs_prorated || 0,
+                            bank_commissions: report.bank_commissions,
                             gross_profit: report.gross_profit,
                             net_profit: report.net_profit,
-                            bank_commissions: report.bank_commissions
+                            exchange_rates: report.exchange_rates || {},
+                            captures: report.captures || [],
+                            daily_summary: report.daily_summary || [],
+                            seller_commissions: report.seller_commissions,
+                            guide_commissions: report.guide_commissions,
+                            arrivals: report.arrivals || [],
+                            metrics: report.metrics || {}
                         });
+                        // Actualizar server_id local con el devuelto por el servidor
+                        if (serverResult && serverResult.id) {
+                            report.server_id = serverResult.id;
+                            report.sync_status = 'synced';
+                            await DB.put('archived_quick_captures', report);
+                        }
                         serverUpdatedCount++;
-                        console.log(`✅ Servidor actualizado: ${report.server_id} (${report.date})`);
+                        console.log(`✅ Servidor actualizado (upsert): ${reportDate} (ID: ${serverResult?.id})`);
                     } catch (serverError) {
-                        console.warn(`⚠️ No se pudo actualizar en servidor: ${report.server_id}:`, serverError.message);
+                        console.warn(`⚠️ No se pudo actualizar en servidor (${report.date}):`, serverError.message);
                     }
                 }
             }
 
-            Utils.showNotification(`✅ ${updatedCount} reportes recalculados (${serverUpdatedCount} actualizados en servidor).`, 'success');
+            const failedCount = updatedCount - serverUpdatedCount;
+            const serverMsg = failedCount > 0
+                ? ` (⚠️ ${failedCount} no pudieron subirse al servidor)`
+                : ` (${serverUpdatedCount} actualizados en servidor)`;
+            Utils.showNotification(`✅ ${updatedCount} reportes recalculados${serverMsg}.`, failedCount > 0 ? 'warning' : 'success');
             // skipSync=true para no sobreescribir los datos corregidos con la sync del servidor
             await this.loadArchivedReports(true);
         } catch (error) {
