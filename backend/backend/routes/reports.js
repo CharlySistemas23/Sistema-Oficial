@@ -1161,18 +1161,27 @@ router.get('/archived-quick-captures/:id', requireBranchAccess, async (req, res)
   }
 });
 
-// Actualizar reporte archivado (solo campos calculados: comisiones, ganancias)
+// Actualizar reporte archivado (edición manual de valores financieros y capturas)
 router.put('/archived-quick-captures/:id', requireBranchAccess, async (req, res) => {
   try {
     const { id } = req.params;
     const {
       total_sales_mxn,
+      total_cogs,
       total_commissions,
+      total_arrival_costs,
+      total_operating_costs,
+      variable_costs_daily,
+      fixed_costs_prorated,
       seller_commissions,
       guide_commissions,
       gross_profit,
       net_profit,
-      bank_commissions
+      bank_commissions,
+      captures,
+      metrics,
+      arrivals,
+      manually_edited
     } = req.body;
 
     const checkResult = await query(
@@ -1192,23 +1201,39 @@ router.put('/archived-quick-captures/:id', requireBranchAccess, async (req, res)
     const result = await query(
       `UPDATE archived_quick_capture_reports
        SET total_sales_mxn = COALESCE($1, total_sales_mxn),
-           total_commissions = COALESCE($2, total_commissions),
-           seller_commissions = COALESCE($3, seller_commissions),
-           guide_commissions = COALESCE($4, guide_commissions),
-           gross_profit = COALESCE($5, gross_profit),
-           net_profit = COALESCE($6, net_profit),
-           bank_commissions = COALESCE($7, bank_commissions),
+           total_cogs = COALESCE($2, total_cogs),
+           total_commissions = COALESCE($3, total_commissions),
+           total_arrival_costs = COALESCE($4, total_arrival_costs),
+           total_operating_costs = COALESCE($5, total_operating_costs),
+           variable_costs_daily = COALESCE($6, variable_costs_daily),
+           fixed_costs_prorated = COALESCE($7, fixed_costs_prorated),
+           seller_commissions = COALESCE($8, seller_commissions),
+           guide_commissions = COALESCE($9, guide_commissions),
+           gross_profit = COALESCE($10, gross_profit),
+           net_profit = COALESCE($11, net_profit),
+           bank_commissions = COALESCE($12, bank_commissions),
+           captures = COALESCE($13, captures),
+           metrics = COALESCE($14, metrics),
+           arrivals = COALESCE($15, arrivals),
            updated_at = NOW()
-       WHERE id = $8
+       WHERE id = $16
        RETURNING *`,
       [
         total_sales_mxn != null ? parseFloat(total_sales_mxn) : null,
+        total_cogs != null ? parseFloat(total_cogs) : null,
         total_commissions != null ? parseFloat(total_commissions) : null,
+        total_arrival_costs != null ? parseFloat(total_arrival_costs) : null,
+        total_operating_costs != null ? parseFloat(total_operating_costs) : null,
+        variable_costs_daily != null ? parseFloat(variable_costs_daily) : null,
+        fixed_costs_prorated != null ? parseFloat(fixed_costs_prorated) : null,
         seller_commissions != null ? JSON.stringify(seller_commissions) : null,
         guide_commissions != null ? JSON.stringify(guide_commissions) : null,
         gross_profit != null ? parseFloat(gross_profit) : null,
         net_profit != null ? parseFloat(net_profit) : null,
         bank_commissions != null ? parseFloat(bank_commissions) : null,
+        captures != null ? JSON.stringify(captures) : null,
+        metrics != null ? JSON.stringify(metrics) : null,
+        arrivals != null ? JSON.stringify(arrivals) : null,
         id
       ]
     );
