@@ -7570,8 +7570,8 @@ const ReportsQuickCapture = {
                     }
                 }
 
-                // Recalcular ganancia usando los valores ya guardados en el reporte
-                const totalSalesMXN = parseFloat(report.total_sales_mxn) || 0;
+                // Recalcular total de ventas directamente de las capturas (capture.total ya está en MXN)
+                const totalSalesMXN = captures.reduce((sum, c) => sum + (parseFloat(c.total) || 0), 0);
                 const totalCOGS = parseFloat(report.total_cogs) || 0;
                 const totalArrivalCosts = parseFloat(report.total_arrival_costs) || 0;
                 const totalOperatingCosts = parseFloat(report.total_operating_costs) || 0;
@@ -7581,6 +7581,7 @@ const ReportsQuickCapture = {
                 const grossProfit = totalSalesMXN - totalCOGS - totalCommissions;
                 const netProfit = grossProfit - totalArrivalCosts - totalOperatingCosts - bankCommissions;
 
+                report.total_sales_mxn = parseFloat(totalSalesMXN.toFixed(2));
                 report.total_commissions = parseFloat(totalCommissions.toFixed(2));
                 report.seller_commissions = Object.values(sellerCommissions).map(s => ({
                     seller_id: s.seller?.id,
@@ -7609,6 +7610,7 @@ const ReportsQuickCapture = {
                 if (report.server_id && typeof API !== 'undefined' && API.updateArchivedReport) {
                     try {
                         await API.updateArchivedReport(report.server_id, {
+                            total_sales_mxn: report.total_sales_mxn,
                             total_commissions: report.total_commissions,
                             seller_commissions: report.seller_commissions,
                             guide_commissions: report.guide_commissions,
