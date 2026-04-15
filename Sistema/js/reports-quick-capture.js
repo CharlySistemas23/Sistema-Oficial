@@ -348,6 +348,12 @@ const ReportsQuickCapture = {
                         </h3>
                     </div>
                     <div style="display: flex; gap: 6px;">
+                        <button class="btn-secondary btn-sm" onclick="window.Reports.recalcAllArchivedCosts()" title="Recalcular costos operativos (variables + fijos + bancarias) de todos los archivados desde cost_entries" style="font-weight: 600; padding: 6px 10px; font-size: 11px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); color: var(--color-info, #3498db);">
+                            <i class="fas fa-sync-alt"></i> Recalcular Costos
+                        </button>
+                        <button class="btn-secondary btn-sm" onclick="window.Reports.recalcAllArchivedArrivals()" title="Re-asociar llegadas desde agency_arrivals por fecha y recalcular costos de llegadas en todos los archivados" style="font-weight: 600; padding: 6px 10px; font-size: 11px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); color: var(--color-success, #27ae60);">
+                            <i class="fas fa-plane-arrival"></i> Recalcular Llegadas
+                        </button>
                         <button class="btn-secondary btn-sm" onclick="window.Reports.recalculateAllArchivedCommissions()" title="Recalcular comisiones de todos los reportes archivados" style="font-weight: 600; padding: 6px 10px; font-size: 11px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); color: var(--color-warning, #e67e22);">
                             <i class="fas fa-calculator"></i> Recalcular Comisiones
                         </button>
@@ -7408,6 +7414,303 @@ const ReportsQuickCapture = {
         });
     },
 
+    async recalcAllArchivedCosts() {
+        try {
+            const confirmed = await Utils.confirm(
+                '¿Recalcular los costos operativos (variables, fijos, bancarias) de TODOS los reportes archivados desde los registros locales de cost_entries?\n\nEsto actualizará también la Utilidad Bruta y Neta de cada reporte.',
+                'Recalcular Costos Todos'
+            );
+            if (!confirmed) return;
+
+            const allReports = await DB.getAll('archived_quick_captures') || [];
+            if (allReports.length === 0) {
+                Utils.showNotification('No hay reportes archivados', 'warning');
+                return;
+            }
+
+            const allCosts = await DB.getAll('cost_entries') || [];
+            const allSessions = await DB.getAll('cash_sessions') || [];
+            const allMovements = await DB.getAll('cash_movements') || [];
+
+            let updated = 0;
+            let errors = 0;
+
+            for (const report of allReports) {
+                try {
+                    const reportDate = this.getArchivedReportDate(report);
+                    if (!reportDate) continue;
+
+                    const captureBranchIds = report.branch_id ? [report.branch_id] : [];
+                    const targetDate = new Date(reportDate);
+                    const DAYS_PER_MONTH = 30;
+                    const daysInYear = ((targetDate.getFullYear() % 4 === 0 && targetDate.getFullYear() % 100 !== 0) || (targetDate.getFullYear() % 400 === 0)) ? 366 : 365;
+
+                    let variableCostsDaily = 0;
+                    let fixedCostsProrated = 0;
+                    let bankCommissions = 0;
+
+                    for (const branchId of (captureBranchIds.length > 0 ? captureBranchIds : [null])) {
+                        let branchCosts = allCosts.filter(c => {
+                            if (branchId === null) return !c.branch_id;
+                            if (!c.branch_id) return false;
+                            return String(c.branch_id) === String(branchId);
+                        });
+                        branchCosts = this.deduplicateCosts(branchCosts);
+
+                        // A) FIJOS PRORRATEADOS
+                        const monthlyCosts = this.deduplicateRecurringCosts(branchCosts.filter(c =>
+                            c.period_type === 'monthly' &&
+                            (c.recurring === true || c.recurring === 'true' || c.type === 'fijo') &&
+                            c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias'
+                        ));
+                        for (const cost of monthlyCosts) fixedCostsProrated += (parseFloat(cost.amount) || 0) / DAYS_PER_MONTH;
+
+                        const weeklyCosts = this.deduplicateRecurringCosts(branchCosts.filter(c => {
+                            const cd = new Date(c.date || c.created_at);
+                            return c.period_type === 'weekly' &&
+                                (c.recurring === true || c.recurring === 'true' || c.type === 'fijo') &&
+                                c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias' &&
+                                targetDate.getFullYear() === cd.getFullYear();
+                        }));
+                        for (const cost of weeklyCosts) fixedCostsProrated += (parseFloat(cost.amount) || 0) / 7;
+
+                        const annualCosts = this.deduplicateRecurringCosts(branchCosts.filter(c =>
+                            (c.period_type === 'annual' || c.period_type === 'yearly') &&
+                            (c.recurring === true || c.recurring === 'true' || c.type === 'fijo') &&
+                            c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias'
+                        ));
+                        for (const cost of annualCosts) fixedCostsProrated += (parseFloat(cost.amount) || 0) / daysInYear;
+
+                        // B) VARIABLES DEL DÍA
+                        const isFixed = c => c.recurring === true || c.recurring === 'true' || c.type === 'fijo';
+                        const varCosts = branchCosts.filter(c => {
+                            const ds = (c.date || c.created_at || '').split('T')[0];
+                            const cat = (c.category || '').toLowerCase();
+                            return ds === reportDate &&
+                                cat !== 'pago_llegadas' && cat !== 'comisiones_bancarias' &&
+                                cat !== 'comisiones' && cat !== 'costo_ventas' && cat !== 'cogs' &&
+                                !isFixed(c) &&
+                                (c.period_type === 'one_time' || c.period_type === 'daily' || !c.period_type);
+                        });
+                        for (const cost of varCosts) variableCostsDaily += (parseFloat(cost.amount) || 0);
+
+                        // C) COMISIONES BANCARIAS REGISTRADAS
+                        const bankCosts = branchCosts.filter(c => {
+                            const ds = (c.date || c.created_at || '').split('T')[0];
+                            return ds === reportDate && (c.category || '').toLowerCase() === 'comisiones_bancarias';
+                        });
+                        for (const cost of bankCosts) bankCommissions += (parseFloat(cost.amount) || 0);
+
+                        // D) RETIROS DE CAJA
+                        const daySessions = allSessions.filter(s => {
+                            const sd = (s.date || s.created_at || '').split('T')[0];
+                            return sd === reportDate && (!branchId || String(s.branch_id) === String(branchId));
+                        });
+                        const sessionIds = daySessions.map(s => s.id);
+                        for (const m of allMovements) {
+                            if (m.type === 'withdrawal' && sessionIds.includes(m.session_id)) {
+                                variableCostsDaily += (parseFloat(m.amount) || 0);
+                            }
+                        }
+                    }
+
+                    // Fallback bancarias
+                    const totalSales = parseFloat(report.total_sales_mxn) || 0;
+                    if (bankCommissions <= 0 && totalSales > 0) bankCommissions = totalSales * 0.045;
+
+                    const totalOpCosts = variableCostsDaily + fixedCostsProrated;
+                    const totalCOGS = parseFloat(report.total_cogs) || 0;
+                    const totalComm = parseFloat(report.total_commissions) || 0;
+                    const totalArrival = parseFloat(report.total_arrival_costs) || 0;
+                    // Misma fórmula que archiveQuickCaptureReport:
+                    // gross = sales - COGS - commissions  (llegadas NO en gross)
+                    // net   = gross - arrivals - opCosts - bank
+                    const grossProfit = totalSales - totalCOGS - totalComm;
+                    const netProfit = grossProfit - totalArrival - totalOpCosts - bankCommissions;
+
+                    const updatedReport = {
+                        ...report,
+                        variable_costs_daily: variableCostsDaily,
+                        fixed_costs_prorated: fixedCostsProrated,
+                        total_operating_costs: totalOpCosts,
+                        bank_commissions: bankCommissions,
+                        gross_profit: grossProfit,
+                        net_profit: netProfit,
+                        recalculated_at: new Date().toISOString()
+                    };
+                    await DB.put('archived_quick_captures', updatedReport);
+
+                    // Sincronizar al servidor si tiene UUID
+                    const serverId = report.server_id || report.id;
+                    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(serverId));
+                    if (isUUID && typeof API !== 'undefined' && API.updateArchivedReport) {
+                        try {
+                            await API.updateArchivedReport(serverId, {
+                                variable_costs_daily: variableCostsDaily,
+                                fixed_costs_prorated: fixedCostsProrated,
+                                total_operating_costs: totalOpCosts,
+                                bank_commissions: bankCommissions,
+                                gross_profit: grossProfit,
+                                net_profit: netProfit
+                            });
+                        } catch (_) {}
+                    }
+
+                    updated++;
+                    console.log(`✅ [RecalcCostos] ${reportDate}: fijos=$${fixedCostsProrated.toFixed(2)} var=$${variableCostsDaily.toFixed(2)} banco=$${bankCommissions.toFixed(2)} neta=$${netProfit.toFixed(2)}`);
+                } catch (err) {
+                    console.error('Error en reporte', report.id, err);
+                    errors++;
+                }
+            }
+
+            Utils.showNotification(`Costos recalculados: ${updated} reportes actualizados${errors > 0 ? `, ${errors} con error` : ''}.`, errors > 0 ? 'warning' : 'success');
+            await this.loadArchivedReports(true);
+        } catch (error) {
+            console.error('Error recalcAllarchivedCosts:', error);
+            Utils.showNotification('Error: ' + error.message, 'error');
+        }
+    },
+
+    async recalcAllArchivedArrivals() {
+        try {
+            const confirmed = await Utils.confirm(
+                '¿Re-asociar llegadas y recalcular costos de llegadas en TODOS los reportes archivados?\n\nSe consultarán las llegadas registradas en el sistema por fecha y se actualizarán los reportes que tengan llegadas faltantes o incorrectas.',
+                'Recalcular Llegadas'
+            );
+            if (!confirmed) return;
+
+            const allReports = await DB.getAll('archived_quick_captures') || [];
+            if (allReports.length === 0) {
+                Utils.showNotification('No hay reportes archivados', 'warning');
+                return;
+            }
+
+            const allCosts = await DB.getAll('cost_entries') || [];
+            const allArrivals = await DB.getAll('agency_arrivals') || [];
+
+            const norm = (id) => (id != null && id !== '') ? String(id).trim().toLowerCase() : '';
+            const isArrivalCost = (cat) => (cat || '').toLowerCase().replace(/\s+/g, '_') === 'pago_llegadas';
+
+            let updated = 0;
+            let errors = 0;
+
+            for (const report of allReports) {
+                try {
+                    const reportDate = this.getArchivedReportDate(report);
+                    if (!reportDate) continue;
+
+                    const captureBranchIds = Array.isArray(report.branch_ids) && report.branch_ids.length > 0
+                        ? report.branch_ids
+                        : (report.branch_id ? [report.branch_id] : []);
+                    const normBranchIds = captureBranchIds.map(norm).filter(Boolean);
+
+                    // 1. Buscar costos de llegadas en cost_entries (fuente autorizada)
+                    const arrivalCostEntries = allCosts.filter(c => {
+                        const costDate = (c.date || c.created_at || '').split('T')[0];
+                        if (!isArrivalCost(c.category)) return false;
+                        if (costDate !== reportDate) return false;
+                        if (normBranchIds.length === 0) return true;
+                        if (!c.branch_id) return true;
+                        return normBranchIds.includes(norm(c.branch_id));
+                    });
+
+                    const uniqueArrivalCosts = new Map();
+                    arrivalCostEntries.forEach(c => {
+                        const amount = parseFloat(c.amount) || 0;
+                        if (c.arrival_id) {
+                            const existing = uniqueArrivalCosts.get(c.arrival_id) || 0;
+                            if (amount > existing) uniqueArrivalCosts.set(c.arrival_id, amount);
+                        } else {
+                            const key = `${c.date||''}_${c.agency_id||''}_${c.branch_id||''}_${amount}`;
+                            if (!uniqueArrivalCosts.has(key)) uniqueArrivalCosts.set(key, amount);
+                        }
+                    });
+                    let totalArrival = Array.from(uniqueArrivalCosts.values()).reduce((s, a) => s + a, 0);
+
+                    // Llegadas del día para guardar en el reporte
+                    let dayArrivals = allArrivals.filter(a => {
+                        const aDate = (a.date || (a.created_at ? a.created_at.split('T')[0] : null) || '');
+                        if (aDate !== reportDate) return false;
+                        if (normBranchIds.length === 0) return true;
+                        return !a.branch_id || normBranchIds.includes(norm(a.branch_id));
+                    });
+
+                    // 2. Fallback: calcular desde agency_arrivals si no hay en cost_entries
+                    if (uniqueArrivalCosts.size === 0 || totalArrival === 0) {
+                        const arrivalsWithFee = dayArrivals.filter(a =>
+                            parseFloat(a.calculated_fee || a.arrival_fee || 0) > 0
+                        );
+                        const uniqueArrivals = new Map();
+                        arrivalsWithFee.forEach(a => {
+                            const fee = parseFloat(a.calculated_fee || a.arrival_fee || 0) || 0;
+                            if (a.id) {
+                                const existing = uniqueArrivals.get(a.id) || 0;
+                                if (fee > existing) uniqueArrivals.set(a.id, fee);
+                            }
+                        });
+                        totalArrival = Array.from(uniqueArrivals.values()).reduce((s, f) => s + f, 0);
+                    }
+
+                    // Si no hay cambio significativo, continuar (evitar writes innecesarios)
+                    const prevArrival = parseFloat(report.total_arrival_costs) || 0;
+                    const prevArrivalsCount = (report.arrivals || []).length;
+                    if (Math.abs(totalArrival - prevArrival) < 0.01 && dayArrivals.length === prevArrivalsCount) continue;
+
+                    // Recalcular gross/net con el nuevo total de llegadas
+                    const totalSales = parseFloat(report.total_sales_mxn) || 0;
+                    const totalCOGS = parseFloat(report.total_cogs) || 0;
+                    const totalComm = parseFloat(report.total_commissions) || 0;
+                    const totalOpCosts = parseFloat(report.total_operating_costs) || 0;
+                    const bankComm = parseFloat(report.bank_commissions) || 0;
+                    const grossProfit = totalSales - totalCOGS - totalComm;
+                    const netProfit = grossProfit - totalArrival - totalOpCosts - bankComm;
+
+                    const updatedReport = {
+                        ...report,
+                        arrivals: dayArrivals,
+                        total_arrival_costs: totalArrival,
+                        gross_profit: grossProfit,
+                        net_profit: netProfit,
+                        recalculated_at: new Date().toISOString()
+                    };
+                    await DB.put('archived_quick_captures', updatedReport);
+
+                    // Sincronizar al servidor
+                    const serverId = report.server_id || report.id;
+                    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(serverId));
+                    if (isUUID && typeof API !== 'undefined' && API.updateArchivedReport) {
+                        try {
+                            await API.updateArchivedReport(serverId, {
+                                total_arrival_costs: totalArrival,
+                                arrivals: dayArrivals,
+                                gross_profit: grossProfit,
+                                net_profit: netProfit
+                            });
+                        } catch (_) {}
+                    }
+
+                    updated++;
+                    console.log(`✅ [RecalcLlegadas] ${reportDate}: prev=$${prevArrival.toFixed(2)} → nuevo=$${totalArrival.toFixed(2)}, llegadas: ${dayArrivals.length}`);
+                } catch (err) {
+                    console.error('Error en reporte', report.id, err);
+                    errors++;
+                }
+            }
+
+            Utils.showNotification(
+                updated > 0
+                    ? `Llegadas recalculadas: ${updated} reporte(s) actualizado(s)${errors > 0 ? `, ${errors} con error` : ''}.`
+                    : `Sin cambios necesarios${errors > 0 ? ` (${errors} con error)` : ''}.`,
+                errors > 0 ? 'warning' : 'success'
+            );
+            if (updated > 0) await this.loadArchivedReports(true);
+        } catch (error) {
+            console.error('Error recalcAllArchivedArrivals:', error);
+            Utils.showNotification('Error: ' + error.message, 'error');
+        }
+    },
+
     async recalculateAllArchivedCommissions() {
         try {
             const confirmed = await Utils.confirm(
@@ -8251,6 +8554,9 @@ const ReportsQuickCapture = {
 
                         <div style="display:flex; gap:10px; justify-content:flex-end;">
                             <button onclick="document.getElementById('edit-archived-report-modal').remove()" style="padding:9px 18px; border:1px solid var(--color-border); background:var(--color-bg); color:var(--color-text); border-radius:6px; cursor:pointer; font-size:13px;">Cancelar</button>
+                            <button onclick="window.Reports.recalcArchivedCosts('${reportId}')" style="padding:9px 18px; background:var(--color-info,#3498db); color:white; border:none; border-radius:6px; cursor:pointer; font-size:13px;" title="Recalcula variables, fijos y bancarias desde cost_entries local">
+                                <i class="fas fa-sync-alt"></i> Recalcular Costos
+                            </button>
                             <button onclick="window.Reports.saveArchivedReportEdits('${reportId}')" style="padding:9px 20px; background:var(--color-primary); color:white; border:none; border-radius:6px; cursor:pointer; font-size:13px; font-weight:600;">
                                 <i class="fas fa-save"></i> Guardar Cambios
                             </button>
@@ -8286,6 +8592,132 @@ const ReportsQuickCapture = {
         if (gpEl) gpEl.value = grossProfit.toFixed(2);
         if (npEl) npEl.value = netProfit.toFixed(2);
         if (opEl) opEl.value = totalOpCosts.toFixed(2);
+    },
+
+    async recalcArchivedCosts(reportId) {
+        const btn = document.querySelector('#edit-archived-report-modal button[onclick*="recalcArchivedCosts"]');
+        const originalText = btn ? btn.innerHTML : '';
+        try {
+            if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Calculando…'; }
+
+            const report = await DB.get('archived_quick_captures', reportId);
+            if (!report) throw new Error('Reporte no encontrado');
+
+            const reportDate = this.getArchivedReportDate(report);
+            if (!reportDate) throw new Error('El reporte no tiene fecha');
+
+            const targetDate = new Date(reportDate);
+            const captureBranchIds = [];
+            if (report.branch_id) captureBranchIds.push(report.branch_id);
+
+            const allCosts = await DB.getAll('cost_entries') || [];
+
+            let variableCostsDaily = 0;
+            let fixedCostsProrated = 0;
+            let bankCommissions = 0;
+
+            for (const branchId of (captureBranchIds.length > 0 ? captureBranchIds : [null])) {
+                let branchCosts = allCosts.filter(c => {
+                    if (branchId === null) return !c.branch_id;
+                    if (!c.branch_id) return false;
+                    return String(c.branch_id) === String(branchId);
+                });
+                branchCosts = this.deduplicateCosts(branchCosts);
+
+                // A) COSTOS FIJOS PRORRATEADOS
+                const DAYS_PER_MONTH = 30;
+                const daysInYear = ((targetDate.getFullYear() % 4 === 0 && targetDate.getFullYear() % 100 !== 0) || (targetDate.getFullYear() % 400 === 0)) ? 366 : 365;
+
+                const monthlyCosts = this.deduplicateRecurringCosts(branchCosts.filter(c =>
+                    c.period_type === 'monthly' &&
+                    (c.recurring === true || c.recurring === 'true' || c.type === 'fijo') &&
+                    c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias'
+                ));
+                for (const cost of monthlyCosts) fixedCostsProrated += (parseFloat(cost.amount) || 0) / DAYS_PER_MONTH;
+
+                const weeklyCosts = this.deduplicateRecurringCosts(branchCosts.filter(c => {
+                    const costDate = new Date(c.date || c.created_at);
+                    return c.period_type === 'weekly' &&
+                        (c.recurring === true || c.recurring === 'true' || c.type === 'fijo') &&
+                        c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias' &&
+                        targetDate.getFullYear() === costDate.getFullYear();
+                }));
+                for (const cost of weeklyCosts) fixedCostsProrated += (parseFloat(cost.amount) || 0) / 7;
+
+                const annualCosts = this.deduplicateRecurringCosts(branchCosts.filter(c =>
+                    (c.period_type === 'annual' || c.period_type === 'yearly') &&
+                    (c.recurring === true || c.recurring === 'true' || c.type === 'fijo') &&
+                    c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias'
+                ));
+                for (const cost of annualCosts) fixedCostsProrated += (parseFloat(cost.amount) || 0) / daysInYear;
+
+                // B) COSTOS VARIABLES DEL DÍA
+                const isFixed = c => c.recurring === true || c.recurring === 'true' || c.type === 'fijo';
+                const variableCosts = branchCosts.filter(c => {
+                    const costDateStr = (c.date || c.created_at || '').split('T')[0];
+                    const cat = (c.category || '').toLowerCase();
+                    return costDateStr === reportDate &&
+                        cat !== 'pago_llegadas' && cat !== 'comisiones_bancarias' &&
+                        cat !== 'comisiones' && cat !== 'costo_ventas' && cat !== 'cogs' &&
+                        !isFixed(c) &&
+                        (c.period_type === 'one_time' || c.period_type === 'daily' || !c.period_type);
+                });
+                for (const cost of variableCosts) variableCostsDaily += (parseFloat(cost.amount) || 0);
+
+                // C) COMISIONES BANCARIAS
+                const bankCosts = branchCosts.filter(c => {
+                    const costDateStr = (c.date || c.created_at || '').split('T')[0];
+                    return costDateStr === reportDate && (c.category || '').toLowerCase() === 'comisiones_bancarias';
+                });
+                for (const cost of bankCosts) bankCommissions += (parseFloat(cost.amount) || 0);
+
+                // D) RETIROS DE CAJA
+                try {
+                    const allSessions = await DB.getAll('cash_sessions') || [];
+                    const daySessions = allSessions.filter(s => {
+                        const sd = (s.date || s.created_at || '').split('T')[0];
+                        return sd === reportDate && (!branchId || String(s.branch_id) === String(branchId));
+                    });
+                    const allMovements = await DB.getAll('cash_movements') || [];
+                    const sessionIds = daySessions.map(s => s.id);
+                    for (const m of allMovements) {
+                        if (m.type === 'withdrawal' && sessionIds.includes(m.session_id)) {
+                            variableCostsDaily += (parseFloat(m.amount) || 0);
+                        }
+                    }
+                } catch (_) {}
+            }
+
+            // Fallback comisiones bancarias: 4.5% si no hay registradas
+            const totalSales = parseFloat(report.total_sales_mxn) || 0;
+            if (bankCommissions <= 0 && totalSales > 0) bankCommissions = totalSales * 0.045;
+
+            const totalOpCosts = variableCostsDaily + fixedCostsProrated;
+
+            // E) LLEGADAS: recalcular desde cost_entries(pago_llegadas) + fallback agency_arrivals
+            const branchIdForArrivals = captureBranchIds[0] || null;
+            let totalArrivalCosts = 0;
+            try {
+                totalArrivalCosts = await this.calculateArrivalCosts(reportDate, branchIdForArrivals, captureBranchIds);
+            } catch (_) {}
+
+            // Rellenar campos del modal y recalcular utilidades
+            const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val.toFixed(2); };
+            set('ea-variable-costs', variableCostsDaily);
+            set('ea-fixed-costs', fixedCostsProrated);
+            set('ea-bank-commissions', bankCommissions);
+            set('ea-total-operating-costs', totalOpCosts);
+            set('ea-total-arrival-costs', totalArrivalCosts);
+            // _eaAutoCalc lee los campos del DOM (ya actualizados) y recalcula gross/net
+            this._eaAutoCalc();
+
+            Utils.showNotification(`Costos recalculados: Fijos $${fixedCostsProrated.toFixed(2)} | Variables $${variableCostsDaily.toFixed(2)} | Bancarias $${bankCommissions.toFixed(2)} | Llegadas $${totalArrivalCosts.toFixed(2)}`, 'success');
+        } catch (error) {
+            console.error('Error recalculando costos:', error);
+            Utils.showNotification('Error: ' + error.message, 'error');
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerHTML = originalText; }
+        }
     },
 
     async saveArchivedReportEdits(reportId) {
