@@ -1414,9 +1414,9 @@ router.post('/historical-quick-captures', requireBranchAccess, async (req, res) 
         period_type, period_name, date_from, date_to, branch_id,
         total_days, total_captures, total_quantity, total_sales_mxn,
         total_cogs, total_commissions, total_arrival_costs, total_operating_costs,
-        gross_profit, net_profit, daily_summary, archived_report_ids, metrics, created_by
+        gross_profit, net_profit, daily_summary, archived_report_ids, metrics
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
       RETURNING *`,
       [
         period_type,
@@ -1436,8 +1436,7 @@ router.post('/historical-quick-captures', requireBranchAccess, async (req, res) 
         netProfit,
         dailySummary.length > 0 ? JSON.stringify(dailySummary) : null,
         archived_report_ids && archived_report_ids.length > 0 ? archived_report_ids : null,
-        req.body.metrics ? JSON.stringify(req.body.metrics) : null,
-        req.user.id
+        req.body.metrics ? JSON.stringify(req.body.metrics) : null
       ]
     );
 
@@ -1640,7 +1639,7 @@ router.delete('/historical-quick-captures/:id', requireBranchAccess, async (req,
 
     // Verificar que el reporte existe y el usuario tiene acceso
     const checkResult = await client.query(
-      'SELECT branch_id, created_by FROM historical_quick_capture_reports WHERE id = $1 FOR UPDATE',
+      'SELECT branch_id FROM historical_quick_capture_reports WHERE id = $1 FOR UPDATE',
       [id]
     );
 
@@ -1651,8 +1650,8 @@ router.delete('/historical-quick-captures/:id', requireBranchAccess, async (req,
 
     const report = checkResult.rows[0];
 
-    // Verificar permisos: solo el creador o master_admin puede eliminar
-    if (!req.user.isMasterAdmin && report.created_by !== req.user.id) {
+    // Verificar permisos: solo master_admin puede eliminar (created_by no existe en la tabla)
+    if (!req.user.isMasterAdmin && report.branch_id !== req.user.branchId) {
       await safeRollback(client, 'reports');
       return res.status(403).json({ error: 'No tienes permiso para eliminar este reporte' });
     }
