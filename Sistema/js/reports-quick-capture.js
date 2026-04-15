@@ -7417,6 +7417,9 @@ const ReportsQuickCapture = {
                         const branchId = sr.branch_id;
                         const existingLocal = await DB.getAll('archived_quick_captures') || [];
                         const existing = existingLocal.find(r => this.getArchivedReportDate(r) === reportDate && r.branch_id === branchId);
+                        // Solo actualizar captures y datos estructurales del servidor;
+                        // NO sobreescribir valores financieros si ya fueron recalculados localmente.
+                        // Esto permite que el recálculo use siempre los captures frescos del servidor.
                         const localReport = {
                             id: existing ? existing.id : (branchId && reportDate ? `report_${reportDate}_${branchId}` : sr.id),
                             date: reportDate,
@@ -7444,6 +7447,7 @@ const ReportsQuickCapture = {
                             archived_at: sr.archived_at || sr.created_at || new Date().toISOString(),
                             server_id: sr.id,
                             sync_status: 'synced'
+                            // Nota: recalculated_at se eliminará intencionalmente para hacer recálculo fresco
                         };
                         await DB.put('archived_quick_captures', localReport);
                     }
@@ -7884,6 +7888,16 @@ const ReportsQuickCapture = {
                                     return rDateStr === reportDateStr && r.branch_id === branchId;
                                 });
                                 
+                                // Si el reporte local fue recalculado manualmente y ese recálculo es más
+                                // reciente que la última actualización del servidor, preservar los valores
+                                // financieros locales (el PUT al servidor puede haber fallado silenciosamente).
+                                const localRecalcTS = existingReport?.recalculated_at ? new Date(existingReport.recalculated_at).getTime() : 0;
+                                const serverUpdatedTS = serverReport.updated_at ? new Date(serverReport.updated_at).getTime() : 0;
+                                const shouldKeepLocalCalcs = localRecalcTS > 0 && localRecalcTS > serverUpdatedTS;
+                                if (shouldKeepLocalCalcs) {
+                                    console.log(`🔒 [Paso 2] Preservando valores recalculados localmente para ${reportDateStr} (local recalculated_at=${existingReport.recalculated_at} > server updated_at=${serverReport.updated_at})`);
+                                }
+                                
                                 // Si existe, actualizar; si no, crear nuevo
                                 const localReport = {
                                     id: existingReport ? existingReport.id : uniqueKey, // Mantener ID existente o usar clave única
@@ -7892,26 +7906,27 @@ const ReportsQuickCapture = {
                                     archived_by: serverReport.archived_by, // Guardar quién archivó el reporte
                                     total_captures: serverReport.total_captures || 0,
                                     total_quantity: serverReport.total_quantity || 0,
-                                    total_sales_mxn: serverReport.total_sales_mxn || 0,
+                                    total_sales_mxn: shouldKeepLocalCalcs ? existingReport.total_sales_mxn : (serverReport.total_sales_mxn || 0),
                                     total_cogs: serverReport.total_cogs || 0,
-                                    total_commissions: serverReport.total_commissions || 0,
+                                    total_commissions: shouldKeepLocalCalcs ? existingReport.total_commissions : (serverReport.total_commissions || 0),
                                     total_arrival_costs: serverReport.total_arrival_costs || 0,
                                     total_operating_costs: serverReport.total_operating_costs || 0,
                                     variable_costs_daily: serverReport.variable_costs_daily || 0,
                                     fixed_costs_prorated: serverReport.fixed_costs_prorated || 0,
-                                    bank_commissions: serverReport.bank_commissions || 0,
-                                    gross_profit: serverReport.gross_profit || 0,
-                                    net_profit: serverReport.net_profit || 0,
+                                    bank_commissions: shouldKeepLocalCalcs ? existingReport.bank_commissions : (serverReport.bank_commissions || 0),
+                                    gross_profit: shouldKeepLocalCalcs ? existingReport.gross_profit : (serverReport.gross_profit || 0),
+                                    net_profit: shouldKeepLocalCalcs ? existingReport.net_profit : (serverReport.net_profit || 0),
                                     exchange_rates: serverReport.exchange_rates || {},
                                     captures: this.normalizeArchivedArray(serverReport.captures),
                                     daily_summary: this.normalizeArchivedArray(serverReport.daily_summary),
-                                    seller_commissions: this.normalizeArchivedArray(serverReport.seller_commissions),
-                                    guide_commissions: this.normalizeArchivedArray(serverReport.guide_commissions),
+                                    seller_commissions: shouldKeepLocalCalcs ? existingReport.seller_commissions : this.normalizeArchivedArray(serverReport.seller_commissions),
+                                    guide_commissions: shouldKeepLocalCalcs ? existingReport.guide_commissions : this.normalizeArchivedArray(serverReport.guide_commissions),
                                     arrivals: this.normalizeArchivedArray(serverReport.arrivals),
                                     metrics: serverReport.metrics || {},
                                     archived_at: serverReport.archived_at || serverReport.created_at || new Date().toISOString(),
                                     server_id: serverReport.id, // Guardar el ID del servidor para referencia
-                                    sync_status: 'synced'
+                                    sync_status: 'synced',
+                                    recalculated_at: existingReport?.recalculated_at || null // Preservar timestamp de recálculo
                                 };
                                 
                                 // Guardar en IndexedDB local (actualizar si existe, crear si no)
