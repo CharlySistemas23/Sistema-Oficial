@@ -1414,9 +1414,9 @@ router.post('/historical-quick-captures', requireBranchAccess, async (req, res) 
         period_type, period_name, date_from, date_to, branch_id,
         total_days, total_captures, total_quantity, total_sales_mxn,
         total_cogs, total_commissions, total_arrival_costs, total_operating_costs,
-        gross_profit, net_profit, daily_summary, archived_report_ids, metrics
+        gross_profit, net_profit, daily_summary, archived_report_ids, metrics, created_by
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
       RETURNING *`,
       [
         period_type,
@@ -1436,7 +1436,8 @@ router.post('/historical-quick-captures', requireBranchAccess, async (req, res) 
         netProfit,
         dailySummary.length > 0 ? JSON.stringify(dailySummary) : null,
         archived_report_ids && archived_report_ids.length > 0 ? archived_report_ids : null,
-        req.body.metrics ? JSON.stringify(req.body.metrics) : null
+        req.body.metrics ? JSON.stringify(req.body.metrics) : null,
+        req.user.id
       ]
     );
 
