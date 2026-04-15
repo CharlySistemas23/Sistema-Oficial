@@ -7652,9 +7652,17 @@ const ReportsQuickCapture = {
                         totalArrival = Array.from(uniqueArrivals.values()).reduce((s, f) => s + f, 0);
                     }
 
-                    // Si no hay cambio significativo, continuar (evitar writes innecesarios)
                     const prevArrival = parseFloat(report.total_arrival_costs) || 0;
                     const prevArrivalsCount = (report.arrivals || []).length;
+
+                    // Si no encontramos NINGÚN dato (ni cost_entries ni agency_arrivals), no tocar el reporte
+                    // Esto evita sobreescribir valores existentes con $0 cuando los datos históricos no están localmente
+                    if (totalArrival === 0 && uniqueArrivalCosts.size === 0 && dayArrivals.length === 0) {
+                        console.log(`⏭️ [RecalcLlegadas] ${reportDate}: sin datos locales, conservando $${prevArrival.toFixed(2)}`);
+                        continue;
+                    }
+
+                    // Si no hay cambio significativo, continuar (evitar writes innecesarios)
                     if (Math.abs(totalArrival - prevArrival) < 0.01 && dayArrivals.length === prevArrivalsCount) continue;
 
                     // Recalcular gross/net con el nuevo total de llegadas
