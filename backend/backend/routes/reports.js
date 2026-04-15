@@ -1161,65 +1161,6 @@ router.get('/archived-quick-captures/:id', requireBranchAccess, async (req, res)
   }
 });
 
-// Actualizar reporte archivado (solo campos calculados: comisiones, ganancias)
-router.put('/archived-quick-captures/:id', requireBranchAccess, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const {
-      total_sales_mxn,
-      total_commissions,
-      seller_commissions,
-      guide_commissions,
-      gross_profit,
-      net_profit,
-      bank_commissions
-    } = req.body;
-
-    const checkResult = await query(
-      'SELECT id, branch_id FROM archived_quick_capture_reports WHERE id = $1',
-      [id]
-    );
-
-    if (checkResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Reporte archivado no encontrado' });
-    }
-
-    const report = checkResult.rows[0];
-    if (!req.user.isMasterAdmin && report.branch_id !== req.user.branchId) {
-      return res.status(403).json({ error: 'No tienes acceso a este reporte' });
-    }
-
-    const result = await query(
-      `UPDATE archived_quick_capture_reports
-       SET total_sales_mxn = COALESCE($1, total_sales_mxn),
-           total_commissions = COALESCE($2, total_commissions),
-           seller_commissions = COALESCE($3, seller_commissions),
-           guide_commissions = COALESCE($4, guide_commissions),
-           gross_profit = COALESCE($5, gross_profit),
-           net_profit = COALESCE($6, net_profit),
-           bank_commissions = COALESCE($7, bank_commissions),
-           updated_at = NOW()
-       WHERE id = $8
-       RETURNING *`,
-      [
-        total_sales_mxn != null ? parseFloat(total_sales_mxn) : null,
-        total_commissions != null ? parseFloat(total_commissions) : null,
-        seller_commissions != null ? JSON.stringify(seller_commissions) : null,
-        guide_commissions != null ? JSON.stringify(guide_commissions) : null,
-        gross_profit != null ? parseFloat(gross_profit) : null,
-        net_profit != null ? parseFloat(net_profit) : null,
-        bank_commissions != null ? parseFloat(bank_commissions) : null,
-        id
-      ]
-    );
-
-    res.json(result.rows[0]);
-  } catch (error) {
-    console.error('Error actualizando reporte archivado:', error);
-    res.status(500).json({ error: 'Error al actualizar reporte archivado', details: error.message });
-  }
-});
-
 // Eliminar reporte archivado
 router.delete('/archived-quick-captures/:id', requireBranchAccess, async (req, res) => {
   const client = await getClient();
@@ -1414,9 +1355,9 @@ router.post('/historical-quick-captures', requireBranchAccess, async (req, res) 
         period_type, period_name, date_from, date_to, branch_id,
         total_days, total_captures, total_quantity, total_sales_mxn,
         total_cogs, total_commissions, total_arrival_costs, total_operating_costs,
-        gross_profit, net_profit, daily_summary, archived_report_ids, metrics, created_by
+        gross_profit, net_profit, daily_summary, archived_report_ids, metrics
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
       RETURNING *`,
       [
         period_type,
@@ -1436,8 +1377,7 @@ router.post('/historical-quick-captures', requireBranchAccess, async (req, res) 
         netProfit,
         dailySummary.length > 0 ? JSON.stringify(dailySummary) : null,
         archived_report_ids && archived_report_ids.length > 0 ? archived_report_ids : null,
-        req.body.metrics ? JSON.stringify(req.body.metrics) : null,
-        req.user.id
+        req.body.metrics ? JSON.stringify(req.body.metrics) : null
       ]
     );
 
