@@ -591,6 +591,29 @@ async function checkAndMigrate() {
       // Continuar para verificar qué tablas existen
     }
 
+    // MIGRACIONES EXPLÍCITAS: columnas que pueden no existir en la BD actual
+    // Se ejecutan DESPUÉS del schema para garantizar que se aplican correctamente
+    const pendingMigrations = [
+      {
+        name: 'historical_quick_capture_reports.created_by',
+        check: `SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='historical_quick_capture_reports' AND column_name='created_by'`,
+        apply: `ALTER TABLE historical_quick_capture_reports ADD COLUMN created_by UUID`
+      }
+    ];
+    for (const migration of pendingMigrations) {
+      try {
+        const exists = await pool.query(migration.check);
+        if (exists.rows.length === 0) {
+          await pool.query(migration.apply);
+          console.log(`✅ Migración aplicada: ${migration.name}`);
+        } else {
+          console.log(`ℹ️ Migración ya aplicada: ${migration.name}`);
+        }
+      } catch (migErr) {
+        console.error(`❌ Error en migración ${migration.name}:`, migErr.message);
+      }
+    }
+
     // Verificar todas las tablas relacionadas con suppliers
     const allRequiredTables = [
       'branches', 
