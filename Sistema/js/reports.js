@@ -5852,35 +5852,69 @@ const Reports = {
             const currentBranchId = branchId || (typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null);
 
             // Obtener reportes archivados del rango de fechas
+            // IMPORTANTE: Usar IndexedDB local como fuente primaria porque puede contener
+            // valores recalculados manualmente que son más precisos que los del servidor.
             let archivedReports = [];
-            
-            // Intentar obtener del servidor primero
-            if (typeof API !== 'undefined' && API.getArchivedReports) {
-                try {
-                    const filters = {
-                        date_from: dateFrom,
-                        date_to: dateTo
-                    };
-                    if (currentBranchId) {
-                        filters.branch_id = currentBranchId;
-                    }
-                    archivedReports = await API.getArchivedReports(filters);
-                    console.log(`📥 ${archivedReports.length} reportes archivados obtenidos del servidor`);
-                } catch (error) {
-                    console.warn('Error obteniendo reportes archivados del servidor, usando locales:', error);
+
+            // PASO 1: Obtener reportes locales (fuente primaria — puede incluir recálculos)
+            const localArchived = await DB.getAll('archived_quick_captures') || [];
+            const localInRange = localArchived.filter(r => {
+                const reportDate = (r.date || r.report_date || '').split('T')[0];
+                const matchesBranch = !currentBranchId || r.branch_id === currentBranchId;
+                return reportDate >= dateFrom && reportDate <= dateTo && matchesBranch;
+            });
+
+            // Construir mapa por fecha+sucursal de reportes locales
+            const localByKey = new Map();
+            for (const r of localInRange) {
+                const key = `${(r.date || r.report_date || '').split('T')[0]}_${r.branch_id}`;
+                const existing = localByKey.get(key);
+                if (!existing) {
+                    localByKey.set(key, r);
+                } else {
+                    // Si hay duplicados, preferir el que tiene recalculated_at más reciente
+                    const existingTS = existing.recalculated_at ? new Date(existing.recalculated_at).getTime() : (existing.archived_at ? new Date(existing.archived_at).getTime() : 0);
+                    const currentTS = r.recalculated_at ? new Date(r.recalculated_at).getTime() : (r.archived_at ? new Date(r.archived_at).getTime() : 0);
+                    if (currentTS > existingTS) localByKey.set(key, r);
                 }
             }
 
-            // Si no hay reportes del servidor, obtener de IndexedDB local
-            if (archivedReports.length === 0) {
-                const localArchived = await DB.getAll('archived_quick_captures') || [];
-                archivedReports = localArchived.filter(r => {
-                    const reportDate = r.date || r.report_date || '';
-                    const normalizedDate = reportDate.split('T')[0];
-                    return normalizedDate >= dateFrom && normalizedDate <= dateTo;
-                });
-                console.log(`📥 ${archivedReports.length} reportes archivados obtenidos localmente`);
+            // PASO 2: Complementar con datos del servidor para fechas que no estén localmente
+            if (typeof API !== 'undefined' && API.getArchivedReports) {
+                try {
+                    const filters = { date_from: dateFrom, date_to: dateTo };
+                    if (currentBranchId) filters.branch_id = currentBranchId;
+                    const serverReports = await API.getArchivedReports(filters) || [];
+                    console.log(`📥 ${serverReports.length} reportes archivados obtenidos del servidor`);
+
+                    for (const sr of serverReports) {
+                        const srDate = (sr.report_date || sr.date || '').split('T')[0];
+                        const key = `${srDate}_${sr.branch_id}`;
+                        if (!localByKey.has(key)) {
+                            // No existe localmente: usar datos del servidor
+                            localByKey.set(key, sr);
+                            console.log(`📥 Reporte del servidor añadido (no existe localmente): ${srDate}`);
+                        } else {
+                            // Existe localmente: verificar si el local fue recalculado
+                            const local = localByKey.get(key);
+                            const localRecalcTS = local.recalculated_at ? new Date(local.recalculated_at).getTime() : 0;
+                            const serverUpdatedTS = sr.updated_at ? new Date(sr.updated_at).getTime() : 0;
+                            if (localRecalcTS > serverUpdatedTS) {
+                                console.log(`🔒 Usando valores recalculados localmente para ${srDate} (recalculated_at=${local.recalculated_at})`);
+                                // Conservar local (ya está en el mapa)
+                            } else {
+                                // El servidor tiene datos más recientes que el recálculo — usar servidor
+                                localByKey.set(key, sr);
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.warn('Error obteniendo reportes archivados del servidor, usando solo locales:', error);
+                }
             }
+
+            archivedReports = Array.from(localByKey.values());
+            console.log(`📊 ${archivedReports.length} reportes archivados fusionados (local + servidor) para el histórico`);
 
             if (archivedReports.length === 0) {
                 Utils.showNotification(`No hay reportes archivados en el rango ${dateFrom} a ${dateTo}`, 'warning');
