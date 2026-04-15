@@ -1735,16 +1735,22 @@ const Reports = {
                     fromDate.setDate(fromDate.getDate() - 1);
                     toDate = new Date(fromDate);
                     break;
-                case 'week':
+                case 'week': {
+                    // Semana empieza el LUNES (convención México/LatAm)
                     fromDate = new Date(today);
-                    fromDate.setDate(fromDate.getDate() - today.getDay());
+                    const daysToMon = today.getDay() === 0 ? 6 : today.getDay() - 1;
+                    fromDate.setDate(fromDate.getDate() - daysToMon);
                     break;
-                case 'lastweek':
+                }
+                case 'lastweek': {
+                    // Lunes al domingo de la semana anterior
                     fromDate = new Date(today);
-                    fromDate.setDate(fromDate.getDate() - today.getDay() - 7);
+                    const daysToMon2 = today.getDay() === 0 ? 6 : today.getDay() - 1;
+                    fromDate.setDate(fromDate.getDate() - daysToMon2 - 7);
                     toDate = new Date(fromDate);
                     toDate.setDate(toDate.getDate() + 6);
                     break;
+                }
                 case 'month':
                     fromDate = new Date(today.getFullYear(), today.getMonth(), 1);
                     break;
@@ -1752,10 +1758,11 @@ const Reports = {
                     fromDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
                     toDate = new Date(today.getFullYear(), today.getMonth(), 0);
                     break;
-                case 'quarter':
+                case 'quarter': {
                     const quarter = Math.floor(today.getMonth() / 3);
                     fromDate = new Date(today.getFullYear(), quarter * 3, 1);
                     break;
+                }
                 case 'year':
                     fromDate = new Date(today.getFullYear(), 0, 1);
                     break;
@@ -1976,7 +1983,7 @@ const Reports = {
                 }
                 branchBreakdown[branchId].sales += 1;
                 branchBreakdown[branchId].total += toNumber(sale.total);
-                branchBreakdown[branchId].passengers += toNumber(sale.passengers) || 1;
+                branchBreakdown[branchId].passengers += toNumber(sale.passengers);
             });
         }
 
@@ -1992,27 +1999,28 @@ const Reports = {
             }
         }
 
-        // Calcular comisiones desde sale_items (más preciso)
+        // Calcular comisiones: siempre separar sellers/guides desde los registros de venta
         const commissionsBreakdown = {
             sellers: 0,
             guides: 0,
             total: 0
         };
-        for (const sale of completedSales) {
-            const items = saleItems.filter(si => si.sale_id === sale.id);
-            for (const item of items) {
-                if (item.commission_amount) {
-                    commissionsBreakdown.total += Number(item.commission_amount) || 0;
-                }
-            }
-        }
-        // Si no hay comisiones en sale_items, usar los valores de las ventas (fallback)
-        if (commissionsBreakdown.total === 0) {
         completedSales.forEach(sale => {
             commissionsBreakdown.sellers += Number(sale.seller_commission) || 0;
-            commissionsBreakdown.guides += Number(sale.guide_commission) || 0;
+            commissionsBreakdown.guides  += Number(sale.guide_commission)  || 0;
         });
         commissionsBreakdown.total = commissionsBreakdown.sellers + commissionsBreakdown.guides;
+
+        // Si los registros de venta no tienen datos de comisión, buscar en sale_items (fallback)
+        if (commissionsBreakdown.total === 0) {
+            let itemsTotal = 0;
+            for (const sale of completedSales) {
+                const saleItemsForSale = saleItems.filter(si => si.sale_id === sale.id);
+                for (const item of saleItemsForSale) {
+                    itemsTotal += Number(item.commission_amount) || 0;
+                }
+            }
+            commissionsBreakdown.total = itemsTotal;
         }
 
         // Obtener costos del período del reporte (llegadas y operativos)
@@ -2393,7 +2401,7 @@ const Reports = {
                                         <td>${seller?.name || 'N/A'}</td>
                                         <td>${agency?.name || 'N/A'}</td>
                                         <td>${guide?.name || 'N/A'}</td>
-                                        <td>${sale.passengers || 1}</td>
+                                        <td>${sale.passengers > 0 ? sale.passengers : '—'}</td>
                                         <td style="font-weight: 600;">${Utils.formatCurrency(sale.total)}</td>
                                         <td style="color: var(--color-primary); font-weight: 500;">${Utils.formatCurrency(sale.seller_commission || 0)}</td>
                                         <td style="color: var(--color-success); font-weight: 500;">${Utils.formatCurrency(sale.guide_commission || 0)}</td>
@@ -4708,17 +4716,23 @@ const Reports = {
                     fromDate.setDate(fromDate.getDate() - 1);
                     toDate = new Date(fromDate);
                     break;
-                case 'week':
+                case 'week': {
+                    // Semana empieza el LUNES (convención México/LatAm)
                     fromDate = new Date(today);
-                    fromDate.setDate(fromDate.getDate() - today.getDay());
+                    const daysToMon = today.getDay() === 0 ? 6 : today.getDay() - 1;
+                    fromDate.setDate(fromDate.getDate() - daysToMon);
                     toDate = new Date(today);
                     break;
-                case 'lastweek':
+                }
+                case 'lastweek': {
+                    // Lunes al domingo de la semana anterior
                     fromDate = new Date(today);
-                    fromDate.setDate(fromDate.getDate() - today.getDay() - 7);
+                    const daysToMon2 = today.getDay() === 0 ? 6 : today.getDay() - 1;
+                    fromDate.setDate(fromDate.getDate() - daysToMon2 - 7);
                     toDate = new Date(fromDate);
                     toDate.setDate(toDate.getDate() + 6);
                     break;
+                }
                 case 'month':
                     fromDate = new Date(today.getFullYear(), today.getMonth(), 1);
                     toDate = new Date(today);
@@ -4727,11 +4741,12 @@ const Reports = {
                     fromDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
                     toDate = new Date(today.getFullYear(), today.getMonth(), 0);
                     break;
-                case 'quarter':
+                case 'quarter': {
                     const quarter = Math.floor(today.getMonth() / 3);
                     fromDate = new Date(today.getFullYear(), quarter * 3, 1);
                     toDate = new Date(today);
                     break;
+                }
                 case 'year':
                     fromDate = new Date(today.getFullYear(), 0, 1);
                     toDate = new Date(today);
