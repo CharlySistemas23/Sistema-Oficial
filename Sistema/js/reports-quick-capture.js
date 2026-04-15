@@ -7656,9 +7656,15 @@ const ReportsQuickCapture = {
                     const prevArrivalsCount = (report.arrivals || []).length;
 
                     // Si no encontramos NINGÚN dato (ni cost_entries ni agency_arrivals), no tocar el reporte
-                    // Esto evita sobreescribir valores existentes con $0 cuando los datos históricos no están localmente
                     if (totalArrival === 0 && uniqueArrivalCosts.size === 0 && dayArrivals.length === 0) {
                         console.log(`⏭️ [RecalcLlegadas] ${reportDate}: sin datos locales, conservando $${prevArrival.toFixed(2)}`);
+                        continue;
+                    }
+
+                    // NUNCA reducir un valor que ya existe — solo corregir reportes con $0 o sin llegadas
+                    // Esto protege reportes históricos ya verificados de ser sobreescritos con datos parciales
+                    if (prevArrival > 0 && totalArrival < prevArrival) {
+                        console.log(`⏭️ [RecalcLlegadas] ${reportDate}: conservando $${prevArrival.toFixed(2)} (nuevo $${totalArrival.toFixed(2)} sería menor, datos posiblemente incompletos)`);
                         continue;
                     }
 
