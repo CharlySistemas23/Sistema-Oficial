@@ -6194,8 +6194,22 @@ const Reports = {
                 });
                 for (const c of variableInRange) freshOpCosts += (parseFloat(c.amount) || 0);
 
+                // Log detallado para diagnóstico
+                console.group('💰 Costos Operativos — Recálculo Histórico');
+                console.log(`Período: ${dateFrom} → ${dateTo} (${periodDays} días, ${monthsCovered} mes/es)`);
+                console.log(`Sucursal filtro: ${currentBranchId || 'todas'} | cost_entries totales en BD: ${allCostEntries.length} | filtradas: ${filteredCosts.length}`);
+                console.log('📋 Mensuales recurrentes (después de dedup):');
+                monthlyRec.forEach(c => console.log(`  → ${c.category} | ${c.description||c.name||''} | $${c.amount} × ${monthsCovered} = $${((parseFloat(c.amount)||0)*monthsCovered).toFixed(2)} | id:${c.id}`));
+                console.log('📋 Semanales recurrentes:');
+                weeklyRec.forEach(c => console.log(`  → ${c.category} | ${c.description||c.name||''} | $${c.amount} × ${(periodDays/7).toFixed(2)} = $${((parseFloat(c.amount)||0)*(periodDays/7)).toFixed(2)} | id:${c.id}`));
+                console.log('📋 Variables en rango:');
+                variableInRange.forEach(c => console.log(`  → ${c.date||c.created_at} | ${c.category} | ${c.description||c.name||''} | $${c.amount} | id:${c.id}`));
+                console.log(`TOTAL mensuales: $${monthlyRec.reduce((s,c)=>s+(parseFloat(c.amount)||0),0).toFixed(2)}`);
+                console.log(`TOTAL variables: $${variableInRange.reduce((s,c)=>s+(parseFloat(c.amount)||0),0).toFixed(2)}`);
+                console.log(`TOTAL freshOpCosts: $${freshOpCosts.toFixed(2)}`);
+                console.groupEnd();
+
                 if (freshOpCosts > 0) {
-                    console.log(`💰 Costos operativos recalculados: $${freshOpCosts.toFixed(2)} (mensuales×${monthsCovered}: $${monthlyRec.reduce((s,c)=>s+(parseFloat(c.amount)||0),0).toFixed(2)}, variables: $${variableInRange.reduce((s,c)=>s+(parseFloat(c.amount)||0),0).toFixed(2)})`);
                     totalOperatingCosts = freshOpCosts;
                     grossProfit = totalSalesMXN - totalCOGS - totalCommissions;
                     netProfit = grossProfit - totalArrivalCosts - totalOperatingCosts - totalBankCommissions;
