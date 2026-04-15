@@ -1587,6 +1587,13 @@ router.get('/historical-quick-captures/:id', requireBranchAccess, async (req, re
   try {
     const { id } = req.params;
 
+    // Validar que el ID tenga formato UUID antes de consultar
+    // Los IDs locales del frontend como "historical_monthly_..." no son UUIDs válidos
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(id)) {
+      return res.status(404).json({ error: 'Reporte histórico no encontrado (ID local no sincronizado con servidor)' });
+    }
+
     const result = await query(
       `SELECT 
         hqr.*,
