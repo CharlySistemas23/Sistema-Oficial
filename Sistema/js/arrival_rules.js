@@ -1,4 +1,4 @@
-﻿// Arrival Rules Module - Cálculo de tarifas de llegadas según tabulador
+// Arrival Rules Module - Cálculo de tarifas de llegadas según tabulador
 
 // CONSTANTES COMPARTIDAS - Tipos de unidad válidos (homologados)
 const ARRIVAL_UNIT_TYPES = {
@@ -332,6 +332,10 @@ const ArrivalRules = {
                         if (aDateStr !== dateStr) return false;
                         if (String(a.branch_id) !== String(branch_id)) return false;
                         if (String(a.agency_id) !== String(agency_id)) return false;
+                        // IMPORTANTE: también comparar guide_id para no mezclar guías distintas de la misma agencia
+                        const aGuideId = a.guide_id || null;
+                        const bGuideId = guide_id || null;
+                        if (String(aGuideId) !== String(bGuideId)) return false;
                         // Si ambos unit_type son null, considerar iguales
                         return (!a.unit_type || a.unit_type === null) && (!unit_type || unit_type === null);
                     })
