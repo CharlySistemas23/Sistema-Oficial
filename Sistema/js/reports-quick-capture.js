@@ -615,7 +615,7 @@ const ReportsQuickCapture = {
                         if (selectedGuideId) {
                             try {
                                 const guides = await DB.getAll('catalog_guides') || [];
-                                const selectedGuide = guides.find(g => g.id === selectedGuideId);
+                                const selectedGuide = guides.find(g => String(g.id) === String(selectedGuideId));
                                 
                                 if (selectedGuide && selectedGuide.agency_id) {
                                     // Marcar que estamos auto-seleccionando la agencia
@@ -662,14 +662,25 @@ const ReportsQuickCapture = {
                                     // Recargar llegadas filtradas por el guía seleccionado
                                     await this.loadQuickCaptureArrivals();
                                 } else {
-                                    Utils.showNotification('El guía seleccionado no tiene agencia asignada', 'warning');
-                                    // Limpiar costo si no hay agencia
-                                    const costInput = document.getElementById('qc-arrival-cost');
-                                    if (costInput) {
-                                        costInput.value = '0.00';
+                                    // Si hay una agencia ya seleccionada en el select, usarla para calcular
+                                    const existingAgencyId = agencySelect ? agencySelect.value : '';
+                                    if (existingAgencyId) {
+                                        // El guía no tiene agency_id en el catálogo, pero hay agencia seleccionada: proceder sin advertencia
+                                        setTimeout(async () => {
+                                            await calculateArrivalCost();
+                                            isAutoSelectingAgency = false;
+                                        }, 100);
+                                        await this.loadQuickCaptureArrivals();
+                                    } else {
+                                        Utils.showNotification('El guía seleccionado no tiene agencia asignada', 'warning');
+                                        // Limpiar costo si no hay agencia
+                                        const costInput = document.getElementById('qc-arrival-cost');
+                                        if (costInput) {
+                                            costInput.value = '0.00';
+                                        }
+                                        // Recargar llegadas sin filtro de guía
+                                        await this.loadQuickCaptureArrivals();
                                     }
-                                    // Recargar llegadas sin filtro de guía
-                                    await this.loadQuickCaptureArrivals();
                                 }
                             } catch (error) {
                                 console.error('Error auto-detectando agencia:', error);
@@ -801,7 +812,7 @@ const ReportsQuickCapture = {
                             const selectedGuideId = guideSelect.value;
                             try {
                                 const guides = await DB.getAll('catalog_guides') || [];
-                                const selectedGuide = guides.find(g => g.id === selectedGuideId);
+                                const selectedGuide = guides.find(g => String(g.id) === String(selectedGuideId));
                                 if (selectedGuide && selectedGuide.agency_id && agencySelect) {
                                     agencySelect.value = selectedGuide.agency_id;
                                 }
@@ -820,7 +831,7 @@ const ReportsQuickCapture = {
                             const selectedGuideId = guideSelect.value;
                             try {
                                 const guides = await DB.getAll('catalog_guides') || [];
-                                const selectedGuide = guides.find(g => g.id === selectedGuideId);
+                                const selectedGuide = guides.find(g => String(g.id) === String(selectedGuideId));
                                 if (selectedGuide && selectedGuide.agency_id && agencySelect) {
                                     agencySelect.value = selectedGuide.agency_id;
                                 }
@@ -3846,8 +3857,19 @@ const ReportsQuickCapture = {
                 return;
             }
 
-            // Limpiar formulario
+            // Limpiar formulario (preservar sucursal, agencia y fecha para facilitar múltiples entradas)
+            const preservedBranch = document.getElementById('qc-arrival-branch')?.value || '';
+            const preservedAgency = document.getElementById('qc-arrival-agency')?.value || '';
             document.getElementById('quick-arrivals-form')?.reset();
+            // Restaurar sucursal, fecha y agencia
+            const branchSelectEl = document.getElementById('qc-arrival-branch');
+            if (branchSelectEl && preservedBranch) branchSelectEl.value = preservedBranch;
+            const agencySelectEl = document.getElementById('qc-arrival-agency');
+            if (agencySelectEl && preservedAgency) {
+                agencySelectEl.value = preservedAgency;
+                // Recargar guías para la agencia preservada
+                try { await this.loadGuidesForAgencyInArrivalsForm(preservedAgency); } catch (_) {}
+            }
             if (arrivalDateInput && mainDateInput?.value) {
                 arrivalDateInput.value = mainDateInput.value;
             }
