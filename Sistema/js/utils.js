@@ -61,11 +61,17 @@ const Utils = {
         return Date.now().toString(36) + Math.random().toString(36).substr(2);
     },
 
-    // Generar folio
+    // Generar folio con alta entropía para evitar colisiones bajo concurrencia.
+    // Formato: BRANCH-YYYYMMDD-HHmmssSSS-RRRR  (ej: SUC1-20260423-134207893-A3F2)
+    //   - HHmmssSSS incluye milisegundos (rara vez dos ventas caen en el mismo ms).
+    //   - RRRR son 4 chars aleatorios en base36 (1.6M combinaciones adicionales).
+    //   - El backend reintenta con SAVEPOINT si aun así hay colisión (defense in depth).
     generateFolio(branchCode, date = new Date()) {
+        const pad = (n, w) => String(n).padStart(w, '0');
         const dateStr = this.formatDate(date, 'YYYYMMDD');
-        const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-        return `${branchCode}-${dateStr}-${random}`;
+        const timeStr = pad(date.getHours(), 2) + pad(date.getMinutes(), 2) + pad(date.getSeconds(), 2) + pad(date.getMilliseconds(), 3);
+        const rnd = Math.random().toString(36).slice(2, 6).toUpperCase();
+        return `${branchCode}-${dateStr}-${timeStr}-${rnd}`;
     },
 
     /**
