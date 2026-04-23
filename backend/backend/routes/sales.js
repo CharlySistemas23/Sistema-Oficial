@@ -226,29 +226,59 @@ router.post('/', requireBranchAccess, async (req, res) => {
       });
     }
 
-    // Crear venta
-    const saleResult = await client.query(
-      `INSERT INTO sales (
-        folio, branch_id, seller_id, guide_id, agency_id, customer_id,
-        subtotal, discount_percent, discount_amount, total, status, created_by
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-      RETURNING *`,
-      [
-        folio || `SALE-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        finalBranchId,
-        seller_id,
-        guide_id,
-        agency_id,
-        customer_id,
-        subtotal,
-        discount_percent,
-        discount_amount,
-        total,
-        'completed',
-        req.user.id
-      ]
-    );
+    // Crear venta con reintento automático si hay colisión de folio (unique_violation 23505).
+    // Usamos SAVEPOINT para poder reintentar sin abortar la transacción completa.
+    let folioCandidate = folio || `SALE-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+    let saleResult;
+    const maxFolioAttempts = 5;
+    for (let attempt = 1; attempt <= maxFolioAttempts; attempt++) {
+      await client.query('SAVEPOINT sp_insert_sale');
+      try {
+        saleResult = await client.query(
+          `INSERT INTO sales (
+            folio, branch_id, seller_id, guide_id, agency_id, customer_id,
+            subtotal, discount_percent, discount_amount, total, status, created_by
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+          RETURNING *`,
+          [
+            folioCandidate,
+            finalBranchId,
+            seller_id,
+            guide_id,
+            agency_id,
+            customer_id,
+            subtotal,
+            discount_percent,
+            discount_amount,
+            total,
+            'completed',
+            req.user.id
+          ]
+        );
+        await client.query('RELEASE SAVEPOINT sp_insert_sale');
+        break;
+      } catch (insertErr) {
+        await client.query('ROLLBACK TO SAVEPOINT sp_insert_sale');
+        const isFolioCollision = insertErr && insertErr.code === '23505' &&
+          (insertErr.constraint === 'sales_folio_key' ||
+           /sales.*folio/i.test(insertErr.detail || '') ||
+           /sales.*folio/i.test(insertErr.message || ''));
+        if (!isFolioCollision || attempt === maxFolioAttempts) {
+          throw insertErr;
+        }
+        logSaleOperation('folio_collision_retry', {
+          branchId: finalBranchId,
+          userId: req.user.id,
+          collidingFolio: folioCandidate,
+          attempt
+        });
+        // Regenerar folio preservando la base (rama previa a "-R") y añadiendo sufijo único.
+        const base = String(folioCandidate).split('-R')[0];
+        const suffix = `R${attempt}${Math.random().toString(36).slice(2, 8)}`;
+        folioCandidate = `${base}-${suffix}`;
+      }
+    }
 
     const sale = saleResult.rows[0];
 
@@ -447,7 +477,17 @@ router.post('/', requireBranchAccess, async (req, res) => {
     }
     if (error && error.code === '23505') {
       if (!transactionCommitted) await safeRollback(client);
-      return res.status(400).json({ error: 'El folio de la venta ya existe' });
+      const isFolioCollision = error.constraint === 'sales_folio_key' ||
+        /sales.*folio/i.test(error.detail || '') ||
+        /sales.*folio/i.test(error.message || '');
+      if (isFolioCollision) {
+        // Llegar aquí significa que los 5 reintentos con SAVEPOINT fallaron: algo inusual.
+        return res.status(409).json({
+          error: 'No fue posible generar un folio único tras múltiples intentos. Reintenta la venta.',
+          code: 'FOLIO_EXHAUSTED'
+        });
+      }
+      return res.status(409).json({ error: 'Duplicado detectado en la venta', detail: error.detail });
     }
     if (!transactionCommitted) {
       await safeRollback(client);
