@@ -1,0 +1,530 @@
+/**
+ * Opal & Co — Polish Layer
+ * Refinamiento visual premium aplicado sobre el sistema existente.
+ * Se carga AL FINAL para cascada sobre todo. Si algo se ve raro, se desactiva
+ * comentando el <link> en index.html.
+ *
+ * Filosofía: detalles, no reestructuración. Todo respeta tokens.css.
+ */
+
+/* ============================================================
+   1. TIPOGRAFÍA REFINADA
+   ============================================================ */
+
+/* Números tabulares en contextos financieros — crítico para POS/Reportes */
+.table td,
+table td,
+.oc-table td,
+.oc-badge,
+.kpi,
+.kpi-value,
+.kpi-number,
+[class*="total"],
+[class*="amount"],
+[class*="price"],
+[class*="folio"],
+[class*="count"],
+input[type="number"],
+input[type="tel"],
+.dashboard-card,
+.dashboard-stat,
+.pos-cart,
+.pos-total,
+.cash-session-value,
+.report-value,
+.stat-value,
+.currency {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1, 'lnum' 1;
+}
+
+/* Balance en headings evita palabras huérfanas */
+h1, h2, h3, h4,
+.module-title,
+.card-title,
+.section-title {
+  text-wrap: balance;
+}
+
+/* Display headlines con más presencia */
+h1,
+.h1,
+.module-title {
+  letter-spacing: -0.02em;
+}
+
+/* Subheaders en uppercase se ven agresivos — suaviza con letter-spacing y peso */
+[class*="section-label"],
+[class*="nav-section-label"],
+.sb-brand .sidebar-logo-text {
+  letter-spacing: 0.12em !important;
+  font-weight: 600 !important;
+  font-size: 11px !important;
+  color: var(--color-muted) !important;
+}
+
+/* Cuerpo con mejor legibilidad */
+body {
+  text-rendering: optimizeLegibility;
+  font-feature-settings: 'ss01', 'cv11';
+}
+
+/* ============================================================
+   2. TEXTURA — ruido sutil para romper la planicie digital
+   ============================================================ */
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.015;
+  background-image: url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 9 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  mix-blend-mode: overlay;
+}
+
+/* Sidebar con textura sutil dorada apenas visible */
+.sidebar {
+  background-image:
+    radial-gradient(ellipse at top left, rgba(201, 161, 74, 0.04), transparent 60%),
+    radial-gradient(ellipse at bottom, rgba(201, 161, 74, 0.02), transparent 50%);
+}
+
+/* ============================================================
+   3. SOMBRAS TINTADAS (reemplazan las negras puras)
+   ============================================================ */
+
+:root {
+  /* Sombras con tinte cálido — reflejan el acento dorado en el dark theme */
+  --shadow-xs: 0 1px 2px rgba(20, 14, 8, 0.5);
+  --shadow-sm: 0 2px 8px rgba(20, 14, 8, 0.6), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 20px rgba(20, 14, 8, 0.65), 0 1px 4px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 12px 40px rgba(15, 10, 5, 0.7), 0 2px 8px rgba(0, 0, 0, 0.35);
+  --shadow-gold: 0 4px 24px rgba(201, 161, 74, 0.18), 0 1px 3px rgba(201, 161, 74, 0.08);
+  --shadow-gold-lg: 0 12px 40px rgba(201, 161, 74, 0.25), 0 2px 8px rgba(201, 161, 74, 0.12);
+}
+
+/* ============================================================
+   4. INTERACCIONES UNIVERSALES — smooth transitions
+   ============================================================ */
+
+/* Respeta preferencia del usuario */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* Todos los elementos interactivos transicionan suavemente */
+  a,
+  button,
+  [role="button"],
+  .nav-item,
+  .nav-section-header,
+  .mobile-nav-btn,
+  .btn,
+  .btn-primary,
+  .btn-secondary,
+  .btn-icon,
+  [class^="btn-"],
+  [class*=" btn-"],
+  .oc-btn-primary,
+  .oc-btn-secondary,
+  .oc-btn-icon,
+  .oc-tab,
+  .tb-btn,
+  .tab,
+  [class*="tab-"],
+  input,
+  select,
+  textarea,
+  .oc-input,
+  .oc-select,
+  .card,
+  .oc-card,
+  .module-card,
+  .dashboard-card,
+  .kpi-card,
+  .product-card,
+  .customer-card,
+  tr {
+    transition:
+      background-color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+      border-color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+      color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+      box-shadow 250ms cubic-bezier(0.4, 0, 0.2, 1),
+      transform 150ms cubic-bezier(0.4, 0, 0.2, 1),
+      opacity 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+}
+
+/* Press states — feedback físico al click */
+@media (prefers-reduced-motion: no-preference) {
+  button:active:not(:disabled),
+  [role="button"]:active,
+  .btn:active,
+  .btn-primary:active,
+  .btn-secondary:active,
+  [class^="btn-"]:active,
+  [class*=" btn-"]:active,
+  .oc-btn-primary:active,
+  .oc-btn-secondary:active,
+  .nav-item:active,
+  .mobile-nav-btn:active,
+  .tb-btn:active {
+    transform: scale(0.97);
+    transition-duration: 80ms;
+  }
+}
+
+/* Hover lift en botones primarios y cards — efecto tridimensional */
+@media (prefers-reduced-motion: no-preference) {
+  .btn-primary:hover:not(:disabled),
+  .oc-btn-primary:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-gold);
+  }
+
+  .oc-card:hover,
+  .card:hover,
+  .dashboard-card:hover,
+  .kpi-card:hover {
+    transform: translateY(-2px);
+  }
+}
+
+/* ============================================================
+   5. FOCUS RINGS ACCESIBLES — dorado
+   ============================================================ */
+
+*:focus {
+  outline: none;
+}
+
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible,
+.nav-item:focus-visible,
+.mobile-nav-btn:focus-visible,
+[class^="btn-"]:focus-visible,
+[class*=" btn-"]:focus-visible,
+.oc-btn-primary:focus-visible,
+.oc-btn-secondary:focus-visible,
+.oc-btn-icon:focus-visible,
+.tb-btn:focus-visible,
+.oc-tab:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: inherit;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+.oc-input:focus-visible,
+.oc-select:focus-visible,
+.form-input:focus,
+.form-select:focus {
+  outline: none;
+  border-color: var(--color-accent) !important;
+  box-shadow: 0 0 0 3px var(--color-accent-light),
+              0 0 12px rgba(201, 161, 74, 0.15) !important;
+}
+
+/* ============================================================
+   6. NAV ITEMS — indicador dorado del activo
+   ============================================================ */
+
+.nav-item {
+  position: relative;
+}
+
+.nav-item.active::before,
+.nav-item[aria-current="page"]::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 60%;
+  background: var(--color-accent);
+  border-radius: 0 3px 3px 0;
+  box-shadow: 0 0 8px rgba(201, 161, 74, 0.5);
+}
+
+.nav-item:hover:not(.active) {
+  background: rgba(201, 161, 74, 0.05) !important;
+  color: var(--color-text) !important;
+}
+
+/* ============================================================
+   7. SCROLLBAR PREMIUM (Webkit + Firefox)
+   ============================================================ */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  transition: background 200ms ease;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(201, 161, 74, 0.4);
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ============================================================
+   8. TABLAS — hover dorado sutil, mejor jerarquía
+   ============================================================ */
+
+.oc-table tr:hover td,
+.table tr:hover td,
+table tbody tr:hover td {
+  background: rgba(201, 161, 74, 0.04) !important;
+}
+
+.oc-table th,
+table thead th {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 11px;
+  color: var(--color-muted);
+  font-weight: 600;
+  background: var(--color-surface) !important;
+}
+
+/* ============================================================
+   9. CARDS — profundidad sutil con gradiente interno
+   ============================================================ */
+
+.oc-card,
+.module-card,
+.dashboard-card,
+.kpi-card {
+  background-image: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.015) 0%,
+    transparent 40%
+  );
+}
+
+/* ============================================================
+   10. BADGES — leve brillo interior
+   ============================================================ */
+
+.oc-badge,
+[class*="badge"] {
+  border: 1px solid transparent;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.oc-badge--accent {
+  border-color: var(--color-border-accent);
+}
+
+/* ============================================================
+   11. LOGIN — más presencia al brand
+   ============================================================ */
+
+.sb-brand-info .sidebar-logo-text {
+  font-family: var(--font-display) !important;
+  letter-spacing: 0.18em !important;
+  font-weight: 600 !important;
+  font-size: 14px !important;
+  color: var(--color-accent) !important;
+  text-shadow: 0 0 20px rgba(201, 161, 74, 0.3);
+}
+
+/* ============================================================
+   12. BOTONES — estados press + hover más tangibles
+   ============================================================ */
+
+.btn-primary,
+.oc-btn-primary {
+  position: relative;
+  overflow: hidden;
+  letter-spacing: 0.02em;
+}
+
+.btn-primary::after,
+.oc-btn-primary::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.08) 0%,
+    transparent 50%
+  );
+  pointer-events: none;
+}
+
+/* Deshabilitados claramente muertos */
+button:disabled,
+[role="button"][aria-disabled="true"],
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* ============================================================
+   13. INPUTS — padding más generoso, tipografía coherente
+   ============================================================ */
+
+.form-input,
+.form-select,
+.oc-input,
+.oc-select,
+input[type="text"],
+input[type="email"],
+input[type="tel"],
+input[type="number"],
+input[type="password"],
+input[type="search"],
+input[type="date"],
+input[type="time"],
+textarea,
+select {
+  font-family: var(--font-ui);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--color-muted-light);
+  opacity: 1;
+  font-style: italic;
+}
+
+/* ============================================================
+   14. MODALES — backdrop con blur premium
+   ============================================================ */
+
+.modal-overlay,
+[id*="overlay"],
+[class*="modal-overlay"] {
+  backdrop-filter: blur(8px) saturate(120%);
+  -webkit-backdrop-filter: blur(8px) saturate(120%);
+  background: rgba(12, 12, 14, 0.6) !important;
+}
+
+.modal,
+.modal-container,
+[class*="modal-content"] {
+  border: 1px solid var(--color-border) !important;
+  box-shadow: var(--shadow-lg), 0 0 0 1px rgba(201, 161, 74, 0.05) !important;
+}
+
+/* ============================================================
+   15. KPIs / DASHBOARD — números con peso, display font
+   ============================================================ */
+
+.kpi-value,
+.kpi-number,
+.dashboard-stat,
+.stat-value,
+[class*="-value"]:not(.stat-label):not(.nav-section-value) {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+/* ============================================================
+   16. MICRO-ENTRADA — módulos que fade-in suavemente
+   ============================================================ */
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes polish-fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  #module-content > * {
+    animation: polish-fade-in 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+}
+
+/* ============================================================
+   17. NOTIFICACIONES — mejor presencia
+   ============================================================ */
+
+[class*="notification"],
+.toast,
+.alert {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* ============================================================
+   18. LINKS — subrayado elegante en lugar del default
+   ============================================================ */
+
+a:not([class]):not(.nav-item):not(.mobile-nav-btn) {
+  text-decoration: none;
+  background-image: linear-gradient(
+    to right,
+    var(--color-accent),
+    var(--color-accent)
+  );
+  background-size: 0 1px;
+  background-position: 0 100%;
+  background-repeat: no-repeat;
+  transition: background-size 250ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+a:not([class]):not(.nav-item):not(.mobile-nav-btn):hover {
+  background-size: 100% 1px;
+  text-decoration: none;
+}
+
+/* ============================================================
+   19. SELECCIÓN DE TEXTO — en color de marca
+   ============================================================ */
+
+::selection {
+  background: var(--color-accent);
+  color: var(--color-bg);
+}
+
+::-moz-selection {
+  background: var(--color-accent);
+  color: var(--color-bg);
+}
+
+/* ============================================================
+   20. REDUCED MOTION — respeto absoluto
+   ============================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
