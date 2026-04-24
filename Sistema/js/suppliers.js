@@ -1498,10 +1498,15 @@ const Suppliers = {
     },
 
     setupSocketListeners() {
+        // Idempotente: si Suppliers.init() se llama varias veces (ej. al navegar
+        // al modulo), el flag previene apilar listeners que harian que cada
+        // evento socket dispare el callback 2, 3, N veces.
+        if (this._socketListenersAttached) return;
         if (typeof API === 'undefined' || !API.socket) {
             console.warn('⚠️ Socket.IO no disponible para Suppliers');
             return;
         }
+        this._socketListenersAttached = true;
 
         API.socket.on('supplier_updated', async (data) => {
             console.log('📡 Suppliers: Evento recibido:', data);
