@@ -1701,7 +1701,7 @@ const Employees = {
         }
         if (branches.length === 0 && typeof DB !== 'undefined') {
             try {
-                branches = await DB.getAll('catalog_branches') || await DB.getAll('branches') || [];
+                branches = await DB.getAll('catalog_branches') || [];
             } catch (e) {}
         }
 

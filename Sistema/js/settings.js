@@ -4367,7 +4367,7 @@ const Settings = {
             Utils.showNotification('No tienes permiso para ver el log de auditoría', 'error');
             return;
         }
-        const audits = await DB.getAll('audit_logs') || [];
+        const audits = await DB.getAll('audit_log') || [];
         const sortedAudits = audits.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 100);
 
         const body = `

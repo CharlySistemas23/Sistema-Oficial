@@ -5915,7 +5915,7 @@ const QA = {
             
             // 5. Recalcular arrival_fee_total para llegadas
             const arrivals = await DB.getAll('agency_arrivals');
-            const arrivalRules = await DB.getAll('arrival_rules');
+            const arrivalRules = await DB.getAll('arrival_rate_rules');
             
             for (const arrival of arrivals) {
                 const rule = arrivalRules.find(r => 
