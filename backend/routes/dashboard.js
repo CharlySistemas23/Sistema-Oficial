@@ -186,6 +186,7 @@ router.get('/analytics', async (req, res) => {
     }
 
     const { branch_id, start_date, end_date, group_by = 'day' } = req.query;
+    const appTimezone = process.env.APP_TIMEZONE || 'America/Mexico_City';
 
     let branchFilter = '';
     const params = [];
@@ -198,22 +199,26 @@ router.get('/analytics', async (req, res) => {
     }
 
     if (start_date) {
-      branchFilter += branchFilter ? ` AND s.created_at >= $${paramCount}` : `WHERE s.created_at >= $${paramCount}`;
-      params.push(start_date);
-      paramCount++;
+      branchFilter += branchFilter ? ` AND DATE(s.created_at AT TIME ZONE $${paramCount}) >= $${paramCount + 1}` : `WHERE DATE(s.created_at AT TIME ZONE $${paramCount}) >= $${paramCount + 1}`;
+      params.push(appTimezone, start_date);
+      paramCount += 2;
     }
 
     if (end_date) {
-      branchFilter += branchFilter ? ` AND s.created_at <= $${paramCount}` : `WHERE s.created_at <= $${paramCount}`;
-      params.push(end_date);
-      paramCount++;
+      branchFilter += branchFilter ? ` AND DATE(s.created_at AT TIME ZONE $${paramCount}) <= $${paramCount + 1}` : `WHERE DATE(s.created_at AT TIME ZONE $${paramCount}) <= $${paramCount + 1}`;
+      params.push(appTimezone, end_date);
+      paramCount += 2;
     }
 
-    let dateFormat = "DATE_TRUNC('day', s.created_at)";
+    // Agrupar por dia/semana/mes en horario LOCAL para que las fronteras
+    // (medianoche) coincidan con como el usuario percibe el dia.
+    const tzParamIdx = paramCount;
+    params.push(appTimezone);
+    let dateFormat = `DATE_TRUNC('day', s.created_at AT TIME ZONE $${tzParamIdx})`;
     if (group_by === 'week') {
-      dateFormat = "DATE_TRUNC('week', s.created_at)";
+      dateFormat = `DATE_TRUNC('week', s.created_at AT TIME ZONE $${tzParamIdx})`;
     } else if (group_by === 'month') {
-      dateFormat = "DATE_TRUNC('month', s.created_at)";
+      dateFormat = `DATE_TRUNC('month', s.created_at AT TIME ZONE $${tzParamIdx})`;
     }
 
     const analyticsResult = await query(
