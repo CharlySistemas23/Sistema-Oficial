@@ -172,29 +172,59 @@ router.post('/', requireBranchAccess, (req, res, next) => {
       return res.status(400).json({ error: 'Monto inválido' });
     }
 
-    const result = await query(
-      `INSERT INTO cost_entries (
-        branch_id, type, category, amount, date, description, notes,
-        period_type, recurring, created_by, supplier_id
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-      RETURNING *`,
-      [
-        finalBranchId,
-        type,
-        category || null,
-        amountNum,
-        date,
-        description || null,
-        notes || null,
-        period_type,
-        recurring,
-        req.user.id,
-        supplier_id || null
-      ]
-    );
+    // INSERT idempotente: si existe duplicado por (branch_id, category, notes, amount, date)
+    // (validado por uniq_cost_entries_dedup), atrapamos 23505 y devolvemos el existente
+    // en lugar de fallar. Previene duplicados por race conditions del sync, retries, etc.
+    const insertParams = [
+      finalBranchId,
+      type,
+      category || null,
+      amountNum,
+      date,
+      description || null,
+      notes || null,
+      period_type,
+      recurring,
+      req.user.id,
+      supplier_id || null
+    ];
 
-    const cost = result.rows[0];
+    let cost;
+    try {
+      const result = await query(
+        `INSERT INTO cost_entries (
+          branch_id, type, category, amount, date, description, notes,
+          period_type, recurring, created_by, supplier_id
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        RETURNING *`,
+        insertParams
+      );
+      cost = result.rows[0];
+    } catch (insertErr) {
+      const isDedupConflict = insertErr && insertErr.code === '23505' &&
+        (insertErr.constraint === 'uniq_cost_entries_dedup' ||
+         /uniq_cost_entries_dedup/i.test(insertErr.detail || '') ||
+         /uniq_cost_entries_dedup/i.test(insertErr.message || ''));
+      if (!isDedupConflict) throw insertErr;
+      // Existe ya un registro identico — devolver el existente para que el cliente
+      // no falle. Esto hace el endpoint idempotente desde el lado del backend.
+      const existing = await query(
+        `SELECT * FROM cost_entries
+         WHERE COALESCE(branch_id::text, '') = COALESCE($1::text, '')
+           AND category = $2
+           AND COALESCE(notes, '') = COALESCE($3, '')
+           AND amount = $4
+           AND date = $5
+         LIMIT 1`,
+        [finalBranchId, category || null, notes || null, amountNum, date]
+      );
+      if (existing.rows.length === 0) {
+        throw insertErr; // por si acaso no se encuentra
+      }
+      cost = existing.rows[0];
+      console.log(`ℹ️ cost_entry duplicado evitado (idempotente): ${cost.id} - ${category} ${amountNum}`);
+    }
 
     // Registrar en audit log
     await query(
