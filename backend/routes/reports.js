@@ -60,6 +60,7 @@ router.get('/profit', requireBranchAccess, async (req, res) => {
   try {
     const { branch_id, start_date, end_date } = req.query;
     const branchId = branch_id || req.user.branchId;
+    const appTimezone = process.env.APP_TIMEZONE || 'America/Mexico_City';
 
     let branchFilter = '';
     const params = [];
@@ -78,20 +79,25 @@ router.get('/profit', requireBranchAccess, async (req, res) => {
     }
 
     if (start_date) {
-      branchFilter += ` AND s.created_at >= $${paramCount}`;
-      params.push(start_date);
-      paramCount++;
+      branchFilter += ` AND DATE(s.created_at AT TIME ZONE $${paramCount}) >= $${paramCount + 1}`;
+      params.push(appTimezone, start_date);
+      paramCount += 2;
     }
 
     if (end_date) {
-      branchFilter += ` AND s.created_at <= $${paramCount}`;
-      params.push(end_date);
-      paramCount++;
+      branchFilter += ` AND DATE(s.created_at AT TIME ZONE $${paramCount}) <= $${paramCount + 1}`;
+      params.push(appTimezone, end_date);
+      paramCount += 2;
     }
 
+    // Agrupar por fecha local del usuario, no por UTC. Antes usabamos DATE(created_at)
+    // sin timezone, lo que rompia el reporte cerca de medianoche (ventas registradas
+    // las 8pm Mexico = 2am UTC dia siguiente terminaban sumando al dia siguiente).
+    const tzParamIdx = paramCount;
+    params.push(appTimezone);
     const profitResult = await query(
-      `SELECT 
-        DATE(s.created_at) as date,
+      `SELECT
+        DATE(s.created_at AT TIME ZONE $${tzParamIdx}) as date,
         COUNT(s.id) as sales_count,
         COALESCE(SUM(s.total), 0) as total_sales,
         COALESCE(SUM(
@@ -108,7 +114,7 @@ router.get('/profit', requireBranchAccess, async (req, res) => {
        FROM sales s
        ${branchFilter}
        AND s.status = 'completed'
-       GROUP BY DATE(s.created_at)
+       GROUP BY DATE(s.created_at AT TIME ZONE $${tzParamIdx})
        ORDER BY date DESC`,
       params
     );
