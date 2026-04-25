@@ -1548,11 +1548,17 @@ const Inventory = {
                 items = items.filter(item => item.theme === themeFilter);
             }
 
+            const parseMeasurements = (raw) => {
+                if (!raw) return null;
+                if (typeof raw !== 'string') return raw;
+                try { return JSON.parse(raw); } catch (e) { return null; }
+            };
+
             const ringSizeFilter = document.getElementById('inventory-ring-size-filter')?.value;
             if (ringSizeFilter) {
                 items = items.filter(item => {
-                    if (!item.measurements) return false;
-                    const measurements = typeof item.measurements === 'string' ? JSON.parse(item.measurements) : item.measurements;
+                    const measurements = parseMeasurements(item.measurements);
+                    if (!measurements) return false;
                     return measurements.ring_size === parseFloat(ringSizeFilter);
                 });
             }
@@ -1560,8 +1566,8 @@ const Inventory = {
             const chainLengthFilter = document.getElementById('inventory-chain-length-filter')?.value;
             if (chainLengthFilter) {
                 items = items.filter(item => {
-                    if (!item.measurements) return false;
-                    const measurements = typeof item.measurements === 'string' ? JSON.parse(item.measurements) : item.measurements;
+                    const measurements = parseMeasurements(item.measurements);
+                    if (!measurements) return false;
                     return measurements.chain_length === parseFloat(chainLengthFilter);
                 });
             }
@@ -2145,7 +2151,14 @@ const Inventory = {
             
             const stoneInfo = item.stone_type ? `${item.stone_type}${item.total_carats ? ` (${item.total_carats}ct)` : ''}` : 'N/A';
             
-            const measurements = item.measurements ? (typeof item.measurements === 'string' ? JSON.parse(item.measurements) : item.measurements) : {};
+            let measurements = {};
+            if (item.measurements) {
+                if (typeof item.measurements === 'string') {
+                    try { measurements = JSON.parse(item.measurements) || {}; } catch (e) { measurements = {}; }
+                } else {
+                    measurements = item.measurements;
+                }
+            }
             const measuresText = [
                 measurements.ring_size ? `Talla: ${measurements.ring_size}` : null,
                 measurements.chain_length ? `Cadena: ${measurements.chain_length}cm` : null,
@@ -3250,9 +3263,13 @@ const Inventory = {
             }
         }
 
-        // Parsear measurements y stones si existen
-        const measurements = item?.measurements ? (typeof item.measurements === 'string' ? JSON.parse(item.measurements) : item.measurements) : {};
-        const stones = item?.stones ? (typeof item.stones === 'string' ? JSON.parse(item.stones) : item.stones) : [];
+        const _safeParse = (raw, fallback) => {
+            if (!raw) return fallback;
+            if (typeof raw !== 'string') return raw;
+            try { return JSON.parse(raw) ?? fallback; } catch (e) { return fallback; }
+        };
+        const measurements = _safeParse(item?.measurements, {});
+        const stones = _safeParse(item?.stones, []);
         
         const body = `
             <form id="inventory-form">
