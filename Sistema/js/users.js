@@ -22,15 +22,26 @@ const UserManager = {
         }
 
         if (barcodeInput) {
-            barcodeInput.addEventListener('input', async (e) => {
+            // Debounce 300ms: antes el listener corria handleBarcodeInput en CADA keystroke,
+            // disparando 3 queries de IndexedDB por tecla y a veces sobrescribiendo el value
+            // mientras el usuario seguia escribiendo. Eso causaba que teclear rapido fuera
+            // imposible (tenias que teclear letra por letra). Ahora solo hace lookup cuando
+            // pasan 300ms sin teclear (humano termina de escribir, o escaner ya envio todo).
+            let _barcodeDebounce = null;
+            barcodeInput.addEventListener('input', (e) => {
                 const barcode = e.target.value.trim();
-                // Asegurar que el campo PIN esté visible cuando el usuario empiece a escribir
                 if (barcode.length > 0 && pinGroup) {
                     pinGroup.style.display = 'block';
                 }
-                if (barcode.length > 0) {
-                    await this.handleBarcodeInput(barcode);
-                }
+                if (_barcodeDebounce) clearTimeout(_barcodeDebounce);
+                _barcodeDebounce = setTimeout(() => {
+                    // Re-leer el value actual (pudo cambiar durante el debounce)
+                    const current = e.target.value.trim();
+                    if (current.length >= 3 && current === barcode) {
+                        // Solo dispara si el usuario realmente paro y el valor coincide.
+                        this.handleBarcodeInput(current).catch(err => console.warn('handleBarcodeInput:', err));
+                    }
+                }, 300);
             });
         }
 
