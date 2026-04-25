@@ -2143,12 +2143,31 @@ const Reports = {
             }
 
             // FALLBACK COMISIONES: si comisiones desde ventas/sale_items dieron 0, usar
-            // cost_entries.comisiones (mismo patron que COGS).
+            // cost_entries.comisiones (mismo patron que COGS). Y separamos Vendedor vs Guia
+            // parseando notes ('Comision Vendedor - Venta X' / 'Comision Guia - Venta X').
             if (commissionsBreakdown.total === 0 && completedSales.length > 0) {
-                const commFromEntries = reportCosts
-                    .filter(c => c.category === 'comisiones')
-                    .reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0);
-                if (commFromEntries > 0) commissionsBreakdown.total = commFromEntries;
+                const commEntries = reportCosts.filter(c => c.category === 'comisiones');
+                let sellersTotal = 0;
+                let guidesTotal = 0;
+                let unmatched = 0;
+                for (const c of commEntries) {
+                    const amt = parseFloat(c.amount) || 0;
+                    const notes = String(c.notes || c.description || '').toLowerCase();
+                    if (notes.includes('vendedor')) {
+                        sellersTotal += amt;
+                    } else if (notes.includes('gu')) { // 'guia' o 'guía'
+                        guidesTotal += amt;
+                    } else {
+                        unmatched += amt;
+                    }
+                }
+                const grandTotal = sellersTotal + guidesTotal + unmatched;
+                if (grandTotal > 0) {
+                    commissionsBreakdown.sellers = sellersTotal;
+                    commissionsBreakdown.guides = guidesTotal;
+                    // Si hay entries sin matchear, sumarlos al total pero no al desglose
+                    commissionsBreakdown.total = grandTotal;
+                }
             }
             }
         }
