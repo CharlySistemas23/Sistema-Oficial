@@ -462,19 +462,19 @@ const Suppliers = {
         
         return `
             <tr data-supplier-id="${supplier.id}">
-                <td class="col-code">${supplier.code || '-'}</td>
+                <td class="col-code">${Utils.escapeHtml(supplier.code || '-')}</td>
                 <td class="col-name">
                     <div class="supplier-name-cell">
-                        <strong>${supplier.name || 'Sin nombre'}</strong>
-                        ${supplier.legal_name ? `<div class="supplier-legal-name">${supplier.legal_name}</div>` : ''}
+                        <strong>${Utils.escapeHtml(supplier.name || 'Sin nombre')}</strong>
+                        ${supplier.legal_name ? `<div class="supplier-legal-name">${Utils.escapeHtml(supplier.legal_name)}</div>` : ''}
                     </div>
                 </td>
-                <td class="col-type">${supplier.supplier_type || '-'}</td>
-                <td class="col-category">${supplier.category || '-'}</td>
+                <td class="col-type">${Utils.escapeHtml(supplier.supplier_type || '-')}</td>
+                <td class="col-category">${Utils.escapeHtml(supplier.category || '-')}</td>
                 <td class="col-contact">
-                    ${supplier.contact_person ? `<div>${supplier.contact_person}</div>` : ''}
-                    ${supplier.email ? `<div class="text-muted"><i class="fas fa-envelope"></i> ${supplier.email}</div>` : ''}
-                    ${supplier.phone ? `<div class="text-muted"><i class="fas fa-phone"></i> ${supplier.phone}</div>` : ''}
+                    ${supplier.contact_person ? `<div>${Utils.escapeHtml(supplier.contact_person)}</div>` : ''}
+                    ${supplier.email ? `<div class="text-muted"><i class="fas fa-envelope"></i> ${Utils.escapeHtml(supplier.email)}</div>` : ''}
+                    ${supplier.phone ? `<div class="text-muted"><i class="fas fa-phone"></i> ${Utils.escapeHtml(supplier.phone)}</div>` : ''}
                 </td>
                 <td class="col-rating">${ratingStars}</td>
                 <td class="col-status">
@@ -512,19 +512,19 @@ const Suppliers = {
             <div class="supplier-card" data-supplier-id="${supplier.id}">
                 <div class="supplier-card-header">
                     <div class="supplier-card-title">
-                        <h3>${supplier.name || 'Sin nombre'}</h3>
-                        <span class="supplier-code">${supplier.code || '-'}</span>
+                        <h3>${Utils.escapeHtml(supplier.name || 'Sin nombre')}</h3>
+                        <span class="supplier-code">${Utils.escapeHtml(supplier.code || '-')}</span>
                     </div>
-                    <span class="status-badge ${statusClass}">${this.getStatusLabel(supplier.status)}</span>
+                    <span class="status-badge ${statusClass}">${Utils.escapeHtml(this.getStatusLabel(supplier.status))}</span>
                 </div>
                 <div class="supplier-card-body">
-                    ${supplier.legal_name ? `<div class="supplier-info"><strong>Razón Social:</strong> ${supplier.legal_name}</div>` : ''}
-                    ${supplier.supplier_type ? `<div class="supplier-info"><strong>Tipo:</strong> ${supplier.supplier_type}</div>` : ''}
-                    ${supplier.category ? `<div class="supplier-info"><strong>Categoría:</strong> ${supplier.category}</div>` : ''}
-                    ${supplier.contact_person ? `<div class="supplier-info"><strong>Contacto:</strong> ${supplier.contact_person}</div>` : ''}
-                    ${supplier.email ? `<div class="supplier-info"><i class="fas fa-envelope"></i> <a href="mailto:${supplier.email}">${supplier.email}</a></div>` : ''}
-                    ${supplier.phone ? `<div class="supplier-info"><i class="fas fa-phone"></i> <a href="tel:${supplier.phone}">${supplier.phone}</a></div>` : ''}
-                    ${supplier.whatsapp ? `<div class="supplier-info"><i class="fab fa-whatsapp"></i> <a href="https://wa.me/${supplier.whatsapp.replace(/[^0-9]/g, '')}" target="_blank">${supplier.whatsapp}</a></div>` : ''}
+                    ${supplier.legal_name ? `<div class="supplier-info"><strong>Razón Social:</strong> ${Utils.escapeHtml(supplier.legal_name)}</div>` : ''}
+                    ${supplier.supplier_type ? `<div class="supplier-info"><strong>Tipo:</strong> ${Utils.escapeHtml(supplier.supplier_type)}</div>` : ''}
+                    ${supplier.category ? `<div class="supplier-info"><strong>Categoría:</strong> ${Utils.escapeHtml(supplier.category)}</div>` : ''}
+                    ${supplier.contact_person ? `<div class="supplier-info"><strong>Contacto:</strong> ${Utils.escapeHtml(supplier.contact_person)}</div>` : ''}
+                    ${supplier.email ? `<div class="supplier-info"><i class="fas fa-envelope"></i> <a href="mailto:${Utils.escapeHtml(supplier.email)}">${Utils.escapeHtml(supplier.email)}</a></div>` : ''}
+                    ${supplier.phone ? `<div class="supplier-info"><i class="fas fa-phone"></i> <a href="tel:${Utils.escapeHtml(supplier.phone)}">${Utils.escapeHtml(supplier.phone)}</a></div>` : ''}
+                    ${supplier.whatsapp ? `<div class="supplier-info"><i class="fab fa-whatsapp"></i> <a href="https://wa.me/${supplier.whatsapp.replace(/[^0-9]/g, '')}" target="_blank">${Utils.escapeHtml(supplier.whatsapp)}</a></div>` : ''}
                     ${supplier.delivery_days ? `<div class="supplier-info"><i class="fas fa-truck"></i> Entrega: ${supplier.delivery_days} días</div>` : ''}
                     ${supplier.payment_terms ? `<div class="supplier-info"><i class="fas fa-money-bill-wave"></i> ${supplier.payment_terms}</div>` : ''}
                     <div class="supplier-rating">${ratingStars}</div>
@@ -765,7 +765,7 @@ const Suppliers = {
                         </div>
                         <div class="form-group">
                             <label>Nombre *</label>
-                            <input type="text" id="supplier-name" class="form-input" value="${supplier?.name || ''}" required>
+                            <input type="text" id="supplier-name" class="form-input" value="${Utils.escapeHtml(supplier?.name || '')}" required>
                         </div>
                     </div>
                     <div class="form-row">
@@ -811,13 +811,13 @@ const Suppliers = {
                         </div>
                         <div class="form-group">
                             <label>Email</label>
-                            <input type="email" id="supplier-email" class="form-input" value="${supplier?.email || ''}">
+                            <input type="email" id="supplier-email" class="form-input" value="${Utils.escapeHtml(supplier?.email || '')}">
                         </div>
                     </div>
                     <div class="form-row">
                         <div class="form-group">
                             <label>Teléfono</label>
-                            <input type="tel" id="supplier-phone" class="form-input" value="${supplier?.phone || ''}">
+                            <input type="tel" id="supplier-phone" class="form-input" value="${Utils.escapeHtml(supplier?.phone || '')}">
                         </div>
                         <div class="form-group">
                             <label>Móvil</label>
@@ -868,7 +868,7 @@ const Suppliers = {
                     <h3>Dirección</h3>
                     <div class="form-group">
                         <label>Dirección</label>
-                        <textarea id="supplier-address" class="form-input" rows="2">${supplier?.address || ''}</textarea>
+                        <textarea id="supplier-address" class="form-input" rows="2">${Utils.escapeHtml(supplier?.address || '')}</textarea>
                     </div>
                     <div class="form-row">
                         <div class="form-group">
@@ -983,7 +983,7 @@ const Suppliers = {
                 <div class="form-section">
                     <h3>Notas</h3>
                     <div class="form-group">
-                        <textarea id="supplier-notes" class="form-input" rows="3" placeholder="Notas adicionales...">${supplier?.notes || ''}</textarea>
+                        <textarea id="supplier-notes" class="form-input" rows="3" placeholder="Notas adicionales...">${Utils.escapeHtml(supplier?.notes || '')}</textarea>
                     </div>
                 </div>
             </form>
@@ -1029,9 +1029,9 @@ const Suppliers = {
                 <div class="contact-item" data-contact-id="${contact.id}">
                     <div class="contact-item-header">
                         <div class="contact-item-info">
-                            <strong>${contact.name || 'Sin nombre'}</strong>
+                            <strong>${Utils.escapeHtml(contact.name || 'Sin nombre')}</strong>
                             ${contact.is_primary ? '<span class="badge badge-primary">Principal</span>' : ''}
-                            ${contact.position ? `<span class="text-muted">${contact.position}</span>` : ''}
+                            ${contact.position ? `<span class="text-muted">${Utils.escapeHtml(contact.position)}</span>` : ''}
                         </div>
                         <div class="contact-item-actions">
                             <button type="button" class="btn-icon" onclick="window.Suppliers.showContactForm('${supplierId}', '${contact.id}')" title="Editar">
@@ -1043,11 +1043,11 @@ const Suppliers = {
                         </div>
                     </div>
                     <div class="contact-item-details">
-                        ${contact.department ? `<div><i class="fas fa-building"></i> ${contact.department}</div>` : ''}
-                        ${contact.email ? `<div><i class="fas fa-envelope"></i> ${contact.email}</div>` : ''}
-                        ${contact.phone ? `<div><i class="fas fa-phone"></i> ${contact.phone}</div>` : ''}
-                        ${contact.mobile ? `<div><i class="fas fa-mobile-alt"></i> ${contact.mobile}</div>` : ''}
-                        ${contact.contact_hours ? `<div><i class="fas fa-clock"></i> ${contact.contact_hours}</div>` : ''}
+                        ${contact.department ? `<div><i class="fas fa-building"></i> ${Utils.escapeHtml(contact.department)}</div>` : ''}
+                        ${contact.email ? `<div><i class="fas fa-envelope"></i> ${Utils.escapeHtml(contact.email)}</div>` : ''}
+                        ${contact.phone ? `<div><i class="fas fa-phone"></i> ${Utils.escapeHtml(contact.phone)}</div>` : ''}
+                        ${contact.mobile ? `<div><i class="fas fa-mobile-alt"></i> ${Utils.escapeHtml(contact.mobile)}</div>` : ''}
+                        ${contact.contact_hours ? `<div><i class="fas fa-clock"></i> ${Utils.escapeHtml(contact.contact_hours)}</div>` : ''}
                     </div>
                 </div>
             `).join('');
@@ -1077,7 +1077,7 @@ const Suppliers = {
             <form id="contact-form" class="contact-form">
                 <div class="form-group">
                     <label>Nombre *</label>
-                    <input type="text" id="contact-name" class="form-input" value="${contact?.name || ''}" required>
+                    <input type="text" id="contact-name" class="form-input" value="${Utils.escapeHtml(contact?.name || '')}" required>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
@@ -1092,11 +1092,11 @@ const Suppliers = {
                 <div class="form-row">
                     <div class="form-group">
                         <label>Email</label>
-                        <input type="email" id="contact-email" class="form-input" value="${contact?.email || ''}">
+                        <input type="email" id="contact-email" class="form-input" value="${Utils.escapeHtml(contact?.email || '')}">
                     </div>
                     <div class="form-group">
                         <label>Teléfono</label>
-                        <input type="tel" id="contact-phone" class="form-input" value="${contact?.phone || ''}">
+                        <input type="tel" id="contact-phone" class="form-input" value="${Utils.escapeHtml(contact?.phone || '')}">
                     </div>
                 </div>
                 <div class="form-group">
@@ -1119,7 +1119,7 @@ const Suppliers = {
                 </div>
                 <div class="form-group">
                     <label>Notas</label>
-                    <textarea id="contact-notes" class="form-input" rows="2">${contact?.notes || ''}</textarea>
+                    <textarea id="contact-notes" class="form-input" rows="2">${Utils.escapeHtml(contact?.notes || '')}</textarea>
                 </div>
                 <div class="form-group">
                     <label>
@@ -1357,28 +1357,28 @@ const Suppliers = {
                 <div class="details-section">
                     <h3>Información Básica</h3>
                     <div class="details-grid">
-                        <div><strong>Código:</strong> ${supplier.code || '-'}</div>
-                        <div><strong>Nombre:</strong> ${supplier.name || '-'}</div>
-                        ${supplier.legal_name ? `<div><strong>Razón Social:</strong> ${supplier.legal_name}</div>` : ''}
-                        ${supplier.tax_id ? `<div><strong>RFC:</strong> ${supplier.tax_id}</div>` : ''}
-                        <div><strong>Tipo:</strong> ${supplier.supplier_type || '-'}</div>
-                        <div><strong>Categoría:</strong> ${supplier.category || '-'}</div>
-                        <div><strong>Estado:</strong> <span class="status-badge ${supplier.status === 'active' ? 'status-active' : 'status-inactive'}">${this.getStatusLabel(supplier.status)}</span></div>
+                        <div><strong>Código:</strong> ${Utils.escapeHtml(supplier.code || '-')}</div>
+                        <div><strong>Nombre:</strong> ${Utils.escapeHtml(supplier.name || '-')}</div>
+                        ${supplier.legal_name ? `<div><strong>Razón Social:</strong> ${Utils.escapeHtml(supplier.legal_name)}</div>` : ''}
+                        ${supplier.tax_id ? `<div><strong>RFC:</strong> ${Utils.escapeHtml(supplier.tax_id)}</div>` : ''}
+                        <div><strong>Tipo:</strong> ${Utils.escapeHtml(supplier.supplier_type || '-')}</div>
+                        <div><strong>Categoría:</strong> ${Utils.escapeHtml(supplier.category || '-')}</div>
+                        <div><strong>Estado:</strong> <span class="status-badge ${supplier.status === 'active' ? 'status-active' : 'status-inactive'}">${Utils.escapeHtml(this.getStatusLabel(supplier.status))}</span></div>
                     </div>
                 </div>
 
                 <div class="details-section">
                     <h3>Contacto</h3>
                     <div class="details-grid">
-                        ${supplier.contact_person ? `<div><strong>Contacto:</strong> ${supplier.contact_person}</div>` : ''}
-                        ${supplier.email ? `<div><strong>Email:</strong> <a href="mailto:${supplier.email}">${supplier.email}</a></div>` : ''}
-                        ${supplier.phone ? `<div><strong>Teléfono:</strong> <a href="tel:${supplier.phone}">${supplier.phone}</a></div>` : ''}
-                        ${supplier.mobile ? `<div><strong>Móvil:</strong> <a href="tel:${supplier.mobile}">${supplier.mobile}</a></div>` : ''}
-                        ${supplier.whatsapp ? `<div><strong>WhatsApp:</strong> <a href="https://wa.me/${supplier.whatsapp.replace(/[^0-9]/g, '')}" target="_blank">${supplier.whatsapp}</a></div>` : ''}
-                        ${supplier.website ? `<div><strong>Web:</strong> <a href="${supplier.website}" target="_blank">${supplier.website}</a></div>` : ''}
-                        ${supplier.facebook ? `<div><strong>Facebook:</strong> <a href="${supplier.facebook}" target="_blank">${supplier.facebook}</a></div>` : ''}
-                        ${supplier.instagram ? `<div><strong>Instagram:</strong> <a href="https://instagram.com/${supplier.instagram.replace('@', '')}" target="_blank">${supplier.instagram}</a></div>` : ''}
-                        ${supplier.business_hours ? `<div><strong>Horarios:</strong> ${supplier.business_hours}</div>` : ''}
+                        ${supplier.contact_person ? `<div><strong>Contacto:</strong> ${Utils.escapeHtml(supplier.contact_person)}</div>` : ''}
+                        ${supplier.email ? `<div><strong>Email:</strong> <a href="mailto:${Utils.escapeHtml(supplier.email)}">${Utils.escapeHtml(supplier.email)}</a></div>` : ''}
+                        ${supplier.phone ? `<div><strong>Teléfono:</strong> <a href="tel:${Utils.escapeHtml(supplier.phone)}">${Utils.escapeHtml(supplier.phone)}</a></div>` : ''}
+                        ${supplier.mobile ? `<div><strong>Móvil:</strong> <a href="tel:${Utils.escapeHtml(supplier.mobile)}">${Utils.escapeHtml(supplier.mobile)}</a></div>` : ''}
+                        ${supplier.whatsapp ? `<div><strong>WhatsApp:</strong> <a href="https://wa.me/${supplier.whatsapp.replace(/[^0-9]/g, '')}" target="_blank">${Utils.escapeHtml(supplier.whatsapp)}</a></div>` : ''}
+                        ${supplier.website ? `<div><strong>Web:</strong> <a href="${Utils.escapeHtml(supplier.website)}" target="_blank">${Utils.escapeHtml(supplier.website)}</a></div>` : ''}
+                        ${supplier.facebook ? `<div><strong>Facebook:</strong> <a href="${Utils.escapeHtml(supplier.facebook)}" target="_blank">${Utils.escapeHtml(supplier.facebook)}</a></div>` : ''}
+                        ${supplier.instagram ? `<div><strong>Instagram:</strong> <a href="https://instagram.com/${supplier.instagram.replace('@', '')}" target="_blank">${Utils.escapeHtml(supplier.instagram)}</a></div>` : ''}
+                        ${supplier.business_hours ? `<div><strong>Horarios:</strong> ${Utils.escapeHtml(supplier.business_hours)}</div>` : ''}
                     </div>
                 </div>
 
@@ -1386,11 +1386,11 @@ const Suppliers = {
                 <div class="details-section">
                     <h3>Dirección</h3>
                     <div class="details-grid">
-                        <div><strong>Dirección:</strong> ${supplier.address}</div>
-                        ${supplier.city ? `<div><strong>Ciudad:</strong> ${supplier.city}</div>` : ''}
-                        ${supplier.state ? `<div><strong>Estado:</strong> ${supplier.state}</div>` : ''}
-                        ${supplier.country ? `<div><strong>País:</strong> ${supplier.country}</div>` : ''}
-                        ${supplier.postal_code ? `<div><strong>Código Postal:</strong> ${supplier.postal_code}</div>` : ''}
+                        <div><strong>Dirección:</strong> ${Utils.escapeHtml(supplier.address)}</div>
+                        ${supplier.city ? `<div><strong>Ciudad:</strong> ${Utils.escapeHtml(supplier.city)}</div>` : ''}
+                        ${supplier.state ? `<div><strong>Estado:</strong> ${Utils.escapeHtml(supplier.state)}</div>` : ''}
+                        ${supplier.country ? `<div><strong>País:</strong> ${Utils.escapeHtml(supplier.country)}</div>` : ''}
+                        ${supplier.postal_code ? `<div><strong>Código Postal:</strong> ${Utils.escapeHtml(supplier.postal_code)}</div>` : ''}
                     </div>
                 </div>
                 ` : ''}
@@ -1398,11 +1398,11 @@ const Suppliers = {
                     <div class="details-section">
                         <h3>Información Comercial</h3>
                         <div class="details-grid">
-                            ${supplier.payment_terms ? `<div><strong>Términos de Pago:</strong> ${supplier.payment_terms}</div>` : ''}
-                            ${supplier.payment_methods ? `<div><strong>Métodos de Pago:</strong> ${supplier.payment_methods}</div>` : ''}
-                            ${supplier.delivery_days ? `<div><strong>Días de Entrega:</strong> ${supplier.delivery_days} días</div>` : ''}
+                            ${supplier.payment_terms ? `<div><strong>Términos de Pago:</strong> ${Utils.escapeHtml(supplier.payment_terms)}</div>` : ''}
+                            ${supplier.payment_methods ? `<div><strong>Métodos de Pago:</strong> ${Utils.escapeHtml(supplier.payment_methods)}</div>` : ''}
+                            ${supplier.delivery_days ? `<div><strong>Días de Entrega:</strong> ${Utils.escapeHtml(supplier.delivery_days)} días</div>` : ''}
                             ${supplier.credit_limit ? `<div><strong>Límite de Crédito:</strong> ${Utils.formatCurrency(supplier.credit_limit)}</div>` : ''}
-                            <div><strong>Moneda:</strong> ${supplier.currency || 'MXN'}</div>
+                            <div><strong>Moneda:</strong> ${Utils.escapeHtml(supplier.currency || 'MXN')}</div>
                             ${supplier.rating ? `<div><strong>Calificación:</strong> ${this.renderRating(supplier.rating)}</div>` : ''}
                             ${supplier.relationship_start_date ? `<div><strong>Fecha de Inicio:</strong> ${new Date(supplier.relationship_start_date).toLocaleDateString('es-MX')}</div>` : ''}
                         </div>
@@ -1412,11 +1412,11 @@ const Suppliers = {
                     <div class="details-section">
                         <h3>Información Bancaria</h3>
                         <div class="details-grid">
-                            ${supplier.bank_name ? `<div><strong>Banco:</strong> ${supplier.bank_name}</div>` : ''}
-                            ${supplier.bank_account ? `<div><strong>Número de Cuenta:</strong> ${supplier.bank_account}</div>` : ''}
-                            ${supplier.clabe ? `<div><strong>CLABE:</strong> ${supplier.clabe}</div>` : ''}
-                            ${supplier.account_holder ? `<div><strong>Titular:</strong> ${supplier.account_holder}</div>` : ''}
-                            ${supplier.bank_references ? `<div><strong>Referencias:</strong> ${supplier.bank_references}</div>` : ''}
+                            ${supplier.bank_name ? `<div><strong>Banco:</strong> ${Utils.escapeHtml(supplier.bank_name)}</div>` : ''}
+                            ${supplier.bank_account ? `<div><strong>Número de Cuenta:</strong> ${Utils.escapeHtml(supplier.bank_account)}</div>` : ''}
+                            ${supplier.clabe ? `<div><strong>CLABE:</strong> ${Utils.escapeHtml(supplier.clabe)}</div>` : ''}
+                            ${supplier.account_holder ? `<div><strong>Titular:</strong> ${Utils.escapeHtml(supplier.account_holder)}</div>` : ''}
+                            ${supplier.bank_references ? `<div><strong>Referencias:</strong> ${Utils.escapeHtml(supplier.bank_references)}</div>` : ''}
                         </div>
                     </div>
                     ` : ''}
@@ -1433,7 +1433,7 @@ const Suppliers = {
                 ${supplier.notes ? `
                 <div class="details-section">
                     <h3>Notas</h3>
-                    <p>${supplier.notes}</p>
+                    <p>${Utils.escapeHtml(supplier.notes)}</p>
                 </div>
                 ` : ''}
             </div>

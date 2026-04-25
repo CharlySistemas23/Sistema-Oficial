@@ -953,23 +953,23 @@ const Customers = {
                     <div class="customer-name-cell">
                         <div class="customer-avatar">${this.getInitials(customer.name, customer.lastname)}</div>
                         <div class="customer-name-info">
-                            <span class="customer-fullname">${customer.name || 'Sin nombre'} ${customer.lastname || ''}</span>
-                            ${customer.tags ? `<div class="customer-tags-mini">${customer.tags.split(',').slice(0, 2).map(t => `<span class="tag-mini">${t.trim()}</span>`).join('')}</div>` : ''}
+                            <span class="customer-fullname">${Utils.escapeHtml(customer.name || 'Sin nombre')} ${Utils.escapeHtml(customer.lastname || '')}</span>
+                            ${customer.tags ? `<div class="customer-tags-mini">${customer.tags.split(',').slice(0, 2).map(t => `<span class="tag-mini">${Utils.escapeHtml(t.trim())}</span>`).join('')}</div>` : ''}
                         </div>
                     </div>
                 </td>
                 <td class="col-contact">
                     <div class="contact-info">
-                        ${customer.email ? `<div class="contact-item"><i class="fas fa-envelope"></i> ${customer.email}</div>` : ''}
-                        ${customer.phone ? `<div class="contact-item"><i class="fas fa-phone"></i> ${customer.phone}</div>` : ''}
+                        ${customer.email ? `<div class="contact-item"><i class="fas fa-envelope"></i> ${Utils.escapeHtml(customer.email)}</div>` : ''}
+                        ${customer.phone ? `<div class="contact-item"><i class="fas fa-phone"></i> ${Utils.escapeHtml(customer.phone)}</div>` : ''}
                         ${!customer.email && !customer.phone ? '<span class="no-data">-</span>' : ''}
                     </div>
                 </td>
                 <td class="col-location">
-                    ${customer.country ? `<span class="location-text">${customer.city ? customer.city + ', ' : ''}${customer.country}</span>` : '<span class="no-data">-</span>'}
+                    ${customer.country ? `<span class="location-text">${customer.city ? Utils.escapeHtml(customer.city) + ', ' : ''}${Utils.escapeHtml(customer.country)}</span>` : '<span class="no-data">-</span>'}
                 </td>
                 <td class="col-segment">
-                    <span class="segment-badge ${segmentClass}">${customer.autoSegment || customer.segment || 'Sin segmento'}</span>
+                    <span class="segment-badge ${segmentClass}">${Utils.escapeHtml(customer.autoSegment || customer.segment || 'Sin segmento')}</span>
                 </td>
                 <td class="col-purchases">
                     <span class="purchase-count">${customer.purchaseCount}</span>
@@ -1054,8 +1054,8 @@ const Customers = {
                 <div class="customer-card-header">
                     <div class="customer-avatar-lg">${this.getInitials(customer.name, customer.lastname)}</div>
                     <div class="customer-card-info">
-                        <h4>${customer.name || 'Sin nombre'} ${customer.lastname || ''}</h4>
-                        <span class="segment-badge ${segmentClass}">${customer.autoSegment || customer.segment || 'Sin segmento'}</span>
+                        <h4>${Utils.escapeHtml(customer.name || 'Sin nombre')} ${Utils.escapeHtml(customer.lastname || '')}</h4>
+                        <span class="segment-badge ${segmentClass}">${Utils.escapeHtml(customer.autoSegment || customer.segment || 'Sin segmento')}</span>
                     </div>
                     <div class="customer-score-badge" style="background: ${scoreColor}">
                         ${customer.customerScore}
@@ -1063,9 +1063,9 @@ const Customers = {
                 </div>
                 <div class="customer-card-body">
                     <div class="customer-card-contact">
-                        ${customer.email ? `<div><i class="fas fa-envelope"></i> ${customer.email}</div>` : ''}
-                        ${customer.phone ? `<div><i class="fas fa-phone"></i> ${customer.phone}</div>` : ''}
-                        ${customer.country ? `<div><i class="fas fa-map-marker-alt"></i> ${customer.city ? customer.city + ', ' : ''}${customer.country}</div>` : ''}
+                        ${customer.email ? `<div><i class="fas fa-envelope"></i> ${Utils.escapeHtml(customer.email)}</div>` : ''}
+                        ${customer.phone ? `<div><i class="fas fa-phone"></i> ${Utils.escapeHtml(customer.phone)}</div>` : ''}
+                        ${customer.country ? `<div><i class="fas fa-map-marker-alt"></i> ${customer.city ? Utils.escapeHtml(customer.city) + ', ' : ''}${Utils.escapeHtml(customer.country)}</div>` : ''}
                     </div>
                     <div class="customer-card-stats">
                         <div class="stat-item">
@@ -1178,21 +1178,21 @@ const Customers = {
                     <div class="form-row">
                         <div class="form-group">
                             <label>Nombre *</label>
-                            <input type="text" id="customer-name" class="form-input" value="${customer?.name || ''}" required>
+                            <input type="text" id="customer-name" class="form-input" value="${Utils.escapeHtml(customer?.name || '')}" required>
                         </div>
                         <div class="form-group">
                             <label>Apellidos</label>
-                            <input type="text" id="customer-lastname" class="form-input" value="${customer?.lastname || ''}">
+                            <input type="text" id="customer-lastname" class="form-input" value="${Utils.escapeHtml(customer?.lastname || '')}">
                         </div>
                     </div>
                     <div class="form-row">
                         <div class="form-group">
                             <label>Email</label>
-                            <input type="email" id="customer-email" class="form-input" value="${customer?.email || ''}">
+                            <input type="email" id="customer-email" class="form-input" value="${Utils.escapeHtml(customer?.email || '')}">
                         </div>
                         <div class="form-group">
                             <label>Teléfono</label>
-                            <input type="text" id="customer-phone" class="form-input" value="${customer?.phone || ''}" placeholder="+52 123 456 7890">
+                            <input type="text" id="customer-phone" class="form-input" value="${Utils.escapeHtml(customer?.phone || '')}" placeholder="+52 123 456 7890">
                         </div>
                     </div>
                     <div class="form-row">
@@ -1228,12 +1228,12 @@ const Customers = {
                         </div>
                         <div class="form-group">
                             <label>Ciudad</label>
-                            <input type="text" id="customer-city" class="form-input" value="${customer?.city || ''}">
+                            <input type="text" id="customer-city" class="form-input" value="${Utils.escapeHtml(customer?.city || '')}">
                         </div>
                     </div>
                     <div class="form-group">
                         <label>Dirección</label>
-                        <textarea id="customer-address" class="form-textarea" rows="2">${customer?.address || ''}</textarea>
+                        <textarea id="customer-address" class="form-textarea" rows="2">${Utils.escapeHtml(customer?.address || '')}</textarea>
                     </div>
                 </div>
 
@@ -1262,7 +1262,7 @@ const Customers = {
                     </div>
                     <div class="form-group">
                         <label>Etiquetas</label>
-                        <input type="text" id="customer-tags" class="form-input" value="${customer?.tags || ''}" placeholder="Ej: joyería fina, anillos, exclusivo (separadas por comas)">
+                        <input type="text" id="customer-tags" class="form-input" value="${Utils.escapeHtml(customer?.tags || '')}" placeholder="Ej: joyería fina, anillos, exclusivo (separadas por comas)">
                         <small>Separa las etiquetas con comas</small>
                     </div>
                     <div class="form-group">
@@ -1352,7 +1352,7 @@ const Customers = {
         const body = `
             <div class="confirm-delete-content">
                 <i class="fas fa-exclamation-triangle"></i>
-                <p>¿Estás seguro de eliminar a <strong>${customer.name} ${customer.lastname || ''}</strong>?</p>
+                <p>¿Estás seguro de eliminar a <strong>${Utils.escapeHtml(customer.name)} ${Utils.escapeHtml(customer.lastname || '')}</strong>?</p>
                 <p class="warning-text">Esta acción no se puede deshacer.</p>
             </div>
         `;
@@ -1501,9 +1501,9 @@ const Customers = {
                 <div class="c360-header">
                     <div class="c360-avatar">${this.getInitials(customer.name, customer.lastname)}</div>
                     <div class="c360-info">
-                        <h3>${customer.name} ${customer.lastname || ''}</h3>
+                        <h3>${Utils.escapeHtml(customer.name)} ${Utils.escapeHtml(customer.lastname || '')}</h3>
                         <div class="c360-badges">
-                            <span class="segment-badge ${this.getSegmentClass(customerSegment)}">${customerSegment}</span>
+                            <span class="segment-badge ${this.getSegmentClass(customerSegment)}">${Utils.escapeHtml(customerSegment)}</span>
                             <span class="c360-score" style="background: ${scoreColor}">${customerScore}/100</span>
                         </div>
                     </div>
@@ -1535,15 +1535,15 @@ const Customers = {
                     <div class="c360-contact-grid">
                         <div class="c360-contact-item">
                             <i class="fas fa-envelope"></i>
-                            <span>${customer.email || 'No registrado'}</span>
+                            <span>${Utils.escapeHtml(customer.email || 'No registrado')}</span>
                         </div>
                         <div class="c360-contact-item">
                             <i class="fas fa-phone"></i>
-                            <span>${customer.phone || 'No registrado'}</span>
+                            <span>${Utils.escapeHtml(customer.phone || 'No registrado')}</span>
                         </div>
                         <div class="c360-contact-item">
                             <i class="fas fa-map-marker-alt"></i>
-                            <span>${customer.city ? customer.city + ', ' : ''}${customer.country || 'No registrado'}</span>
+                            <span>${customer.city ? Utils.escapeHtml(customer.city) + ', ' : ''}${Utils.escapeHtml(customer.country || 'No registrado')}</span>
                         </div>
                         <div class="c360-contact-item">
                             <i class="fas fa-calendar-alt"></i>
