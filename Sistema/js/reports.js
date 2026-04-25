@@ -2066,6 +2066,25 @@ const Reports = {
             }
             costBreakdown.arrivals = periodArrivals.reduce((sum, a) => sum + (parseFloat(a.arrival_fee || a.calculated_fee) || 0), 0);
             
+            // Sincronizar cost_entries del backend ANTES de leer (garantiza data fresca
+            // de costo_ventas, comisiones y comisiones_bancarias creadas por el POS de
+            // otros dispositivos). Sin esto, el cache local puede dar 0.
+            if (typeof API !== 'undefined' && API.getCosts && (API.token || (typeof localStorage !== 'undefined' && localStorage.getItem('api_token')))) {
+                try {
+                    const apiCosts = await API.getCosts({
+                        branch_id: branchId || null,
+                        start_date: costsDateFrom,
+                        end_date: costsDateTo
+                    });
+                    const list = Array.isArray(apiCosts) ? apiCosts : (apiCosts?.data || apiCosts?.costs || []);
+                    for (const c of list) {
+                        if (c && c.id) { try { await DB.put('cost_entries', c); } catch (_) {} }
+                    }
+                } catch (apiErr) {
+                    console.warn('[Reports] sync cost_entries fallo, usando local:', apiErr?.message || apiErr);
+                }
+            }
+
             // Obtener costos operativos del período
             if (typeof Costs !== 'undefined') {
             const reportCosts = await Costs.getFilteredCosts({
@@ -2073,7 +2092,7 @@ const Reports = {
                 dateFrom: costsDateFrom,
                 dateTo: costsDateTo
             });
-            
+
                 // Desglose de costos operativos
             costBreakdown.fixed = reportCosts
                     .filter(c => c.type === 'fijo' && c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias')
@@ -2088,9 +2107,27 @@ const Reports = {
             costBreakdown.arrivals += reportCosts
                 .filter(c => c.category === 'pago_llegadas')
                 .reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0);
+
+            // FALLBACK COGS: si totalCOGS desde sale_items quedo en 0 pero hay ventas,
+            // usar cost_entries.costo_ventas (el POS registra COGS aqui al cobrar cada venta).
+            if (totalCOGS === 0 && completedSales.length > 0) {
+                const cogsFromEntries = reportCosts
+                    .filter(c => c.category === 'costo_ventas')
+                    .reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0);
+                if (cogsFromEntries > 0) totalCOGS = cogsFromEntries;
+            }
+
+            // FALLBACK COMISIONES: si comisiones desde ventas/sale_items dieron 0, usar
+            // cost_entries.comisiones (mismo patron que COGS).
+            if (commissionsBreakdown.total === 0 && completedSales.length > 0) {
+                const commFromEntries = reportCosts
+                    .filter(c => c.category === 'comisiones')
+                    .reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0);
+                if (commFromEntries > 0) commissionsBreakdown.total = commFromEntries;
+            }
             }
         }
-        
+
         // Usar COGS calculado desde items en lugar de cost_entries
         costBreakdown.cogs = totalCOGS;
         costBreakdown.commissions = commissionsBreakdown.total;
