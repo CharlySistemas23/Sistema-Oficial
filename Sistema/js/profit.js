@@ -92,8 +92,8 @@ const ProfitCalculator = {
                 try {
                     const apiCosts = await API.getCosts({
                         branch_id: branchId,
-                        date_from: monthStartStr,
-                        date_to: monthEndStr
+                        start_date: monthStartStr,
+                        end_date: monthEndStr
                     });
                     const list = Array.isArray(apiCosts) ? apiCosts : (apiCosts?.data || apiCosts?.costs || []);
                     for (const c of list) {
@@ -250,8 +250,8 @@ const ProfitCalculator = {
                 try {
                     const apiCosts = await API.getCosts({
                         branch_id: branchIdStr,
-                        date_from: dateYYYYMMDD,
-                        date_to: dateYYYYMMDD
+                        start_date: dateYYYYMMDD,
+                        end_date: dateYYYYMMDD
                     });
                     const list = Array.isArray(apiCosts) ? apiCosts : (apiCosts?.data || apiCosts?.costs || []);
                     for (const c of list) {
