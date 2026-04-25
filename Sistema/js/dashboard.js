@@ -505,57 +505,23 @@ const Dashboard = {
             // % de Cierre = (Ventas / Pasajeros)*100 si hay pasajeros; si no, N/A (0)
             const closeRate = todayPassengers > 0 ? (todayTickets / todayPassengers) * 100 : 0;
             
-            // Obtener utilidad diaria usando ProfitCalculator (centralizado)
+            // Obtener utilidad diaria — SIEMPRE recalcular desde fuentes (cost_entries
+            // del backend + sales locales). Decisión deliberada: el snapshot cacheado
+            // en daily_profit_reports causaba que valores incorrectos persistieran
+            // multiples sesiones. La latencia extra (~300ms) es aceptable; los usuarios
+            // ven utilidad real, no cache.
             let dailyProfit = null;
             try {
-                // Intentar obtener reporte existente primero
-                // Envolver en try/catch propio: el store daily_profit_reports puede no existir en el browser
-                let todayProfit = null;
+                // Limpiar snapshot del dia para garantizar recalculo en proximas cargas tambien.
                 try {
                     const profitReports = await DB.query('daily_profit_reports', 'date', todayStr) || [];
-                    todayProfit = !viewAllBranches
-                        ? profitReports.find(p => p.branch_id === branchId || !p.branch_id)
-                        : null;
-                    if (todayProfit) {
-                        const revenue = (todayProfit?.revenue_sales_total ?? todayProfit?.revenue) || 0;
-                        const operatingCosts = (todayProfit?.fixed_costs_daily || 0) + (todayProfit?.variable_costs_daily || 0);
-                        const cogs = todayProfit?.cogs_total || 0;
-                        const commissions = (todayProfit?.commissions_sellers_total || 0) + (todayProfit?.commissions_guides_total || 0);
-                        // Snapshot anomalo: revenue sin costos asociados o costos absurdos.
-                        // - revenue=0 con costos>0
-                        // - costos > 3x revenue
-                        // - revenue>0 PERO cogs=0 Y commissions=0 (sintoma del bug del schema:
-                        //   COGS y comisiones se calculaban desde columnas inexistentes y
-                        //   quedaban en 0; al cambiar el calculo a cost_entries no se invalida
-                        //   el snapshot anterior. Forzamos refresh aqui).
-                        const isReportAnomalous =
-                            (revenue === 0 && operatingCosts > 0) ||
-                            (revenue > 0 && operatingCosts > revenue * 3) ||
-                            (revenue > 0 && cogs === 0 && commissions === 0);
-                        if (isReportAnomalous) {
-                            try { await DB.delete('daily_profit_reports', todayProfit.id); } catch (_) {}
-                            todayProfit = null;
+                    for (const pr of profitReports) {
+                        if (!viewAllBranches && (pr.branch_id === branchId || !pr.branch_id)) {
+                            try { await DB.delete('daily_profit_reports', pr.id); } catch (_) {}
                         }
                     }
-                } catch (_dbErr) {
-                    // El store o índice no existe; continuar con cálculo manual
-                    todayProfit = null;
-                }
-
-                if (todayProfit && !viewAllBranches) {
-                    // Usar reporte existente si está disponible y no es sospechoso
-                    dailyProfit = {
-                        revenue: todayProfit.revenue_sales_total || todayProfit.revenue || 0,
-                        merchandise_cost: todayProfit.cogs_total || 0,
-                        arrival_costs: todayProfit.arrivals_total || 0,
-                        operating_costs: (todayProfit.fixed_costs_daily || 0) + (todayProfit.variable_costs_daily || 0),
-                        commissions: (todayProfit.commissions_sellers_total || 0) + (todayProfit.commissions_guides_total || 0),
-                        bank_commissions: todayProfit.bank_commissions || 0,
-                        gross_profit: todayProfit.gross_profit || 0,
-                        net_profit: todayProfit.profit_before_taxes || todayProfit.net_profit || 0,
-                        total_passengers: todayProfit.passengers_total || 0
-                    };
-                }
+                } catch (_dbErr) { /* store no existe, continuar */ }
+                let todayProfit = null;
                 if (!dailyProfit && typeof ProfitCalculator !== 'undefined' && ProfitCalculator.calculateDailyProfit && branchId) {
                     // Calcular usando ProfitCalculator si no hay reporte
                     try {
