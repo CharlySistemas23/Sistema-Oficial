@@ -290,6 +290,74 @@ router.get('/verify', async (req, res) => {
   }
 });
 
+// =====================================================================
+// Validacion del codigo de acceso de empresa (gate previo al login).
+// El codigo vive en env var COMPANY_ACCESS_CODE (defaults a 'OPAL2024')
+// para no exponerlo en el bundle del frontend. El frontend pega aqui con
+// el codigo escrito; si es correcto recibe un remember_token con HMAC
+// firmado con COMPANY_TOKEN_SECRET, que puede guardar en localStorage
+// para no volver a pedir el codigo en proximas visitas.
+// =====================================================================
+import crypto from 'crypto';
+
+const getCompanyCodeSecret = () =>
+  process.env.COMPANY_TOKEN_SECRET ||
+  process.env.JWT_SECRET ||
+  'opal-co-default-secret-change-me';
+
+const computeCompanyToken = (code) => {
+  const secret = getCompanyCodeSecret();
+  return crypto.createHmac('sha256', secret).update(String(code)).digest('hex');
+};
+
+const getExpectedCompanyCode = () =>
+  (process.env.COMPANY_ACCESS_CODE || 'OPAL2024').trim();
+
+router.post('/verify-company-code', [
+  body('code').optional().isString(),
+  body('token').optional().isString()
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ valid: false, error: 'Datos invalidos' });
+    }
+
+    const expectedCode = getExpectedCompanyCode();
+    const expectedToken = computeCompanyToken(expectedCode);
+
+    const { code, token } = req.body || {};
+
+    // Validar via remember_token (constant-time compare evita timing attacks)
+    if (token && typeof token === 'string') {
+      const safe = (a, b) => {
+        try {
+          const bufA = Buffer.from(String(a), 'hex');
+          const bufB = Buffer.from(String(b), 'hex');
+          if (bufA.length !== bufB.length) return false;
+          return crypto.timingSafeEqual(bufA, bufB);
+        } catch { return false; }
+      };
+      if (safe(token, expectedToken)) {
+        return res.json({ valid: true, remember_token: expectedToken });
+      }
+      return res.status(401).json({ valid: false, error: 'Token invalido' });
+    }
+
+    // Validar via codigo escrito
+    if (!code || typeof code !== 'string') {
+      return res.status(400).json({ valid: false, error: 'Codigo requerido' });
+    }
+    if (code.trim() === expectedCode) {
+      return res.json({ valid: true, remember_token: expectedToken });
+    }
+    return res.status(401).json({ valid: false, error: 'Codigo de acceso incorrecto' });
+  } catch (err) {
+    console.error('Error verificando company code:', err);
+    return res.status(500).json({ valid: false, error: 'Error verificando codigo' });
+  }
+});
+
 // Endpoint temporal para crear usuario admin si no existe
 router.post('/ensure-admin', async (req, res) => {
   try {

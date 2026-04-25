@@ -6,9 +6,33 @@ const App = {
     _initInProgress: false,
     _initDone: false,
     
-    // Código de acceso de empresa (configurable)
-    COMPANY_ACCESS_CODE: 'OPAL2024', // Cambia este código por el que quieras
-    
+    // El codigo de acceso vive en el BACKEND (env var COMPANY_ACCESS_CODE).
+    // El frontend nunca lo conoce; solo envia codigo o token al endpoint
+    // /api/auth/verify-company-code y recibe valid: true/false.
+    async _verifyCompanyCodeViaAPI({ code, token } = {}) {
+        if (typeof API === 'undefined' || !API.baseURL) {
+            // Fallback offline: aceptar token guardado previamente sin verificar.
+            // No es ideal pero permite trabajar offline si el sistema ya fue validado antes.
+            if (token) return { valid: true, remember_token: token };
+            return { valid: false, error: 'Sin conexion. Reintenta cuando haya internet.' };
+        }
+        try {
+            const cleanBase = String(API.baseURL).replace(/\/$/, '');
+            const resp = await fetch(`${cleanBase}/api/auth/verify-company-code`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(code ? { code } : { token })
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (resp.ok && data.valid) return data;
+            return { valid: false, error: data.error || 'Codigo incorrecto' };
+        } catch (err) {
+            // Sin red: si tiene token previo guardado, aceptarlo (offline mode)
+            if (token) return { valid: true, remember_token: token };
+            return { valid: false, error: 'No se pudo verificar el codigo (sin conexion)' };
+        }
+    },
+
     async initCompanyCodeAccess() {
         // Verificar si el usuario ya está autenticado (evitar mostrar diálogos si ya hay sesión)
         if (typeof UserManager !== 'undefined' && UserManager.currentUser) {
@@ -18,24 +42,23 @@ const App = {
             if (loginScreen) loginScreen.style.display = 'none';
             return;
         }
-        
-        // Verificar si el código ya fue validado (guardado en localStorage)
-        const savedCodeHash = localStorage.getItem('company_code_validated');
+
+        const savedToken = localStorage.getItem('company_code_validated');
         const codeInput = document.getElementById('company-code-input');
         const codeBtn = document.getElementById('company-code-btn');
         const codeScreen = document.getElementById('company-code-screen');
         const loginScreen = document.getElementById('login-screen');
         const codeError = document.getElementById('company-code-error');
-        
-        // Si el código ya fue validado, mostrar directamente el login
-        if (savedCodeHash) {
-            const expectedHash = await this.hashCode(this.COMPANY_ACCESS_CODE);
-            if (savedCodeHash === expectedHash) {
+
+        // Si hay token guardado, validarlo via backend
+        if (savedToken) {
+            const result = await this._verifyCompanyCodeViaAPI({ token: savedToken });
+            if (result.valid) {
                 if (codeScreen) codeScreen.style.display = 'none';
                 if (loginScreen) loginScreen.style.display = 'flex';
                 return;
             } else {
-                // Código guardado es inválido, limpiar
+                // Token invalido (cambio de secret, etc): limpiar y pedir codigo
                 localStorage.removeItem('company_code_validated');
             }
         }
@@ -84,30 +107,27 @@ const App = {
             return;
         }
         
-        // Validar código
-        if (enteredCode === this.COMPANY_ACCESS_CODE) {
-            // Código correcto
+        // Validar codigo via backend
+        const result = await this._verifyCompanyCodeViaAPI({ code: enteredCode });
+
+        if (result.valid) {
             if (codeError) codeError.style.display = 'none';
-            
-            // Guardar validación si el usuario marcó "recordar"
-            if (rememberCheckbox && rememberCheckbox.checked) {
-                const codeHash = await this.hashCode(enteredCode);
-                localStorage.setItem('company_code_validated', codeHash);
+
+            // Guardar token (HMAC firmado por el backend, no el codigo en si)
+            if (rememberCheckbox && rememberCheckbox.checked && result.remember_token) {
+                localStorage.setItem('company_code_validated', result.remember_token);
             }
-            
-            // Ocultar pantalla de código y mostrar login
+
             if (codeScreen) codeScreen.style.display = 'none';
             if (loginScreen) loginScreen.style.display = 'flex';
-            
-            // Enfocar el input de usuario del login
+
             setTimeout(() => {
                 const userInput = document.getElementById('employee-barcode-input');
                 if (userInput) userInput.focus();
             }, 100);
         } else {
-            // Código incorrecto
             if (codeError) {
-                codeError.textContent = 'Código de acceso incorrecto';
+                codeError.textContent = result.error || 'Codigo de acceso incorrecto';
                 codeError.style.display = 'block';
             }
             if (codeInput) {
