@@ -2235,14 +2235,24 @@ Object.assign(POS, {
         const paymentMethods = await DB.getAll('payment_methods') || [];
         const getMethodId = (code) => paymentMethods.find(m => m.code === code)?.id || code;
 
-        // Función para calcular comisión bancaria
+        // Función para calcular comisión bancaria.
+        // Busca tasa especifica (bank_commission_BANCO_TIPO), luego global
+        // (bank_commission_rate), default 5%. Antes retornaba 0 si no habia setting
+        // especifico, lo que hacia que NUNCA se registraran comisiones bancarias.
         const calculateBankCommission = async (amount, bank, paymentType) => {
             if (amount <= 0) return 0;
-            
+
             const bankKey = `bank_commission_${bank}_${paymentType}`;
-            const commissionSetting = await DB.get('settings', bankKey);
-            const commissionRate = commissionSetting?.value || 0;
-            
+            const specificSetting = await DB.get('settings', bankKey).catch(() => null);
+            let commissionRate = parseFloat(specificSetting?.value);
+            if (!Number.isFinite(commissionRate) || commissionRate <= 0) {
+                const globalSetting = await DB.get('settings', 'bank_commission_rate').catch(() => null);
+                let globalRate = parseFloat(globalSetting?.value);
+                // El setting puede estar como fraccion (0.05) o como porcentaje (5). Normalizar a %.
+                if (Number.isFinite(globalRate) && globalRate > 0 && globalRate < 1) globalRate = globalRate * 100;
+                commissionRate = Number.isFinite(globalRate) && globalRate > 0 ? globalRate : 5;
+            }
+
             return (amount * commissionRate) / 100;
         };
 

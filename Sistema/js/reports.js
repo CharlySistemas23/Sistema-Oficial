@@ -2169,6 +2169,37 @@ const Reports = {
                     commissionsBreakdown.total = grandTotal;
                 }
             }
+
+            // FALLBACK COMISIONES BANCARIAS: si no hay registro en cost_entries.comisiones_bancarias,
+            // estimar como 5% sobre los pagos con tarjeta (tpv_*) del periodo.
+            // Tasa configurable: si Settings tiene 'bank_commission_rate' lo usa, default 0.05.
+            if (costBreakdown.bankCommissions === 0 && completedSales.length > 0) {
+                let bankRate = 0.05;
+                try {
+                    const setting = await DB.get('settings', 'bank_commission_rate');
+                    if (setting && setting.value != null) {
+                        const r = parseFloat(setting.value);
+                        if (Number.isFinite(r) && r > 0 && r < 1) bankRate = r;
+                    }
+                } catch (_) {}
+                const allPayments = await DB.getAll('payments') || [];
+                let cardTotal = 0;
+                for (const sale of completedSales) {
+                    const sps = allPayments.filter(p => p.sale_id === sale.id);
+                    for (const p of sps) {
+                        const m = String(p.method || '').toLowerCase();
+                        if (m.startsWith('tpv') || m.includes('tarjeta') || m.includes('card') || m.includes('visa') || m.includes('master') || m.includes('amex')) {
+                            cardTotal += parseFloat(p.amount) || 0;
+                        }
+                    }
+                }
+                if (cardTotal > 0) {
+                    costBreakdown.bankCommissions = cardTotal * bankRate;
+                    costBreakdown.bankCommissionsEstimated = true; // bandera para mostrar como "estimado"
+                    costBreakdown.bankCommissionsRate = bankRate;
+                    costBreakdown.bankCommissionsBase = cardTotal;
+                }
+            }
             }
         }
 
