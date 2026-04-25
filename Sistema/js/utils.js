@@ -122,6 +122,38 @@ const Utils = {
         return str.replace(/[&<>"']/g, m => map[m]);
     },
 
+    /**
+     * Detecta PINs debiles. Devuelve string con la razon, o null si es seguro.
+     * Bloquea: longitud <4, todos iguales (1111, 2222...), secuencias asc/desc
+     * (1234, 4321, 0123...), y la lista negra explicita.
+     */
+    isWeakPin(pin) {
+        const s = String(pin || '').trim();
+        if (s.length < 4) return 'PIN debe tener al menos 4 digitos';
+        if (s.length > 8) return 'PIN demasiado largo (max 8)';
+        // Lista negra explicita
+        const blacklist = new Set([
+            '1234','0000','1111','2222','3333','4444','5555','6666','7777','8888','9999',
+            '4321','12345','54321','111111','000000','123456','654321','password','admin'
+        ]);
+        if (blacklist.has(s.toLowerCase())) return 'PIN demasiado comun, elige otro';
+        // Todos iguales
+        if (/^(.)\1+$/.test(s)) return 'PIN no puede ser todos los digitos iguales';
+        // Secuencia ascendente o descendente (123456, 987654, etc)
+        if (s.length >= 4 && /^\d+$/.test(s)) {
+            let asc = true, desc = true;
+            for (let i = 1; i < s.length; i++) {
+                const a = parseInt(s[i - 1], 10);
+                const b = parseInt(s[i], 10);
+                if (b !== a + 1) asc = false;
+                if (b !== a - 1) desc = false;
+            }
+            if (asc) return 'PIN no puede ser una secuencia (1234, 5678, etc)';
+            if (desc) return 'PIN no puede ser una secuencia (4321, 9876, etc)';
+        }
+        return null; // OK
+    },
+
     // Hash simple para PIN
     async hashPin(pin) {
         const encoder = new TextEncoder();

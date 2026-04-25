@@ -4040,6 +4040,15 @@ const Settings = {
             return;
         }
 
+        // Bloquear PINs debiles (1234, 0000, secuencias, etc.)
+        if (typeof Utils !== 'undefined' && Utils.isWeakPin) {
+            const weak = Utils.isWeakPin(newPin);
+            if (weak) {
+                Utils.showNotification(weak, 'error');
+                return;
+            }
+        }
+
         if (newPin !== confirmPin) {
             Utils.showNotification('Los PINs no coinciden', 'error');
             return;

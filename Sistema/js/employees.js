@@ -1600,8 +1600,14 @@ const Employees = {
                 counter++;
             }
 
-            // Crear PIN por defecto (1234)
-            const pinHash = await Utils.hashPin('1234');
+            // Generar PIN aleatorio de 6 digitos (antes era '1234' fijo, inseguro).
+            // El admin que crea el usuario debe verlo y compartirlo. Forzar cambio en
+            // primer login es ideal pero requiere migracion; por ahora al menos NO usa
+            // un PIN debil predeciblemente.
+            const generatedPin = String(Math.floor(100000 + Math.random() * 900000));
+            const pinHash = await Utils.hashPin(generatedPin);
+            console.warn(`[Employees] PIN generado para nuevo usuario ${username}: ${generatedPin} (compartir con el empleado, debera cambiarlo)`);
+            try { Utils.alert(`PIN inicial para ${username}: ${generatedPin}\n\nCompartir con el empleado. Debera cambiarlo desde Configuracion.`); } catch (_) {}
 
             // Determinar permisos según el rol usando PermissionManager
             let permissions = [];
@@ -1879,15 +1885,27 @@ const Employees = {
 
         if (!userId && employeeId && hasApi && API.createUserForEmployee) {
             try {
-                const password = pinInput && pinInput.length >= 4 ? pinInput : '1234';
-                const created = await API.createUserForEmployee(employeeId, { username, password, role, permissions });
+                // Si no hay PIN escrito, generar uno aleatorio (NO usar '1234' default)
+                let actualPin = (pinInput && pinInput.length >= 4) ? pinInput : null;
+                if (!actualPin) {
+                    actualPin = String(Math.floor(100000 + Math.random() * 900000));
+                    console.warn(`[Employees] PIN generado aleatorio para ${username}: ${actualPin}`);
+                    try { Utils.alert(`PIN inicial para ${username}: ${actualPin}\n\nCompartir con el empleado.`); } catch (_) {}
+                }
+                // Validar que no sea PIN debil
+                const weak = (typeof Utils !== 'undefined' && Utils.isWeakPin) ? Utils.isWeakPin(actualPin) : null;
+                if (weak) {
+                    Utils.showNotification(`PIN rechazado: ${weak}`, 'error');
+                    return;
+                }
+                const created = await API.createUserForEmployee(employeeId, { username, password: actualPin, role, permissions });
                 const user = {
                     id: created.id,
                     username: created.username || username,
                     employee_id: employeeId,
                     role: created.role || role,
                     permissions: created.permissions != null && Array.isArray(created.permissions) ? created.permissions : permissions,
-                    pin_hash: pinInput && pinInput.length >= 4 ? await Utils.hashPin(pinInput) : await Utils.hashPin('1234'),
+                    pin_hash: await Utils.hashPin(actualPin),
                     active,
                     created_at: new Date().toISOString()
                 };

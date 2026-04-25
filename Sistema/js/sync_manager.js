@@ -1108,11 +1108,15 @@ const SyncManager = {
 
                                     // Intentar crear el usuario (si ya existe, el catch lo manejará)
                                     try {
+                                        // PIN aleatorio en sync recovery (antes era '1234' inseguro).
+                                        // El admin debera resetear el PIN despues desde el modulo Empleados.
+                                        const fallbackPin = String(Math.floor(100000 + Math.random() * 900000));
                                         await API.post(`/api/employees/${entityData.employee_id}/user`, {
                                             username: entityData.username,
-                                            password: '1234', // PIN por defecto, debería cambiarse
+                                            password: fallbackPin,
                                             role: entityData.role || 'employee'
                                         });
+                                        console.warn(`[Sync] usuario ${entityData.username} creado con PIN aleatorio: ${fallbackPin} (resetear desde Empleados)`);
                                         await DB.delete('sync_queue', item.id);
                                         successCount++;
                                     } catch (createError) {
