@@ -1151,84 +1151,12 @@ const API = {
     },
 
     // Ventas
-    async getSales(filters = {}) {
-        return await this.get('/api/sales', filters);
-    },
-
-    async getSale(id) {
-        return await this.get(`/api/sales/${id}`);
-    },
-
-    async createSale(sale) {
-        return await this.post('/api/sales', sale);
-    },
-
-    async updateSale(id, sale) {
-        return await this.put(`/api/sales/${id}`, sale);
-    },
-
-    async deleteSale(id) {
-        return await this.delete(`/api/sales/${id}`);
-    },
 
     // Clientes
-    async getCustomers(search = '') {
-        return await this.get('/api/customers', { search });
-    },
-
-    async getCustomer(id) {
-        return await this.get(`/api/customers/${id}`);
-    },
-
-    async createCustomer(customer) {
-        return await this.post('/api/customers', customer);
-    },
-
-    async updateCustomer(id, customer) {
-        return await this.put(`/api/customers/${id}`, customer);
-    },
-
-    async deleteCustomer(id) {
-        return await this.delete(`/api/customers/${id}`);
-    },
 
     // Sucursales
-    async getBranches() {
-        return await this.get('/api/branches');
-    },
-
-    async getBranch(id) {
-        return await this.get(`/api/branches/${id}`);
-    },
-
-    async createBranch(branch) {
-        return await this.post('/api/branches', branch);
-    },
-
-    async updateBranch(id, branch) {
-        return await this.put(`/api/branches/${id}`, branch);
-    },
-
-    async deleteBranch(id) {
-        return await this.delete(`/api/branches/${id}`);
-    },
 
     // Empleados
-    async getEmployees() {
-        return await this.get('/api/employees');
-    },
-
-    async createEmployee(employee) {
-        return await this.post('/api/employees', employee);
-    },
-
-    async updateEmployee(id, employee) {
-        return await this.put(`/api/employees/${id}`, employee);
-    },
-
-    async deleteEmployee(id) {
-        return await this.delete(`/api/employees/${id}`);
-    },
 
     async updateUser(userId, data) {
         return await this.put(`/api/employees/user/${userId}`, data);
@@ -1243,110 +1171,21 @@ const API = {
     },
 
     // Dashboard
-    async getDashboardMetrics(filters = {}) {
-        return await this.get('/api/dashboard/metrics', filters);
-    },
-
-    async getAnalytics(filters = {}) {
-        return await this.get('/api/dashboard/analytics', filters);
-    },
 
     // Reportes
-    async getProfitReport(filters = {}) {
-        return await this.get('/api/reports/profit', filters);
-    },
 
     // Catálogos
-    async getAgencies(search = '', active = null) {
-        const params = {};
-        if (search) params.search = search;
-        if (active !== null) params.active = active;
-        return await this.get('/api/catalogs/agencies', params);
-    },
 
     async getAgencyByBarcode(barcode) {
         return await this.get(`/api/catalogs/agencies/barcode/${barcode}`);
-    },
-
-    async createAgency(agency) {
-        return await this.post('/api/catalogs/agencies', agency);
-    },
-
-    async updateAgency(id, agency) {
-        return await this.put(`/api/catalogs/agencies/${id}`, agency);
-    },
-
-    async deleteAgency(id) {
-        return await this.delete(`/api/catalogs/agencies/${id}`);
-    },
-
-    async getAgencies(search = '', active = null) {
-        const params = {};
-        if (search) params.search = search;
-        if (active !== null) params.active = active;
-        return await this.get('/api/catalogs/agencies', params);
-    },
-
-    async getAgencyByBarcode(barcode) {
-        return await this.get(`/api/catalogs/agencies/barcode/${barcode}`);
-    },
-
-    async getGuides(search = '', agencyId = null, active = null) {
-        const params = {};
-        if (search) params.search = search;
-        if (agencyId) params.agency_id = agencyId;
-        if (active !== null) params.active = active;
-        return await this.get('/api/catalogs/guides', params);
     },
 
     async getGuideByBarcode(barcode) {
         return await this.get(`/api/catalogs/guides/barcode/${barcode}`);
     },
 
-    async getSellers(search = '', active = null) {
-        const params = {};
-        if (search) params.search = search;
-        if (active !== null) params.active = active;
-        return await this.get('/api/catalogs/sellers', params);
-    },
-
     async getSellerByBarcode(barcode) {
         return await this.get(`/api/catalogs/sellers/barcode/${barcode}`);
-    },
-
-    async createGuide(guide) {
-        return await this.post('/api/catalogs/guides', guide);
-    },
-
-    async updateGuide(id, guide) {
-        return await this.put(`/api/catalogs/guides/${id}`, guide);
-    },
-
-    async deleteGuide(id) {
-        return await this.delete(`/api/catalogs/guides/${id}`);
-    },
-
-    async getSellers(search = '', active = null) {
-        const params = {};
-        if (search) params.search = search;
-        if (active !== null) params.active = active;
-        return await this.get('/api/catalogs/sellers', params);
-    },
-
-    async getSellerByBarcode(barcode) {
-        return await this.get(`/api/catalogs/sellers/barcode/${barcode}`);
-    },
-
-    async createSeller(seller) {
-        return await this.post('/api/catalogs/sellers', seller);
-    },
-
-    async updateSeller(id, seller) {
-        return await this.put(`/api/catalogs/sellers/${id}`, seller);
-    },
-
-    async deleteSeller(id) {
-        return await this.delete(`/api/catalogs/sellers/${id}`);
     },
 
     // Reparaciones
@@ -1382,21 +1221,6 @@ const API = {
     },
 
     // Llegadas
-    async getArrivals(filters = {}) {
-        return await this.get('/api/tourist/arrivals', filters);
-    },
-
-    async createArrival(arrival) {
-        return await this.post('/api/tourist/arrivals', arrival);
-    },
-
-    async updateArrival(id, arrival) {
-        return await this.put(`/api/tourist/arrivals/${id}`, arrival);
-    },
-
-    async deleteArrival(id) {
-        return await this.delete(`/api/tourist/arrivals/${id}`);
-    },
 
     async completeRepair(id, data) {
         return await this.post(`/api/repairs/${id}/complete`, data);
@@ -1445,18 +1269,6 @@ const API = {
         return await this.get(`/api/transfers/${id}`);
     },
 
-    async completeTransfer(id) {
-        return await this.put(`/api/transfers/${id}/complete`);
-    },
-
-    async cancelTransfer(id) {
-        return await this.put(`/api/transfers/${id}/cancel`);
-    },
-
-    async approveTransfer(id) {
-        return await this.put(`/api/transfers/${id}/approve`);
-    },
-
     async createTransfer(transfer) {
         return await this.post('/api/transfers', transfer);
     },
@@ -1474,44 +1286,6 @@ const API = {
     },
 
     // Costos
-    async getCosts(filters = {}) {
-        return await this.get('/api/costs', filters);
-    },
-
-    async getCost(id) {
-        return await this.get(`/api/costs/${id}`);
-    },
-
-    async createCost(cost) {
-        const isUUID = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || ''));
-        const payload = { ...(cost || {}) };
-        // Backend espera "amount"; aceptar "monto" como alias y enviar número válido
-        const rawAmount = payload.amount ?? payload.monto;
-        if (rawAmount !== undefined && rawAmount !== null && rawAmount !== '') {
-            const num = parseFloat(rawAmount);
-            if (!isNaN(num)) payload.amount = num;
-        }
-        if (payload.monto !== undefined) delete payload.monto;
-        // No mandar id local no-UUID
-        if (payload.id && !isUUID(payload.id)) delete payload.id;
-        // No mandar branch_id si no es UUID (evita 500 en Postgres)
-        if (payload.branch_id && !isUUID(payload.branch_id)) delete payload.branch_id;
-        return await this.post('/api/costs', payload);
-    },
-
-    async updateCost(id, cost) {
-        const isUUID = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || ''));
-        const payload = { ...(cost || {}) };
-        if (payload.monto !== undefined && payload.amount === undefined) payload.amount = payload.monto;
-        if (payload.monto !== undefined) delete payload.monto;
-        if (payload.id && !isUUID(payload.id)) delete payload.id;
-        if (payload.branch_id && !isUUID(payload.branch_id)) delete payload.branch_id;
-        return await this.put(`/api/costs/${id}`, payload);
-    },
-
-    async deleteCost(id) {
-        return await this.delete(`/api/costs/${id}`);
-    },
 
     async getCostsSummary(filters = {}) {
         return await this.get('/api/costs/summary', filters);
@@ -1576,10 +1350,6 @@ const API = {
         return await this.delete(`/api/tourist/arrivals/${id}`);
     },
 
-    async getArrivalRules(filters = {}) {
-        return await this.get('/api/tourist/rules', filters);
-    },
-
     async createArrivalRateRule(rule) {
         const isUUID = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || ''));
         const payload = { ...(rule || {}) };
@@ -1618,9 +1388,6 @@ const API = {
     },
 
     // Alias para compatibilidad
-    async createArrivalRule(rule) {
-        return await this.createArrivalRateRule(rule);
-    },
 
     // ========== CAPTURAS RÁPIDAS (Quick Captures) ==========
     async createQuickCapture(capture) {
@@ -2090,18 +1857,6 @@ const API = {
     },
 
     // ========== TIPOS DE CAMBIO (Exchange Rates) ==========
-    async getExchangeRates(filters = {}) {
-        return await this.get('/api/exchange-rates', filters);
-    },
-
-    async getExchangeRateByDate(date) {
-        return await this.get(`/api/exchange-rates/${date}`);
-    },
-
-    async setExchangeRate(rateData) {
-        const payload = { ...(rateData || {}) };
-        return await this.post('/api/exchange-rates', payload);
-    },
 
     async updateExchangeRate(date, rateData) {
         const payload = { ...(rateData || {}) };
@@ -2167,19 +1922,9 @@ const API = {
     },
 
     // ========== AGENCIAS (Agencies) ==========
-    async getAgencies(filters = {}) {
-        return await this.get('/api/catalogs/agencies', filters);
-    },
 
     async getAgency(id) {
         return await this.get(`/api/catalogs/agencies/${id}`);
-    },
-
-    async createAgency(agency) {
-        const isUUID = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || ''));
-        const payload = { ...(agency || {}) };
-        if (payload.id && !isUUID(payload.id)) delete payload.id;
-        return await this.post('/api/catalogs/agencies', payload);
     },
 
     async updateAgency(id, agency) {

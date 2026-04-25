@@ -1460,22 +1460,6 @@ const Transfers = {
             });
         });
     },
-    
-    clearAllSelectedItems() {
-        if (this.transferSelectedItems && this.transferSelectedItems.length > 0) {
-            const confirmed = confirm(`¿Deseas eliminar todos los ${this.transferSelectedItems.length} items seleccionados?`);
-            if (confirmed) {
-                this.transferSelectedItems = [];
-                this.updateTransferSelectedItems();
-                // Re-buscar si hay búsqueda activa
-                const searchInput = document.getElementById('transfer-search-item');
-                if (searchInput && searchInput.value) {
-                    this.searchItemForTransfer(searchInput.value, true);
-                }
-                Utils.showNotification('Todos los items han sido eliminados', 'info');
-            }
-        }
-    },
 
     decreaseTransferQuantity(index) {
         if (this.transferSelectedItems && this.transferSelectedItems[index] && this.transferSelectedItems[index].quantity > 1) {

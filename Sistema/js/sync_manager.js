@@ -131,10 +131,6 @@ const SyncManager = {
         }
     },
 
-    getQueueSize() {
-        return this.syncQueue ? this.syncQueue.length : 0;
-    },
-
     async addToQueue(type, entityId, data = null) {
         try {
             const isUUID = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || ''));

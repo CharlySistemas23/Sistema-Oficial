@@ -819,10 +819,6 @@ const QA = {
         return false;
     },
     
-    async wait(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
-    },
-    
     async waitForRender(selector = null, timeout = 2000) {
         const start = Date.now();
         while (Date.now() - start < timeout) {
@@ -1052,19 +1048,6 @@ const QA = {
         const destructiveWords = ['eliminar', 'borrar', 'delete', 'remove', 'limpiar', 'clear'];
         const text = (item.text || '').toLowerCase();
         return destructiveWords.some(word => text.includes(word));
-    },
-    
-    async safeClick(element, moduleName) {
-        if (!element || !element.click) return;
-        
-        // Scroll into view
-        element.scrollIntoView({ behavior: 'instant', block: 'center' });
-        await this.wait(50);
-        
-        // Disparar evento click
-        element.click();
-        
-        console.log(`🖱️ QA Click: ${moduleName} - ${element.textContent?.substring(0, 30) || element.id}`);
     },
     
     async handleModalIfPresent() {
@@ -3204,14 +3187,6 @@ const QA = {
             { text: 'Cerrar', class: 'btn-secondary', onclick: () => UI.closeModal() }
         ]);
     },
-    
-    clearCapturedErrors() {
-        this.jsErrors = [];
-        this.consoleErrors = [];
-        this.consoleWarnings = [];
-        this.networkErrors = [];
-        Utils.showNotification('Errores capturados limpiados', 'success');
-    },
 
     // =====================================================
     // DETECTAR BOTONES SIN ACCIONES (MUERTOS)
@@ -3430,63 +3405,6 @@ const QA = {
     // =====================================================
     // DETECTAR MÓDULOS QUE NO SE ACTUALIZAN (STALE)
     // =====================================================
-    async detectStaleModules() {
-        this.startTestRun('stale_modules');
-        this.showProgress(true);
-        
-        const modules = [
-            'dashboard', 'pos', 'inventory', 'customers', 'repairs',
-            'employees', 'reports', 'costs', 'tourist-report', 'cash',
-            'barcodes', 'sync', 'settings'
-        ];
-        
-        const staleModules = [];
-        const freshModules = [];
-        const errorModules = [];
-        
-        for (let i = 0; i < modules.length; i++) {
-            const mod = modules[i];
-            this.updateProgress((i / modules.length) * 100, `Verificando: ${mod}`);
-            
-            try {
-                const result = await this.testModuleRefresh(mod);
-                
-                if (result.status === 'stale') {
-                    staleModules.push({ module: mod, ...result });
-                    this.addError(mod, 'stale_module', result.message, result.details, 'warning');
-                } else if (result.status === 'error') {
-                    errorModules.push({ module: mod, ...result });
-                    this.addError(mod, 'module_error', result.message, result.details, 'error');
-                } else {
-                    freshModules.push({ module: mod });
-                }
-                
-                this.addCoverage('stale_modules', mod, result.status);
-                
-            } catch (e) {
-                errorModules.push({ module: mod, message: e.message });
-                this.addError('stale_modules', mod, e.message, e.stack);
-            }
-            
-            await this.wait(200);
-        }
-        
-        this.updateProgress(100, 'Verificación completada');
-        await this.wait(500);
-        
-        this.showStaleModulesReport(staleModules, freshModules, errorModules);
-        
-        this.finishTestRun({
-            stale: staleModules.length,
-            fresh: freshModules.length,
-            errors: errorModules.length
-        });
-        this.showProgress(false);
-        this.renderResults();
-        
-        UI.showModule('qa');
-        await App.loadModule('qa');
-    },
     
     async testModuleRefresh(moduleName) {
         // Paso 1: Ir a dashboard primero (módulo base)

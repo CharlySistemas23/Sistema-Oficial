@@ -1823,57 +1823,6 @@ const Inventory = {
     },
 
     // Actualizar estado visual de los botones de vista
-    updateViewButtons() {
-        const gridBtn = document.getElementById('inventory-view-grid-btn');
-        const listBtn = document.getElementById('inventory-view-list-btn');
-        
-        console.log('🎨 [updateViewButtons] Vista actual:', this.currentView, 'Grid:', !!gridBtn, 'List:', !!listBtn);
-        
-        if (gridBtn) {
-            if (this.currentView === 'grid') {
-                gridBtn.classList.add('active');
-                gridBtn.style.background = 'var(--color-primary)';
-                gridBtn.style.color = 'white';
-                console.log('✅ Botón GRID activado');
-            } else {
-                gridBtn.classList.remove('active');
-                gridBtn.style.background = 'transparent';
-                gridBtn.style.color = 'var(--color-text)';
-            }
-        } else {
-            console.warn('⚠️ Botón GRID no encontrado en updateViewButtons');
-        }
-        
-        if (listBtn) {
-            if (this.currentView === 'list') {
-                listBtn.classList.add('active');
-                listBtn.style.background = 'var(--color-primary)';
-                listBtn.style.color = 'white';
-                console.log('✅ Botón LISTA activado');
-            } else {
-                listBtn.classList.remove('active');
-                listBtn.style.background = 'transparent';
-                listBtn.style.color = 'var(--color-text)';
-            }
-        } else {
-            console.warn('⚠️ Botón LISTA no encontrado en updateViewButtons');
-        }
-    },
-
-    async displayInventory(items) {
-        // Si hay agrupación por colección, mostrar agrupado
-        if (this.groupedItems) {
-            await this.displayInventoryGrouped(this.groupedItems);
-            return;
-        }
-
-        // Usar la vista seleccionada
-        if (this.currentView === 'list') {
-            await this.displayInventoryList(items);
-        } else {
-            await this.displayInventoryGrid(items);
-        }
-    },
 
     async displayInventoryGrouped({ grouped, noCollection }) {
         const container = document.getElementById('inventory-list');
@@ -1970,136 +1919,6 @@ const Inventory = {
 
         html += '</div>';
         container.innerHTML = html;
-    },
-
-    async getInventoryGridHTML(items) {
-        const itemsWithPhotos = await Promise.all(items.map(async (item) => {
-            const photos = await DB.query('inventory_photos', 'item_id', item.id);
-            return { ...item, photo: photos[0]?.thumbnail_blob || null };
-        }));
-
-        return itemsWithPhotos.map(item => {
-            const hasCertificate = item.certificate_type && item.certificate_number;
-            const stoneInfo = item.stone_type ? `${item.stone_type}${item.carats ? ` ${item.carats}ct` : ''}` : (item.stone || 'N/A');
-            const isSelected = this.selectedItems.has(item.id);
-            const stockStatus = this.getStockStatus(item);
-            const stockBadgeClass = this.getStockBadgeClass(stockStatus);
-            const stockStatusText = this.getStockStatusText(stockStatus);
-            const stockActual = item.stock_actual ?? 1;
-            const stockMin = item.stock_min ?? 1;
-            const stockMax = item.stock_max ?? 10;
-            
-            return `
-            <div class="inventory-card ${isSelected ? 'inventory-card-selected' : ''}" data-item-id="${item.id}" style="display: inline-block; width: calc(25% - 12px); margin: 6px; vertical-align: top;">
-                <div class="inventory-card-select">
-                    <input type="checkbox" class="inventory-checkbox" 
-                           ${isSelected ? 'checked' : ''} 
-                           onchange="window.Inventory.toggleItemSelection('${item.id}', this.checked)">
-                </div>
-                ${item.photo ? `<img src="${item.photo}" alt="${item.name}" class="inventory-card-photo">` : 
-                  '<div class="inventory-card-photo" style="display: flex; align-items: center; justify-content: center; color: #999; background: var(--color-bg-secondary);"><i class="fas fa-gem" style="font-size: 48px; opacity: 0.3;"></i></div>'}
-                <div class="inventory-card-info">
-                    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
-                        <h4 style="margin: 0; flex: 1; font-size: 14px;">${item.name || item.sku}</h4>
-                        <div style="display: flex; gap: 4px;">
-                            ${hasCertificate ? '<span class="cert-badge" title="Certificado"><i class="fas fa-certificate"></i></span>' : ''}
-                            <span class="stock-badge ${stockBadgeClass}" title="Stock: ${stockActual} (Mín: ${stockMin}, Máx: ${stockMax})">${stockStatusText}</span>
-                        </div>
-                    </div>
-                    <p style="font-size: 11px; color: var(--color-text-secondary); margin-bottom: 4px;"><strong>SKU:</strong> ${item.sku}</p>
-                    <p style="font-size: 11px; margin-bottom: 4px;"><strong>Metal:</strong> ${item.metal || 'N/A'}</p>
-                    <p style="font-size: 11px; margin-bottom: 4px;"><strong>Piedra:</strong> ${stoneInfo}</p>
-                    <p style="font-size: 11px; margin-bottom: 4px;"><strong>Peso:</strong> ${(parseFloat(item.weight_g || item.weight || 0) || 0).toFixed(2)}g</p>
-                    <div class="stock-info-bar" style="margin: 8px 0; padding: 8px; background: var(--color-bg-secondary); border-radius: var(--radius-sm);">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                            <span style="font-size: 10px; color: var(--color-text-secondary);">Stock</span>
-                            <span style="font-size: 10px; font-weight: 600;">${stockActual} / ${stockMax}</span>
-                        </div>
-                        <div class="stock-progress-bar" style="height: 6px; background: var(--color-border); border-radius: 3px; overflow: hidden;">
-                            <div class="stock-progress ${stockBadgeClass}" style="height: 100%; width: ${Math.min((stockActual / stockMax) * 100, 100)}%; border-radius: 3px; transition: width 0.3s;"></div>
-                        </div>
-                    </div>
-                    <p style="font-size: 12px; font-weight: 600; color: var(--color-primary); margin: 8px 0;"><strong>Costo:</strong> ${Utils.formatCurrency(item.cost || 0)}</p>
-                    <p style="margin-top: 8px;"><strong>Estado:</strong> <span class="status-badge status-${item.status}">${item.status}</span></p>
-                    <div class="inv-card-actions">
-                        <button class="btn-secondary inv-btn-main" onclick="window.Inventory.showItemDetails('${item.id}')">Ver <span class="inv-btn-detail">Detalles</span></button>
-                        <div class="inv-btn-icons">
-                            ${typeof PermissionManager !== 'undefined' && PermissionManager.hasPermission('inventory.update_stock') ? `
-                                <button class="btn-secondary" onclick="window.Inventory.showStockModal('${item.id}')" title="Ajustar Stock"><i class="fas fa-cubes"></i></button>
-                            ` : ''}
-                            <button class="btn-secondary" onclick="window.Inventory.printJewelryLabel('${item.id}')" title="Imprimir Etiqueta Joya"><i class="fas fa-gem"></i></button>
-                            ${typeof PermissionManager !== 'undefined' && PermissionManager.hasPermission('inventory.delete') ? `
-                                <button class="btn-danger-outline" onclick="window.Inventory.confirmDeleteItem('${item.id}')" title="Eliminar"><i class="fas fa-trash"></i></button>
-                            ` : ''}
-                        </div>
-                    </div>
-                </div>
-            </div>
-            `;
-        }).join('');
-    },
-
-    async getInventoryListHTML(items) {
-        const itemsWithPhotos = await Promise.all(items.map(async (item) => {
-            const photos = await DB.query('inventory_photos', 'item_id', item.id);
-            return { ...item, photo: photos[0]?.thumbnail_blob || null };
-        }));
-
-        return itemsWithPhotos.map(item => {
-                            const isSelected = this.selectedItems.has(item.id);
-                            const stockStatus = this.getStockStatus(item);
-                            const stockBadgeClass = this.getStockBadgeClass(stockStatus);
-                            const stockStatusText = this.getStockStatusText(stockStatus);
-                            const stockActual = item.stock_actual ?? 1;
-                            const stockMax = item.stock_max ?? 10;
-                            
-                            return `
-                            <tr class="inventory-list-row ${isSelected ? 'inventory-list-row-selected' : ''}" data-item-id="${item.id}" style="border-bottom: 1px solid var(--color-border-light); transition: background 0.2s;">
-                                <td style="padding: 12px;">
-                                    <input type="checkbox" class="inventory-checkbox" 
-                                           ${isSelected ? 'checked' : ''} 
-                                           onchange="window.Inventory.toggleItemSelection('${item.id}', this.checked)"
-                                           style="cursor: pointer;">
-                                </td>
-                                <td style="padding: 12px;">
-                                    ${item.photo ? 
-                                        `<img src="${item.photo}" alt="${item.name}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px;">` : 
-                                        '<div style="width: 50px; height: 50px; background: var(--color-bg-secondary); border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #999;"><i class="fas fa-gem" style="font-size: 20px; opacity: 0.3;"></i></div>'
-                                    }
-                                </td>
-                                <td style="padding: 12px; font-size: 12px; font-weight: 600; color: var(--color-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${item.sku || 'N/A'}">${item.sku || 'N/A'}</td>
-                                <td style="padding: 12px; font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${item.name || 'Sin nombre'}">${item.name || 'Sin nombre'}</td>
-                                <td style="padding: 12px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${item.category || 'N/A'}">${item.category || 'N/A'}</td>
-                                <td style="padding: 12px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${item.metal || 'N/A'}">${item.metal || 'N/A'}</td>
-                                <td style="padding: 12px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${item.stone_type || item.stone || 'N/A'}">${item.stone_type || item.stone || 'N/A'}</td>
-                                <td style="padding: 12px; text-align: center;">
-                                    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
-                                        <span style="font-size: 12px; font-weight: 600;">${stockActual} / ${stockMax}</span>
-                                        <span class="stock-badge ${stockBadgeClass}" style="font-size: 10px; padding: 2px 6px; border-radius: 3px;">${stockStatusText}</span>
-                                    </div>
-                                </td>
-                                <td style="padding: 12px; text-align: right; font-size: 13px; font-weight: 600; color: var(--color-primary);">${Utils.formatCurrency(item.cost || 0)}</td>
-                                <td style="padding: 12px;">
-                                    <span class="status-badge status-${item.status}" style="font-size: 11px; padding: 4px 8px; border-radius: 4px;">${item.status || 'disponible'}</span>
-                                </td>
-                                <td style="padding: 12px; text-align: center;">
-                                    <div style="display: flex; gap: 4px; justify-content: center; flex-wrap: nowrap;">
-                                        <button class="btn-secondary btn-sm" onclick="window.Inventory.showItemDetails('${item.id}')" title="Ver Detalles" style="padding: 4px 8px; font-size: 11px; min-width: auto;">
-                                            <i class="fas fa-eye"></i>
-                                        </button>
-                                        <button class="btn-secondary btn-sm" onclick="window.Inventory.showAddForm('${item.id}')" title="Editar" style="padding: 4px 8px; font-size: 11px; min-width: auto;">
-                                            <i class="fas fa-edit"></i>
-                                        </button>
-                                        ${typeof PermissionManager !== 'undefined' && PermissionManager.hasPermission('inventory.update_stock') ? `
-                                            <button class="btn-secondary btn-sm" onclick="window.Inventory.showStockModal('${item.id}')" title="Ajustar Stock" style="padding: 4px 8px; font-size: 11px; min-width: auto;">
-                                                <i class="fas fa-cubes"></i>
-                                            </button>
-                                        ` : ''}
-                                    </div>
-                                </td>
-                            </tr>
-                            `;
-                        }).join('');
     },
 
     // Función principal que decide qué vista mostrar
@@ -2340,66 +2159,6 @@ const Inventory = {
     },
 
     // Vista de lista (tabla)
-    async displayInventoryList(items) {
-        const container = document.getElementById('inventory-list');
-        if (!container) {
-            console.warn('Container inventory-list no encontrado');
-            return;
-        }
-
-        // Mostrar estadísticas
-        await this.displayInventoryStats(items);
-
-        if (items.length === 0) {
-            container.innerHTML = this.getEmptyInventoryMessage();
-            return;
-        }
-
-        // Usar función helper para obtener HTML de las filas
-        const rowsHTML = await this.getInventoryListHTML(items);
-
-        // Construir tabla completa con thead - Ajustada al mismo tamaño que el recuadro de filtros
-        const tableHTML = `
-            <div style="width: 100%; max-width: 100%; padding: 16px; background: var(--color-bg-secondary); border-radius: var(--radius-lg); overflow-x: auto; overflow-y: visible; box-sizing: border-box;">
-                <table style="width: 100%; min-width: calc(100vw - 400px); border-collapse: collapse; background: var(--color-bg-card); border-radius: var(--radius-md); overflow: hidden; table-layout: auto;">
-                    <thead>
-                        <tr style="background: var(--color-bg-secondary); border-bottom: 2px solid var(--color-border);">
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); min-width: 40px; width: auto;">
-                                <input type="checkbox" id="inventory-select-all-list" onchange="window.Inventory.toggleSelectAll(this.checked)">
-                            </th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); min-width: 80px; width: auto;">Foto</th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); min-width: 120px; width: auto;">SKU</th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); min-width: 200px; width: auto;">Nombre</th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); min-width: 120px; width: auto;">Categoría</th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); min-width: 120px; width: auto;">Material</th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); min-width: 120px; width: auto;">Piedra</th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); min-width: 80px; width: auto;">Peso (g)</th>
-                            <th style="padding: 12px; text-align: right; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); min-width: 100px; width: auto;">Costo</th>
-                            <th style="padding: 12px; text-align: right; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); min-width: 120px; width: auto;">Precio Venta</th>
-                            <th style="padding: 12px; text-align: center; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); min-width: 100px; width: auto;">Stock</th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); min-width: 120px; width: auto;">Estado</th>
-                            <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); min-width: 100px; width: auto;">Ubicación</th>
-                            <th style="padding: 12px; text-align: center; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); min-width: 150px; width: auto;">Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${rowsHTML}
-                    </tbody>
-                </table>
-            </div>
-        `;
-
-        container.innerHTML = tableHTML;
-        
-        // Remover clase inventory-grid cuando está en modo lista para evitar limitaciones de grid
-        if (container.classList.contains('inventory-grid')) {
-            container.classList.remove('inventory-grid');
-            container.classList.add('inventory-list-view');
-        }
-
-        // Actualizar estado de selección
-        this.updateViewButtons();
-    },
 
     async displayInventoryGrid(items, options = {}) {
         const container = document.getElementById('inventory-list');
@@ -2588,68 +2347,8 @@ const Inventory = {
     },
     
     // Seleccionar/deseleccionar todos
-    toggleSelectAll() {
-        const checkboxes = document.querySelectorAll('.inventory-checkbox');
-        const allSelected = this.selectedItems.size === checkboxes.length && checkboxes.length > 0;
-        
-        checkboxes.forEach(checkbox => {
-            const itemId = checkbox.closest('.inventory-card')?.dataset.itemId;
-            if (itemId) {
-                checkbox.checked = !allSelected;
-                this.toggleItemSelection(itemId, !allSelected);
-            }
-        });
-    },
     
     // Actualizar UI de selección
-    updateSelectionUI() {
-        const count = this.selectedItems.size;
-        const deleteBtn = document.getElementById('inventory-delete-selected-btn');
-        const printLabelsBtn = document.getElementById('inventory-print-selected-labels-btn');
-        const printLabelsTopBtn = document.getElementById('inventory-print-labels-btn');
-        const countEl = document.getElementById('inventory-selected-count');
-        const countTextEl = document.getElementById('inventory-selected-count-text');
-        const selectAllBtn = document.getElementById('inventory-select-all-btn');
-        const batchActionsBar = document.getElementById('inventory-batch-actions');
-        
-        if (deleteBtn) {
-            deleteBtn.style.display = count > 0 ? 'inline-flex' : 'none';
-            deleteBtn.innerHTML = `<i class="fas fa-trash"></i> Eliminar (${count})`;
-        }
-        
-        if (printLabelsBtn) {
-            printLabelsBtn.style.display = count > 0 ? 'inline-flex' : 'none';
-            printLabelsBtn.innerHTML = `<i class="fas fa-gem"></i> Imprimir Etiquetas (${count})`;
-        }
-        
-        if (printLabelsTopBtn) {
-            printLabelsTopBtn.style.display = count > 0 ? 'inline-flex' : 'none';
-            const countSpan = printLabelsTopBtn.querySelector('#inventory-print-labels-count');
-            if (countSpan) {
-                countSpan.textContent = count;
-            }
-        }
-        
-        if (countEl) {
-            countEl.textContent = count > 0 ? `${count} seleccionados` : '';
-        }
-        
-        if (countTextEl) {
-            countTextEl.textContent = count > 0 ? `${count} item${count > 1 ? 's' : ''} seleccionado${count > 1 ? 's' : ''}` : '';
-        }
-        
-        if (selectAllBtn) {
-            const checkboxes = document.querySelectorAll('.inventory-checkbox');
-            const allSelected = count === checkboxes.length && checkboxes.length > 0;
-            selectAllBtn.innerHTML = allSelected ? 
-                '<i class="fas fa-square"></i> Deseleccionar' : 
-                '<i class="fas fa-check-square"></i> Seleccionar todo';
-        }
-        
-        if (batchActionsBar) {
-            batchActionsBar.style.display = count > 0 ? 'flex' : 'none';
-        }
-    },
 
     // ============ MÉTODOS DE ELIMINACIÓN ============
     
@@ -4030,55 +3729,8 @@ const Inventory = {
     },
 
     // Función para cambiar de pestaña
-    switchTab(tabName) {
-        // Ocultar todas las pestañas
-        document.querySelectorAll('.tab-content').forEach(tab => {
-            tab.classList.remove('active');
-            tab.style.display = 'none';
-        });
-        
-        // Remover clase active de todos los botones (tanto .tab-btn como .tab-btn-vertical)
-        document.querySelectorAll('.tab-btn, .tab-btn-vertical').forEach(btn => {
-            btn.classList.remove('active');
-            if (btn.classList.contains('tab-btn-vertical')) {
-                btn.style.background = 'transparent';
-                btn.style.color = 'var(--color-text)';
-                btn.style.fontWeight = 'normal';
-            }
-        });
-        
-        // Mostrar la pestaña seleccionada
-        const selectedTab = document.getElementById(`tab-${tabName}`);
-        if (selectedTab) {
-            selectedTab.classList.add('active');
-            selectedTab.style.display = 'block';
-        }
-        
-        // Agregar clase active al botón correspondiente
-        const selectedBtn = document.querySelector(`[data-tab="${tabName}"]`);
-        if (selectedBtn) {
-            selectedBtn.classList.add('active');
-            if (selectedBtn.classList.contains('tab-btn-vertical')) {
-                selectedBtn.style.background = 'var(--color-primary)';
-                selectedBtn.style.color = 'white';
-                selectedBtn.style.fontWeight = '600';
-            }
-        }
-    },
 
     // Inicializar sistema de pestañas
-    initializeTabs() {
-        // Agregar event listeners a todos los botones de pestaña (tanto .tab-btn como .tab-btn-vertical)
-        document.querySelectorAll('.tab-btn, .tab-btn-vertical').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.preventDefault();
-                const tabName = btn.getAttribute('data-tab');
-                if (tabName) {
-                    this.switchTab(tabName);
-                }
-            });
-        });
-    },
 
     previewPhotos(files) {
         const preview = document.getElementById('inv-photos-preview');

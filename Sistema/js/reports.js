@@ -502,65 +502,6 @@ const Reports = {
         `;
     },
 
-    async getCompareTab() {
-        return `
-            <div class="filters-bar-compact" style="margin-bottom: var(--spacing-md); width: 100%; max-width: 100%; box-sizing: border-box; flex-wrap: wrap;">
-                <div class="form-group" style="flex: 1; min-width: 200px;">
-                    <label>Período 1 - Desde</label>
-                    <input type="date" id="compare-period1-from" class="form-input" style="width: 100%;">
-                </div>
-                <div class="form-group" style="flex: 1; min-width: 200px;">
-                    <label>Período 1 - Hasta</label>
-                    <input type="date" id="compare-period1-to" class="form-input" style="width: 100%;">
-                </div>
-                <div class="form-group" style="flex: 1; min-width: 200px;">
-                    <label>Período 2 - Desde</label>
-                    <input type="date" id="compare-period2-from" class="form-input" style="width: 100%;">
-                </div>
-                <div class="form-group" style="flex: 1; min-width: 200px;">
-                    <label>Período 2 - Hasta</label>
-                    <input type="date" id="compare-period2-to" class="form-input" style="width: 100%;">
-                </div>
-                <div class="form-group" style="flex-shrink: 0;">
-                    <label>&nbsp;</label>
-                    <button class="btn-primary" onclick="window.Reports.comparePeriods()" style="white-space: nowrap;">
-                        <i class="fas fa-balance-scale"></i> Comparar
-                    </button>
-                </div>
-            </div>
-            <div id="compare-results" style="min-height: 400px; width: 100%; max-width: 100%; box-sizing: border-box;">
-                <div class="empty-state">Selecciona los períodos y ejecuta la comparación</div>
-            </div>
-        `;
-    },
-
-    async getSavedReportsTab() {
-        return `
-            <div class="filters-bar-compact" style="margin-bottom: var(--spacing-md); width: 100%; max-width: 100%; box-sizing: border-box; flex-wrap: wrap;">
-                <div class="form-group" style="flex: 1; min-width: 200px;">
-                    <input type="text" id="saved-reports-search" class="form-input" placeholder="Buscar reporte guardado..." style="width: 100%;">
-                </div>
-                <div class="form-group" style="width: 150px; min-width: 120px;">
-                    <select id="saved-reports-type-filter" class="form-select" style="width: 100%;">
-                        <option value="">Todos los tipos</option>
-                        <option value="summary">Resumen General</option>
-                        <option value="daily">Por Día</option>
-                        <option value="seller">Por Vendedor</option>
-                        <option value="agency">Por Agencia</option>
-                        <option value="product">Por Producto</option>
-                        <option value="comparative">Comparativo</option>
-                    </select>
-                </div>
-                <button class="btn-secondary btn-sm" onclick="window.Reports.loadSavedReports()" style="white-space: nowrap; flex-shrink: 0;">
-                    <i class="fas fa-sync"></i> Actualizar
-                </button>
-            </div>
-            <div id="saved-reports-list" style="width: 100%; max-width: 100%; box-sizing: border-box;">
-                <div class="empty-state">Cargando reportes guardados...</div>
-            </div>
-        `;
-    },
-
     async getHistoryTab() {
         return `
             <div class="filters-bar-compact" style="margin-bottom: var(--spacing-md); width: 100%; max-width: 100%; box-sizing: border-box; flex-wrap: wrap;">
@@ -586,70 +527,6 @@ const Reports = {
             <div id="history-list" style="max-height: 600px; overflow-y: auto; width: 100%; overflow-x: auto;">
                 <div class="empty-state">Cargando historial...</div>
             </div>
-        `;
-    },
-
-    async getCommissionsTab() {
-        return `
-            <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light); margin-bottom: var(--spacing-lg);">
-                <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
-                    <i class="fas fa-filter"></i> Filtros de Comisiones
-                </h3>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--spacing-md); width: 100%; box-sizing: border-box;">
-                    <div class="form-group" style="min-width: 0;">
-                        <label>Fecha Desde</label>
-                        <input type="date" id="commissions-date-from" class="form-input" value="${Utils.formatDate(new Date(Date.now() - 30*24*60*60*1000), 'YYYY-MM-DD')}" style="width: 100%;">
-                    </div>
-                    <div class="form-group" style="min-width: 0;">
-                        <label>Fecha Hasta</label>
-                        <input type="date" id="commissions-date-to" class="form-input" value="${Utils.formatDate(new Date(), 'YYYY-MM-DD')}" style="width: 100%;">
-                    </div>
-                    <div class="form-group" style="min-width: 0;">
-                        <label>Rango Predefinido</label>
-                        <select id="commissions-preset-range" class="form-select" style="width: 100%;">
-                            <option value="">Personalizado</option>
-                            <option value="today">Hoy</option>
-                            <option value="yesterday">Ayer</option>
-                            <option value="week">Esta Semana</option>
-                            <option value="lastweek">Semana Pasada</option>
-                            <option value="month">Este Mes</option>
-                            <option value="lastmonth">Mes Pasado</option>
-                            <option value="quarter">Este Trimestre</option>
-                            <option value="year">Este Año</option>
-                        </select>
-                    </div>
-                    <div class="form-group" style="min-width: 0;">
-                        <label>Sucursal</label>
-                        <select id="commissions-branch" class="form-select" style="width: 100%;">
-                            <option value="all">Todas las sucursales</option>
-                        </select>
-                    </div>
-                    <div class="form-group" style="min-width: 0;">
-                        <label>Vendedor</label>
-                        <select id="commissions-seller" class="form-select" style="width: 100%;">
-                            <option value="">Todos</option>
-                        </select>
-                    </div>
-                    <div class="form-group" style="min-width: 0;">
-                        <label>Guía</label>
-                        <select id="commissions-guide" class="form-select" style="width: 100%;">
-                            <option value="">Todos</option>
-                        </select>
-                    </div>
-                </div>
-                <div style="margin-top: var(--spacing-md); display: flex; gap: var(--spacing-sm); flex-wrap: wrap;">
-                    <button class="btn-primary btn-sm" onclick="window.Reports.generateCommissionsReport()">
-                        <i class="fas fa-chart-bar"></i> Generar Reporte de Comisiones
-                    </button>
-                    <button class="btn-secondary btn-sm" onclick="window.Reports.exportCommissionsReport()">
-                        <i class="fas fa-file-excel"></i> Exportar Excel
-                    </button>
-                    <button class="btn-secondary btn-sm" onclick="window.Reports.exportCommissionsPDF()">
-                        <i class="fas fa-file-pdf"></i> Exportar PDF
-                    </button>
-                </div>
-            </div>
-            <div id="commissions-results" style="width: 100%; max-width: 100%; box-sizing: border-box;"></div>
         `;
     },
 
