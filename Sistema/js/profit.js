@@ -70,11 +70,14 @@ const ProfitCalculator = {
                 }
             }
 
-            // 3. COMISIONES: Desde sale_items
+            // 3. COMISIONES: Desde sale_items (seller_commission + guide_commission columnas reales
+            //    del schema; commission_amount se conserva por compatibilidad con datasets antiguos)
             let commissions = 0;
             for (const sale of monthSales) {
                 const items = saleItems.filter(si => si.sale_id === sale.id);
                 for (const item of items) {
+                    commissions += parseAmt(item.seller_commission);
+                    commissions += parseAmt(item.guide_commission);
                     if (item.commission_amount != null && item.commission_amount !== '') {
                         commissions += parseAmt(item.commission_amount);
                     }
@@ -90,15 +93,27 @@ const ProfitCalculator = {
                     dateFrom: monthStartStr,
                     dateTo: monthEndStr
                 });
-                
+
                 // Extraer costos de llegadas antes de filtrar (fuente autorizada para sección 5)
                 paidArrivalEntries = monthCosts.filter(c => c.category === 'pago_llegadas');
 
+                // FALLBACK: si COGS desde sale_items dio 0 pero hay ventas, usar cost_entries.costo_ventas
+                if (cogs === 0 && monthSales.length > 0) {
+                    const cogsEntries = monthCosts.filter(c => c.category === 'costo_ventas');
+                    cogs = cogsEntries.reduce((s, c) => s + parseAmt(c.amount), 0);
+                }
+
+                // FALLBACK: si comisiones desde sale_items dieron 0 pero hay ventas, usar cost_entries.comisiones
+                if (commissions === 0 && monthSales.length > 0) {
+                    const commEntries = monthCosts.filter(c => c.category === 'comisiones');
+                    commissions = commEntries.reduce((s, c) => s + parseAmt(c.amount), 0);
+                }
+
                 // Excluir COGS, comisiones y llegadas (ya están contabilizados)
                 operatingCosts = monthCosts
-                    .filter(c => 
-                        c.category !== 'costo_ventas' && 
-                        c.category !== 'comisiones' && 
+                    .filter(c =>
+                        c.category !== 'costo_ventas' &&
+                        c.category !== 'comisiones' &&
                         c.category !== 'pago_llegadas' &&
                         c.category !== 'comisiones_bancarias'
                     )
@@ -208,16 +223,35 @@ const ProfitCalculator = {
             
             const revenueSalesTotal = daySales.reduce((sum, s) => sum + parseCostAmt(s.total), 0);
 
+            // Cargar cost_entries temprano: sirve como fuente autorizada de COGS, comisiones,
+            // llegadas y bank commissions cuando los campos correspondientes en sale_items no
+            // existen o estan vacios (caso actual: sale_items.cost/commission_amount no existen
+            // en el schema de produccion, pero los costos SI se registran en cost_entries).
+            const allCostsEarly = await DB.getAll('cost_entries', null, null, {
+                filterByBranch: false,
+                branchIdField: 'branch_id'
+            }) || [];
+            const matchesCostEntryDate = (c) => {
+                const raw = c.date || c.created_at;
+                if (!raw) return false;
+                const s = typeof raw === 'string' ? raw.split('T')[0] : new Date(raw).toISOString().split('T')[0];
+                return s === dateYYYYMMDD;
+            };
+            const matchesCostEntryBranch = (c) => {
+                const cb = String(c.branch_id || '').trim().toLowerCase();
+                return cb === branchIdStr.toLowerCase() || !cb;
+            };
+
             // 2. COGS: Costo de productos vendidos (filtrados por sucursal)
             let cogsTotal = 0;
             const saleItems = await DB.getAll('sale_items') || [];
             // NOTA: Usamos filterByBranch: false porque los items pueden estar en diferentes sucursales
             // y necesitamos acceder a todos para calcular COGS correctamente
-            const inventoryItems = await DB.getAll('inventory_items', null, null, { 
-                filterByBranch: false, // Caso especial: items pueden estar en diferentes sucursales
-                branchIdField: 'branch_id' 
+            const inventoryItems = await DB.getAll('inventory_items', null, null, {
+                filterByBranch: false,
+                branchIdField: 'branch_id'
             }) || [];
-            
+
             for (const sale of daySales) {
                 const items = saleItems.filter(si => si.sale_id === sale.id);
                 for (const item of items) {
@@ -229,9 +263,46 @@ const ProfitCalculator = {
                 }
             }
 
-            // 3. COMISIONES: Sumar comisiones desde sale_items (homologado con POS y dashboard)
+            // FALLBACK: si COGS da 0 pero hay ventas, usar cost_entries.costo_ventas.
+            // Este es el caso de produccion: sale_items.cost no existe y inventory_items.cost
+            // local puede estar desactualizado, pero cost_entries SI tiene los registros de COGS
+            // que el POS crea al cobrar cada venta.
+            if (cogsTotal === 0 && daySales.length > 0) {
+                const cogsEntries = allCostsEarly.filter(c =>
+                    c.category === 'costo_ventas' &&
+                    matchesCostEntryDate(c) &&
+                    matchesCostEntryBranch(c)
+                );
+                cogsTotal = cogsEntries.reduce((s, c) => s + parseCostAmt(c.amount), 0);
+            }
+
+            // 3. COMISIONES: Sumar comisiones desde sale_items
             let commissionsTotal = 0;
-            
+            // Primero intentar desde columnas reales del schema (seller_commission + guide_commission).
+            // Sale_items.commission_amount no existe en el schema de produccion, pero el campo se
+            // conserva aqui por compatibilidad con registros antiguos o dataset migrados.
+            for (const sale of daySales) {
+                const items = saleItems.filter(si => si.sale_id === sale.id);
+                for (const item of items) {
+                    commissionsTotal += parseCostAmt(item.seller_commission);
+                    commissionsTotal += parseCostAmt(item.guide_commission);
+                    if (item.commission_amount != null && item.commission_amount !== '') {
+                        commissionsTotal += parseCostAmt(item.commission_amount);
+                    }
+                }
+            }
+
+            // FALLBACK: si comisiones dan 0 pero hay ventas, usar cost_entries.comisiones.
+            // Mismo razonamiento que COGS: el POS registra las comisiones en cost_entries
+            // cuando se cobra la venta, aunque las columnas de sale_items no esten pobladas.
+            if (commissionsTotal === 0 && daySales.length > 0) {
+                const commEntries = allCostsEarly.filter(c =>
+                    c.category === 'comisiones' &&
+                    matchesCostEntryDate(c) &&
+                    matchesCostEntryBranch(c)
+                );
+                commissionsTotal = commEntries.reduce((s, c) => s + parseCostAmt(c.amount), 0);
+            }
             // Validar que todas las ventas tengan branch_id
             const salesWithoutBranch = daySales.filter(s => !s.branch_id);
             if (salesWithoutBranch.length > 0) {
@@ -242,20 +313,6 @@ const ProfitCalculator = {
                 }
             }
 
-            // Obtener todos los sale_items de las ventas del día
-            const allSaleItems = await DB.getAll('sale_items') || [];
-
-            for (const sale of daySales) {
-                const saleItems = allSaleItems.filter(si => si.sale_id === sale.id);
-                
-                // Sumar comisiones desde los items (ya calculadas en POS)
-                for (const item of saleItems) {
-                    if (item.commission_amount != null && item.commission_amount !== '') {
-                        commissionsTotal += parseCostAmt(item.commission_amount);
-                    }
-                }
-            }
-            
             // Mantener compatibilidad con campos anteriores (pero usar el nuevo cálculo)
             const commissionsSellersTotal = commissionsTotal; // Todas las comisiones (vendedores + guías)
             const commissionsGuidesTotal = 0; // Ya están incluidas en commissionsTotal
