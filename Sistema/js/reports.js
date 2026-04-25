@@ -1937,6 +1937,31 @@ const Reports = {
             branchIdForBanner = currentBranchId;
         }
 
+        // Sincronizar catalogos del backend antes de leer locales. Sin esto, el
+        // dispositivo que abre el reporte puede no tener los catalog_sellers/guides/
+        // agencies poblados en IndexedDB y todas las filas muestran N/A aunque
+        // sales.seller_id/guide_id/agency_id si esten guardados.
+        if (typeof API !== 'undefined' && (API.token || (typeof localStorage !== 'undefined' && localStorage.getItem('api_token')))) {
+            try {
+                const tasks = [];
+                if (API.getSellers) tasks.push(API.getSellers().then(list => {
+                    const arr = Array.isArray(list) ? list : (list?.data || list?.sellers || []);
+                    return Promise.all(arr.map(s => s?.id ? DB.put('catalog_sellers', s).catch(() => {}) : null));
+                }).catch(() => {}));
+                if (API.getGuides) tasks.push(API.getGuides().then(list => {
+                    const arr = Array.isArray(list) ? list : (list?.data || list?.guides || []);
+                    return Promise.all(arr.map(g => g?.id ? DB.put('catalog_guides', g).catch(() => {}) : null));
+                }).catch(() => {}));
+                if (API.getAgencies) tasks.push(API.getAgencies().then(list => {
+                    const arr = Array.isArray(list) ? list : (list?.data || list?.agencies || []);
+                    return Promise.all(arr.map(a => a?.id ? DB.put('catalog_agencies', a).catch(() => {}) : null));
+                }).catch(() => {}));
+                await Promise.all(tasks);
+            } catch (catErr) {
+                console.warn('[Reports] sync catalogos fallo, usando local:', catErr?.message || catErr);
+            }
+        }
+
         const branches = await DB.getAll('catalog_branches');
         const sellers = await DB.getAll('catalog_sellers');
         const agencies = await DB.getAll('catalog_agencies');
