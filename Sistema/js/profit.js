@@ -87,6 +87,24 @@ const ProfitCalculator = {
             // 4. COSTOS OPERATIVOS: Desde cost_entries
             let operatingCosts = 0;
             let paidArrivalEntries = [];
+            // Sync del API antes para garantizar data fresca (cost_entries de otros dispositivos)
+            if (typeof API !== 'undefined' && API.getCosts && (API.token || (typeof localStorage !== 'undefined' && localStorage.getItem('api_token')))) {
+                try {
+                    const apiCosts = await API.getCosts({
+                        branch_id: branchId,
+                        date_from: monthStartStr,
+                        date_to: monthEndStr
+                    });
+                    const list = Array.isArray(apiCosts) ? apiCosts : (apiCosts?.data || apiCosts?.costs || []);
+                    for (const c of list) {
+                        if (c && c.id) {
+                            try { await DB.put('cost_entries', c); } catch (_) { /* continuar */ }
+                        }
+                    }
+                } catch (apiErr) {
+                    console.warn('[Profit-Monthly] sync de cost_entries fallo, usando local:', apiErr?.message || apiErr);
+                }
+            }
             if (typeof Costs !== 'undefined') {
                 const monthCosts = await Costs.getFilteredCosts({
                     branchId: branchId,
@@ -223,10 +241,34 @@ const ProfitCalculator = {
             
             const revenueSalesTotal = daySales.reduce((sum, s) => sum + parseCostAmt(s.total), 0);
 
-            // Cargar cost_entries temprano: sirve como fuente autorizada de COGS, comisiones,
-            // llegadas y bank commissions cuando los campos correspondientes en sale_items no
-            // existen o estan vacios (caso actual: sale_items.cost/commission_amount no existen
-            // en el schema de produccion, pero los costos SI se registran en cost_entries).
+            // Sincronizar cost_entries del backend ANTES de calcular utilidad.
+            // Sin esto, el frontend depende de su IndexedDB local que puede no tener los
+            // costos del POS de otros dispositivos (los socket events de cost_updated pueden
+            // perderse o llegar tarde). Esto garantiza data fresca cada vez que se carga
+            // el dashboard o se recalcula el dia.
+            if (typeof API !== 'undefined' && API.getCosts && (API.token || (typeof localStorage !== 'undefined' && localStorage.getItem('api_token')))) {
+                try {
+                    const apiCosts = await API.getCosts({
+                        branch_id: branchIdStr,
+                        date_from: dateYYYYMMDD,
+                        date_to: dateYYYYMMDD
+                    });
+                    const list = Array.isArray(apiCosts) ? apiCosts : (apiCosts?.data || apiCosts?.costs || []);
+                    for (const c of list) {
+                        if (c && c.id) {
+                            try { await DB.put('cost_entries', c); } catch (_) { /* continuar */ }
+                        }
+                    }
+                } catch (apiErr) {
+                    console.warn('[Profit] sync de cost_entries fallo, usando local:', apiErr?.message || apiErr);
+                }
+            }
+
+            // Cargar cost_entries (ahora ya sincronizados) como fuente autorizada para
+            // COGS, comisiones, llegadas y bank commissions cuando las columnas
+            // correspondientes en sale_items no existen o estan vacias (caso de produccion:
+            // sale_items.cost / commission_amount no existen en el schema; los costos SI se
+            // registran en cost_entries).
             const allCostsEarly = await DB.getAll('cost_entries', null, null, {
                 filterByBranch: false,
                 branchIdField: 'branch_id'
