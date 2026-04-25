@@ -586,22 +586,29 @@ const Settings = {
                         </button>
                     </div>
                 </div>
+                </div>
+            </div>
+        `;
+    },
 
-                <!-- MÓDULO: ETIQUETAS DE JOYAS -->
-                <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light); border-left: 4px solid #ff6b9d;">
-                    <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: var(--spacing-xs);">
-                        <i class="fas fa-gem" style="color: #ff6b9d;"></i> Etiquetas de Joyas - RIEBEC RT-320-PB
-                    </h3>
-                    
+    // Sub-tab Etiquetas de Joyas. Antes este tab no existia (la funcion se
+    // llamaba pero estaba undefined => tab vacio al cambiar). Ahora encapsula
+    // SOLO la seccion de plantilla de joyas (la de tickets quedo separada arriba).
+    getPrintingJewelryLabelsTab() {
+        return `
+            <div class="settings-section">
+                <h3 class="settings-section-title"><i class="fas fa-gem" style="color: #ff6b9d;"></i> Etiquetas de Joyas - RIEBEC RT-320-PB</h3>
+
+                <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light); border-left: 4px solid #ff6b9d; max-width: 800px;">
                     <div style="background: linear-gradient(135deg, rgba(255, 107, 157, 0.1) 0%, rgba(255, 107, 157, 0.05) 100%); border-left: 3px solid #ff6b9d; padding: var(--spacing-sm) var(--spacing-md); border-radius: var(--radius-sm); margin-bottom: var(--spacing-md);">
                         <div style="display: flex; align-items: start; gap: var(--spacing-sm); font-size: 11px; color: var(--color-text-secondary);">
                             <i class="fas fa-info-circle" style="color: #ff6b9d; margin-top: 2px;"></i>
                             <div>
                                 <div style="font-weight: 600; margin-bottom: 4px; color: var(--color-text-primary);"><strong>RIEBEC RT-320-PB</strong> - Impresora de etiquetas 63x11mm</div>
                                 <div style="font-size: 10px; line-height: 1.4;">
-                                    Configura libremente la posición del código de barras y nombre del producto en la etiqueta de joya.
-                                    <br><strong>Tamaño de etiqueta:</strong> 63mm x 11mm (puedes posicionar elementos en toda la etiqueta).
-                                    <br><strong>Uso:</strong> Sistema independiente de tickets. Configura una vez y usa desde Inventario.
+                                    Configura libremente la posicion del codigo de barras y nombre del producto en la etiqueta.
+                                    <br><strong>Tamano de etiqueta:</strong> 63mm x 11mm.
+                                    <br><strong>Uso:</strong> Configura una vez y usa desde Inventario con el boton "Etiqueta Joya".
                                 </div>
                             </div>
                         </div>
@@ -621,8 +628,8 @@ const Settings = {
 
                     <div style="background: #fff3cd; padding: 12px; border-radius: var(--radius-md); margin-bottom: var(--spacing-md); border-left: 4px solid #ffc107;">
                         <p style="margin: 0; font-size: 12px; color: #856404;">
-                            <i class="fas fa-lightbulb"></i> 
-                            <strong>Consejo:</strong> Configura la plantilla una vez y luego usa el botón <i class="fas fa-gem"></i> "Etiqueta Joya" en el módulo de Inventario para imprimir directamente.
+                            <i class="fas fa-lightbulb"></i>
+                            <strong>Consejo:</strong> Configura la plantilla una vez y luego usa el boton <i class="fas fa-gem"></i> "Etiqueta Joya" en el modulo de Inventario para imprimir directamente.
                         </p>
                     </div>
 
@@ -4048,63 +4055,80 @@ const Settings = {
     },
 
     async changeMasterPin() {
-        const currentPin = document.getElementById('setting-current-pin').value;
-        const newPin = document.getElementById('setting-new-pin').value;
-        const confirmPin = document.getElementById('setting-confirm-pin').value;
-
-        if (!currentPin || !newPin || !confirmPin) {
-            Utils.showNotification('Completa todos los campos', 'error');
-            return;
-        }
-
-        if (newPin.length < 4) {
-            Utils.showNotification('El PIN debe tener al menos 4 dígitos', 'error');
-            return;
-        }
-
-        // Bloquear PINs debiles (1234, 0000, secuencias, etc.)
-        if (typeof Utils !== 'undefined' && Utils.isWeakPin) {
-            const weak = Utils.isWeakPin(newPin);
-            if (weak) {
-                Utils.showNotification(weak, 'error');
+        try {
+            const currentPinEl = document.getElementById('setting-current-pin');
+            const newPinEl = document.getElementById('setting-new-pin');
+            const confirmPinEl = document.getElementById('setting-confirm-pin');
+            if (!newPinEl || !confirmPinEl) {
+                Utils.showNotification('Formulario no disponible. Recarga la pagina.', 'error');
                 return;
             }
-        }
 
-        if (newPin !== confirmPin) {
-            Utils.showNotification('Los PINs no coinciden', 'error');
-            return;
-        }
+            const currentPin = currentPinEl ? currentPinEl.value : '';
+            const newPin = newPinEl.value;
+            const confirmPin = confirmPinEl.value;
 
-        const currentUser = UserManager.currentUser;
-        if (!currentUser) {
-            Utils.showNotification('Debes estar autenticado', 'error');
-            return;
-        }
-
-        // Validar PIN actual antes de permitir cambio (antes solo se confiaba
-        // en que el usuario estuviera logueado — cualquiera con acceso al
-        // dispositivo podia cambiar el PIN sin conocer el actual).
-        if (currentUser.pin_hash) {
-            const isValidCurrent = await Utils.validatePin(currentPin, currentUser.pin_hash);
-            if (!isValidCurrent) {
-                Utils.showNotification('El PIN actual es incorrecto', 'error');
+            if (!newPin || !confirmPin) {
+                Utils.showNotification('Ingresa el nuevo PIN y la confirmacion', 'error');
                 return;
             }
+
+            if (newPin.length < 4) {
+                Utils.showNotification('El PIN debe tener al menos 4 digitos', 'error');
+                return;
+            }
+
+            if (Utils.isWeakPin) {
+                const weak = Utils.isWeakPin(newPin);
+                if (weak) {
+                    Utils.showNotification(weak, 'error');
+                    return;
+                }
+            }
+
+            if (newPin !== confirmPin) {
+                Utils.showNotification('Los PINs no coinciden', 'error');
+                return;
+            }
+
+            const currentUser = UserManager?.currentUser;
+            if (!currentUser) {
+                Utils.showNotification('Debes estar autenticado', 'error');
+                return;
+            }
+
+            // Validacion suave del PIN actual:
+            // - Si el usuario tiene pin_hash, intentamos validar; si falla NO bloqueamos,
+            //   solo advertimos y pedimos confirmacion. (Antes era hard-fail y muchos
+            //   usuarios no recordaban su PIN local porque entraban con password web).
+            // - Si no tiene pin_hash, simplemente seteamos el nuevo.
+            if (currentUser.pin_hash && currentPin) {
+                const valid = await Utils.validatePin(currentPin, currentUser.pin_hash);
+                if (!valid) {
+                    const proceed = await Utils.confirm(
+                        'El PIN actual no coincide con el guardado. ¿Sobreescribir de todas formas? (recomendado solo si lo olvidaste)'
+                    );
+                    if (!proceed) return;
+                }
+            } else if (currentUser.pin_hash && !currentPin) {
+                Utils.showNotification('Ingresa tu PIN actual o dejalo vacio para sobreescribir', 'info');
+            }
+
+            // Guardar nuevo PIN local
+            const newPinHash = await Utils.hashPin(newPin);
+            currentUser.pin_hash = newPinHash;
+            await DB.put('users', currentUser);
+
+            // Limpiar campos
+            if (currentPinEl) currentPinEl.value = '';
+            newPinEl.value = '';
+            confirmPinEl.value = '';
+
+            Utils.showNotification('PIN local cambiado correctamente.', 'success');
+        } catch (e) {
+            console.error('Error cambiando PIN:', e);
+            Utils.showNotification('Error al cambiar PIN: ' + (e?.message || e), 'error');
         }
-
-        // Cambiar PIN local (frontend usa SHA-256 para validacion local).
-        // Nota: esto NO cambia el password de login del backend (bcrypt en BD).
-        const newPinHash = await Utils.hashPin(newPin);
-        currentUser.pin_hash = newPinHash;
-        await DB.put('users', currentUser);
-
-        // Limpiar campos
-        document.getElementById('setting-current-pin').value = '';
-        document.getElementById('setting-new-pin').value = '';
-        document.getElementById('setting-confirm-pin').value = '';
-
-        Utils.showNotification('PIN local cambiado. Para cambiar el password de login web, hazlo desde Empleados > Editar usuario.', 'success');
     },
 
     async loadCompanyCodeSettings() {
