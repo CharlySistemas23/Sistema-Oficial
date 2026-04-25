@@ -1,9 +1,21 @@
 import express from 'express';
-import { authenticateOptional } from '../middleware/authOptional.js';
+import { authenticateOptional, requireMasterAdmin } from '../middleware/authOptional.js';
 import { uploadSingle, uploadMultiple } from '../middleware/upload.js';
 import { uploadImage, deleteImage } from '../config/cloudinary.js';
 
 const router = express.Router();
+
+// Solo master_admin / manager pueden borrar fotos. Antes cualquier empleado
+// autenticado podia borrar cualquier foto adivinando o leyendo el publicId.
+const requireDeleteAccess = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Autenticacion requerida' });
+  }
+  if (req.user.isMasterAdmin) return next();
+  const role = (req.user.role || '').toLowerCase();
+  if (role === 'admin' || role === 'manager') return next();
+  return res.status(403).json({ error: 'Solo administradores y managers pueden borrar imagenes' });
+};
 
 // Subir una imagen
 router.post('/image', authenticateOptional, uploadSingle, async (req, res) => {
@@ -129,8 +141,8 @@ router.post('/images', authenticateOptional, uploadMultiple, async (req, res) =>
   }
 });
 
-// Eliminar imagen
-router.delete('/image/:publicId', authenticateOptional, async (req, res) => {
+// Eliminar imagen (solo admin/manager — antes cualquier empleado podia borrar)
+router.delete('/image/:publicId', authenticateOptional, requireDeleteAccess, async (req, res) => {
   try {
     const { publicId } = req.params;
 

@@ -1,10 +1,59 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { query } from '../config/database.js';
 import { body, validationResult } from 'express-validator';
 
 const router = express.Router();
+
+// Lockout en memoria por (IP + username). Despues de N intentos fallidos
+// rechazamos por M minutos. No reemplaza al rate limiter de Express, lo
+// complementa con granularidad por usuario.
+const LOGIN_FAIL_MAX = parseInt(process.env.LOGIN_FAIL_MAX || '8', 10);
+const LOGIN_LOCKOUT_MS = parseInt(process.env.LOGIN_LOCKOUT_MS || String(15 * 60 * 1000), 10);
+const loginAttempts = new Map(); // key -> { count, firstAt, lockedUntil }
+
+const getLockoutKey = (req, username) => `${req.ip || 'unknown'}::${String(username || '').toLowerCase()}`;
+
+const isLockedOut = (key) => {
+  const entry = loginAttempts.get(key);
+  if (!entry) return 0;
+  if (entry.lockedUntil && entry.lockedUntil > Date.now()) {
+    return entry.lockedUntil - Date.now();
+  }
+  if (entry.lockedUntil && entry.lockedUntil <= Date.now()) {
+    loginAttempts.delete(key);
+  }
+  return 0;
+};
+
+const recordLoginFailure = (key) => {
+  const entry = loginAttempts.get(key) || { count: 0, firstAt: Date.now(), lockedUntil: 0 };
+  entry.count++;
+  if (entry.count >= LOGIN_FAIL_MAX) {
+    entry.lockedUntil = Date.now() + LOGIN_LOCKOUT_MS;
+  }
+  loginAttempts.set(key, entry);
+};
+
+const clearLoginFailures = (key) => {
+  loginAttempts.delete(key);
+};
+
+// Comparacion timing-safe para hashes ya conocidos. bcrypt.compare ya es
+// timing-safe internamente; este helper es para el camino legacy SHA-256.
+const timingSafeEqualStr = (a, b) => {
+  const aStr = String(a || '');
+  const bStr = String(b || '');
+  if (aStr.length !== bStr.length) {
+    // Aun en mismatch de longitud, hacer una comparacion dummy para evitar
+    // que el atacante deduzca el largo del hash por timing.
+    crypto.timingSafeEqual(Buffer.from('a'), Buffer.from('a'));
+    return false;
+  }
+  return crypto.timingSafeEqual(Buffer.from(aStr), Buffer.from(bStr));
+};
 
 // Cache liviano para /verify para reducir presión de BD en estaciones abiertas por horas.
 const verifyUserCache = new Map();
@@ -70,6 +119,17 @@ router.post('/login', [
 
     const { username, password } = req.body;
 
+    // Lockout por (IP+username) tras N intentos fallidos.
+    const lockoutKey = getLockoutKey(req, username);
+    const remainingMs = isLockedOut(lockoutKey);
+    if (remainingMs > 0) {
+      const minutes = Math.ceil(remainingMs / 60000);
+      return res.status(429).json({
+        error: `Demasiados intentos fallidos. Intenta de nuevo en ${minutes} minuto(s).`,
+        code: 'LOGIN_LOCKED_OUT'
+      });
+    }
+
     // Buscar usuario
     const userResult = await query(
        `SELECT u.*, e.branch_id, e.branch_ids, e.role as employee_role, e.name as employee_name
@@ -80,23 +140,24 @@ router.post('/login', [
     );
 
     if (userResult.rows.length === 0) {
+      recordLoginFailure(lockoutKey);
       return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
     }
 
     const user = userResult.rows[0];
 
-    // Verificar contraseña (soporta tanto bcrypt como SHA-256 para compatibilidad)
+    // Verificar contraseña (soporta tanto bcrypt como SHA-256 para compatibilidad).
+    // bcrypt.compare es timing-safe internamente. Para SHA-256 usamos
+    // crypto.timingSafeEqual para evitar leak por comparacion `===`.
     let isValidPassword = false;
-    
-    // Verificar si el hash es bcrypt (empieza con $2a$, $2b$, $2y$)
+
     const isBcryptHash = user.password_hash && (
       user.password_hash.startsWith('$2a$') ||
       user.password_hash.startsWith('$2b$') ||
       user.password_hash.startsWith('$2y$')
     );
-    
+
     if (isBcryptHash) {
-      // Intentar con bcrypt (nuevo sistema)
       try {
         isValidPassword = await bcrypt.compare(password, user.password_hash);
       } catch (bcryptError) {
@@ -104,20 +165,22 @@ router.post('/login', [
         isValidPassword = false;
       }
     } else {
-      // Intentar con SHA-256 (sistema legacy)
       try {
-        const crypto = await import('crypto');
         const sha256Hash = crypto.createHash('sha256').update(password).digest('hex');
-        isValidPassword = (sha256Hash === user.password_hash);
+        isValidPassword = timingSafeEqualStr(sha256Hash, user.password_hash);
       } catch (shaError) {
         console.error('Error comparando con SHA-256:', shaError);
         isValidPassword = false;
       }
     }
-    
+
     if (!isValidPassword) {
+      recordLoginFailure(lockoutKey);
       return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
     }
+
+    // Login OK — limpiar contador de intentos fallidos
+    clearLoginFailures(lockoutKey);
 
     // Actualizar último login
     await query(
@@ -297,8 +360,8 @@ router.get('/verify', async (req, res) => {
 // el codigo escrito; si es correcto recibe un remember_token con HMAC
 // firmado con COMPANY_TOKEN_SECRET, que puede guardar en localStorage
 // para no volver a pedir el codigo en proximas visitas.
+// (crypto ya esta importado al inicio del archivo)
 // =====================================================================
-import crypto from 'crypto';
 
 const getCompanyCodeSecret = () =>
   process.env.COMPANY_TOKEN_SECRET ||
