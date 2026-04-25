@@ -382,23 +382,29 @@ router.put('/:id', requireBranchAccess, async (req, res) => {
       return res.status(403).json({ error: 'No tienes acceso a este item' });
     }
 
-    // Si cambió el stock, registrar en log
-    if (updateData.stock_actual !== undefined && updateData.stock_actual !== existingItem.stock_actual) {
-      const stockDiff = updateData.stock_actual - existingItem.stock_actual;
-      const userId = req.user?.id || req.user?.userId || null;
-      if (userId) {
-        await client.query(
-          `INSERT INTO inventory_logs (item_id, action, quantity, stock_before, stock_after, reason, notes, user_id)
-           VALUES ($1, $2, $3, $4, $5, 'edicion', 'Stock modificado', $6)`,
-          [
-            id,
-            stockDiff > 0 ? 'entrada' : 'salida',
-            Math.abs(stockDiff),
-            existingItem.stock_actual,
-            updateData.stock_actual,
-            userId
-          ]
-        );
+    // Si cambió el stock, registrar en log.
+    // Coerce a numero antes de comparar para evitar falsos positivos
+    // ("5" !== 5 era true y disparaba un log con quantity=0).
+    if (updateData.stock_actual !== undefined) {
+      const newStock = parseInt(updateData.stock_actual, 10);
+      const oldStock = parseInt(existingItem.stock_actual, 10) || 0;
+      if (Number.isFinite(newStock) && newStock !== oldStock) {
+        const stockDiff = newStock - oldStock;
+        const userId = req.user?.id || req.user?.userId || null;
+        if (userId) {
+          await client.query(
+            `INSERT INTO inventory_logs (item_id, action, quantity, stock_before, stock_after, reason, notes, user_id)
+             VALUES ($1, $2, $3, $4, $5, 'edicion', 'Stock modificado', $6)`,
+            [
+              id,
+              stockDiff > 0 ? 'entrada' : 'salida',
+              Math.abs(stockDiff),
+              oldStock,
+              newStock,
+              userId
+            ]
+          );
+        }
       }
     }
 
