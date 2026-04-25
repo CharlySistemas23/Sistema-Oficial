@@ -1,7 +1,11 @@
 import express from 'express';
-import { query } from '../config/database.js';
+import { query, getClient } from '../config/database.js';
 import { requireBranchAccess } from '../middleware/authOptional.js';
 import { emitSupplierUpdate } from '../socket/socketHandler.js';
+
+const safeRollback = async (client) => {
+  try { await client.query('ROLLBACK'); } catch (e) { /* swallow */ }
+};
 
 // Importar io desde el módulo principal
 let io;
@@ -363,6 +367,9 @@ router.put('/:id', requireBranchAccess, async (req, res) => {
 
 // Registrar pago parcial/total
 router.post('/:id/pay', requireBranchAccess, async (req, res) => {
+  const client = await getClient();
+  let transactionCommitted = false;
+
   try {
     const { id } = req.params;
     const {
@@ -370,16 +377,22 @@ router.post('/:id/pay', requireBranchAccess, async (req, res) => {
     } = req.body;
 
     if (!payment_amount || !payment_date || !payment_method) {
+      client.release();
       return res.status(400).json({ error: 'payment_amount, payment_date y payment_method son requeridos' });
     }
 
-    // Obtener pago
-    const paymentResult = await query(
-      'SELECT * FROM supplier_payments WHERE id = $1',
+    await client.query('BEGIN');
+
+    // Obtener pago con lock pesimista para evitar race conditions
+    // (dos requests concurrentes leyendo el mismo paid_amount y aplicando
+    //  pagos parciales corrompian el saldo).
+    const paymentResult = await client.query(
+      'SELECT * FROM supplier_payments WHERE id = $1 FOR UPDATE',
       [id]
     );
 
     if (paymentResult.rows.length === 0) {
+      await safeRollback(client);
       return res.status(404).json({ error: 'Pago no encontrado' });
     }
 
@@ -388,6 +401,7 @@ router.post('/:id/pay', requireBranchAccess, async (req, res) => {
     // Verificar permisos
     if (!req.user.isMasterAdmin) {
       if (payment.branch_id !== req.user.branchId) {
+        await safeRollback(client);
         return res.status(403).json({ error: 'No tienes acceso a este pago' });
       }
     }
@@ -399,6 +413,7 @@ router.post('/:id/pay', requireBranchAccess, async (req, res) => {
 
     // Validar que no se pague más de lo debido
     if (newPaidAmount > totalAmount) {
+      await safeRollback(client);
       return res.status(400).json({ error: 'El monto del pago excede el total adeudado' });
     }
 
@@ -412,18 +427,19 @@ router.post('/:id/pay', requireBranchAccess, async (req, res) => {
 
     // Verificar que el receipt_number no exista si se proporciona
     if (receipt_number) {
-      const existingReceipt = await query(
+      const existingReceipt = await client.query(
         'SELECT id FROM payment_invoices WHERE receipt_number = $1',
         [receipt_number]
       );
       if (existingReceipt.rows.length > 0) {
+        await safeRollback(client);
         return res.status(400).json({ error: 'El número de folio del recibo ya existe' });
       }
     }
 
     // Registrar pago en historial
     const branchId = payment.branch_id || req.user.branchId;
-    await query(
+    await client.query(
       `INSERT INTO payment_invoices (
         supplier_payment_id, payment_date, payment_amount, payment_method, payment_reference, receipt_number, notes, branch_id, created_by
       )
@@ -432,7 +448,7 @@ router.post('/:id/pay', requireBranchAccess, async (req, res) => {
     );
 
     // Actualizar pago (incluyendo receipt_number si se proporciona)
-    const result = await query(
+    const result = await client.query(
       `UPDATE supplier_payments SET
         paid_amount = $1,
         status = $2,
@@ -443,6 +459,9 @@ router.post('/:id/pay', requireBranchAccess, async (req, res) => {
       RETURNING *`,
       [newPaidAmount, newStatus, payment_date, id, receipt_number || null]
     );
+
+    await client.query('COMMIT');
+    transactionCommitted = true;
 
     const updatedPayment = result.rows[0];
 
@@ -459,8 +478,13 @@ router.post('/:id/pay', requireBranchAccess, async (req, res) => {
 
     res.json(updatedPayment);
   } catch (error) {
+    if (!transactionCommitted) {
+      await safeRollback(client);
+    }
     console.error('Error registrando pago:', error);
     res.status(500).json({ error: 'Error al registrar pago' });
+  } finally {
+    client.release();
   }
 });
 
