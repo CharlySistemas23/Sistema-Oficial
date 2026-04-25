@@ -177,9 +177,11 @@ const ProfitCalculator = {
                     .reduce((sum, p) => sum + parseAmt(p.bank_commission), 0);
             }
 
-            // Calcular utilidades
-            const grossProfit = revenue - cogs - arrivalCosts - operatingCosts;
-            const netProfit = grossProfit - commissions - bankCommissions;
+            // Utilidad Bruta = Ingresos - COGS - Comisiones (vendedores + guias)
+            // Utilidad Neta = Utilidad Bruta - (Costos Llegadas + Operativos + Comisiones Bancarias)
+            // Esta formula coincide con dashboard.js para que los KPIs cuadren entre vistas.
+            const grossProfit = revenue - cogs - commissions;
+            const netProfit = grossProfit - arrivalCosts - operatingCosts - bankCommissions;
             let profitMargin = revenue > 0 ? (netProfit / revenue * 100) : 0;
             // Garantizar que nunca devolvamos NaN ni undefined
             if (!Number.isFinite(profitMargin)) profitMargin = 0;
