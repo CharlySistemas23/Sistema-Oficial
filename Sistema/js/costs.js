@@ -3546,8 +3546,37 @@ const Costs = {
      */
     async registerCOGS(saleId, cogsAmount, branchId, saleFolio) {
         if (!cogsAmount || cogsAmount <= 0) return;
+        if (!saleId) {
+            console.warn('registerCOGS llamado sin saleId, omitiendo');
+            return;
+        }
 
         try {
+            // IDEMPOTENCIA: si ya existe un cost_entry para esta venta + COGS, actualizar
+            // en lugar de crear uno nuevo. Antes esta funcion creaba un id nuevo cada vez,
+            // lo que producia duplicados al editar venta, reintentos de sync, etc.
+            const allCosts = await DB.getAll('cost_entries') || [];
+            const existing = allCosts.find(c =>
+                c && c.sale_id === saleId && c.category === 'costo_ventas'
+            );
+
+            if (existing) {
+                // Solo actualizar si el monto cambio (evita escrituras innecesarias)
+                if (parseFloat(existing.amount) !== parseFloat(cogsAmount)) {
+                    const updated = {
+                        ...existing,
+                        amount: cogsAmount,
+                        updated_at: new Date().toISOString(),
+                        sync_status: 'pending'
+                    };
+                    await DB.put('cost_entries', updated);
+                    if (typeof SyncManager !== 'undefined') {
+                        await SyncManager.addToQueue('cost_entry', existing.id);
+                    }
+                }
+                return;
+            }
+
             const cost = {
                 id: Utils.generateId(),
                 type: 'variable',
@@ -3559,7 +3588,7 @@ const Costs = {
                 recurring: false,
                 auto_generate: true,
                 notes: `COGS - Venta ${saleFolio || saleId}`,
-                sale_id: saleId, // Referencia a la venta
+                sale_id: saleId,
                 created_at: new Date().toISOString(),
                 sync_status: 'pending'
             };
@@ -3584,8 +3613,41 @@ const Costs = {
      */
     async registerCommission(saleId, commissionAmount, branchId, saleFolio, entityType, entityId) {
         if (!commissionAmount || commissionAmount <= 0) return;
+        if (!saleId) {
+            console.warn('registerCommission llamado sin saleId, omitiendo');
+            return;
+        }
 
         try {
+            // IDEMPOTENCIA: una venta puede tener hasta 2 comisiones (vendedor + guia),
+            // diferenciadas por entity_type. Buscar por (sale_id, category, entity_type).
+            const allCosts = await DB.getAll('cost_entries') || [];
+            const existing = allCosts.find(c =>
+                c && c.sale_id === saleId &&
+                c.category === 'comisiones' &&
+                (c.entity_type === entityType ||
+                 // Fallback: si entries antiguos no tienen entity_type, distinguir por notes
+                 (!c.entity_type && (c.notes || '').includes(entityType === 'seller' ? 'Vendedor' : 'Guía')))
+            );
+
+            if (existing) {
+                if (parseFloat(existing.amount) !== parseFloat(commissionAmount)) {
+                    const updated = {
+                        ...existing,
+                        amount: commissionAmount,
+                        entity_type: entityType,
+                        entity_id: entityId,
+                        updated_at: new Date().toISOString(),
+                        sync_status: 'pending'
+                    };
+                    await DB.put('cost_entries', updated);
+                    if (typeof SyncManager !== 'undefined') {
+                        await SyncManager.addToQueue('cost_entry', existing.id);
+                    }
+                }
+                return;
+            }
+
             const cost = {
                 id: Utils.generateId(),
                 type: 'variable',
@@ -3624,8 +3686,38 @@ const Costs = {
      */
     async registerBankCommission(saleId, commissionAmount, branchId, bank, paymentType, saleFolio) {
         if (!commissionAmount || commissionAmount <= 0) return;
+        if (!saleId) {
+            console.warn('registerBankCommission llamado sin saleId, omitiendo');
+            return;
+        }
 
         try {
+            // IDEMPOTENCIA: una venta puede tener varias comisiones bancarias si pago con
+            // multiples tarjetas (visa + amex). Diferenciar por (sale_id, category, bank, payment_type).
+            const allCosts = await DB.getAll('cost_entries') || [];
+            const existing = allCosts.find(c =>
+                c && c.sale_id === saleId &&
+                c.category === 'comisiones_bancarias' &&
+                c.bank === bank &&
+                c.payment_type === paymentType
+            );
+
+            if (existing) {
+                if (parseFloat(existing.amount) !== parseFloat(commissionAmount)) {
+                    const updated = {
+                        ...existing,
+                        amount: commissionAmount,
+                        updated_at: new Date().toISOString(),
+                        sync_status: 'pending'
+                    };
+                    await DB.put('cost_entries', updated);
+                    if (typeof SyncManager !== 'undefined') {
+                        await SyncManager.addToQueue('cost_entry', existing.id);
+                    }
+                }
+                return;
+            }
+
             const cost = {
                 id: Utils.generateId(),
                 type: 'variable',
