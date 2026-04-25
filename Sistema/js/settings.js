@@ -58,14 +58,11 @@ const Settings = {
                     <button class="settings-main-tab" data-tab="financial">
                         <i class="fas fa-dollar-sign"></i> Financiero
                     </button>
+                    <button class="settings-main-tab" data-tab="branches">
+                        <i class="fas fa-store"></i> Sucursales
+                    </button>
                     <button class="settings-main-tab" data-tab="catalogs">
-                        <i class="fas fa-book"></i> Datos maestros
-                    </button>
-                    <button class="settings-main-tab" data-tab="arrival-rates">
-                        <i class="fas fa-table"></i> Reglas de Llegadas
-                    </button>
-                    <button class="settings-main-tab" data-tab="sync">
-                        <i class="fas fa-sync-alt"></i> Sincronización
+                        <i class="fas fa-book"></i> Catálogos
                     </button>
                     <button class="settings-main-tab" data-tab="security">
                         <i class="fas fa-shield-alt"></i> Seguridad
@@ -112,26 +109,26 @@ const Settings = {
             ],
             'financial': [
                 { id: 'taxes', label: 'Impuestos', icon: 'fa-receipt' },
-                { id: 'exchange-rates', label: 'Tipos de Cambio', icon: 'fa-exchange-alt' },
-                { id: 'payment-methods', label: 'Métodos de Pago', icon: 'fa-credit-card' }
+                { id: 'bank-commissions', label: 'Comisiones Bancarias', icon: 'fa-credit-card' },
+                { id: 'exchange-rates', label: 'Tipos de Cambio', icon: 'fa-exchange-alt' }
             ],
+            // Sucursales: una sola vista (lista + asignar empleados desde modales)
+            'branches': [],
             'catalogs': [
-                { id: 'metals', label: 'Metales', icon: 'fa-gem' },
-                { id: 'stones', label: 'Piedras', icon: 'fa-diamond' },
-                { id: 'categories', label: 'Categorías', icon: 'fa-tags' }
-            ],
-            'arrival-rates': [],
-            'sync': [
-                { id: 'server', label: 'Servidor', icon: 'fa-server' },
-                { id: 'status', label: 'Estado', icon: 'fa-sync-alt' }
+                { id: 'agencies', label: 'Agencias', icon: 'fa-building' },
+                { id: 'sellers', label: 'Vendedores', icon: 'fa-user-tag' },
+                { id: 'guides', label: 'Guías', icon: 'fa-suitcase' },
+                { id: 'arrival-rules', label: 'Reglas de Llegadas', icon: 'fa-table' }
             ],
             'security': [
-                { id: 'company-code', label: 'Código de Empresa', icon: 'fa-key' },
-                { id: 'users', label: 'Usuarios', icon: 'fa-users' }
+                { id: 'pin', label: 'Mi PIN', icon: 'fa-key' },
+                { id: 'permissions', label: 'Permisos', icon: 'fa-user-shield' },
+                { id: 'company-code', label: 'Código de Empresa', icon: 'fa-building' }
             ],
             'system': [
-                { id: 'backups', label: 'Respaldo', icon: 'fa-database' },
-                { id: 'maintenance', label: 'Mantenimiento', icon: 'fa-tools' }
+                { id: 'server', label: 'Servidor', icon: 'fa-server' },
+                { id: 'backups', label: 'Respaldos', icon: 'fa-database' },
+                { id: 'info', label: 'Información', icon: 'fa-info-circle' }
             ]
         };
         return subCategories[tab] || [];
@@ -197,97 +194,94 @@ const Settings = {
         const content = document.getElementById('settings-content');
         if (!content) return;
 
+        const wireServerEvents = () => setTimeout(() => {
+            const saveBtn = document.getElementById('save-server-url-btn');
+            const testBtn = document.getElementById('test-server-connection-btn');
+            const urlInput = document.getElementById('server-url-input');
+            if (saveBtn) saveBtn.addEventListener('click', () => this.saveServerURL());
+            if (testBtn) testBtn.addEventListener('click', () => this.testServerConnection());
+            if (urlInput) {
+                urlInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') this.saveServerURL();
+                });
+            }
+        }, 100);
+
+        const wireBackupEvents = () => setTimeout(() => {
+            const createBtn = document.getElementById('backup-create-btn');
+            const importBtn = document.getElementById('backup-import-btn');
+            const selectBtn = document.getElementById('backup-select-folder-btn');
+            const clearBtn = document.getElementById('backup-clear-folder-btn');
+            if (createBtn) createBtn.onclick = () => this.createBackupManually();
+            if (importBtn) importBtn.onclick = () => this.importBackupManually();
+            if (selectBtn) selectBtn.onclick = () => this.selectBackupFolder();
+            if (clearBtn) clearBtn.onclick = () => this.clearBackupFolder();
+        }, 100);
+
         switch(mainTab) {
             case 'general':
-                if (subTab === 'appearance') {
-                    content.innerHTML = this.getGeneralAppearanceTab();
-                } else if (subTab === 'notifications') {
+                if (subTab === 'notifications') {
                     content.innerHTML = this.getGeneralNotificationsTab();
                 } else {
-                    content.innerHTML = this.getGeneralTab();
+                    content.innerHTML = this.getGeneralAppearanceTab();
                 }
                 break;
             case 'printing':
-                if (subTab === 'tickets') {
-                    content.innerHTML = this.getPrintingTicketsTab();
-                    await this.updateJewelryLabelStatus();
-                } else if (subTab === 'jewelry-labels') {
+                if (subTab === 'jewelry-labels') {
                     content.innerHTML = this.getPrintingJewelryLabelsTab();
-                    await this.updateJewelryLabelStatus();
                 } else {
-                    content.innerHTML = this.getPrintingTab();
-                    await this.updateJewelryLabelStatus();
+                    content.innerHTML = this.getPrintingTicketsTab();
                 }
-                break;
-            case 'sync':
-                if (subTab === 'server') {
-                    content.innerHTML = this.getSyncServerTab();
-                    await this.loadSyncTab();
-                } else if (subTab === 'status') {
-                    content.innerHTML = this.getSyncStatusTab();
-                    await this.loadSyncTab();
-                } else {
-                    content.innerHTML = this.getSyncTab();
-                    await this.loadSyncTab();
-                }
-                // Configurar eventos
-                setTimeout(() => {
-                    const saveBtn = document.getElementById('save-server-url-btn');
-                    const testBtn = document.getElementById('test-server-connection-btn');
-                    const urlInput = document.getElementById('server-url-input');
-                    
-                    if (saveBtn) {
-                        saveBtn.addEventListener('click', () => this.saveServerURL());
-                    }
-                    if (testBtn) {
-                        testBtn.addEventListener('click', () => this.testServerConnection());
-                    }
-                    if (urlInput) {
-                        urlInput.addEventListener('keypress', (e) => {
-                            if (e.key === 'Enter') this.saveServerURL();
-                        });
-                    }
-                }, 100);
+                await this.updateJewelryLabelStatus();
                 break;
             case 'financial':
-                content.innerHTML = this.getFinancialTab();
+                if (subTab === 'bank-commissions') {
+                    content.innerHTML = this.getFinancialBankCommissionsTab();
+                } else if (subTab === 'exchange-rates') {
+                    content.innerHTML = this.getFinancialExchangeRatesTab();
+                } else {
+                    content.innerHTML = this.getFinancialTaxesTab();
+                }
+                break;
+            case 'branches':
+                content.innerHTML = this.getBranchesTab();
                 break;
             case 'catalogs':
-                content.innerHTML = this.getCatalogsTab();
-                break;
-            case 'arrival-rates':
-                content.innerHTML = this.getArrivalRatesTab();
-                await this.loadArrivalRates();
+                if (subTab === 'sellers') {
+                    content.innerHTML = this.getCatalogSellersTab();
+                } else if (subTab === 'guides') {
+                    content.innerHTML = this.getCatalogGuidesTab();
+                } else if (subTab === 'arrival-rules') {
+                    content.innerHTML = this.getArrivalRatesTab();
+                    await this.loadArrivalRates();
+                } else {
+                    content.innerHTML = this.getCatalogAgenciesTab();
+                }
                 break;
             case 'security':
-                content.innerHTML = this.getSecurityTab();
-                await this.loadCompanyCodeSettings();
+                if (subTab === 'permissions') {
+                    content.innerHTML = this.getSecurityPermissionsTab();
+                } else if (subTab === 'company-code') {
+                    content.innerHTML = this.getSecurityCompanyCodeTab();
+                } else {
+                    content.innerHTML = this.getSecurityPinTab();
+                }
                 break;
             case 'system':
-                content.innerHTML = this.getSystemTab();
-                await this.loadBackupsList();
-                this.loadBackupDirectoryInfo();
-                setTimeout(() => {
-                    const saveBtn = document.getElementById('save-server-url-btn');
-                    const testBtn = document.getElementById('test-server-connection-btn');
-                    const urlInput = document.getElementById('server-url-input');
-                    const createBtn = document.getElementById('backup-create-btn');
-                    const importBtn = document.getElementById('backup-import-btn');
-                    const selectBtn = document.getElementById('backup-select-folder-btn');
-                    const clearBtn = document.getElementById('backup-clear-folder-btn');
-                    
-                    if (saveBtn) saveBtn.addEventListener('click', () => this.saveServerURL());
-                    if (testBtn) testBtn.addEventListener('click', () => this.testServerConnection());
-                    if (urlInput) {
-                        urlInput.addEventListener('keypress', (e) => {
-                            if (e.key === 'Enter') this.saveServerURL();
-                        });
-                    }
-                    if (createBtn) createBtn.onclick = () => this.createBackupManually();
-                    if (importBtn) importBtn.onclick = () => this.importBackupManually();
-                    if (selectBtn) selectBtn.onclick = () => this.selectBackupFolder();
-                    if (clearBtn) clearBtn.onclick = () => this.clearBackupFolder();
-                }, 100);
+                if (subTab === 'backups') {
+                    content.innerHTML = this.getSystemBackupsTab();
+                    await this.loadBackupsList();
+                    this.loadBackupDirectoryInfo();
+                    wireBackupEvents();
+                } else if (subTab === 'info') {
+                    content.innerHTML = this.getSystemInfoTab();
+                    await this.loadSystemInfo();
+                    await this.loadDatabaseStats();
+                } else {
+                    content.innerHTML = this.getSystemServerTab();
+                    await this.loadSyncTab();
+                    wireServerEvents();
+                }
                 break;
         }
     },
@@ -710,250 +704,181 @@ const Settings = {
         `;
     },
 
-    getFinancialTab() {
+    getFinancialTaxesTab() {
         return `
-            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--spacing-md);">
-                <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light);">
-                    <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
-                        <i class="fas fa-receipt"></i> Impuestos
-                    </h3>
-                    <div class="form-group">
-                        <label>IVA (%)</label>
-                        <input type="number" id="setting-tax-iva" class="form-input" step="0.01" value="16.00">
-                    </div>
-                    <div class="form-group">
-                        <label>IEPS (%)</label>
-                        <input type="number" id="setting-tax-ieps" class="form-input" step="0.01" value="0.00">
-                    </div>
-                    <div class="form-group">
-                        <label>ISR (%)</label>
-                        <input type="number" id="setting-tax-isr" class="form-input" step="0.01" value="0.00">
-                    </div>
-                    <button class="btn-primary btn-sm" onclick="window.Settings.saveTaxes()" style="width: 100%; margin-top: var(--spacing-xs);">
-                        <i class="fas fa-save"></i> Guardar Impuestos
-                    </button>
+            <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light); max-width: 600px;">
+                <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+                    <i class="fas fa-receipt"></i> Impuestos
+                </h3>
+                <p style="font-size: 11px; color: var(--color-text-secondary); margin-bottom: var(--spacing-md);">
+                    IVA, IEPS e ISR aplicados a las ventas. El IVA se incluye automáticamente en los reportes financieros.
+                </p>
+                <div class="form-group">
+                    <label>IVA (%)</label>
+                    <input type="number" id="setting-tax-iva" class="form-input" step="0.01" value="16.00">
                 </div>
-
-                <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light);">
-                    <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
-                        <i class="fas fa-exchange-alt"></i> Monedas y Tipo de Cambio
-                    </h3>
-                    <div style="margin-bottom: var(--spacing-sm); padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm); border-left: 2px solid var(--color-accent);">
-                        <button class="btn-primary btn-sm" onclick="window.Settings.fetchExchangeRates()" style="width: 100%; margin-bottom: var(--spacing-xs);">
-                            <i class="fas fa-sync-alt"></i> Obtener Tipos de Cambio Actuales
-                        </button>
-                        <small style="color: var(--color-text-secondary); font-size: 9px;">
-                            Obtiene automáticamente los tipos de cambio actuales de USD y CAD desde internet
-                        </small>
-                    </div>
-                    <div class="form-group">
-                        <label>Tipo de Cambio USD (MXN por USD)</label>
-                        <input type="number" id="setting-exchange-usd" class="form-input" step="0.0001" value="20.00">
-                    </div>
-                    <div class="form-group">
-                        <label>Tipo de Cambio CAD (MXN por CAD)</label>
-                        <input type="number" id="setting-exchange-cad" class="form-input" step="0.0001" value="15.00">
-                    </div>
-                    <div style="margin-top: var(--spacing-sm); padding: var(--spacing-xs); background: var(--color-bg-secondary); border-radius: var(--radius-sm); font-size: 9px; color: var(--color-text-secondary);">
-                        <strong>Última actualización:</strong> <span id="exchange-rates-timestamp">-</span>
-                    </div>
-                    <button class="btn-primary btn-sm" onclick="window.Settings.saveExchangeRates()" style="width: 100%; margin-top: var(--spacing-sm);">
-                        Guardar Tipos de Cambio
-                    </button>
+                <div class="form-group">
+                    <label>IEPS (%)</label>
+                    <input type="number" id="setting-tax-ieps" class="form-input" step="0.01" value="0.00">
                 </div>
-
-                <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light);">
-                    <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
-                        <i class="fas fa-credit-card"></i> Comisiones Bancarias (con IVA incluido)
-                    </h3>
-                    <div style="margin-bottom: var(--spacing-sm); padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm); font-size: 10px; color: var(--color-text-secondary);">
-                        <i class="fas fa-info-circle"></i> Las comisiones se aplican automáticamente a los pagos con TPV (tarjeta). Los porcentajes ya incluyen IVA.
-                    </div>
-                    
-                    <div style="margin-bottom: var(--spacing-md);">
-                        <h4 style="font-size: 11px; font-weight: 600; text-transform: uppercase; margin-bottom: var(--spacing-sm); color: var(--color-primary);">
-                            <i class="fas fa-university"></i> Banamex
-                        </h4>
-                        <div class="form-group">
-                            <label>Nacional (%)</label>
-                            <input type="number" id="setting-bank-commission-banamex-national" class="form-input" step="0.01" value="2.32" min="0" max="100">
-                            <small style="color: var(--color-text-secondary); font-size: 9px;">Comisión para tarjetas nacionales</small>
-                        </div>
-                        <div class="form-group">
-                            <label>Internacional (%)</label>
-                            <input type="number" id="setting-bank-commission-banamex-international" class="form-input" step="0.01" value="4.06" min="0" max="100">
-                            <small style="color: var(--color-text-secondary); font-size: 9px;">Comisión para tarjetas internacionales</small>
-                        </div>
-                    </div>
-
-                    <div style="margin-bottom: var(--spacing-md); padding-top: var(--spacing-md); border-top: 1px solid var(--color-border-light);">
-                        <h4 style="font-size: 11px; font-weight: 600; text-transform: uppercase; margin-bottom: var(--spacing-sm); color: var(--color-primary);">
-                            <i class="fas fa-university"></i> Santander
-                        </h4>
-                        <div class="form-group">
-                            <label>Nacional (%)</label>
-                            <input type="number" id="setting-bank-commission-santander-national" class="form-input" step="0.01" value="2.00" min="0" max="100">
-                            <small style="color: var(--color-text-secondary); font-size: 9px;">Comisión para tarjetas nacionales</small>
-                        </div>
-                        <div class="form-group">
-                            <label>Internacional (%)</label>
-                            <input type="number" id="setting-bank-commission-santander-international" class="form-input" step="0.01" value="2.55" min="0" max="100">
-                            <small style="color: var(--color-text-secondary); font-size: 9px;">Comisión para tarjetas internacionales</small>
-                        </div>
-                    </div>
-
-                    <button class="btn-primary btn-sm" onclick="window.Settings.saveBankCommissions()" style="width: 100%; margin-top: var(--spacing-xs);">
-                        <i class="fas fa-save"></i> Guardar Comisiones Bancarias
-                    </button>
+                <div class="form-group">
+                    <label>ISR (%)</label>
+                    <input type="number" id="setting-tax-isr" class="form-input" step="0.01" value="0.00">
                 </div>
-
-                <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light);">
-                    <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
-                        <i class="fas fa-percent"></i> Reglas de Comisión
-                    </h3>
-                    <p style="font-size: 11px; color: var(--color-text-secondary); margin-bottom: var(--spacing-sm);">
-                        Configura las reglas de comisión para vendedores, guías y agencias
-                    </p>
-                    <button class="btn-secondary btn-sm" onclick="window.Settings.manageCommissionRules()" style="width: 100%;">
-                        <i class="fas fa-cog"></i> Gestionar Reglas de Comisión
-                    </button>
-                </div>
+                <button class="btn-primary btn-sm" onclick="window.Settings.saveTaxes()" style="width: 100%; margin-top: var(--spacing-xs);">
+                    <i class="fas fa-save"></i> Guardar Impuestos
+                </button>
             </div>
         `;
     },
 
-    getCatalogsTab() {
+    getFinancialBankCommissionsTab() {
         return `
-            <div style="margin-bottom: var(--spacing-md); padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm); font-size: 11px; color: var(--color-text-secondary);">
-                Puedes gestionar Agencias, Vendedores y Guías aquí (modal) o ir al módulo <strong>Catálogos</strong> del menú (Administración).
-            </div>
-            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--spacing-md);">
-                <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light); text-align: center;">
-                    <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
-                        <i class="fas fa-building"></i> Agencias
-                    </h3>
-                    <p style="font-size: 11px; color: var(--color-text-secondary); margin-bottom: var(--spacing-sm);">
-                        Gestiona las agencias de turismo
-                    </p>
-                    <button class="btn-secondary btn-sm" onclick="window.Settings.manageAgencies()" style="width: 100%; margin-bottom: var(--spacing-xs);">
-                        Gestionar Agencias
-                    </button>
-                    <button class="btn-primary btn-sm" onclick="window.Settings.goToCatalogsModule('agencies')" style="width: 100%;">
-                        <i class="fas fa-external-link-alt"></i> Ir a Catálogos
-                    </button>
+            <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light); max-width: 600px;">
+                <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+                    <i class="fas fa-credit-card"></i> Comisiones Bancarias
+                </h3>
+                <div style="margin-bottom: var(--spacing-sm); padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm); font-size: 10px; color: var(--color-text-secondary);">
+                    <i class="fas fa-info-circle"></i> Las comisiones se aplican automáticamente a los pagos con TPV (tarjeta). Los porcentajes incluyen IVA.
                 </div>
 
-                <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light); text-align: center;">
-                    <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
-                        <i class="fas fa-user-tag"></i> Vendedores
-                    </h3>
-                    <p style="font-size: 11px; color: var(--color-text-secondary); margin-bottom: var(--spacing-sm);">
-                        Gestiona los vendedores del sistema
-                    </p>
-                    <button class="btn-secondary btn-sm" onclick="window.Settings.manageSellers()" style="width: 100%; margin-bottom: var(--spacing-xs);">
-                        Gestionar Vendedores
-                    </button>
-                    <button class="btn-primary btn-sm" onclick="window.Settings.goToCatalogsModule('sellers')" style="width: 100%;">
-                        <i class="fas fa-external-link-alt"></i> Ir a Catálogos
-                    </button>
+                <div style="margin-bottom: var(--spacing-md);">
+                    <h4 style="font-size: 11px; font-weight: 600; text-transform: uppercase; margin-bottom: var(--spacing-sm); color: var(--color-primary);">
+                        <i class="fas fa-university"></i> Banamex
+                    </h4>
+                    <div class="form-group">
+                        <label>Nacional (%)</label>
+                        <input type="number" id="setting-bank-commission-banamex-national" class="form-input" step="0.01" value="2.32" min="0" max="100">
+                    </div>
+                    <div class="form-group">
+                        <label>Internacional (%)</label>
+                        <input type="number" id="setting-bank-commission-banamex-international" class="form-input" step="0.01" value="4.06" min="0" max="100">
+                    </div>
                 </div>
 
-                <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light); text-align: center;">
-                    <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
-                        <i class="fas fa-suitcase"></i> Guías
-                    </h3>
-                    <p style="font-size: 11px; color: var(--color-text-secondary); margin-bottom: var(--spacing-sm);">
-                        Gestiona los guías de turismo
-                    </p>
-                    <button class="btn-secondary btn-sm" onclick="window.Settings.manageGuides()" style="width: 100%; margin-bottom: var(--spacing-xs);">
-                        Gestionar Guías
-                    </button>
-                    <button class="btn-primary btn-sm" onclick="window.Settings.goToCatalogsModule('guides')" style="width: 100%;">
-                        <i class="fas fa-external-link-alt"></i> Ir a Catálogos
-                    </button>
+                <div style="margin-bottom: var(--spacing-md); padding-top: var(--spacing-md); border-top: 1px solid var(--color-border-light);">
+                    <h4 style="font-size: 11px; font-weight: 600; text-transform: uppercase; margin-bottom: var(--spacing-sm); color: var(--color-primary);">
+                        <i class="fas fa-university"></i> Santander
+                    </h4>
+                    <div class="form-group">
+                        <label>Nacional (%)</label>
+                        <input type="number" id="setting-bank-commission-santander-national" class="form-input" step="0.01" value="2.00" min="0" max="100">
+                    </div>
+                    <div class="form-group">
+                        <label>Internacional (%)</label>
+                        <input type="number" id="setting-bank-commission-santander-international" class="form-input" step="0.01" value="2.55" min="0" max="100">
+                    </div>
                 </div>
 
-                <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light); text-align: center;">
-                    <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
-                        <i class="fas fa-store"></i> Sucursales
-                    </h3>
-                    <p style="font-size: 11px; color: var(--color-text-secondary); margin-bottom: var(--spacing-sm);">
-                        Gestiona las sucursales
-                    </p>
-                    <button class="btn-secondary btn-sm" onclick="window.Settings.manageBranches()" style="width: 100%;">
-                        Gestionar Sucursales
-                    </button>
-                </div>
-
-                <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light); text-align: center;">
-                    <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
-                        <i class="fas fa-truck"></i> Proveedores
-                    </h3>
-                    <p style="font-size: 11px; color: var(--color-text-secondary); margin-bottom: var(--spacing-sm);">
-                        Gestiona los proveedores del sistema
-                    </p>
-                    <button class="btn-secondary btn-sm" onclick="window.Settings.manageSuppliers()" style="width: 100%;">
-                        Gestionar Proveedores
-                    </button>
-                </div>
+                <button class="btn-primary btn-sm" onclick="window.Settings.saveBankCommissions()" style="width: 100%; margin-top: var(--spacing-xs);">
+                    <i class="fas fa-save"></i> Guardar Comisiones Bancarias
+                </button>
             </div>
         `;
     },
 
-    getSecurityTab() {
+    getFinancialExchangeRatesTab() {
         return `
-            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--spacing-md);">
-                <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light);">
-                    <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
-                        <i class="fas fa-lock"></i> Seguridad de PIN
-                    </h3>
-                    <div class="form-group">
-                        <label>Longitud Mínima de PIN</label>
-                        <input type="number" id="setting-pin-min-length" class="form-input" value="4" min="4" max="8">
-                    </div>
-                    <div class="form-group">
-                        <label>Intentos Máximos de Login</label>
-                        <input type="number" id="setting-max-login-attempts" class="form-input" value="5" min="3" max="10">
-                    </div>
-                    <div class="form-group">
-                        <label>Tiempo de Bloqueo (minutos)</label>
-                        <input type="number" id="setting-lockout-time" class="form-input" value="15" min="5" max="60">
-                    </div>
-                    <button class="btn-primary btn-sm" onclick="window.Settings.saveSecuritySettings()" style="width: 100%; margin-top: var(--spacing-xs);">
-                        Guardar Configuración
+            <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light); max-width: 600px;">
+                <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+                    <i class="fas fa-exchange-alt"></i> Tipos de Cambio
+                </h3>
+                <div style="margin-bottom: var(--spacing-sm); padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm); border-left: 2px solid var(--color-accent);">
+                    <button class="btn-primary btn-sm" onclick="window.Settings.fetchExchangeRates()" style="width: 100%; margin-bottom: var(--spacing-xs);">
+                        <i class="fas fa-sync-alt"></i> Obtener Tipos de Cambio Actuales
                     </button>
+                    <small style="color: var(--color-text-secondary); font-size: 9px;">
+                        Obtiene automáticamente USD y CAD desde internet
+                    </small>
                 </div>
+                <div class="form-group">
+                    <label>Tipo de Cambio USD (MXN por USD)</label>
+                    <input type="number" id="setting-exchange-usd" class="form-input" step="0.0001" value="20.00">
+                </div>
+                <div class="form-group">
+                    <label>Tipo de Cambio CAD (MXN por CAD)</label>
+                    <input type="number" id="setting-exchange-cad" class="form-input" step="0.0001" value="15.00">
+                </div>
+                <div style="margin-top: var(--spacing-sm); padding: var(--spacing-xs); background: var(--color-bg-secondary); border-radius: var(--radius-sm); font-size: 9px; color: var(--color-text-secondary);">
+                    <strong>Última actualización:</strong> <span id="exchange-rates-timestamp">-</span>
+                </div>
+                <button class="btn-primary btn-sm" onclick="window.Settings.saveExchangeRates()" style="width: 100%; margin-top: var(--spacing-sm);">
+                    Guardar Tipos de Cambio
+                </button>
+            </div>
+        `;
+    },
 
+    // Helper: tarjeta simple "Gestionar X" usada en cada sub-tab de Catalogos.
+    _catalogCard(icon, title, description, action) {
+        return `
+            <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light); max-width: 600px; text-align: center;">
+                <h3 style="margin-bottom: var(--spacing-sm); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+                    <i class="fas ${icon}"></i> ${title}
+                </h3>
+                <p style="font-size: 11px; color: var(--color-text-secondary); margin-bottom: var(--spacing-md);">
+                    ${description}
+                </p>
+                <button class="btn-primary btn-sm" onclick="window.Settings.${action}()" style="width: 100%;">
+                    <i class="fas fa-cog"></i> Gestionar
+                </button>
+            </div>
+        `;
+    },
+
+    getCatalogAgenciesTab() {
+        return this._catalogCard('fa-building', 'Agencias',
+            'Gestiona las agencias de turismo (alta, edicion, codigo de barras).', 'manageAgencies');
+    },
+
+    getCatalogSellersTab() {
+        return `
+            ${this._catalogCard('fa-user-tag', 'Vendedores',
+                'Gestiona los vendedores del sistema (alta, edicion, codigo de barras).', 'manageSellers')}
+            <div class="module" style="margin-top: var(--spacing-md); padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light); max-width: 600px;">
+                <h3 style="margin-bottom: var(--spacing-sm); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+                    <i class="fas fa-percent"></i> Reglas de Comision
+                </h3>
+                <p style="font-size: 11px; color: var(--color-text-secondary); margin-bottom: var(--spacing-sm);">
+                    Configura las reglas de comision para vendedores, guias y agencias.
+                </p>
+                <button class="btn-secondary btn-sm" onclick="window.Settings.manageCommissionRules()" style="width: 100%;">
+                    <i class="fas fa-cog"></i> Gestionar Reglas de Comision
+                </button>
+            </div>
+        `;
+    },
+
+    getCatalogGuidesTab() {
+        return this._catalogCard('fa-suitcase', 'Guias',
+            'Gestiona los guias de turismo (alta, edicion, codigo de barras).', 'manageGuides');
+    },
+
+    getBranchesTab() {
+        return `
+            ${this._catalogCard('fa-store', 'Sucursales',
+                'Gestiona las sucursales: alta, edicion, asignacion de empleados, datos empresariales.',
+                'manageBranches')}
+        `;
+    },
+
+    getSecurityPinTab() {
+        return `
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--spacing-md); max-width: 1000px;">
                 <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light);">
                     <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
-                        <i class="fas fa-user-shield"></i> Permisos y Roles
+                        <i class="fas fa-key"></i> Cambiar Mi PIN
                     </h3>
                     <p style="font-size: 11px; color: var(--color-text-secondary); margin-bottom: var(--spacing-sm);">
-                        Gestiona los permisos del sistema
+                        Cambia el PIN local que usa el sistema para reautenticarte en operaciones sensibles.
                     </p>
-                    ${typeof PermissionManager !== 'undefined' && PermissionManager.hasPermission('settings.manage_permissions') ? `
-                        <button class="btn-secondary btn-sm" onclick="window.Settings.managePermissions()" style="width: 100%; margin-bottom: var(--spacing-xs);">
-                            <i class="fas fa-users-cog"></i> Gestionar Permisos
-                        </button>
-                    ` : ''}
-                    ${typeof PermissionManager !== 'undefined' && PermissionManager.hasPermission('settings.view_audit') ? `
-                        <button class="btn-secondary btn-sm" onclick="window.Settings.viewAuditLog()" style="width: 100%;">
-                            <i class="fas fa-history"></i> Ver Log de Auditoría
-                        </button>
-                    ` : ''}
-                </div>
-
-                <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light);">
-                    <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
-                        <i class="fas fa-key"></i> Cambiar Contraseña Maestra
-                    </h3>
                     <div class="form-group">
                         <label>PIN Actual</label>
                         <input type="password" id="setting-current-pin" class="form-input" placeholder="Ingresa tu PIN actual">
                     </div>
                     <div class="form-group">
                         <label>Nuevo PIN</label>
-                        <input type="password" id="setting-new-pin" class="form-input" placeholder="Nuevo PIN (mínimo 4 dígitos)">
+                        <input type="password" id="setting-new-pin" class="form-input" placeholder="Nuevo PIN (minimo 4 digitos)">
                     </div>
                     <div class="form-group">
                         <label>Confirmar Nuevo PIN</label>
@@ -966,37 +891,89 @@ const Settings = {
 
                 <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light);">
                     <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
-                        <i class="fas fa-building"></i> Código de Acceso de Empresa
+                        <i class="fas fa-lock"></i> Politica de PIN
                     </h3>
                     <p style="font-size: 11px; color: var(--color-text-secondary); margin-bottom: var(--spacing-sm);">
-                        Este código se solicita antes del login. Solo usuarios autorizados pueden acceder al sistema.
+                        Reglas que aplican a TODOS los PINs locales del sistema.
                     </p>
-                    <div style="padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm); border-left: 3px solid var(--color-warning, #f59e0b); font-size: 11px; line-height: 1.5; margin-bottom: var(--spacing-sm);">
-                        <strong><i class="fas fa-info-circle"></i> El codigo se gestiona en el servidor</strong><br>
-                        Por seguridad, el codigo de acceso vive en una variable de entorno del backend
-                        (<code>COMPANY_ACCESS_CODE</code> en Railway) y no se puede cambiar desde aqui.
-                        Para cambiarlo, actualiza la variable en Railway y haz redeploy.
+                    <div class="form-group">
+                        <label>Longitud Minima de PIN</label>
+                        <input type="number" id="setting-pin-min-length" class="form-input" value="4" min="4" max="8">
                     </div>
-                    <button class="btn-secondary btn-sm" onclick="window.Settings.clearCompanyCodeCache()" style="width: 100%;">
-                        <i class="fas fa-trash"></i> Limpiar Codigos Guardados (forzar revalidacion)
+                    <div class="form-group">
+                        <label>Intentos Maximos de Login (local)</label>
+                        <input type="number" id="setting-max-login-attempts" class="form-input" value="5" min="3" max="10">
+                    </div>
+                    <div class="form-group">
+                        <label>Tiempo de Bloqueo (minutos)</label>
+                        <input type="number" id="setting-lockout-time" class="form-input" value="15" min="5" max="60">
+                    </div>
+                    <button class="btn-primary btn-sm" onclick="window.Settings.saveSecuritySettings()" style="width: 100%; margin-top: var(--spacing-xs);">
+                        Guardar Politica
                     </button>
                 </div>
             </div>
         `;
     },
 
-    getSystemTab() {
-        // NOTA: Antes habia DOS getSystemTab() en este archivo. La segunda
-        // sobreescribia la primera (JS conserva la ultima definicion en un
-        // objeto literal), asi que el modulo de Sistema mostraba SOLO Server
-        // URL + Backups + Migracion y se perdian Base de Datos, Verificaciones,
-        // Historial e Info. Ahora todo esta unificado en una sola funcion.
+    getSecurityPermissionsTab() {
+        const canManage = typeof PermissionManager !== 'undefined' && PermissionManager.hasPermission('settings.manage_permissions');
+        const canAudit = typeof PermissionManager !== 'undefined' && PermissionManager.hasPermission('settings.view_audit');
         return `
-            <div style="display: grid; gap: var(--spacing-md);">
-                <!-- Configuración del Servidor -->
+            <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light); max-width: 600px;">
+                <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+                    <i class="fas fa-user-shield"></i> Permisos y Auditoria
+                </h3>
+                <p style="font-size: 11px; color: var(--color-text-secondary); margin-bottom: var(--spacing-sm);">
+                    Gestiona los permisos del sistema y revisa el log de cambios.
+                </p>
+                ${canManage ? `
+                    <button class="btn-secondary btn-sm" onclick="window.Settings.managePermissions()" style="width: 100%; margin-bottom: var(--spacing-xs);">
+                        <i class="fas fa-users-cog"></i> Gestionar Permisos
+                    </button>
+                ` : `
+                    <div style="padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm); font-size: 11px; color: var(--color-text-secondary); margin-bottom: var(--spacing-xs);">
+                        No tienes permiso para gestionar permisos.
+                    </div>
+                `}
+                ${canAudit ? `
+                    <button class="btn-secondary btn-sm" onclick="window.Settings.viewAuditLog()" style="width: 100%;">
+                        <i class="fas fa-history"></i> Ver Log de Auditoria
+                    </button>
+                ` : ''}
+            </div>
+        `;
+    },
+
+    getSecurityCompanyCodeTab() {
+        return `
+            <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light); max-width: 600px;">
+                <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+                    <i class="fas fa-building"></i> Codigo de Acceso de Empresa
+                </h3>
+                <p style="font-size: 11px; color: var(--color-text-secondary); margin-bottom: var(--spacing-sm);">
+                    Este codigo se solicita antes del login. Solo usuarios autorizados pueden acceder al sistema.
+                </p>
+                <div style="padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm); border-left: 3px solid var(--color-warning, #f59e0b); font-size: 11px; line-height: 1.5; margin-bottom: var(--spacing-sm);">
+                    <strong><i class="fas fa-info-circle"></i> El codigo se gestiona en el servidor</strong><br>
+                    Por seguridad, el codigo de acceso vive en una variable de entorno del backend
+                    (<code>COMPANY_ACCESS_CODE</code> en Railway) y no se puede cambiar desde aqui.
+                    Para cambiarlo, actualiza la variable en Railway y haz redeploy.
+                </div>
+                <button class="btn-secondary btn-sm" onclick="window.Settings.clearCompanyCodeCache()" style="width: 100%;">
+                    <i class="fas fa-trash"></i> Limpiar Codigos Guardados (forzar revalidacion)
+                </button>
+            </div>
+        `;
+    },
+
+    // Sub-tab: Servidor (URL + estado de sincronizacion)
+    getSystemServerTab() {
+        return `
+            <div style="display: grid; gap: var(--spacing-md); max-width: 800px;">
                 <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light);">
                     <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
-                        <i class="fas fa-server"></i> Configuración del Servidor
+                        <i class="fas fa-server"></i> Configuracion del Servidor
                     </h3>
                     <div class="form-group">
                         <label>URL del Servidor Railway</label>
@@ -1016,92 +993,37 @@ const Settings = {
                         </div>
                     </div>
                 </div>
-            </div>
-
-            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--spacing-md); margin-top: var(--spacing-md);">
-                <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light);">
-                    <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
-                        <i class="fas fa-database"></i> Base de Datos
-                    </h3>
-                    <div id="db-stats" style="padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm); margin-bottom: var(--spacing-sm); font-size: 11px;">
-                        <div>Cargando estadísticas...</div>
-                    </div>
-                    <button class="btn-secondary btn-sm" onclick="window.Settings.exportDatabase()" style="width: 100%; margin-bottom: var(--spacing-xs);">
-                        <i class="fas fa-download"></i> Exportar DB
-                    </button>
-                    <button class="btn-secondary btn-sm" onclick="window.Settings.importDatabase()" style="width: 100%; margin-bottom: var(--spacing-xs);">
-                        <i class="fas fa-upload"></i> Importar DB
-                    </button>
-                    <button class="btn-primary btn-sm" onclick="window.Settings.loadDemoData()" style="width: 100%; margin-bottom: var(--spacing-xs); background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; font-weight: 600; border: none;">
-                        <i class="fas fa-database"></i> Cargar 20 Datos Demo
-                    </button>
-                    <button class="btn-danger btn-sm" onclick="window.Settings.clearMockData()" style="width: 100%; margin-bottom: var(--spacing-xs);">
-                        <i class="fas fa-broom"></i> Limpiar Datos Mock (Solo Usuarios)
-                    </button>
-                    <button class="btn-danger btn-sm" onclick="window.Settings.clearDatabase()" style="width: 100%;">
-                        <i class="fas fa-trash"></i> Limpiar DB Completa (Cuidado!)
-                    </button>
-                </div>
 
                 <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light);">
                     <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
-                        <i class="fas fa-check-circle"></i> Verificaciones y Validaciones
+                        <i class="fas fa-sync-alt"></i> Estado de Sincronizacion
                     </h3>
-                    <div style="display: flex; flex-direction: column; gap: var(--spacing-xs);">
-                        <button class="btn-primary btn-sm" onclick="window.Settings.verifySettings()" style="width: 100%;">
-                            <i class="fas fa-cog"></i> Verificar Configuraciones
-                        </button>
-                        <button class="btn-secondary btn-sm" onclick="window.Settings.verifyCatalogs('all')" style="width: 100%;">
-                            <i class="fas fa-book"></i> Verificar Todos los Catálogos
-                        </button>
-                        <button class="btn-secondary btn-sm" onclick="window.Settings.verifyCatalogs('agencies')" style="width: 100%;">
-                            <i class="fas fa-building"></i> Verificar Agencias
-                        </button>
-                        <button class="btn-secondary btn-sm" onclick="window.Settings.verifyCatalogs('sellers')" style="width: 100%;">
-                            <i class="fas fa-user-tie"></i> Verificar Vendedores
-                        </button>
-                        <button class="btn-secondary btn-sm" onclick="window.Settings.verifyCatalogs('guides')" style="width: 100%;">
-                            <i class="fas fa-user-shield"></i> Verificar Guías
-                        </button>
-                        <button class="btn-secondary btn-sm" onclick="window.Settings.verifyCatalogs('branches')" style="width: 100%;">
-                            <i class="fas fa-map-marker-alt"></i> Verificar Sucursales
-                        </button>
-                        <button class="btn-primary btn-sm" onclick="window.Settings.validateMultiBranchSystem()" style="width: 100%; margin-top: var(--spacing-xs); background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; font-weight: 600; border: none;">
-                            <i class="fas fa-check-double"></i> Validar Sistema Multisucursal
-                        </button>
+                    <div id="sync-status-info" style="padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm); font-size: 11px; margin-bottom: var(--spacing-sm);">
+                        <div style="color: var(--color-text-secondary);">
+                            <i class="fas fa-circle-notch fa-spin"></i> Cargando...
+                        </div>
                     </div>
-                </div>
-
-                <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light);">
-                    <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
-                        <i class="fas fa-history"></i> Historial de Configuración
-                    </h3>
-                    <div id="settings-history" style="max-height: 300px; overflow-y: auto; padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm); font-size: 11px;">
-                        Cargando historial...
+                    <div style="display: flex; align-items: center; justify-content: space-between; padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm); margin-bottom: var(--spacing-sm);">
+                        <span style="font-weight: 600; font-size: 11px;">
+                            <i class="fas fa-list"></i> Elementos pendientes
+                        </span>
+                        <span id="sync-queue-count" style="font-size: 16px; font-weight: 700; color: var(--color-primary);">0</span>
                     </div>
-                    <button class="btn-secondary btn-sm" onclick="window.Settings.loadSettingsHistory()" style="width: 100%; margin-top: var(--spacing-xs);">
-                        <i class="fas fa-sync"></i> Actualizar
-                    </button>
-                </div>
-
-                <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light);">
-                    <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
-                        <i class="fas fa-info-circle"></i> Información del Sistema
-                    </h3>
-                    <div id="system-info" style="padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm); font-size: 11px;">
-                        <div>Cargando información...</div>
-                    </div>
-                    <button class="btn-secondary btn-sm" onclick="window.Settings.loadSystemInfo()" style="width: 100%; margin-top: var(--spacing-xs);">
-                        <i class="fas fa-sync"></i> Actualizar
+                    <button class="btn-primary btn-sm" onclick="if(typeof window.SyncManager !== 'undefined') window.SyncManager.syncPending(); else Utils.showNotification('SyncManager no disponible', 'error');" style="width: 100%;">
+                        <i class="fas fa-sync-alt"></i> Sincronizar Ahora
                     </button>
                 </div>
             </div>
+        `;
+    },
 
-            <!-- Gestión de Backups (full width) -->
-            <div class="module" style="margin-top: var(--spacing-md); padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light);">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-md);">
+    // Sub-tab: Backups (gestion de respaldos)
+    getSystemBackupsTab() {
+        return `
+            <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light); max-width: 900px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-md); flex-wrap: wrap; gap: var(--spacing-xs);">
                     <h3 style="margin: 0; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
-                        <i class="fas fa-database"></i> Gestión de Backups
+                        <i class="fas fa-database"></i> Gestion de Backups
                     </h3>
                     <div style="display: flex; gap: var(--spacing-xs);">
                         <button class="btn-primary btn-sm" id="backup-create-btn">
@@ -1113,9 +1035,9 @@ const Settings = {
                     </div>
                 </div>
                 <div style="margin-bottom: var(--spacing-md); padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm); font-size: 11px; color: var(--color-text-secondary);">
-                    <i class="fas fa-info-circle"></i> Los backups se crean automáticamente cada 5 minutos.
+                    <i class="fas fa-info-circle"></i> Los backups se crean automaticamente cada 5 minutos.
                     <div id="backup-directory-info" style="margin-top: var(--spacing-xs); padding-top: var(--spacing-xs); border-top: 1px solid var(--color-border-light);">
-                        <i class="fas fa-folder"></i> <span id="backup-directory-path">No hay carpeta seleccionada (los backups se guardarán solo en localStorage)</span>
+                        <i class="fas fa-folder"></i> <span id="backup-directory-path">No hay carpeta seleccionada (los backups se guardaran solo en localStorage)</span>
                     </div>
                 </div>
                 <div style="margin-bottom: var(--spacing-md); display: flex; gap: var(--spacing-xs);">
@@ -1132,23 +1054,49 @@ const Settings = {
                     </div>
                 </div>
                 <div id="backup-storage-info" style="margin-top: var(--spacing-md); padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm); font-size: 10px; color: var(--color-text-secondary);">
-                    <i class="fas fa-hdd"></i> <span id="backup-storage-text">Cargando información...</span>
+                    <i class="fas fa-hdd"></i> <span id="backup-storage-text">Cargando informacion...</span>
                 </div>
             </div>
+        `;
+    },
 
-            <!-- Migración de datos históricos -->
-            <div class="module" style="margin-top: var(--spacing-md); padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light);">
-                <h3 style="margin: 0 0 var(--spacing-sm); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
-                    <i class="fas fa-tools"></i> Migración de Datos
-                </h3>
-                <p style="font-size: 11px; color: var(--color-text-secondary); margin-bottom: var(--spacing-sm);">
-                    Rellena costo de mercancía y comisiones en ventas antiguas que no los tienen. Ejecutar una sola vez si el dashboard muestra $0 en Costo Mercancía o Comisiones.
-                </p>
-                <button class="btn-secondary btn-sm" id="migration-backfill-sale-items-btn">
-                    <i class="fas fa-sync-alt"></i> Rellenar costos y comisiones en ventas
-                </button>
+    // Sub-tab: Informacion (estadisticas DB + datos del sistema + export/import seguro)
+    getSystemInfoTab() {
+        return `
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--spacing-md); max-width: 1000px;">
+                <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light);">
+                    <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+                        <i class="fas fa-database"></i> Base de Datos Local
+                    </h3>
+                    <div id="db-stats" style="padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm); margin-bottom: var(--spacing-sm); font-size: 11px;">
+                        <div>Cargando estadisticas...</div>
+                    </div>
+                    <button class="btn-secondary btn-sm" onclick="window.Settings.exportDatabase()" style="width: 100%; margin-bottom: var(--spacing-xs);">
+                        <i class="fas fa-download"></i> Exportar BD (JSON)
+                    </button>
+                    <button class="btn-secondary btn-sm" onclick="window.Settings.importDatabase()" style="width: 100%;">
+                        <i class="fas fa-upload"></i> Importar BD (JSON)
+                    </button>
+                </div>
+
+                <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light);">
+                    <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+                        <i class="fas fa-info-circle"></i> Informacion del Sistema
+                    </h3>
+                    <div id="system-info" style="padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm); font-size: 11px;">
+                        <div>Cargando informacion...</div>
+                    </div>
+                    <button class="btn-secondary btn-sm" onclick="window.Settings.loadSystemInfo()" style="width: 100%; margin-top: var(--spacing-xs);">
+                        <i class="fas fa-sync"></i> Actualizar
+                    </button>
+                </div>
             </div>
         `;
+    },
+
+    // Wrapper para compat con codigo viejo: redirige al sub-tab por defecto.
+    getSystemTab() {
+        return this.getSystemServerTab();
     },
 
     async loadSettings() {
