@@ -1189,7 +1189,7 @@ const Dashboard = {
                 <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin-top: 4px;">
                     ${data.branchBreakdown.map(b => `
                         <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:12px;">
-                            <div style="font-size:12px;font-weight:700;color:var(--color-primary);margin-bottom:6px;">${b.branch.name}</div>
+                            <div style="font-size:12px;font-weight:700;color:var(--color-primary);margin-bottom:6px;">${Utils.escapeHtml(b.branch.name)}</div>
                             <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:2px;">Hoy: <strong style="color:var(--color-text)">${Utils.formatCurrency(b.todaySales)}</strong> (${b.todayTickets})</div>
                             <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:2px;">Mes: <strong style="color:var(--color-text)">${Utils.formatCurrency(b.monthSales)}</strong></div>
                             <div style="font-size:11px;color:var(--color-text-tertiary);">PAX: ${b.todayPassengers}</div>
@@ -1401,7 +1401,7 @@ const Dashboard = {
                                 <div class="db-rank-item">
                                     <div class="db-rank-num" style="color:${idx===0?'#C9A14A':idx===1?'#9BA3B0':idx===2?'#CD7F32':'var(--color-text-tertiary)'}">${idx+1}</div>
                                     <div class="db-rank-info">
-                                        <div class="db-rank-name">${seller.name}</div>
+                                        <div class="db-rank-name">${Utils.escapeHtml(seller.name)}</div>
                                         <div class="db-rank-bar-track">
                                             <div class="db-rank-bar-fill" style="width:${width}%"></div>
                                         </div>
@@ -1428,7 +1428,7 @@ const Dashboard = {
                                 <div class="db-rank-item">
                                     <div class="db-rank-num" style="color:${idx===0?'#C9A14A':idx===1?'#9BA3B0':idx===2?'#CD7F32':'var(--color-text-tertiary)'}">${idx+1}</div>
                                     <div class="db-rank-info">
-                                        <div class="db-rank-name">${product.name}</div>
+                                        <div class="db-rank-name">${Utils.escapeHtml(product.name)}</div>
                                         <div class="db-rank-bar-track">
                                             <div class="db-rank-bar-fill db-rank-bar-fill--alt" style="width:${width}%"></div>
                                         </div>
@@ -1487,7 +1487,7 @@ const Dashboard = {
                                     <div class="db-rank-item">
                                         <div class="db-rank-num" style="color:${idx===0?'#C9A14A':idx===1?'#9BA3B0':'var(--color-text-tertiary)'}">${idx+1}</div>
                                         <div class="db-rank-info">
-                                            <div class="db-rank-name">${supplier.code ? supplier.code + ' · ' : ''}${supplier.name || 'Sin nombre'}</div>
+                                            <div class="db-rank-name">${supplier.code ? Utils.escapeHtml(supplier.code) + ' · ' : ''}${Utils.escapeHtml(supplier.name || 'Sin nombre')}</div>
                                             <div class="db-rank-bar-track">
                                                 <div class="db-rank-bar-fill db-rank-bar-fill--alt" style="width:${width}%"></div>
                                             </div>

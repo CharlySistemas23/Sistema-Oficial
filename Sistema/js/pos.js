@@ -1539,14 +1539,14 @@ Object.assign(POS, {
             <div class="pos-cart-item-advanced" data-item-id="${item.id}">
                 <div class="pos-cart-item-main">
                     <div class="pos-cart-item-image">
-                        ${item.photo ? 
-                            `<img src="${item.photo}" alt="${item.name}">` :
+                        ${item.photo ?
+                            `<img src="${Utils.escapeHtml(item.photo)}" alt="${Utils.escapeHtml(item.name)}">` :
                             `<div class="pos-cart-item-image-placeholder"><i class="fas fa-gem"></i></div>`
                         }
                         </div>
                     <div class="pos-cart-item-info">
-                        <div class="pos-cart-item-name">${item.name || 'Sin nombre'}</div>
-                        <div class="pos-cart-item-sku">${item.sku || item.barcode || 'N/A'}</div>
+                        <div class="pos-cart-item-name">${Utils.escapeHtml(item.name || 'Sin nombre')}</div>
+                        <div class="pos-cart-item-sku">${Utils.escapeHtml(item.sku || item.barcode || 'N/A')}</div>
                         <div class="pos-cart-item-price-row">
                             <div class="pos-cart-item-qty">
                         <button onclick="window.POS.updateQuantity('${item.id}', ${item.quantity - 1})">-</button>
@@ -2608,7 +2608,7 @@ Object.assign(POS, {
                             </strong>
                         </div>
                         <div style="font-size: 12px; color: var(--color-text-secondary); margin-bottom: 12px;">
-                            ${sale.cart.map(item => item.name || item.sku).join(', ')}
+                            ${Utils.escapeHtml(sale.cart.map(item => item.name || item.sku).join(', '))}
                         </div>
                         <div style="display: flex; gap: 8px;">
                             <button class="btn-primary btn-sm" onclick="window.POS.resumeSale('${sale.id}')">
@@ -2687,11 +2687,11 @@ Object.assign(POS, {
                             <div style="padding: 16px; background: var(--color-bg-secondary); border-radius: 8px; margin-bottom: 12px; border: 1px solid var(--color-border-light);">
                                 <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
                                     <div>
-                                        <strong style="color: var(--color-primary);">${sale.folio || 'Sin folio'}</strong>
+                                        <strong style="color: var(--color-primary);">${Utils.escapeHtml(sale.folio || 'Sin folio')}</strong>
                                         <div style="font-size: 11px; color: var(--color-text-secondary); margin-top: 4px;">
                                             ${Utils.formatDate(sale.created_at, 'DD/MM/YYYY HH:mm')}
                                         </div>
-                                        ${branch ? `<div style="font-size: 11px; color: var(--color-text-secondary);">${branch.name}</div>` : ''}
+                                        ${branch ? `<div style="font-size: 11px; color: var(--color-text-secondary);">${Utils.escapeHtml(branch.name)}</div>` : ''}
                                     </div>
                                     <strong style="color: var(--color-primary); font-size: 18px;">
                                         ${Utils.formatCurrency(sale.total || 0)}
@@ -2699,13 +2699,13 @@ Object.assign(POS, {
                                 </div>
                                 <div style="font-size: 12px; color: var(--color-text-secondary); margin-bottom: 8px;">
                                     <div><strong>Productos:</strong> ${cartItems.length} item${cartItems.length !== 1 ? 's' : ''}</div>
-                                    ${seller ? `<div><strong>Vendedor:</strong> ${seller.name}</div>` : ''}
-                                    ${guide ? `<div><strong>Guía:</strong> ${guide.name}</div>` : ''}
-                                    ${agency ? `<div><strong>Agencia:</strong> ${agency.name}</div>` : ''}
+                                    ${seller ? `<div><strong>Vendedor:</strong> ${Utils.escapeHtml(seller.name)}</div>` : ''}
+                                    ${guide ? `<div><strong>Guía:</strong> ${Utils.escapeHtml(guide.name)}</div>` : ''}
+                                    ${agency ? `<div><strong>Agencia:</strong> ${Utils.escapeHtml(agency.name)}</div>` : ''}
                                 </div>
                                 ${cartItems.length > 0 ? `
                                     <div style="font-size: 11px; color: var(--color-text-secondary); margin-bottom: 12px; max-height: 60px; overflow-y: auto;">
-                                        ${cartItems.slice(0, 3).map(item => `${item.name || item.sku} (${item.quantity}x)`).join(', ')}
+                                        ${Utils.escapeHtml(cartItems.slice(0, 3).map(item => `${item.name || item.sku} (${item.quantity}x)`).join(', '))}
                                         ${cartItems.length > 3 ? `... y ${cartItems.length - 3} más` : ''}
                                     </div>
                                 ` : ''}
@@ -2930,8 +2930,8 @@ Object.assign(POS, {
                         <div style="padding: 12px; background: var(--color-bg-secondary); border-radius: 8px; text-align: center; cursor: pointer; border: 1px solid var(--color-border-light); transition: all 0.2s;"
                              onclick="window.POS.selectProduct('${item.id}'); UI.closeModal();">
                             <div style="font-size: 32px; margin-bottom: 8px; color: var(--color-primary);"><i class="fas fa-gem"></i></div>
-                            <div style="font-size: 12px; font-weight: 600; margin-bottom: 4px;">${item.name || 'Sin nombre'}</div>
-                            <div style="font-size: 10px; color: var(--color-text-secondary);">${item.sku || 'N/A'}</div>
+                            <div style="font-size: 12px; font-weight: 600; margin-bottom: 4px;">${Utils.escapeHtml(item.name || 'Sin nombre')}</div>
+                            <div style="font-size: 10px; color: var(--color-text-secondary);">${Utils.escapeHtml(item.sku || 'N/A')}</div>
                             <div style="font-size: 14px; font-weight: 700; color: var(--color-primary); margin-top: 8px;">
                                 ${Utils.formatCurrency((parseFloat(item.sale_price) || parseFloat(item.price) || parseFloat(item.cost)) || 0)}
                             </div>
@@ -2975,22 +2975,22 @@ Object.assign(POS, {
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
                         <div>
                             <div style="width: 100%; height: 250px; background: var(--color-bg-secondary); border-radius: 12px; display: flex; align-items: center; justify-content: center; overflow: hidden;">
-                                ${photo ? 
-                                    `<img src="${photo}" style="width: 100%; height: 100%; object-fit: cover;">` :
+                                ${photo ?
+                                    `<img src="${Utils.escapeHtml(photo)}" style="width: 100%; height: 100%; object-fit: cover;">` :
                                     `<i class="fas fa-gem" style="font-size: 72px; color: var(--color-primary);"></i>`
                                 }
                             </div>
                         </div>
                         <div>
-                            <h3 style="font-size: 20px; margin-bottom: 8px;">${item.name || 'Sin nombre'}</h3>
-                            <p style="color: var(--color-text-secondary); font-family: monospace; margin-bottom: 16px;">${item.sku || item.barcode || 'N/A'}</p>
-                            
+                            <h3 style="font-size: 20px; margin-bottom: 8px;">${Utils.escapeHtml(item.name || 'Sin nombre')}</h3>
+                            <p style="color: var(--color-text-secondary); font-family: monospace; margin-bottom: 16px;">${Utils.escapeHtml(item.sku || item.barcode || 'N/A')}</p>
+
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 24px;">
-                                ${item.metal ? `<div><strong>Metal:</strong><br>${item.metal}</div>` : ''}
-                                ${item.stone ? `<div><strong>Piedra:</strong><br>${item.stone}</div>` : ''}
-                                ${item.weight_g ? `<div><strong>Peso:</strong><br>${item.weight_g}g</div>` : ''}
-                                ${item.size ? `<div><strong>Talla:</strong><br>${item.size}</div>` : ''}
-                                ${item.measures ? `<div><strong>Medidas:</strong><br>${item.measures}</div>` : ''}
+                                ${item.metal ? `<div><strong>Metal:</strong><br>${Utils.escapeHtml(item.metal)}</div>` : ''}
+                                ${item.stone ? `<div><strong>Piedra:</strong><br>${Utils.escapeHtml(item.stone)}</div>` : ''}
+                                ${item.weight_g ? `<div><strong>Peso:</strong><br>${Utils.escapeHtml(item.weight_g)}g</div>` : ''}
+                                ${item.size ? `<div><strong>Talla:</strong><br>${Utils.escapeHtml(item.size)}</div>` : ''}
+                                ${item.measures ? `<div><strong>Medidas:</strong><br>${Utils.escapeHtml(item.measures)}</div>` : ''}
                                 ${item.certificate ? `<div><strong>Certificado:</strong><br><span style="color: #22c55e;">✓ Sí</span></div>` : ''}
                             </div>
                             
@@ -3228,9 +3228,9 @@ Object.assign(POS, {
         const body = customers.map(c => `
             <div style="padding: 12px; border-bottom: 1px solid var(--color-border-light); cursor: pointer;"
                  onclick="window.POS.selectCustomer('${c.id}'); UI.closeModal();">
-                <strong>${c.name}</strong>
-                ${c.phone ? `<br><small>${c.phone}</small>` : ''}
-                ${c.email ? `<br><small>${c.email}</small>` : ''}
+                <strong>${Utils.escapeHtml(c.name)}</strong>
+                ${c.phone ? `<br><small>${Utils.escapeHtml(c.phone)}</small>` : ''}
+                ${c.email ? `<br><small>${Utils.escapeHtml(c.email)}</small>` : ''}
             </div>
         `).join('');
 
@@ -3436,11 +3436,11 @@ Object.assign(POS, {
                                 const saleIsToday = isToday(sale.created_at);
                                 return `
                                     <tr>
-                                        <td><strong>${sale.folio}</strong></td>
+                                        <td><strong>${Utils.escapeHtml(sale.folio)}</strong></td>
                                         <td>${Utils.formatDate(sale.created_at, 'DD/MM/YYYY HH:mm')}</td>
-                                        ${isMasterAdmin ? `<td>${branch?.name || 'N/A'}</td>` : ''}
+                                        ${isMasterAdmin ? `<td>${Utils.escapeHtml(branch?.name || 'N/A')}</td>` : ''}
                                         <td>${Utils.formatCurrency(sale.total)}</td>
-                                        <td><span class="status-badge status-${saleStatus}">${saleStatus}</span></td>
+                                        <td><span class="status-badge status-${saleStatus}">${Utils.escapeHtml(saleStatus)}</span></td>
                                         <td style="white-space: nowrap;">
                                             <button class="btn-secondary btn-xs" onclick="window.POS.viewSale('${sale.id}')" title="Ver detalles">
                                                 <i class="fas fa-eye"></i>
@@ -3520,7 +3520,7 @@ Object.assign(POS, {
                     <div style="max-height: 150px; overflow-y: auto;">
                         ${inventoryItems.map(item => `
                             <div style="display: flex; justify-content: space-between; padding: 8px; background: var(--color-bg-secondary); border-radius: 4px; margin-bottom: 4px;">
-                                <span>${item.inventory?.name || 'N/A'} x${item.quantity}</span>
+                                <span>${Utils.escapeHtml(item.inventory?.name || 'N/A')} x${item.quantity}</span>
                                 <span>${Utils.formatCurrency(item.subtotal)}</span>
                             </div>
                         `).join('')}
@@ -3911,8 +3911,8 @@ Object.assign(POS, {
             <div class="pos-cart-item-advanced" data-item-id="${item.id}" style="margin-bottom: 12px; padding: 12px; background: var(--color-bg-card); border-radius: 8px; border: 1px solid var(--color-border-light);">
                 <div style="display: flex; justify-content: space-between; align-items: start;">
                     <div style="flex: 1;">
-                        <div style="font-weight: 600; margin-bottom: 4px;">${item.name}</div>
-                        <div style="font-size: 12px; color: var(--color-text-secondary);">${item.sku}</div>
+                        <div style="font-weight: 600; margin-bottom: 4px;">${Utils.escapeHtml(item.name)}</div>
+                        <div style="font-size: 12px; color: var(--color-text-secondary);">${Utils.escapeHtml(item.sku)}</div>
                     </div>
                     <button class="btn-danger btn-xs" onclick="window.POS.removeItemFromEditSale('${item.id}')" title="Eliminar">
                         <i class="fas fa-trash"></i>
@@ -4037,7 +4037,7 @@ Object.assign(POS, {
         
         const itemsList = availableItems.slice(0, 50).map(item => {
             const inCart = window._editingSale.cart.find(c => c.id === item.id);
-            return `<option value="${item.id}" ${inCart ? 'disabled' : ''}>${item.name} (${item.sku}) ${inCart ? '- Ya en carrito' : ''}</option>`;
+            return `<option value="${item.id}" ${inCart ? 'disabled' : ''}>${Utils.escapeHtml(item.name)} (${Utils.escapeHtml(item.sku)}) ${inCart ? '- Ya en carrito' : ''}</option>`;
         }).join('');
         
         const selectedItemId = await Utils.select('Seleccionar producto:', availableItems.filter(item => !window._editingSale.cart.find(c => c.id === item.id)).map(item => ({

@@ -623,12 +623,12 @@ const Employees = {
                             const branch = branches.find(b => b.id === emp.branch_id);
                             return `
                                 <tr data-employee-id="${emp.id}" data-employee-active="${emp.active}" data-employee-role="${emp.role || ''}" data-branch-id="${emp.branch_id || ''}">
-                                    <td><strong>${emp.name}</strong></td>
-                                    <td><span class="status-badge" style="background: ${emp.role === 'admin' ? '#d32f2f' : emp.role === 'manager' ? '#1976d2' : '#388e3c'}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px;">${emp.role || 'N/A'}</span></td>
-                                    <td>${branch?.name || 'N/A'}</td>
+                                    <td><strong>${Utils.escapeHtml(emp.name)}</strong></td>
+                                    <td><span class="status-badge" style="background: ${emp.role === 'admin' ? '#d32f2f' : emp.role === 'manager' ? '#1976d2' : '#388e3c'}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px;">${Utils.escapeHtml(emp.role || 'N/A')}</span></td>
+                                    <td>${Utils.escapeHtml(branch?.name || 'N/A')}</td>
                                     <td style="text-align: center;"><strong>${emp.salesCount || 0}</strong></td>
                                     <td style="font-weight: 600;">${Utils.formatCurrency(emp.totalSales || 0)}</td>
-                                    <td><small style="font-family: monospace; color: var(--color-text-secondary);">${emp.barcode || 'N/A'}</small></td>
+                                    <td><small style="font-family: monospace; color: var(--color-text-secondary);">${Utils.escapeHtml(emp.barcode || 'N/A')}</small></td>
                                     <td><span class="status-badge status-${emp.active ? 'disponible' : 'vendida'}">${emp.active ? 'Activo' : 'Inactivo'}</span></td>
                                     <td style="white-space: nowrap;">
                                         <button class="btn-secondary btn-sm" onclick="window.Employees.editEmployee('${emp.id}')" title="Editar">
@@ -759,12 +759,12 @@ const Employees = {
             
             return `
                 <tr data-employee-id="${emp.id}" data-employee-active="${emp.active}" data-employee-role="${emp.role || ''}" data-branch-id="${emp.branch_id || ''}">
-                    <td><strong>${emp.name}</strong></td>
-                    <td><span class="status-badge" style="background: ${emp.role === 'admin' ? '#d32f2f' : emp.role === 'manager' ? '#1976d2' : '#388e3c'}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px;">${emp.role || 'N/A'}</span></td>
-                    <td>${branchDisplay}</td>
+                    <td><strong>${Utils.escapeHtml(emp.name)}</strong></td>
+                    <td><span class="status-badge" style="background: ${emp.role === 'admin' ? '#d32f2f' : emp.role === 'manager' ? '#1976d2' : '#388e3c'}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px;">${Utils.escapeHtml(emp.role || 'N/A')}</span></td>
+                    <td>${Utils.escapeHtml(branchDisplay)}</td>
                     <td style="text-align: center;"><strong>${emp.salesCount || 0}</strong></td>
                     <td style="font-weight: 600;">${Utils.formatCurrency(emp.totalSales || 0)}</td>
-                    <td><small style="font-family: monospace; color: var(--color-text-secondary);">${emp.barcode || 'N/A'}</small></td>
+                    <td><small style="font-family: monospace; color: var(--color-text-secondary);">${Utils.escapeHtml(emp.barcode || 'N/A')}</small></td>
                     <td><span class="status-badge status-${emp.active ? 'disponible' : 'vendida'}">${emp.active ? 'Activo' : 'Inactivo'}</span></td>
                     <td style="white-space: nowrap;">
                         ${typeof PermissionManager !== 'undefined' && PermissionManager.hasPermission('employees.edit') ? `
@@ -854,7 +854,7 @@ const Employees = {
                                     <div style="display: flex; justify-content: space-between; margin-bottom: 4px; min-width: 0;">
                                         <div style="min-width: 0; overflow: hidden; text-overflow: ellipsis;">
                                             <span style="font-weight: 600; color: var(--color-primary); font-size: 10px;">#${idx + 1}</span>
-                                            <span style="margin-left: var(--spacing-xs); font-weight: 600; font-size: 11px;">${emp.name}</span>
+                                            <span style="margin-left: var(--spacing-xs); font-weight: 600; font-size: 11px;">${Utils.escapeHtml(emp.name)}</span>
                                             <div style="font-size: 9px; color: var(--color-text-secondary);">
                                                 ${emp.salesCount} ventas • Prom: ${Utils.formatCurrency(emp.avgSale || 0)}
                                             </div>
@@ -931,7 +931,7 @@ const Employees = {
         
         const body = `
             <div class="dashboard-section">
-                <h3>Estadísticas de ${employee.name}</h3>
+                <h3>Estadísticas de ${Utils.escapeHtml(employee.name)}</h3>
                 <div class="dashboard-grid" style="margin-bottom: var(--spacing-lg);">
                     <div class="kpi-card">
                         <div class="kpi-label">Total Ventas</div>
@@ -1097,10 +1097,10 @@ const Employees = {
                             ${users.map(user => {
                                 const emp = employees.find(e => e.id === user.employee_id);
                                 return `
-                                    <tr data-user-id="${user.id}" data-user-active="${user.active}" data-user-role="${user.role || ''}" data-username="${user.username?.toLowerCase() || ''}" data-employee-name="${emp?.name?.toLowerCase() || ''}">
-                                        <td><strong>${user.username}</strong></td>
-                                        <td>${emp?.name || '<span style="color: var(--color-danger);">Sin empleado</span>'}</td>
-                                        <td><span class="status-badge" style="background: ${user.role === 'admin' ? '#d32f2f' : user.role === 'manager' ? '#1976d2' : '#388e3c'}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px;">${user.role || 'N/A'}</span></td>
+                                    <tr data-user-id="${user.id}" data-user-active="${user.active}" data-user-role="${user.role || ''}" data-username="${Utils.escapeHtml(user.username?.toLowerCase() || '')}" data-employee-name="${Utils.escapeHtml(emp?.name?.toLowerCase() || '')}">
+                                        <td><strong>${Utils.escapeHtml(user.username)}</strong></td>
+                                        <td>${emp?.name ? Utils.escapeHtml(emp.name) : '<span style="color: var(--color-danger);">Sin empleado</span>'}</td>
+                                        <td><span class="status-badge" style="background: ${user.role === 'admin' ? '#d32f2f' : user.role === 'manager' ? '#1976d2' : '#388e3c'}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px;">${Utils.escapeHtml(user.role || 'N/A')}</span></td>
                                         <td><small>${user.permissions?.length || 0} permiso${user.permissions?.length !== 1 ? 's' : ''}</small></td>
                                         <td><span class="status-badge status-${user.active ? 'disponible' : 'vendida'}">${user.active ? 'Activo' : 'Inactivo'}</span></td>
                                         <td style="white-space: nowrap;">
@@ -1175,10 +1175,10 @@ const Employees = {
         tbody.innerHTML = filtered.map(user => {
             const emp = employees.find(e => e.id === user.employee_id);
             return `
-                <tr data-user-id="${user.id}" data-user-active="${user.active}" data-user-role="${user.role || ''}" data-username="${user.username?.toLowerCase() || ''}" data-employee-name="${emp?.name?.toLowerCase() || ''}">
-                    <td><strong>${user.username}</strong></td>
-                    <td>${emp?.name || '<span style="color: var(--color-danger);">Sin empleado</span>'}</td>
-                    <td><span class="status-badge" style="background: ${user.role === 'admin' ? '#d32f2f' : user.role === 'manager' ? '#1976d2' : '#388e3c'}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px;">${user.role || 'N/A'}</span></td>
+                <tr data-user-id="${user.id}" data-user-active="${user.active}" data-user-role="${user.role || ''}" data-username="${Utils.escapeHtml(user.username?.toLowerCase() || '')}" data-employee-name="${Utils.escapeHtml(emp?.name?.toLowerCase() || '')}">
+                    <td><strong>${Utils.escapeHtml(user.username)}</strong></td>
+                    <td>${emp?.name ? Utils.escapeHtml(emp.name) : '<span style="color: var(--color-danger);">Sin empleado</span>'}</td>
+                    <td><span class="status-badge" style="background: ${user.role === 'admin' ? '#d32f2f' : user.role === 'manager' ? '#1976d2' : '#388e3c'}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px;">${Utils.escapeHtml(user.role || 'N/A')}</span></td>
                     <td><small>${user.permissions?.length || 0} permiso${user.permissions?.length !== 1 ? 's' : ''}</small></td>
                     <td><span class="status-badge status-${user.active ? 'disponible' : 'vendida'}">${user.active ? 'Activo' : 'Inactivo'}</span></td>
                     <td style="white-space: nowrap;">
@@ -1228,7 +1228,7 @@ const Employees = {
             <form id="employee-form" style="max-width: 600px;">
                 <div class="form-group">
                     <label>Nombre Completo *</label>
-                    <input type="text" id="emp-name" class="form-input" value="${employee?.name || ''}" required 
+                    <input type="text" id="emp-name" class="form-input" value="${Utils.escapeHtml(employee?.name || '')}" required
                         placeholder="Ej: Juan Pérez García" maxlength="100">
                     <small style="color: var(--color-text-secondary); font-size: 10px;">Nombre completo del empleado</small>
                 </div>
@@ -1742,13 +1742,13 @@ const Employees = {
             <form id="user-form">
                 <div class="form-group">
                     <label>Username *</label>
-                    <input type="text" id="user-username" class="form-input" value="${user?.username || ''}" required>
+                    <input type="text" id="user-username" class="form-input" value="${Utils.escapeHtml(user?.username || '')}" required>
                 </div>
                 <div class="form-group">
                     <label>Empleado</label>
                     <select id="user-employee" class="form-select">
                         <option value="">Seleccionar...</option>
-                        ${employees.map(e => `<option value="${e.id}" ${user?.employee_id === e.id ? 'selected' : ''}>${e.name}</option>`).join('')}
+                        ${employees.map(e => `<option value="${e.id}" ${user?.employee_id === e.id ? 'selected' : ''}>${Utils.escapeHtml(e.name)}</option>`).join('')}
                     </select>
                 </div>
                 <div class="form-group">
@@ -2370,9 +2370,9 @@ const Employees = {
                             const barcode = Utils.isBarcodeEmpty(seller.barcode) ? 'Sin código' : seller.barcode;
                             return `
                             <tr>
-                                <td>${seller.name || 'N/A'}</td>
-                                <td>${seller.commission_rule || 'N/A'}</td>
-                                <td>${barcode}</td>
+                                <td>${Utils.escapeHtml(seller.name || 'N/A')}</td>
+                                <td>${Utils.escapeHtml(seller.commission_rule || 'N/A')}</td>
+                                <td>${Utils.escapeHtml(barcode)}</td>
                                 <td>${seller.active !== false ? 'Activo' : 'Inactivo'}</td>
                                 <td>
                                     <button class="btn-secondary btn-sm" data-id="${String(seller.id || '').replace(/"/g, '&quot;')}" onclick="window.Employees.editSeller(this.getAttribute('data-id'))">Editar</button>
