@@ -1,8 +1,16 @@
 import express from 'express';
 import { query } from '../config/database.js';
 import { body, validationResult } from 'express-validator';
+import { authenticateOptional } from '../middleware/authOptional.js';
 
 const router = express.Router();
+
+const requireAuthenticatedUser = (req, res, next) => {
+  if (!req.user || !req.user.id || req.user.isTemporary) {
+    return res.status(401).json({ error: 'Autenticaci├│n requerida' });
+  }
+  next();
+};
 
 // Listar tipos de cambio
 router.get('/', async (req, res) => {
@@ -106,8 +114,8 @@ router.get('/:date', async (req, res) => {
   }
 });
 
-// Crear/actualizar tipo de cambio
-router.post('/', [
+// Crear/actualizar tipo de cambio (requiere auth)
+router.post('/', authenticateOptional, requireAuthenticatedUser, [
   body('date').notEmpty().withMessage('Fecha requerida'),
   body('usd_to_mxn').isNumeric().withMessage('Tipo de cambio USD requerido'),
   body('cad_to_mxn').isNumeric().withMessage('Tipo de cambio CAD requerido')

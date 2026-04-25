@@ -275,22 +275,31 @@ const syncLimiter = rateLimit({
   legacyHeaders: false
 });
 
+// Limiter espec├¡fico para auth (login/verify): generoso pero acotado para evitar abuso.
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: parseInt(process.env.AUTH_RATE_LIMIT_MAX || '600', 10), // 600 req / 15min por IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Demasiados intentos de autenticaci├│n, intenta de nuevo m├ís tarde.'
+});
+
 // No aplicar rate limit a preflight OPTIONS para evitar bloquear CORS
-// Excluir endpoints cr├¡ticos del rate limit (se usan frecuentemente durante inicio)
+// Endpoints cr├¡ticos: tope amplio pero NO ilimitado (evitar abuso por proyectos zombie).
 app.use('/api/', (req, res, next) => {
   if (req.method === 'OPTIONS') return next();
-  
+
   // Endpoints cr├¡ticos de sincronizaci├│n inicial - usar limiter m├ís permisivo
   const syncPaths = ['/branches', '/employees', '/catalogs/', '/exchange-rates'];
   if (syncPaths.some(path => req.path.includes(path))) {
     return syncLimiter(req, res, next);
   }
-  
-  // Endpoints de autenticaci├│n - sin rate limit
-  if (req.path === '/auth/verify' || req.path === '/auth/login') {
-    return next();
+
+  // Endpoints de autenticaci├│n - limiter espec├¡fico (antes no ten├¡an tope)
+  if (req.path === '/auth/verify' || req.path === '/auth/login' || req.path === '/auth/verify-company-code') {
+    return authLimiter(req, res, next);
   }
-  
+
   // Resto de endpoints - usar limiter normal
   return limiter(req, res, next);
 });
