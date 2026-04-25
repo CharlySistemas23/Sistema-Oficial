@@ -588,6 +588,25 @@ const Dashboard = {
                 // Fallback: calcular manualmente si ProfitCalculator no está disponible o falló
                 // En vista consolidada, siempre calcular manualmente para agregar todas las sucursales
                 if (!dailyProfit && (todaySales.length > 0 || viewAllBranches)) {
+                    // Sincronizar cost_entries del backend ANTES de calcular: garantiza que
+                    // este dispositivo ve los costos creados por POS de otros dispositivos.
+                    // Sin esto, el cache local puede estar desactualizado y todo queda en 0.
+                    if (typeof API !== 'undefined' && API.getCosts && (API.token || (typeof localStorage !== 'undefined' && localStorage.getItem('api_token')))) {
+                        try {
+                            const apiCosts = await API.getCosts({
+                                branch_id: viewAllBranches ? null : branchId,
+                                start_date: todayStr,
+                                end_date: todayStr
+                            });
+                            const list = Array.isArray(apiCosts) ? apiCosts : (apiCosts?.data || apiCosts?.costs || []);
+                            for (const c of list) {
+                                if (c && c.id) { try { await DB.put('cost_entries', c); } catch (_) {} }
+                            }
+                        } catch (apiErr) {
+                            console.warn('[Dashboard] sync cost_entries fallo, usando cache local:', apiErr?.message || apiErr);
+                        }
+                    }
+
                     const saleItems = await DB.getAll('sale_items') || [];
                     const allPayments = await DB.getAll('payments') || [];
                     const inventoryItems = await DB.getAll('inventory_items', null, null, { filterByBranch: false, branchIdField: 'branch_id' }) || [];
@@ -595,16 +614,24 @@ const Dashboard = {
                     let commissionsRealTime = 0;
                     let bankCommissionsRealTime = 0;
                     const revenueRealTime = todaySales.reduce((sum, s) => sum + (Utils.getSaleTotal ? Utils.getSaleTotal(s) : (parseFloat(s.total) || 0)), 0);
-                    
+
                     for (const sale of todaySales) {
                         const items = saleItems.filter(si => si.sale_id === sale.id);
                         for (const item of items) {
-                            const unitCost = item.cost != null && item.cost !== '' ? Number(item.cost) : (inventoryItems.find(inv => inv.id === item.item_id)?.cost ?? 0);
+                            // sale_items.cost no existe en el schema real; el unico costo recuperable
+                            // por item es inventory_items.cost. Si tampoco hay, queda 0 y abajo
+                            // usamos cost_entries como fuente alterna.
+                            const unitCost = item.cost != null && item.cost !== ''
+                                ? Number(item.cost)
+                                : (inventoryItems.find(inv => inv.id === item.item_id)?.cost ?? 0);
                             merchandiseCostRealTime += unitCost * (item.quantity || 1);
-                            const commission = item.commission_amount ?? (item.guide_commission || 0) + (item.seller_commission || 0);
-                            if (commission) commissionsRealTime += Number(commission);
+                            // Comisiones: schema real tiene seller_commission + guide_commission separadas.
+                            // commission_amount se conserva por compatibilidad con datasets antiguos.
+                            const fromColumns = parseFloat(item.seller_commission || 0) + parseFloat(item.guide_commission || 0);
+                            const fromLegacy = item.commission_amount != null && item.commission_amount !== '' ? parseFloat(item.commission_amount) : 0;
+                            commissionsRealTime += fromColumns + fromLegacy;
                         }
-                        
+
                         const salePayments = allPayments.filter(p => p.sale_id === sale.id);
                         for (const payment of salePayments) {
                             if (payment.bank_commission) {
@@ -658,13 +685,37 @@ const Dashboard = {
                         
                         // Calcular costos operativos (excluyendo llegadas que ya se contaron; insensible a mayúsculas)
                         operatingCostsRealTime = todayCosts
-                            .filter(c => 
-                                normCat(c.category) !== 'costo_ventas' && 
-                                normCat(c.category) !== 'comisiones' && 
+                            .filter(c =>
+                                normCat(c.category) !== 'costo_ventas' &&
+                                normCat(c.category) !== 'comisiones' &&
                                 normCat(c.category) !== 'comisiones_bancarias' &&
                                 !isArrivalCost(c.category) // Ya se contaron arriba
                             )
                             .reduce((sum, c) => sum + (typeof Utils !== 'undefined' && Utils.parseAmount ? Utils.parseAmount(c.amount) : (parseFloat(c.amount) || 0)), 0);
+
+                        // FALLBACK COGS: si el calculo desde sale_items dio 0, usar cost_entries.costo_ventas
+                        if (merchandiseCostRealTime === 0 && todaySales.length > 0) {
+                            const cogsFromEntries = todayCosts
+                                .filter(c => normCat(c.category) === 'costo_ventas')
+                                .reduce((sum, c) => sum + (typeof Utils !== 'undefined' && Utils.parseAmount ? Utils.parseAmount(c.amount) : (parseFloat(c.amount) || 0)), 0);
+                            if (cogsFromEntries > 0) merchandiseCostRealTime = cogsFromEntries;
+                        }
+
+                        // FALLBACK COMISIONES: si dio 0 desde sale_items, usar cost_entries.comisiones
+                        if (commissionsRealTime === 0 && todaySales.length > 0) {
+                            const commFromEntries = todayCosts
+                                .filter(c => normCat(c.category) === 'comisiones')
+                                .reduce((sum, c) => sum + (typeof Utils !== 'undefined' && Utils.parseAmount ? Utils.parseAmount(c.amount) : (parseFloat(c.amount) || 0)), 0);
+                            if (commFromEntries > 0) commissionsRealTime = commFromEntries;
+                        }
+
+                        // FALLBACK COMISIONES BANCARIAS: si dio 0 desde payments, usar cost_entries.comisiones_bancarias
+                        if (bankCommissionsRealTime === 0 && todaySales.length > 0) {
+                            const bankFromEntries = todayCosts
+                                .filter(c => normCat(c.category) === 'comisiones_bancarias')
+                                .reduce((sum, c) => sum + (typeof Utils !== 'undefined' && Utils.parseAmount ? Utils.parseAmount(c.amount) : (parseFloat(c.amount) || 0)), 0);
+                            if (bankFromEntries > 0) bankCommissionsRealTime = bankFromEntries;
+                        }
                     } else {
                         // Fallback si Costs no está disponible
                         arrivalCostsRealTime = (todayArrivals || []).reduce((sum, a) => sum + (a.arrival_fee || a.calculated_fee || 0), 0);
