@@ -986,8 +986,39 @@ const Settings = {
     },
 
     getSystemTab() {
+        // NOTA: Antes habia DOS getSystemTab() en este archivo. La segunda
+        // sobreescribia la primera (JS conserva la ultima definicion en un
+        // objeto literal), asi que el modulo de Sistema mostraba SOLO Server
+        // URL + Backups + Migracion y se perdian Base de Datos, Verificaciones,
+        // Historial e Info. Ahora todo esta unificado en una sola funcion.
         return `
-            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--spacing-md);">
+            <div style="display: grid; gap: var(--spacing-md);">
+                <!-- Configuración del Servidor -->
+                <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light);">
+                    <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+                        <i class="fas fa-server"></i> Configuración del Servidor
+                    </h3>
+                    <div class="form-group">
+                        <label>URL del Servidor Railway</label>
+                        <div style="display: flex; gap: var(--spacing-xs);">
+                            <input type="text" id="server-url-input" class="form-input" placeholder="https://backend-production-xxxx.up.railway.app" style="flex: 1;">
+                            <button class="btn-primary" id="save-server-url-btn">
+                                <i class="fas fa-save"></i> Guardar
+                            </button>
+                            <button class="btn-secondary" id="test-server-connection-btn">
+                                <i class="fas fa-network-wired"></i> Probar
+                            </button>
+                        </div>
+                    </div>
+                    <div id="server-config-status" style="margin-top: var(--spacing-sm); padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm); font-size: 11px;">
+                        <div style="color: var(--color-text-secondary);">
+                            <i class="fas fa-info-circle"></i> Estado del servidor
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--spacing-md); margin-top: var(--spacing-md);">
                 <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light);">
                     <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
                         <i class="fas fa-database"></i> Base de Datos
@@ -1064,6 +1095,58 @@ const Settings = {
                         <i class="fas fa-sync"></i> Actualizar
                     </button>
                 </div>
+            </div>
+
+            <!-- Gestión de Backups (full width) -->
+            <div class="module" style="margin-top: var(--spacing-md); padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-md);">
+                    <h3 style="margin: 0; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+                        <i class="fas fa-database"></i> Gestión de Backups
+                    </h3>
+                    <div style="display: flex; gap: var(--spacing-xs);">
+                        <button class="btn-primary btn-sm" id="backup-create-btn">
+                            <i class="fas fa-plus"></i> Crear Backup
+                        </button>
+                        <button class="btn-secondary btn-sm" id="backup-import-btn">
+                            <i class="fas fa-upload"></i> Importar Backup
+                        </button>
+                    </div>
+                </div>
+                <div style="margin-bottom: var(--spacing-md); padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm); font-size: 11px; color: var(--color-text-secondary);">
+                    <i class="fas fa-info-circle"></i> Los backups se crean automáticamente cada 5 minutos.
+                    <div id="backup-directory-info" style="margin-top: var(--spacing-xs); padding-top: var(--spacing-xs); border-top: 1px solid var(--color-border-light);">
+                        <i class="fas fa-folder"></i> <span id="backup-directory-path">No hay carpeta seleccionada (los backups se guardarán solo en localStorage)</span>
+                    </div>
+                </div>
+                <div style="margin-bottom: var(--spacing-md); display: flex; gap: var(--spacing-xs);">
+                    <button class="btn-secondary btn-sm" id="backup-select-folder-btn">
+                        <i class="fas fa-folder-open"></i> Seleccionar Carpeta
+                    </button>
+                    <button class="btn-secondary btn-sm" id="backup-clear-folder-btn" style="display: none;">
+                        <i class="fas fa-times"></i> Deseleccionar Carpeta
+                    </button>
+                </div>
+                <div id="backups-list-container">
+                    <div style="text-align: center; padding: var(--spacing-md); color: var(--color-text-secondary);">
+                        <i class="fas fa-spinner fa-spin"></i> Cargando backups...
+                    </div>
+                </div>
+                <div id="backup-storage-info" style="margin-top: var(--spacing-md); padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm); font-size: 10px; color: var(--color-text-secondary);">
+                    <i class="fas fa-hdd"></i> <span id="backup-storage-text">Cargando información...</span>
+                </div>
+            </div>
+
+            <!-- Migración de datos históricos -->
+            <div class="module" style="margin-top: var(--spacing-md); padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light);">
+                <h3 style="margin: 0 0 var(--spacing-sm); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+                    <i class="fas fa-tools"></i> Migración de Datos
+                </h3>
+                <p style="font-size: 11px; color: var(--color-text-secondary); margin-bottom: var(--spacing-sm);">
+                    Rellena costo de mercancía y comisiones en ventas antiguas que no los tienen. Ejecutar una sola vez si el dashboard muestra $0 en Costo Mercancía o Comisiones.
+                </p>
+                <button class="btn-secondary btn-sm" id="migration-backfill-sale-items-btn">
+                    <i class="fas fa-sync-alt"></i> Rellenar costos y comisiones en ventas
+                </button>
             </div>
         `;
     },
@@ -6607,124 +6690,6 @@ const Settings = {
                 urlInput.value = apiUrl || '';
             }
 
-            // CRÍTICO: si la URL existe en DB pero API.baseURL quedó null (o distinto) tras recargar,
-            // sincronizarla aquí para que NO “se desconfigure” la sincronización al abrir Configuración.
-            if (apiUrl && typeof API !== 'undefined') {
-                let cleanURL = (apiUrl || '').trim();
-                if (cleanURL && !cleanURL.startsWith('http://') && !cleanURL.startsWith('https://')) {
-                    cleanURL = 'https://' + cleanURL;
-                }
-                if (cleanURL.includes('railway') && !cleanURL.endsWith('.app') && !cleanURL.endsWith('.app/')) {
-                    cleanURL = cleanURL.replace(/\/+$/, '') + '.app';
-                }
-                cleanURL = cleanURL.replace(/\/+$/, '');
-
-                if (!API.baseURL || API.baseURL !== cleanURL) {
-                    API.baseURL = cleanURL;
-                    console.log(`🔄 API.baseURL sincronizado desde DB (Settings): ${cleanURL}`);
-                }
-
-                // Si normalizamos la URL, persistirla para evitar que “vuelva” mal en el próximo reload.
-                if (cleanURL && cleanURL !== apiUrl) {
-                    await DB.put('settings', { key: 'api_url', value: cleanURL });
-                }
-            }
-        } catch (error) {
-            console.error('Error cargando URL del servidor:', error);
-        }
-
-        // Cargar estado del servidor
-        try {
-            const apiUrl = (await DB.get('settings', 'api_url'))?.value || null;
-            const statusDiv = document.getElementById('server-config-status');
-            if (statusDiv) {
-                if (apiUrl && typeof API !== 'undefined' && API.baseURL && API.token) {
-                    statusDiv.innerHTML = `
-                        <div style="color: var(--color-success);">
-                            <i class="fas fa-check-circle"></i> Conectado<br>
-                            <small style="color: var(--color-text-secondary);">${apiUrl}</small>
-                        </div>
-                    `;
-                } else if (apiUrl) {
-                    statusDiv.innerHTML = `
-                        <div style="color: var(--color-warning);">
-                            <i class="fas fa-exclamation-triangle"></i> Configurado pero no conectado<br>
-                            <small style="color: var(--color-text-secondary);">${apiUrl}</small>
-                        </div>
-                    `;
-                } else {
-                    statusDiv.innerHTML = `
-                        <div style="color: var(--color-warning);">
-                            <i class="fas fa-exclamation-triangle"></i> Servidor no configurado<br>
-                            <small style="color: var(--color-text-secondary);">Ingresa la URL de Railway y haz clic en "Guardar"</small>
-                        </div>
-                    `;
-                }
-            }
-        } catch (error) {
-            console.error('Error cargando estado del servidor:', error);
-        }
-
-        // Cargar estado de sincronización
-        try {
-            const statusInfoDiv = document.getElementById('sync-status-info');
-            if (statusInfoDiv) {
-                const apiUrl = (await DB.get('settings', 'api_url'))?.value || null;
-                // Verificar conexión real: URL, baseURL, token Y socket conectado
-                const hasToken = (typeof API !== 'undefined' && API.token) || localStorage.getItem('api_token');
-                const hasSocket = typeof API !== 'undefined' && API.socket && API.socket.connected;
-                const isConnected = apiUrl && typeof API !== 'undefined' && API.baseURL && hasToken && hasSocket;
-                
-                if (isConnected) {
-                    statusInfoDiv.innerHTML = `
-                        <div style="margin-bottom: var(--spacing-xs);">
-                            <strong>Estado:</strong> 
-                            <span style="color: var(--color-success);">Conectado</span>
-                        </div>
-                        <div style="font-size: 10px; color: var(--color-text-secondary);">
-                            Sincronización activa con Railway
-                        </div>
-                    `;
-                } else {
-                    statusInfoDiv.innerHTML = `
-                        <div style="margin-bottom: var(--spacing-xs);">
-                            <strong>Estado:</strong> 
-                            <span style="color: var(--color-warning);">Desconectado</span>
-                        </div>
-                        <div style="font-size: 10px; color: var(--color-text-secondary);">
-                            Configura el servidor para activar la sincronización
-                        </div>
-                    `;
-                }
-            }
-        } catch (error) {
-            console.error('Error cargando estado de sincronización:', error);
-        }
-
-        // Cargar estado de la cola de sincronización
-        try {
-            if (typeof window.SyncManager !== 'undefined') {
-                const queueSize = window.SyncManager.getQueueSize();
-                const queueCountEl = document.getElementById('sync-queue-count');
-                if (queueCountEl) {
-                    queueCountEl.textContent = queueSize;
-                    queueCountEl.style.color = queueSize > 0 ? 'var(--color-warning)' : 'var(--color-text-secondary)';
-                }
-            }
-        } catch (error) {
-            console.error('Error cargando estado de sincronización:', error);
-        }
-    },
-
-    async loadSyncTab() {
-        // Cargar URL del servidor en el campo de texto
-        try {
-            const apiUrl = (await DB.get('settings', 'api_url'))?.value || null;
-            const urlInput = document.getElementById('server-url-input');
-            if (urlInput) {
-                urlInput.value = apiUrl || '';
-            }
-
             // CRÍTICO: Sincronizar API.baseURL con la DB para que NO “se desconfigure” al recargar
             if (apiUrl && typeof API !== 'undefined') {
                 let cleanURL = apiUrl.trim();
@@ -6760,14 +6725,14 @@ const Settings = {
                     statusDiv.innerHTML = `
                         <div style="color: var(--color-success);">
                             <i class="fas fa-check-circle"></i> Conectado<br>
-                            <small style="color: var(--color-text-secondary);">${apiUrl}</small>
+                            <small style="color: var(--color-text-secondary);">${Utils.escapeHtml(apiUrl)}</small>
                         </div>
                     `;
                 } else if (apiUrl) {
                     statusDiv.innerHTML = `
                         <div style="color: var(--color-warning);">
                             <i class="fas fa-exclamation-triangle"></i> Configurado pero no conectado<br>
-                            <small style="color: var(--color-text-secondary);">${apiUrl}</small>
+                            <small style="color: var(--color-text-secondary);">${Utils.escapeHtml(apiUrl)}</small>
                         </div>
                     `;
                 } else {
@@ -6855,7 +6820,7 @@ const Settings = {
                     statusDiv.innerHTML = `
                         <div style="color: var(--color-success);">
                             <i class="fas fa-check-circle"></i> Servidor configurado<br>
-                            <small style="color: var(--color-text-secondary);">${apiUrl}</small>
+                            <small style="color: var(--color-text-secondary);">${Utils.escapeHtml(apiUrl)}</small>
                         </div>
                     `;
                 } else {
@@ -7099,7 +7064,7 @@ const Settings = {
                         statusDiv.innerHTML = `
                             <div style="color: var(--color-success);">
                                 <i class="fas fa-check-circle"></i> Conexión exitosa<br>
-                                <small style="color: var(--color-text-secondary);">${apiUrl}</small>
+                                <small style="color: var(--color-text-secondary);">${Utils.escapeHtml(apiUrl)}</small>
                             </div>
                         `;
                     }
@@ -7122,93 +7087,11 @@ const Settings = {
                 statusDiv.innerHTML = `
                     <div style="color: var(--color-danger);">
                         <i class="fas fa-times-circle"></i> Error de conexión<br>
-                        <small style="color: var(--color-text-secondary);">${error.message}</small>
+                        <small style="color: var(--color-text-secondary);">${Utils.escapeHtml(error.message || '')}</small>
                     </div>
                 `;
             }
         }
-    },
-
-    getSystemTab() {
-        return `
-            <div style="display: grid; gap: var(--spacing-md);">
-                <!-- Configuración del Servidor -->
-                <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light);">
-                    <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
-                        <i class="fas fa-server"></i> Configuración del Servidor
-                    </h3>
-                    <div class="form-group">
-                        <label>URL del Servidor Railway</label>
-                        <div style="display: flex; gap: var(--spacing-xs);">
-                            <input type="text" id="server-url-input" class="form-input" placeholder="https://backend-production-xxxx.up.railway.app" style="flex: 1;">
-                            <button class="btn-primary" id="save-server-url-btn">
-                                <i class="fas fa-save"></i> Guardar
-                            </button>
-                            <button class="btn-secondary" id="test-server-connection-btn">
-                                <i class="fas fa-network-wired"></i> Probar
-                            </button>
-                        </div>
-                    </div>
-                    <div id="server-config-status" style="margin-top: var(--spacing-sm); padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm); font-size: 11px;">
-                        <div style="color: var(--color-text-secondary);">
-                            <i class="fas fa-info-circle"></i> Estado del servidor
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Gestión de Backups -->
-                <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light);">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-md);">
-                        <h3 style="margin: 0; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
-                            <i class="fas fa-database"></i> Gestión de Backups
-                        </h3>
-                        <div style="display: flex; gap: var(--spacing-xs);">
-                            <button class="btn-primary btn-sm" id="backup-create-btn">
-                                <i class="fas fa-plus"></i> Crear Backup
-                            </button>
-                            <button class="btn-secondary btn-sm" id="backup-import-btn">
-                                <i class="fas fa-upload"></i> Importar Backup
-                            </button>
-                        </div>
-                    </div>
-                    <div style="margin-bottom: var(--spacing-md); padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm); font-size: 11px; color: var(--color-text-secondary);">
-                        <i class="fas fa-info-circle"></i> Los backups se crean automáticamente cada 5 minutos.
-                        <div id="backup-directory-info" style="margin-top: var(--spacing-xs); padding-top: var(--spacing-xs); border-top: 1px solid var(--color-border-light);">
-                            <i class="fas fa-folder"></i> <span id="backup-directory-path">No hay carpeta seleccionada (los backups se guardarán solo en localStorage)</span>
-                        </div>
-                    </div>
-                    <div style="margin-bottom: var(--spacing-md); display: flex; gap: var(--spacing-xs);">
-                        <button class="btn-secondary btn-sm" id="backup-select-folder-btn">
-                            <i class="fas fa-folder-open"></i> Seleccionar Carpeta
-                        </button>
-                        <button class="btn-secondary btn-sm" id="backup-clear-folder-btn" style="display: none;">
-                            <i class="fas fa-times"></i> Deseleccionar Carpeta
-                        </button>
-                    </div>
-                    <div id="backups-list-container">
-                        <div style="text-align: center; padding: var(--spacing-md); color: var(--color-text-secondary);">
-                            <i class="fas fa-spinner fa-spin"></i> Cargando backups...
-                        </div>
-                    </div>
-                    <div id="backup-storage-info" style="margin-top: var(--spacing-md); padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm); font-size: 10px; color: var(--color-text-secondary);">
-                        <i class="fas fa-hdd"></i> <span id="backup-storage-text">Cargando información...</span>
-                    </div>
-                </div>
-
-                <!-- Migración de datos históricos -->
-                <div class="module" style="margin-top: var(--spacing-md); padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light);">
-                    <h3 style="margin: 0 0 var(--spacing-sm); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
-                        <i class="fas fa-tools"></i> Migración de Datos
-                    </h3>
-                    <p style="font-size: 11px; color: var(--color-text-secondary); margin-bottom: var(--spacing-sm);">
-                        Rellena costo de mercancía y comisiones en ventas antiguas que no los tienen. Ejecutar una sola vez si el dashboard muestra $0 en Costo Mercancía o Comisiones.
-                    </p>
-                    <button class="btn-secondary btn-sm" id="migration-backfill-sale-items-btn">
-                        <i class="fas fa-sync-alt"></i> Rellenar costos y comisiones en ventas
-                    </button>
-                </div>
-            </div>
-        `;
     },
 
     async loadBackupsList() {
