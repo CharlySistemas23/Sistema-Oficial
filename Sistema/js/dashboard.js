@@ -519,8 +519,19 @@ const Dashboard = {
                     if (todayProfit) {
                         const revenue = (todayProfit?.revenue_sales_total ?? todayProfit?.revenue) || 0;
                         const operatingCosts = (todayProfit?.fixed_costs_daily || 0) + (todayProfit?.variable_costs_daily || 0);
-                        const isReportAnomalous = (revenue === 0 && operatingCosts > 0) ||
-                            (revenue > 0 && operatingCosts > revenue * 3);
+                        const cogs = todayProfit?.cogs_total || 0;
+                        const commissions = (todayProfit?.commissions_sellers_total || 0) + (todayProfit?.commissions_guides_total || 0);
+                        // Snapshot anomalo: revenue sin costos asociados o costos absurdos.
+                        // - revenue=0 con costos>0
+                        // - costos > 3x revenue
+                        // - revenue>0 PERO cogs=0 Y commissions=0 (sintoma del bug del schema:
+                        //   COGS y comisiones se calculaban desde columnas inexistentes y
+                        //   quedaban en 0; al cambiar el calculo a cost_entries no se invalida
+                        //   el snapshot anterior. Forzamos refresh aqui).
+                        const isReportAnomalous =
+                            (revenue === 0 && operatingCosts > 0) ||
+                            (revenue > 0 && operatingCosts > revenue * 3) ||
+                            (revenue > 0 && cogs === 0 && commissions === 0);
                         if (isReportAnomalous) {
                             try { await DB.delete('daily_profit_reports', todayProfit.id); } catch (_) {}
                             todayProfit = null;
