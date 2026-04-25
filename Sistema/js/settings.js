@@ -971,23 +971,14 @@ const Settings = {
                     <p style="font-size: 11px; color: var(--color-text-secondary); margin-bottom: var(--spacing-sm);">
                         Este código se solicita antes del login. Solo usuarios autorizados pueden acceder al sistema.
                     </p>
-                    <div class="form-group">
-                        <label>Código Actual</label>
-                        <input type="text" id="setting-current-company-code" class="form-input" placeholder="Código actual" readonly style="background: var(--color-bg-secondary);">
+                    <div style="padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm); border-left: 3px solid var(--color-warning, #f59e0b); font-size: 11px; line-height: 1.5; margin-bottom: var(--spacing-sm);">
+                        <strong><i class="fas fa-info-circle"></i> El codigo se gestiona en el servidor</strong><br>
+                        Por seguridad, el codigo de acceso vive en una variable de entorno del backend
+                        (<code>COMPANY_ACCESS_CODE</code> en Railway) y no se puede cambiar desde aqui.
+                        Para cambiarlo, actualiza la variable en Railway y haz redeploy.
                     </div>
-                    <div class="form-group">
-                        <label>Nuevo Código</label>
-                        <input type="password" id="setting-new-company-code" class="form-input" placeholder="Nuevo código de acceso">
-                    </div>
-                    <div class="form-group">
-                        <label>Confirmar Nuevo Código</label>
-                        <input type="password" id="setting-confirm-company-code" class="form-input" placeholder="Confirma el nuevo código">
-                    </div>
-                    <button class="btn-primary btn-sm" onclick="window.Settings.changeCompanyCode()" style="width: 100%; margin-top: var(--spacing-xs);">
-                        <i class="fas fa-save"></i> Cambiar Código
-                    </button>
-                    <button class="btn-secondary btn-sm" onclick="window.Settings.clearCompanyCodeCache()" style="width: 100%; margin-top: var(--spacing-xs);">
-                        <i class="fas fa-trash"></i> Limpiar Códigos Guardados
+                    <button class="btn-secondary btn-sm" onclick="window.Settings.clearCompanyCodeCache()" style="width: 100%;">
+                        <i class="fas fa-trash"></i> Limpiar Codigos Guardados (forzar revalidacion)
                     </button>
                 </div>
             </div>
@@ -1666,9 +1657,9 @@ const Settings = {
                     <tbody id="agencies-tbody">
                         ${agencies.map(agency => `
                             <tr data-agency-id="${agency.id}" data-agency-active="${agency.active}">
-                                <td><strong>${agency.name || 'Sin nombre'}</strong></td>
-                                <td><small style="color: var(--color-text-secondary); font-family: monospace;">${agency.id}</small></td>
-                                <td><small style="color: var(--color-text-secondary); font-family: monospace;">${agency.barcode || 'N/A'}</small></td>
+                                <td><strong>${Utils.escapeHtml(agency.name || 'Sin nombre')}</strong></td>
+                                <td><small style="color: var(--color-text-secondary); font-family: monospace;">${Utils.escapeHtml(agency.id)}</small></td>
+                                <td><small style="color: var(--color-text-secondary); font-family: monospace;">${Utils.escapeHtml(agency.barcode || 'N/A')}</small></td>
                                 <td><span class="status-badge status-${agency.active ? 'disponible' : 'vendida'}">${agency.active ? 'Activa' : 'Inactiva'}</span></td>
                                 <td style="white-space: nowrap;">
                                     <button class="btn-secondary btn-sm" onclick="window.Settings.editAgency('${agency.id}')">
@@ -1710,9 +1701,9 @@ const Settings = {
 
         tbody.innerHTML = filtered.map(agency => `
             <tr data-agency-id="${agency.id}" data-agency-active="${agency.active}">
-                <td><strong>${agency.name || 'Sin nombre'}</strong></td>
-                <td><small style="color: var(--color-text-secondary); font-family: monospace;">${agency.id}</small></td>
-                <td><small style="color: var(--color-text-secondary); font-family: monospace;">${agency.barcode || 'N/A'}</small></td>
+                <td><strong>${Utils.escapeHtml(agency.name || 'Sin nombre')}</strong></td>
+                <td><small style="color: var(--color-text-secondary); font-family: monospace;">${Utils.escapeHtml(agency.id)}</small></td>
+                <td><small style="color: var(--color-text-secondary); font-family: monospace;">${Utils.escapeHtml(agency.barcode || 'N/A')}</small></td>
                 <td><span class="status-badge status-${agency.active ? 'disponible' : 'vendida'}">${agency.active ? 'Activa' : 'Inactiva'}</span></td>
                 <td style="white-space: nowrap;">
                     <button class="btn-secondary btn-sm" onclick="window.Settings.editAgency('${agency.id}')">
@@ -1824,7 +1815,7 @@ const Settings = {
                 <div class="form-group">
                     <label>Nombre de la Agencia *</label>
                     <input type="text" id="agency-name-input" class="form-input" required 
-                        value="${agency.name || ''}" placeholder="Ej: AGENCIA DE VIAJES SA" maxlength="100">
+                        value="${Utils.escapeHtml(agency.name || '')}" placeholder="Ej: AGENCIA DE VIAJES SA" maxlength="100">
                     <small style="color: var(--color-text-secondary); font-size: 10px;">
                         El nombre será convertido a mayúsculas automáticamente
                     </small>
@@ -1896,9 +1887,9 @@ const Settings = {
                     <tbody id="sellers-tbody">
                         ${sellers.map(seller => `
                             <tr data-seller-id="${seller.id}" data-seller-active="${seller.active}">
-                                <td><strong>${seller.name || 'Sin nombre'}</strong></td>
-                                <td><small style="color: var(--color-text-secondary); font-family: monospace;">${seller.id}</small></td>
-                                <td><small style="color: var(--color-text-secondary); font-family: monospace;">${seller.barcode || 'N/A'}</small></td>
+                                <td><strong>${Utils.escapeHtml(seller.name || 'Sin nombre')}</strong></td>
+                                <td><small style="color: var(--color-text-secondary); font-family: monospace;">${Utils.escapeHtml(seller.id)}</small></td>
+                                <td><small style="color: var(--color-text-secondary); font-family: monospace;">${Utils.escapeHtml(seller.barcode || 'N/A')}</small></td>
                                 <td><span class="status-badge status-${seller.active ? 'disponible' : 'vendida'}">${seller.active ? 'Activo' : 'Inactivo'}</span></td>
                                 <td style="white-space: nowrap;">
                                     <button class="btn-secondary btn-sm" onclick="window.Settings.editSeller('${seller.id}')">
@@ -1939,9 +1930,9 @@ const Settings = {
 
         tbody.innerHTML = filtered.map(seller => `
             <tr data-seller-id="${seller.id}" data-seller-active="${seller.active}">
-                <td><strong>${seller.name || 'Sin nombre'}</strong></td>
-                <td><small style="color: var(--color-text-secondary); font-family: monospace;">${seller.id}</small></td>
-                <td><small style="color: var(--color-text-secondary); font-family: monospace;">${seller.barcode || 'N/A'}</small></td>
+                <td><strong>${Utils.escapeHtml(seller.name || 'Sin nombre')}</strong></td>
+                <td><small style="color: var(--color-text-secondary); font-family: monospace;">${Utils.escapeHtml(seller.id)}</small></td>
+                <td><small style="color: var(--color-text-secondary); font-family: monospace;">${Utils.escapeHtml(seller.barcode || 'N/A')}</small></td>
                 <td><span class="status-badge status-${seller.active ? 'disponible' : 'vendida'}">${seller.active ? 'Activo' : 'Inactivo'}</span></td>
                 <td style="white-space: nowrap;">
                     <button class="btn-secondary btn-sm" onclick="window.Settings.editSeller('${seller.id}')">
@@ -2050,7 +2041,7 @@ const Settings = {
                 <div class="form-group">
                     <label>Nombre del Vendedor *</label>
                     <input type="text" id="seller-name-input" class="form-input" required 
-                        value="${seller.name || ''}" placeholder="Ej: JUAN PÉREZ" maxlength="100">
+                        value="${Utils.escapeHtml(seller.name || '')}" placeholder="Ej: JUAN PÉREZ" maxlength="100">
                     <small style="color: var(--color-text-secondary); font-size: 10px;">
                         El nombre será convertido a mayúsculas automáticamente
                     </small>
@@ -2125,10 +2116,10 @@ const Settings = {
                             const agency = agencies.find(a => a.id === guide.agency_id);
                             return `
                                 <tr data-guide-id="${guide.id}" data-guide-active="${guide.active}" data-agency-id="${guide.agency_id || ''}">
-                                    <td><strong>${guide.name || 'Sin nombre'}</strong></td>
-                                    <td>${agency?.name || 'Sin agencia'}</td>
-                                    <td><small style="color: var(--color-text-secondary); font-family: monospace;">${guide.id}</small></td>
-                                    <td><small style="color: var(--color-text-secondary); font-family: monospace;">${guide.barcode || 'N/A'}</small></td>
+                                    <td><strong>${Utils.escapeHtml(guide.name || 'Sin nombre')}</strong></td>
+                                    <td>${Utils.escapeHtml(agency?.name || 'Sin agencia')}</td>
+                                    <td><small style="color: var(--color-text-secondary); font-family: monospace;">${Utils.escapeHtml(guide.id)}</small></td>
+                                    <td><small style="color: var(--color-text-secondary); font-family: monospace;">${Utils.escapeHtml(guide.barcode || 'N/A')}</small></td>
                                     <td><span class="status-badge status-${guide.active ? 'disponible' : 'vendida'}">${guide.active ? 'Activo' : 'Inactivo'}</span></td>
                                     <td style="white-space: nowrap;">
                                         <button class="btn-secondary btn-sm" onclick="window.Settings.editGuide('${guide.id}')">
@@ -2178,10 +2169,10 @@ const Settings = {
             const agency = agencies.find(a => a.id === guide.agency_id);
             return `
                 <tr data-guide-id="${guide.id}" data-guide-active="${guide.active}" data-agency-id="${guide.agency_id || ''}">
-                    <td><strong>${guide.name || 'Sin nombre'}</strong></td>
-                    <td>${agency?.name || 'Sin agencia'}</td>
-                    <td><small style="color: var(--color-text-secondary); font-family: monospace;">${guide.id}</small></td>
-                    <td><small style="color: var(--color-text-secondary); font-family: monospace;">${guide.barcode || 'N/A'}</small></td>
+                    <td><strong>${Utils.escapeHtml(guide.name || 'Sin nombre')}</strong></td>
+                    <td>${Utils.escapeHtml(agency?.name || 'Sin agencia')}</td>
+                    <td><small style="color: var(--color-text-secondary); font-family: monospace;">${Utils.escapeHtml(guide.id)}</small></td>
+                    <td><small style="color: var(--color-text-secondary); font-family: monospace;">${Utils.escapeHtml(guide.barcode || 'N/A')}</small></td>
                     <td><span class="status-badge status-${guide.active ? 'disponible' : 'vendida'}">${guide.active ? 'Activo' : 'Inactivo'}</span></td>
                     <td style="white-space: nowrap;">
                         <button class="btn-secondary btn-sm" onclick="window.Settings.editGuide('${guide.id}')">
@@ -2322,7 +2313,7 @@ const Settings = {
                 <div class="form-group">
                     <label>Nombre del Guía *</label>
                     <input type="text" id="guide-name-input" class="form-input" required 
-                        value="${guide.name || ''}" placeholder="Ej: CARLOS RAMÍREZ" maxlength="100">
+                        value="${Utils.escapeHtml(guide.name || '')}" placeholder="Ej: CARLOS RAMÍREZ" maxlength="100">
                     <small style="color: var(--color-text-secondary); font-size: 10px;">
                         El nombre será convertido a mayúsculas automáticamente
                     </small>
@@ -2416,11 +2407,11 @@ const Settings = {
                             return `
                             <tr data-branch-id="${branch.id}" data-branch-active="${branch.active}">
                                 <td>
-                                    <strong>${branch.name || 'Sin nombre'}</strong>
+                                    <strong>${Utils.escapeHtml(branch.name || 'Sin nombre')}</strong>
                                     <br><small style="color: var(--color-text-secondary); font-family: monospace; font-size: 9px;">ID: ${branch.id}</small>
                                 </td>
                                 <td>
-                                    ${branch.address ? `<span>${branch.address}</span>` : '<span style="color: var(--color-text-secondary); font-style: italic;">Sin dirección</span>'}
+                                    ${branch.address ? `<span>${Utils.escapeHtml(branch.address)}</span>` : '<span style="color: var(--color-text-secondary); font-style: italic;">Sin dirección</span>'}
                                 </td>
                                 <td>
                                     <div style="display: flex; align-items: center; gap: var(--spacing-xs);">
@@ -2575,11 +2566,11 @@ const Settings = {
             return `
             <tr data-branch-id="${branch.id}" data-branch-active="${branch.active}">
                 <td>
-                    <strong>${branch.name || 'Sin nombre'}</strong>
+                    <strong>${Utils.escapeHtml(branch.name || 'Sin nombre')}</strong>
                     <br><small style="color: var(--color-text-secondary); font-family: monospace; font-size: 9px;">ID: ${branch.id}</small>
                 </td>
                 <td>
-                    ${branch.address ? `<span>${branch.address}</span>` : '<span style="color: var(--color-text-secondary); font-style: italic;">Sin dirección</span>'}
+                    ${branch.address ? `<span>${Utils.escapeHtml(branch.address)}</span>` : '<span style="color: var(--color-text-secondary); font-style: italic;">Sin dirección</span>'}
                 </td>
                 <td>
                     <div style="display: flex; align-items: center; gap: var(--spacing-xs);">
@@ -4054,14 +4045,25 @@ const Settings = {
             return;
         }
 
-        // Validar PIN actual (simplificado - en producción validar con hash)
         const currentUser = UserManager.currentUser;
         if (!currentUser) {
             Utils.showNotification('Debes estar autenticado', 'error');
             return;
         }
 
-        // Cambiar PIN
+        // Validar PIN actual antes de permitir cambio (antes solo se confiaba
+        // en que el usuario estuviera logueado — cualquiera con acceso al
+        // dispositivo podia cambiar el PIN sin conocer el actual).
+        if (currentUser.pin_hash) {
+            const isValidCurrent = await Utils.validatePin(currentPin, currentUser.pin_hash);
+            if (!isValidCurrent) {
+                Utils.showNotification('El PIN actual es incorrecto', 'error');
+                return;
+            }
+        }
+
+        // Cambiar PIN local (frontend usa SHA-256 para validacion local).
+        // Nota: esto NO cambia el password de login del backend (bcrypt en BD).
         const newPinHash = await Utils.hashPin(newPin);
         currentUser.pin_hash = newPinHash;
         await DB.put('users', currentUser);
@@ -4071,59 +4073,12 @@ const Settings = {
         document.getElementById('setting-new-pin').value = '';
         document.getElementById('setting-confirm-pin').value = '';
 
-        Utils.showNotification('PIN cambiado correctamente', 'success');
+        Utils.showNotification('PIN local cambiado. Para cambiar el password de login web, hazlo desde Empleados > Editar usuario.', 'success');
     },
 
     async loadCompanyCodeSettings() {
-        // Cargar código actual (sin mostrarlo completo por seguridad)
-        const currentCodeInput = document.getElementById('setting-current-company-code');
-        if (currentCodeInput && typeof App !== 'undefined' && App.COMPANY_ACCESS_CODE) {
-            const code = App.COMPANY_ACCESS_CODE;
-            // Mostrar solo los primeros y últimos caracteres
-            const masked = code.length > 4 
-                ? code.substring(0, 2) + '•'.repeat(code.length - 4) + code.substring(code.length - 2)
-                : '•'.repeat(code.length);
-            currentCodeInput.value = masked;
-        }
-    },
-
-    async changeCompanyCode() {
-        const newCode = document.getElementById('setting-new-company-code').value.trim();
-        const confirmCode = document.getElementById('setting-confirm-company-code').value.trim();
-
-        if (!newCode || !confirmCode) {
-            Utils.showNotification('Completa todos los campos', 'error');
-            return;
-        }
-
-        if (newCode.length < 4) {
-            Utils.showNotification('El código debe tener al menos 4 caracteres', 'error');
-            return;
-        }
-
-        if (newCode !== confirmCode) {
-            Utils.showNotification('Los códigos no coinciden', 'error');
-            return;
-        }
-
-        // Cambiar el código en App
-        if (typeof App !== 'undefined') {
-            App.COMPANY_ACCESS_CODE = newCode;
-            
-            // Limpiar códigos guardados para forzar nueva validación
-            localStorage.removeItem('company_code_validated');
-            
-            // Limpiar campos
-            document.getElementById('setting-new-company-code').value = '';
-            document.getElementById('setting-confirm-company-code').value = '';
-            
-            // Actualizar display del código actual
-            await this.loadCompanyCodeSettings();
-            
-            Utils.showNotification('Código de acceso cambiado correctamente. Todos los usuarios deberán ingresar el nuevo código.', 'success');
-        } else {
-            Utils.showNotification('Error: No se pudo cambiar el código', 'error');
-        }
+        // El codigo de acceso vive en el backend (env var). El cliente no lo
+        // conoce; este modulo solo expone "limpiar codigos guardados" (cache local).
     },
 
     async clearCompanyCodeCache() {
