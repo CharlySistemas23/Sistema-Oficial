@@ -213,16 +213,21 @@ router.post('/', requireBranchAccess, async (req, res) => {
     const finalBranchId = branch_id || req.user.branchId;
     const finalOrderDate = order_date || new Date().toISOString().split('T')[0];
 
-    // Calcular totales si no se proporcionan
-    let finalSubtotal = subtotal || 0;
-    let finalTaxAmount = tax_amount || 0;
-    let finalDiscountAmount = discount_amount || 0;
-    let finalShippingCost = shipping_cost || 0;
-    let finalTotalAmount = total_amount || 0;
+    // Calcular totales si no se proporcionan. parseFloat explicito para evitar
+    // concatenacion de strings cuando el body trae numeros como string
+    // (ej. "100" + "5" => "1005" en vez de 105).
+    let finalSubtotal = parseFloat(subtotal) || 0;
+    let finalTaxAmount = parseFloat(tax_amount) || 0;
+    let finalDiscountAmount = parseFloat(discount_amount) || 0;
+    let finalShippingCost = parseFloat(shipping_cost) || 0;
+    let finalTotalAmount = parseFloat(total_amount) || 0;
 
     if (items && items.length > 0) {
       finalSubtotal = items.reduce((sum, item) => {
-        const lineTotal = (item.quantity_ordered * item.unit_price) - (item.discount_amount || 0);
+        const qty = parseFloat(item.quantity_ordered) || 0;
+        const unitPrice = parseFloat(item.unit_price) || 0;
+        const itemDiscount = parseFloat(item.discount_amount) || 0;
+        const lineTotal = (qty * unitPrice) - itemDiscount;
         return sum + lineTotal;
       }, 0);
       finalTotalAmount = finalSubtotal + finalTaxAmount - finalDiscountAmount + finalShippingCost;

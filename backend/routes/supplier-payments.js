@@ -295,11 +295,15 @@ router.put('/:id', requireBranchAccess, async (req, res) => {
       }
     }
 
-    // Calcular montos
-    const finalAmount = amount || existing.amount;
-    const finalTaxAmount = tax_amount !== undefined ? tax_amount : existing.tax_amount;
-    const finalDiscountAmount = discount_amount !== undefined ? discount_amount : existing.discount_amount;
-    const finalTotalAmount = total_amount || (finalAmount + finalTaxAmount - finalDiscountAmount);
+    // Calcular montos. Postgres devuelve DECIMAL como string y req.body
+    // puede traer numeros o strings; sin parseFloat, `+` concatena.
+    // (ej. "100.00" + "10.00" => "100.0010.00", luego Postgres rechaza el cast).
+    const finalAmount = parseFloat(amount ?? existing.amount) || 0;
+    const finalTaxAmount = parseFloat(tax_amount !== undefined ? tax_amount : existing.tax_amount) || 0;
+    const finalDiscountAmount = parseFloat(discount_amount !== undefined ? discount_amount : existing.discount_amount) || 0;
+    const finalTotalAmount = total_amount !== undefined && total_amount !== null && total_amount !== ''
+      ? (parseFloat(total_amount) || 0)
+      : (finalAmount + finalTaxAmount - finalDiscountAmount);
 
     // Actualizar estado si se marca como pagado
     let finalStatus = status || existing.status;
