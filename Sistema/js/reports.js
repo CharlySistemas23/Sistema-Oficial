@@ -1978,17 +1978,72 @@ const Reports = {
                 : ['completed', 'completada', 'completado'].includes(String(s.status || '').toLowerCase()))
         );
 
-        const totalSales = completedSales.reduce((sum, s) => sum + toNumber(s.total), 0);
+        let totalSales = completedSales.reduce((sum, s) => sum + toNumber(s.total), 0);
         const passengerValues = completedSales.map(s => toNumber(s.passengers)).filter(v => v > 0);
         const hasPassengerData = passengerValues.length > 0;
         let totalPassengers = hasPassengerData
             ? passengerValues.reduce((sum, v) => sum + v, 0)
             : 0; // Sin datos de pasajeros en ventas — se actualiza con llegadas del período más abajo
-        const avgTicket = completedSales.length > 0
-            ? (hasPassengerData ? totalSales / totalPassengers : totalSales / completedSales.length)
+
+        // CONSOLIDACION CON ARCHIVED QUICK CAPTURE REPORTS:
+        // Las ventas reales del negocio vienen de DOS fuentes:
+        //   1. POS (tabla sales) — ventas registradas via Punto de Venta
+        //   2. archived_quick_capture_reports — capturas rapidas archivadas
+        // Sin esta consolidacion el reporte solo muestra POS y oculta hasta el 80%
+        // de las ventas (caso real: marzo MALECON $238k POS + $965k archived = $1.2M).
+        let archivedAggregates = {
+            sales: 0, cogs: 0, commissions: 0,
+            arrivalCosts: 0, operatingCosts: 0, bankCommissions: 0,
+            captures: 0
+        };
+        try {
+            if (typeof API !== 'undefined' && typeof API.getArchivedReports === 'function' &&
+                (API.token || (typeof localStorage !== 'undefined' && localStorage.getItem('api_token')))) {
+                const params = {};
+                if (dateFrom) params.date_from = dateFrom;
+                if (dateTo) params.date_to = dateTo;
+                const archivedBranch = (branchFilterValue && branchFilterValue !== 'all')
+                    ? branchFilterValue
+                    : (branchIdForBanner || null);
+                if (archivedBranch) params.branch_id = archivedBranch;
+
+                const archivedRaw = await API.getArchivedReports(params);
+                const archivedList = Array.isArray(archivedRaw) ? archivedRaw : (archivedRaw?.data || archivedRaw?.reports || []);
+
+                // Filtrar localmente por fecha + branch (defensa por si el backend no respeta filtros)
+                const filtered = archivedList.filter(r => {
+                    const d = (r.report_date || r.date || '').toString().split('T')[0];
+                    if (dateFrom && d < dateFrom) return false;
+                    if (dateTo && d > dateTo) return false;
+                    if (archivedBranch && r.branch_id && String(r.branch_id) !== String(archivedBranch)) return false;
+                    return true;
+                });
+
+                for (const r of filtered) {
+                    archivedAggregates.sales += toNumber(r.total_sales_mxn);
+                    archivedAggregates.cogs += toNumber(r.total_cogs);
+                    archivedAggregates.commissions += toNumber(r.total_commissions);
+                    archivedAggregates.arrivalCosts += toNumber(r.total_arrival_costs);
+                    archivedAggregates.operatingCosts += toNumber(r.total_operating_costs) +
+                                                          toNumber(r.variable_costs_daily) +
+                                                          toNumber(r.fixed_costs_prorated);
+                    archivedAggregates.bankCommissions += toNumber(r.bank_commissions);
+                    archivedAggregates.captures += parseInt(r.total_captures, 10) || 0;
+                }
+            }
+        } catch (archivedErr) {
+            console.warn('[Reports] sync archived reports fallo, usando solo POS:', archivedErr?.message || archivedErr);
+        }
+
+        // Sumar archived a totales
+        totalSales += archivedAggregates.sales;
+        const consolidatedSalesCount = completedSales.length + archivedAggregates.captures;
+
+        const avgTicket = consolidatedSalesCount > 0
+            ? (hasPassengerData && totalPassengers > 0 ? totalSales / totalPassengers : totalSales / consolidatedSalesCount)
             : 0;
         let closeRate = hasPassengerData && totalPassengers > 0
-            ? (completedSales.length / totalPassengers) * 100
+            ? (consolidatedSalesCount / totalPassengers) * 100
             : 0;
 
         // Agrupar por sucursal si es master_admin y hay múltiples sucursales
@@ -2258,19 +2313,34 @@ const Reports = {
             }
         }
 
-        // Usar COGS calculado desde items en lugar de cost_entries
+        // Asignar COGS y comisiones del lado POS
         costBreakdown.cogs = totalCOGS;
         costBreakdown.commissions = commissionsBreakdown.total;
-        
-        // Calcular utilidades
-        const grossProfit = totalSales - totalCOGS - commissionsBreakdown.total;
+
+        // CONSOLIDACION: sumar todo lo que viene de archived_quick_capture_reports.
+        // Estos reportes ya estan totalizados (no necesitan dedupe ni filtros adicionales).
+        if (archivedAggregates.sales > 0) {
+            costBreakdown.cogs += archivedAggregates.cogs;
+            costBreakdown.commissions += archivedAggregates.commissions;
+            commissionsBreakdown.total += archivedAggregates.commissions;
+            // Distribuir comisiones archived 50/50 entre vendedores y guias (sin info de desglose)
+            commissionsBreakdown.sellers += archivedAggregates.commissions / 2;
+            commissionsBreakdown.guides += archivedAggregates.commissions / 2;
+            costBreakdown.arrivals += archivedAggregates.arrivalCosts;
+            costBreakdown.bankCommissions += archivedAggregates.bankCommissions;
+            // Operativos archived: van como variables (mas comun para captura rapida)
+            costBreakdown.variable += archivedAggregates.operatingCosts;
+        }
+
+        // Calcular utilidades sobre totales CONSOLIDADOS (POS + archived)
+        const grossProfit = totalSales - costBreakdown.cogs - costBreakdown.commissions;
         const grossMargin = totalSales > 0 ? (grossProfit / totalSales * 100) : 0;
-        
+
         // Costos totales = COGS + Comisiones + Llegadas + Operativos + Comisiones Bancarias
-        totalCosts = costBreakdown.cogs + costBreakdown.commissions + costBreakdown.arrivals + 
+        totalCosts = costBreakdown.cogs + costBreakdown.commissions + costBreakdown.arrivals +
                      costBreakdown.fixed + costBreakdown.variable + costBreakdown.bankCommissions;
-        
-        const netProfit = grossProfit - costBreakdown.arrivals - costBreakdown.fixed - 
+
+        const netProfit = grossProfit - costBreakdown.arrivals - costBreakdown.fixed -
                          costBreakdown.variable - costBreakdown.bankCommissions;
         const netMargin = totalSales > 0 ? (netProfit / totalSales * 100) : 0;
         
