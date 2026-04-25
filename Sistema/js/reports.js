@@ -2317,6 +2317,18 @@ const Reports = {
         costBreakdown.cogs = totalCOGS;
         costBreakdown.commissions = commissionsBreakdown.total;
 
+        // IVA / Comision empresarial: 16% sobre ventas totales (configurable via setting 'iva_rate').
+        // Se considera un costo recurrente que reduce la utilidad neta.
+        let ivaRate = 0.16;
+        try {
+            const ivaSetting = await DB.get('settings', 'iva_rate');
+            if (ivaSetting?.value != null) {
+                const r = parseFloat(ivaSetting.value);
+                if (Number.isFinite(r) && r > 0 && r <= 1) ivaRate = r;
+            }
+        } catch (_) { /* default 16% */ }
+        costBreakdown.iva = totalSales * ivaRate;
+
         // CONSOLIDACION: sumar todo lo que viene de archived_quick_capture_reports.
         // Estos reportes ya estan totalizados (no necesitan dedupe ni filtros adicionales).
         if (archivedAggregates.sales > 0) {
@@ -2336,12 +2348,13 @@ const Reports = {
         const grossProfit = totalSales - costBreakdown.cogs - costBreakdown.commissions;
         const grossMargin = totalSales > 0 ? (grossProfit / totalSales * 100) : 0;
 
-        // Costos totales = COGS + Comisiones + Llegadas + Operativos + Comisiones Bancarias
+        // Costos totales = COGS + Comisiones + Llegadas + Operativos + Com. Bancarias + IVA
         totalCosts = costBreakdown.cogs + costBreakdown.commissions + costBreakdown.arrivals +
-                     costBreakdown.fixed + costBreakdown.variable + costBreakdown.bankCommissions;
+                     costBreakdown.fixed + costBreakdown.variable + costBreakdown.bankCommissions +
+                     (costBreakdown.iva || 0);
 
         const netProfit = grossProfit - costBreakdown.arrivals - costBreakdown.fixed -
-                         costBreakdown.variable - costBreakdown.bankCommissions;
+                         costBreakdown.variable - costBreakdown.bankCommissions - (costBreakdown.iva || 0);
         const netMargin = totalSales > 0 ? (netProfit / totalSales * 100) : 0;
         
         // Mantener compatibilidad con el código anterior
