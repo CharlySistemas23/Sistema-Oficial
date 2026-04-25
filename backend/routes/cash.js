@@ -307,9 +307,13 @@ router.put('/sessions/:id/close', requireBranchAccess, async (req, res) => {
       return res.status(400).json({ error: 'La sesión ya está cerrada' });
     }
 
-    // Calcular diferencia
-    const finalAmount = final_amount || session.current_amount;
-    const difference = finalAmount - session.current_amount;
+    // Calcular diferencia. session.current_amount viene como string desde Postgres,
+    // y final_amount puede venir como 0 legitimo (caja vacia), asi que no usamos `||`.
+    const expectedAmount = parseFloat(session.current_amount) || 0;
+    const finalAmount = (final_amount !== undefined && final_amount !== null && final_amount !== '')
+      ? parseFloat(final_amount) || 0
+      : expectedAmount;
+    const difference = finalAmount - expectedAmount;
 
     // Cerrar sesión
     const result = await client.query(
@@ -434,11 +438,14 @@ router.post('/sessions/:id/movements', requireBranchAccess, [
       return res.status(400).json({ error: 'La sesión debe estar abierta para agregar movimientos' });
     }
 
-    // Calcular nuevo monto actual
+    // Calcular nuevo monto actual.
+    // session.current_amount viene como string desde Postgres (DECIMAL); si
+    // usaramos `+` directo se concatena en vez de sumar ("100.00"+50 = "100.0050").
     const amountValue = parseFloat(amount);
-    const newAmount = type === 'deposit' 
-      ? session.current_amount + amountValue
-      : session.current_amount - amountValue;
+    const currentAmountValue = parseFloat(session.current_amount) || 0;
+    const newAmount = type === 'deposit'
+      ? currentAmountValue + amountValue
+      : currentAmountValue - amountValue;
 
     if (newAmount < 0) {
       await safeRollback(client);
