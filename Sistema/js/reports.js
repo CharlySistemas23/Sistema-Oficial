@@ -2186,7 +2186,9 @@ const Reports = {
                 let cardTotal = 0;
                 for (const sale of completedSales) {
                     const sps = allPayments.filter(p => p.sale_id === sale.id);
-                    for (const p of sps) {
+                    // Fallback a payments embebidos en la venta (si el backend los manda asi)
+                    const paymentsList = sps.length > 0 ? sps : (Array.isArray(sale.payments) ? sale.payments : []);
+                    for (const p of paymentsList) {
                         const m = String(p.method || '').toLowerCase();
                         if (m.startsWith('tpv') || m.includes('tarjeta') || m.includes('card') || m.includes('visa') || m.includes('master') || m.includes('amex')) {
                             cardTotal += parseFloat(p.amount) || 0;
@@ -2195,9 +2197,40 @@ const Reports = {
                 }
                 if (cardTotal > 0) {
                     costBreakdown.bankCommissions = cardTotal * bankRate;
-                    costBreakdown.bankCommissionsEstimated = true; // bandera para mostrar como "estimado"
+                    costBreakdown.bankCommissionsEstimated = true;
                     costBreakdown.bankCommissionsRate = bankRate;
                     costBreakdown.bankCommissionsBase = cardTotal;
+                } else {
+                    // ULTIMO FALLBACK: si no encontramos payments en local ni embedded
+                    // (sync incompleta), estimar bankCommissions como 5% del total de ventas
+                    // (asume pago con tarjeta). Mejor mostrar estimacion gruesa que \$0.
+                    const totalRevenue = completedSales.reduce((sum, s) => sum + toNumber(s.total), 0);
+                    if (totalRevenue > 0) {
+                        costBreakdown.bankCommissions = totalRevenue * bankRate;
+                        costBreakdown.bankCommissionsEstimated = true;
+                        costBreakdown.bankCommissionsRate = bankRate;
+                        costBreakdown.bankCommissionsBase = totalRevenue;
+                        costBreakdown.bankCommissionsApprox = true; // gruesa, sin filtrar tarjeta
+                    }
+                }
+            }
+
+            // PASAJEROS DESDE COST_ENTRIES.PAGO_LLEGADAS: el modulo Costos guarda llegadas
+            // en cost_entries con notes formato 'Pago llegadas TRAVELEX - 15 pasajeros'.
+            // Si no hay agency_arrivals/tourist_reports registrados, parsear de aqui.
+            if (totalPassengers === 0) {
+                const arrivalEntries = reportCosts.filter(c => c.category === 'pago_llegadas');
+                let parsedPax = 0;
+                for (const e of arrivalEntries) {
+                    const txt = String(e.notes || e.description || '');
+                    const m = txt.match(/(\d+)\s*pasajeros?/i);
+                    if (m) parsedPax += parseInt(m[1], 10) || 0;
+                }
+                if (parsedPax > 0) {
+                    totalPassengers = parsedPax;
+                    if (parsedPax > 0 && completedSales.length > 0) {
+                        closeRate = (completedSales.length / parsedPax) * 100;
+                    }
                 }
             }
             }
