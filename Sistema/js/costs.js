@@ -633,7 +633,7 @@ const Costs = {
                             <div style="font-size: 11px; color: var(--color-text-secondary); margin-top: 2px;">
                                 Guía: ${guideName} • Transporte: ${unitType} • Unidades: ${units > 0 ? units : '-'}
                             </div>
-                            ${cost.notes && cost.notes !== agencyName ? `<div style="font-size: 10px; color: var(--color-text-secondary); margin-top: 2px;">${cost.notes}</div>` : ''}
+                            ${cost.notes && cost.notes !== agencyName ? `<div style="font-size: 10px; color: var(--color-text-secondary); margin-top: 2px;">${Utils.escapeHtml(cost.notes)}</div>` : ''}
                         </div>
                         <div style="text-align: right; margin-left: var(--spacing-md);">
                             <div style="font-weight: 700; font-size: 14px; color: #667eea;">${Utils.formatCurrency(cost.amount || 0)}</div>
@@ -1180,7 +1180,7 @@ const Costs = {
                                             <td style="font-weight: 600; color: var(--color-accent);">${Utils.formatCurrency(dailyProrate)}</td>
                                             <td>${cost.auto_generate ? '<span class="status-badge status-disponible">Sí</span>' : '<span class="status-badge status-reservado">No</span>'}</td>
                                             <td style="font-size: 11px;">${Utils.formatDate(cost.date || cost.created_at, 'DD/MM/YYYY')}</td>
-                                            <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${cost.notes || '-'}</td>
+                                            <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${Utils.escapeHtml(cost.notes || '-')}</td>
                                             <td style="white-space: nowrap;">
                                                 <button class="btn-secondary btn-xs" onclick="window.Costs.editCost('${cost.id}')">
                                                     <i class="fas fa-edit"></i> Editar
@@ -2155,7 +2155,7 @@ const Costs = {
                                 ${cost.supplier_code || ''} ${cost.supplier_code && cost.supplier_name ? '- ' : ''}${cost.supplier_name || ''}
                             </div>
                             ` : ''}
-                            ${cost.notes ? `<div style="font-size: 10px; color: var(--color-text-secondary); margin-top: 2px;">${cost.notes}</div>` : ''}
+                            ${cost.notes ? `<div style="font-size: 10px; color: var(--color-text-secondary); margin-top: 2px;">${Utils.escapeHtml(cost.notes)}</div>` : ''}
                         </div>
                         <div style="text-align: right; margin-left: var(--spacing-md);">
                             <div style="font-weight: 700; font-size: 14px; color: var(--color-primary);">${Utils.formatCurrency(cost.amount || 0)}</div>
@@ -2246,7 +2246,7 @@ const Costs = {
                                             <td><span class="status-badge status-${cost.type === 'variable' ? 'reservado' : 'disponible'}">${cost.type === 'variable' ? 'Variable' : 'Fijo'}</span></td>
                                             <td>${cost.category || 'N/A'}</td>
                                             <td style="font-weight: 600;">${Utils.formatCurrency(cost.amount)}</td>
-                                            <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${cost.notes || '-'}</td>
+                                            <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${Utils.escapeHtml(cost.notes || '-')}</td>
                                             <td style="white-space: nowrap;">
                                                 <button class="btn-secondary btn-sm" onclick="window.Costs.editCost('${cost.id}')" title="Editar">
                                                     <i class="fas fa-edit"></i>
@@ -2752,7 +2752,7 @@ const Costs = {
                                 <td>${cost.category || 'N/A'}</td>
                                 <td style="font-weight: 600;">${Utils.formatCurrency(cost.amount)}</td>
                                 <td>${branch?.name || 'Todas'}</td>
-                                <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${cost.notes || '-'}</td>
+                                <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${Utils.escapeHtml(cost.notes || '-')}</td>
                                 <td style="white-space: nowrap;">
                                     <button class="btn-secondary btn-xs" onclick="window.Costs.editCost('${cost.id}')">
                                         <i class="fas fa-edit"></i> Editar
@@ -3038,7 +3038,7 @@ const Costs = {
                     </div>
                     <div class="form-group" style="min-width: 0; grid-column: 1 / -1;">
                         <label>Notas</label>
-                        <textarea id="budget-notes" class="form-textarea" rows="3" style="width: 100%; resize: vertical;">${budget.notes || ''}</textarea>
+                        <textarea id="budget-notes" class="form-textarea" rows="3" style="width: 100%; resize: vertical;">${Utils.escapeHtml(budget.notes || '')}</textarea>
                     </div>
                 </div>
             </form>
@@ -3189,7 +3189,7 @@ const Costs = {
                     </div>
                     <div class="form-group" style="min-width: 0; grid-column: 1 / -1;">
                         <label>Notas</label>
-                        <textarea id="cost-notes" class="form-textarea" rows="3" style="width: 100%; resize: vertical;">${cost?.notes || ''}</textarea>
+                        <textarea id="cost-notes" class="form-textarea" rows="3" style="width: 100%; resize: vertical;">${Utils.escapeHtml(cost?.notes || '')}</textarea>
                     </div>
                 </div>
             </form>
@@ -4270,7 +4270,7 @@ const Costs = {
                         </div>
                         <div class="form-group">
                             <label>Notas</label>
-                            <textarea id="cost-notes" class="form-input" rows="3" placeholder="Notas adicionales...">${cost?.notes || ''}</textarea>
+                            <textarea id="cost-notes" class="form-input" rows="3" placeholder="Notas adicionales...">${Utils.escapeHtml(cost?.notes || '')}</textarea>
                         </div>
                     </div>
 

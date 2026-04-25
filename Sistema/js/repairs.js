@@ -486,10 +486,10 @@ const Repairs = {
                             const item = items.find(i => i.id === repair.item_id);
                             return `
                                 <tr>
-                                    <td>${repair.folio || 'N/A'}</td>
-                                    <td>${customer?.name || 'N/A'}</td>
-                                    <td>${item?.name || 'N/A'}</td>
-                                    <td>${repair.description?.substring(0, 30) || 'N/A'}...</td>
+                                    <td>${Utils.escapeHtml(repair.folio || 'N/A')}</td>
+                                    <td>${Utils.escapeHtml(customer?.name || 'N/A')}</td>
+                                    <td>${Utils.escapeHtml(item?.name || 'N/A')}</td>
+                                    <td>${Utils.escapeHtml(repair.description?.substring(0, 30) || 'N/A')}...</td>
                                     <td><span class="status-badge status-${repair.status}">${repair.status}</span></td>
                                     <td style="font-weight: 600;">${Utils.formatCurrency(repair.cost || 0)}</td>
                                     <td>${Utils.formatDate(repair.created_at, 'DD/MM/YYYY')}</td>
@@ -666,7 +666,7 @@ const Repairs = {
                 </div>
                 <div class="form-group">
                     <label>Descripción *</label>
-                    <textarea id="repair-description" class="form-textarea" rows="4" required>${repair?.description || ''}</textarea>
+                    <textarea id="repair-description" class="form-textarea" rows="4" required>${Utils.escapeHtml(repair?.description || '')}</textarea>
                 </div>
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--spacing-md); width: 100%; box-sizing: border-box;">
                     <div class="form-group" style="min-width: 0; width: 100%; box-sizing: border-box;">
@@ -976,11 +976,11 @@ const Repairs = {
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
                 <div>
                     <h4>Información</h4>
-                    <p><strong>Folio:</strong> ${repair.folio}</p>
-                    <p><strong>Cliente:</strong> ${customer?.name || 'N/A'}</p>
-                    <p><strong>Pieza:</strong> ${item ? `${item.sku} - ${item.name}` : 'N/A'}</p>
-                    <p><strong>Descripción:</strong> ${repair.description}</p>
-                    <p><strong>Estado:</strong> ${repair.status}</p>
+                    <p><strong>Folio:</strong> ${Utils.escapeHtml(repair.folio)}</p>
+                    <p><strong>Cliente:</strong> ${Utils.escapeHtml(customer?.name || 'N/A')}</p>
+                    <p><strong>Pieza:</strong> ${item ? `${Utils.escapeHtml(item.sku)} - ${Utils.escapeHtml(item.name)}` : 'N/A'}</p>
+                    <p><strong>Descripción:</strong> ${Utils.escapeHtml(repair.description)}</p>
+                    <p><strong>Estado:</strong> ${Utils.escapeHtml(repair.status)}</p>
                     <p><strong>Costo:</strong> ${Utils.formatCurrency(repair.cost)}</p>
                     <p><strong>Fecha:</strong> ${Utils.formatDate(repair.created_at, 'DD/MM/YYYY HH:mm')}</p>
                 </div>

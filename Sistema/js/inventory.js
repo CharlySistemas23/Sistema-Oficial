@@ -2166,13 +2166,13 @@ const Inventory = {
                         `<img src="${item.photo}" alt="${item.name}" style="width: 50px; height: 50px; object-fit: cover; border-radius: var(--radius-sm);">` : 
                         '<div style="width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; color: #999; background: var(--color-bg-secondary); border-radius: var(--radius-sm);"><i class="fas fa-gem"></i></div>'}
                 </td>
-                <td style="padding: 12px; font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${item.sku || 'N/A'}">${item.sku || 'N/A'}</td>
-                <td style="padding: 12px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${item.name || 'Sin nombre'}">
-                    <div style="font-weight: 600; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${item.name || 'Sin nombre'}</div>
-                    ${item.description ? `<div style="font-size: 11px; color: var(--color-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${item.description}">${item.description.substring(0, 30)}${item.description.length > 30 ? '...' : ''}</div>` : ''}
+                <td style="padding: 12px; font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${Utils.escapeHtml(item.sku || 'N/A')}">${Utils.escapeHtml(item.sku || 'N/A')}</td>
+                <td style="padding: 12px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${Utils.escapeHtml(item.name || 'Sin nombre')}">
+                    <div style="font-weight: 600; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${Utils.escapeHtml(item.name || 'Sin nombre')}</div>
+                    ${item.description ? `<div style="font-size: 11px; color: var(--color-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${Utils.escapeHtml(item.description)}">${Utils.escapeHtml(item.description.substring(0, 30))}${item.description.length > 30 ? '...' : ''}</div>` : ''}
                 </td>
-                <td style="padding: 12px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${item.category || 'N/A'}">
-                    <div style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${item.category || 'N/A'}</div>
+                <td style="padding: 12px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${Utils.escapeHtml(item.category || 'N/A')}">
+                    <div style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${Utils.escapeHtml(item.category || 'N/A')}</div>
                     ${item.subcategory ? `<div style="font-size: 11px; color: var(--color-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${item.subcategory}">${item.subcategory}</div>` : ''}
                 </td>
                 <td style="padding: 12px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${item.metal || item.material || 'N/A'}">
@@ -3052,7 +3052,7 @@ const Inventory = {
                                     <td style="font-size: 11px;">${Utils.formatDate(log.created_at, 'YYYY-MM-DD HH:mm')}</td>
                                     <td><span class="stock-action-badge stock-action-${log.action}">${log.action}</span></td>
                                     <td style="text-align: center;">${log.quantity || '-'}</td>
-                                    <td style="font-size: 11px; max-width: 200px; overflow: hidden; text-overflow: ellipsis;">${log.notes || '-'}</td>
+                                    <td style="font-size: 11px; max-width: 200px; overflow: hidden; text-overflow: ellipsis;">${Utils.escapeHtml(log.notes || '-')}</td>
                                 </tr>
                             `).join('')}
                         </tbody>
@@ -3116,8 +3116,8 @@ const Inventory = {
                         ${item.year ? `<div><strong>Año:</strong> ${item.year}</div>` : ''}
                         <div><strong>Ubicación:</strong> ${item.location || 'N/A'}</div>
                         <div><strong>Estado:</strong> <span class="status-badge status-${item.status}">${item.status}</span></div>
-                        ${item.tags ? `<div><strong>Etiquetas:</strong> ${item.tags.split(',').map(t => `<span style="background: var(--color-bg-secondary); padding: 2px 8px; border-radius: 12px; font-size: 11px; margin-right: 4px;">${t.trim()}</span>`).join('')}</div>` : ''}
-                        ${item.notes ? `<div style="margin-top: 8px;"><strong>Notas:</strong><br><div style="background: var(--color-bg-secondary); padding: 8px; border-radius: 4px; font-size: 12px; margin-top: 4px;">${item.notes}</div></div>` : ''}
+                        ${item.tags ? `<div><strong>Etiquetas:</strong> ${item.tags.split(',').map(t => `<span style="background: var(--color-bg-secondary); padding: 2px 8px; border-radius: 12px; font-size: 11px; margin-right: 4px;">${Utils.escapeHtml(t.trim())}</span>`).join('')}</div>` : ''}
+                        ${item.notes ? `<div style="margin-top: 8px;"><strong>Notas:</strong><br><div style="background: var(--color-bg-secondary); padding: 8px; border-radius: 4px; font-size: 12px; margin-top: 4px;">${Utils.escapeHtml(item.notes)}</div></div>` : ''}
                     </div>
                     
                     <!-- Panel de Control de Stock -->
@@ -3332,11 +3332,11 @@ const Inventory = {
                     </div>
                     <div class="form-group">
                         <label>Descripción</label>
-                        <textarea id="inv-description" class="form-input" rows="3" placeholder="Descripción detallada de la pieza...">${item?.description || ''}</textarea>
+                        <textarea id="inv-description" class="form-input" rows="3" placeholder="Descripción detallada de la pieza...">${Utils.escapeHtml(item?.description || '')}</textarea>
                     </div>
                     <div class="form-group">
                         <label>Notas Adicionales</label>
-                        <textarea id="inv-notes" class="form-input" rows="3" placeholder="Información adicional sobre la pieza...">${item?.notes || ''}</textarea>
+                        <textarea id="inv-notes" class="form-input" rows="3" placeholder="Información adicional sobre la pieza...">${Utils.escapeHtml(item?.notes || '')}</textarea>
                     </div>
                     <div class="form-group">
                         <label>Etiquetas/Categorías</label>

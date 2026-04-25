@@ -1267,7 +1267,7 @@ const Customers = {
                     </div>
                     <div class="form-group">
                         <label>Notas</label>
-                        <textarea id="customer-notes" class="form-textarea" rows="3" placeholder="Notas adicionales sobre el cliente...">${customer?.notes || ''}</textarea>
+                        <textarea id="customer-notes" class="form-textarea" rows="3" placeholder="Notas adicionales sobre el cliente...">${Utils.escapeHtml(customer?.notes || '')}</textarea>
                     </div>
                 </div>
             </form>
@@ -1590,7 +1590,7 @@ const Customers = {
                 ${customer.notes ? `
                 <div class="c360-section">
                     <h4><i class="fas fa-sticky-note"></i> Notas</h4>
-                    <p class="c360-notes">${customer.notes}</p>
+                    <p class="c360-notes">${Utils.escapeHtml(customer.notes)}</p>
                 </div>
                 ` : ''}
             </div>
