@@ -803,7 +803,10 @@ const Utils = {
     },
 
     // Detectar escaneo vs tecleo (velocidad)
-    createBarcodeScanner(callback, minSpeed = 350) {
+    // minSpeed bajado de 350 a 50ms: el valor anterior bloqueaba tecleo humano normal
+    // (~150-200ms entre teclas) y por eso los inputs de login/POS no permitian escribir
+    // a velocidad normal. 50ms es seguro: escaner real ~10-20ms, humano nunca <80ms.
+    createBarcodeScanner(callback, minSpeed = 50) {
         let buffer = '';
         let lastKeyTime = 0;
         let timeout;
@@ -861,17 +864,13 @@ const Utils = {
             
             // Acumular caracteres si es un carácter imprimible
             if (event.key && event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
-                // Si el tiempo entre teclas es muy corto, probablemente es escaneo
-                if (timeSinceLastKey < minSpeed && buffer.length > 0) {
-                    // Prevenir comportamiento por defecto durante escaneo rápido
-                    event.preventDefault();
-                    event.stopPropagation();
-                }
-                
+                // Acumular SIEMPRE en el buffer interno (sin bloquear input).
+                // Antes hacia event.preventDefault() cuando timeSinceLastKey < minSpeed,
+                // lo cual bloqueaba teclas en inputs incluso para tecleo humano normal.
+                // Solo el callback final (al detectar Enter rapido) hace el preventDefault.
                 buffer += event.key;
                 clearTimeout(timeout);
                 timeout = setTimeout(() => {
-                    // Si no hay actividad, limpiar buffer
                     if (!isScanning) {
                         buffer = '';
                     }
