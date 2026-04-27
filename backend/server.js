@@ -866,11 +866,34 @@ async function checkAndMigrate() {
             }
           }
         } else {
-          console.log('Ô£à Usuario master_admin ya existe');
+          console.log('Usuario master_admin ya existe');
+          // Recovery hatch: si MASTER_ADMIN_RESET_PASSWORD esta seteada al
+          // arrancar, resetea el password de master_admin a ese valor. Util
+          // cuando se pierde la contrasena. Recuerda QUITAR la env var
+          // despues del primer login.
+          const resetTo = process.env.MASTER_ADMIN_RESET_PASSWORD;
+          if (resetTo && String(resetTo).length >= 4) {
+            try {
+              const bcrypt = await import('bcryptjs');
+              const newHash = await bcrypt.default.hash(String(resetTo), 10);
+              await pool.query(
+                `UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE username = 'master_admin'`,
+                [newHash]
+              );
+              console.log('==================================================');
+              console.log('  master_admin password RESETEADO via env var');
+              console.log('  Username: master_admin');
+              console.log('  Password: (el valor de MASTER_ADMIN_RESET_PASSWORD)');
+              console.log('  -> QUITA MASTER_ADMIN_RESET_PASSWORD de Railway');
+              console.log('     y haz redeploy despues del primer login.');
+              console.log('==================================================');
+            } catch (resetErr) {
+              console.error('Error reseteando password master_admin:', resetErr?.message || resetErr);
+            }
+          }
         }
       } catch (adminError) {
-        console.warn('ÔÜá´©Å  Error creando usuario admin (no cr├¡tico):', adminError.message);
-        console.log('­ƒÆí Puedes crear el usuario admin manualmente con: npm run create-admin');
+        console.warn('Error creando usuario admin (no critico):', adminError.message);
         // No lanzar error, continuar con el servidor
       }
       

@@ -244,7 +244,19 @@ const UserManager = {
                     const errorMsg = apiError.message || 'Error desconocido';
                     const errorStatus = Number(apiError.status || 0);
                     const errorCode = String(apiError.code || '').toUpperCase();
-                    
+
+                    // 429 = lockout por intentos fallidos. Mostrar mensaje claro
+                    // para que el usuario sepa que NO es contrasena incorrecta sino
+                    // bloqueo temporal (antes mostraba "Usuario o contrasena
+                    // incorrectos" generico y confundia).
+                    if (errorStatus === 429 || errorCode === 'LOGIN_LOCKED_OUT') {
+                        if (errorEl) {
+                            errorEl.textContent = errorMsg || 'Demasiados intentos fallidos. Espera unos minutos.';
+                            errorEl.style.display = 'block';
+                        }
+                        return;
+                    }
+
                     // Si es 401, el usuario/contraseña no coinciden en Railway
                     if (errorMsg.includes('401') || errorMsg.includes('incorrectos') || errorMsg.includes('Unauthorized')) {
                         console.error('❌ Login con API falló: Usuario o contraseña incorrectos en Railway');
