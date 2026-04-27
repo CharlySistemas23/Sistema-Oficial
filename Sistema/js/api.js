@@ -2046,6 +2046,15 @@ const API = {
 
     async deleteImage(publicId) {
         return await this.delete(`/api/upload/image/${publicId}`);
+    },
+
+    // Company settings (configuracion compartida entre dispositivos)
+    async getCompanySettings() {
+        return await this.get('/api/settings/company');
+    },
+
+    async setCompanySettings(settings) {
+        return await this.put('/api/settings/company', { settings });
     }
 };
 

@@ -1374,10 +1374,23 @@ BEGIN
     END IF;
 END $$;
 
+-- Configuracion compartida de la empresa (tax_iva, comisiones bancarias,
+-- tipos de cambio, etc.). Antes solo vivia en IndexedDB local de cada
+-- dispositivo, lo que provocaba que cambiar el IVA en una compu no
+-- afectara a las demas.
+CREATE TABLE IF NOT EXISTS company_settings (
+    key VARCHAR(100) PRIMARY KEY,
+    value JSONB NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_by UUID REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_company_settings_updated_at ON company_settings(updated_at DESC);
+
 -- ============================================
 -- DATOS INICIALES
 -- ============================================
 
 -- Usuario administrador maestro se crea automáticamente al iniciar el servidor
--- Ver backend/server.js y backend/routes/auth.js para detalles
--- Username: admin, PIN: 1234, Rol: master_admin
+-- Ver backend/server.js (con MASTER_ADMIN_INITIAL_PASSWORD env var o random)
+-- Username: master_admin, Rol: master_admin

@@ -30,6 +30,7 @@ import exchangeRatesRoutes from './routes/exchange_rates.js';
 import uploadRoutes from './routes/upload.js';
 import arrivalRulesRoutes from './routes/arrival-rules.js';
 import debugRoutes from './routes/debug.js';
+import companySettingsRoutes from './routes/company-settings.js';
 
 // Importar middleware
 import { authenticateOptional } from './middleware/authOptional.js';
@@ -374,6 +375,7 @@ app.use('/api/tourist', authenticateOptional, touristRoutes);
 app.use('/api/exchange-rates', exchangeRatesRoutes); // P├║blico, no requiere auth
 app.use('/api/arrival-rules', authenticateOptional, arrivalRulesRoutes);
 app.use('/api/upload', authenticateOptional, uploadRoutes); // Autenticaci├│n opcional
+app.use('/api/settings/company', authenticateOptional, companySettingsRoutes);
 if (!isProductionLike || process.env.ENABLE_DEBUG_ROUTES === 'true') {
   app.use('/api/debug', authenticateOptional, debugRoutes); // Diagn├│stico: conteos por sucursal
 }

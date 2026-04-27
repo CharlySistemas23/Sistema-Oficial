@@ -6,9 +6,13 @@ const Settings = {
     async init() {
         try {
             if (this.initialized) return;
+            // Pull configuracion compartida del backend ANTES de renderizar.
+            // Asi cualquier cambio hecho desde otro dispositivo (IVA, comisiones,
+            // etc.) se refleja al abrir Configuracion. Errores son no-op.
+            await this._pullCompanySettingsFromBackend();
             this.setupUI();
             await this.loadSettings();
-            
+
             // Escuchar eventos de sincronización para actualizar el estado
             window.addEventListener('sync-completed', async () => {
                 // Si estamos en la pestaña de sincronización, recargar el estado
@@ -1558,6 +1562,15 @@ const Settings = {
                 await DB.put('settings', { key: 'tax_isr', value: taxIsr, updated_at: new Date().toISOString() });
             }
 
+            // Sincronizar al backend para que TODOS los dispositivos usen el
+            // mismo IVA. Antes era local-only por dispositivo, lo que causaba
+            // discrepancias en reportes.
+            await this._syncCompanySettingsToBackend({
+                tax_iva: taxIva,
+                tax_ieps: taxIeps,
+                ...(taxIsrInput ? { tax_isr: taxIsr } : {})
+            });
+
             // Verificar que se guardó correctamente
             const savedIva = await DB.get('settings', 'tax_iva');
             if (!savedIva || savedIva.value !== taxIva) {
@@ -1568,6 +1581,58 @@ const Settings = {
         } catch (e) {
             console.error('Error guardando impuestos:', e);
             Utils.showNotification('Error al guardar: ' + e.message, 'error');
+        }
+    },
+
+    // Helper: jala configuracion compartida del backend al iniciar y la
+    // mergea en IndexedDB local. Si el backend tiene un valor mas reciente
+    // pisa el local; si no, el local sigue como autoridad. Offline = no-op.
+    async _pullCompanySettingsFromBackend() {
+        try {
+            if (typeof API === 'undefined' || !API.baseURL || !API.token) return;
+            if (typeof API.getCompanySettings !== 'function') return;
+            const remote = await API.getCompanySettings();
+            if (!remote || typeof remote !== 'object') return;
+            for (const [key, entry] of Object.entries(remote)) {
+                if (!entry || typeof entry !== 'object') continue;
+                const remoteValue = entry.value;
+                const remoteUpdatedAt = entry.updated_at ? new Date(entry.updated_at).getTime() : 0;
+                let localUpdatedAt = 0;
+                try {
+                    const local = await DB.get('settings', key);
+                    if (local && local.updated_at) {
+                        localUpdatedAt = new Date(local.updated_at).getTime();
+                    }
+                } catch (_) {}
+                // Si el remoto es mas nuevo o no hay local, escribir.
+                if (remoteUpdatedAt >= localUpdatedAt) {
+                    await DB.put('settings', {
+                        key,
+                        value: remoteValue,
+                        updated_at: entry.updated_at || new Date().toISOString()
+                    });
+                }
+            }
+        } catch (err) {
+            console.warn('[Settings] No se pudo jalar config del backend:', err?.message || err);
+        }
+    },
+
+    // Helper: empuja un set de settings al backend si hay API+token. Errores
+    // se silencian (offline ok), el guardado local ya quedo. Solo master_admin
+    // puede escribir en la tabla company_settings — para otros roles esto es
+    // un no-op (recibe 403 y se ignora).
+    async _syncCompanySettingsToBackend(settings) {
+        try {
+            if (typeof API === 'undefined' || !API.baseURL || !API.token) return;
+            if (typeof API.setCompanySettings !== 'function') return;
+            await API.setCompanySettings(settings);
+        } catch (err) {
+            // Silenciar 403 (no master_admin) y errores de red.
+            const status = Number(err?.status || 0);
+            if (status !== 403) {
+                console.warn('[Settings] No se pudo sincronizar config al backend:', err?.message || err);
+            }
         }
     },
 
@@ -1600,6 +1665,14 @@ const Settings = {
             await DB.put('settings', { key: 'bank_commission_banamex_international', value: banamexInternational, updated_at: new Date().toISOString() });
             await DB.put('settings', { key: 'bank_commission_santander_national', value: santanderNational, updated_at: new Date().toISOString() });
             await DB.put('settings', { key: 'bank_commission_santander_international', value: santanderInternational, updated_at: new Date().toISOString() });
+
+            // Sincronizar al backend (master_admin lo aplica a la empresa entera)
+            await this._syncCompanySettingsToBackend({
+                bank_commission_banamex_national: banamexNational,
+                bank_commission_banamex_international: banamexInternational,
+                bank_commission_santander_national: santanderNational,
+                bank_commission_santander_international: santanderInternational
+            });
 
             Utils.showNotification('Comisiones bancarias guardadas correctamente', 'success');
         } catch (e) {
