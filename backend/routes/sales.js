@@ -63,10 +63,16 @@ router.get('/', requireBranchAccess, async (req, res) => {
     const userBranchId = normalizeBranchId(req.user.branchId);
     const branchId = requestedBranchId || userBranchId;
 
+    // LEFT JOIN a una sub-aggregada en vez de subselect correlacionada
+    // (era N+1: un COUNT por venta). Una sola pasada sobre sale_items.
     let sql = `
-      SELECT s.*,
-             (SELECT COUNT(*) FROM sale_items WHERE sale_id = s.id) as items_count
+      SELECT s.*, COALESCE(ic.items_count, 0)::int AS items_count
       FROM sales s
+      LEFT JOIN (
+        SELECT sale_id, COUNT(*) AS items_count
+        FROM sale_items
+        GROUP BY sale_id
+      ) ic ON ic.sale_id = s.id
       WHERE 1=1
     `;
     const params = [];
