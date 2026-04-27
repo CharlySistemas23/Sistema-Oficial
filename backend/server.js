@@ -828,10 +828,17 @@ async function checkAndMigrate() {
             } else {
               const employeeId = employeeResult.rows[0].id;
               
-              // Crear usuario admin
+              // Crear usuario admin con password seguro.
+              // Antes era hardcoded "1234" — cualquier deploy nuevo arrancaba con
+              // credenciales conocidas. Ahora:
+              //   1. Si existe MASTER_ADMIN_INITIAL_PASSWORD en env, se usa.
+              //   2. Si no, se genera uno aleatorio y se loggea UNA SOLA VEZ.
               const bcrypt = await import('bcryptjs');
-              const passwordHash = await bcrypt.default.hash('1234', 10);
-              
+              const cryptoMod = await import('crypto');
+              const initialPassword = process.env.MASTER_ADMIN_INITIAL_PASSWORD
+                || cryptoMod.randomBytes(12).toString('base64').replace(/[^a-zA-Z0-9]/g, '').slice(0, 16);
+              const passwordHash = await bcrypt.default.hash(initialPassword, 10);
+
               await pool.query(`
                 INSERT INTO users (id, username, password_hash, employee_id, role, active)
                 VALUES (
@@ -844,9 +851,18 @@ async function checkAndMigrate() {
                 )
                 ON CONFLICT (id) DO NOTHING
               `, [passwordHash, employeeId]);
-              
-              console.log('Ô£à Usuario master_admin creado');
-              console.log('­ƒôï Credenciales: username=master_admin, PIN=1234');
+
+              console.log('==================================================');
+              console.log('  Usuario master_admin creado');
+              console.log('  username: master_admin');
+              if (process.env.MASTER_ADMIN_INITIAL_PASSWORD) {
+                console.log('  password: (definido en MASTER_ADMIN_INITIAL_PASSWORD)');
+              } else {
+                console.log('  password (auto-generado, copialo AHORA): ' + initialPassword);
+                console.log('  -> Si pierdes este log, hay que resetearlo desde la BD.');
+              }
+              console.log('  CAMBIA el password despues del primer login.');
+              console.log('==================================================');
             }
           }
         } else {
