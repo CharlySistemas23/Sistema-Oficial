@@ -729,7 +729,7 @@ const Cash = {
                         </div>
                         <div class="movement-details">
                             <div class="movement-type">Arqueo Parcial</div>
-                            <div class="movement-description">${m.description || 'Sin descripción'}</div>
+                            <div class="movement-description">${Utils.escapeHtml(m.description || 'Sin descripción')}</div>
                             <div class="partial-details">
                                 <div class="partial-row">
                                     <span>Contado USD:</span>
@@ -1476,7 +1476,7 @@ const Cash = {
                         </div>
                         ${session.notes ? `
                         <div class="history-notes">
-                            <strong>Notas:</strong> ${session.notes}
+                            <strong>Notas:</strong> ${Utils.escapeHtml(session.notes)}
                         </div>
                         ` : ''}
                     </div>

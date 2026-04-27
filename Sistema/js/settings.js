@@ -4020,11 +4020,21 @@ const Settings = {
             
             const verificationResults = await Promise.all(verificationPromises);
             const allSaved = verificationResults.every(r => r === true);
-            
+
             if (!allSaved) {
                 console.error('Algunos settings no se guardaron correctamente');
                 Utils.showNotification('Configuración guardada con advertencias. Algunos valores pueden no haberse guardado.', 'warning');
             }
+
+            // Sincronizar al backend SOLO los datos empresariales que aparecen
+            // en tickets/reportes (deben ser iguales en todos los dispositivos).
+            // El resto (config de impresora especifica del hardware) sigue local.
+            await this._syncCompanySettingsToBackend({
+                business_name: businessName,
+                business_address: businessAddress,
+                business_phone: businessPhone,
+                ticket_footer: ticketFooterMsg
+            });
 
             // Actualizar configuración del módulo Printer
             if (typeof Printer !== 'undefined') {
@@ -4436,13 +4446,13 @@ const Settings = {
                         </tr>
                     </thead>
                     <tbody>
-                        ${sortedAudits.length === 0 ? '<tr><td colspan="4" style="text-align: center; padding: var(--spacing-md);">No hay registros</td></tr>' : 
+                        ${sortedAudits.length === 0 ? '<tr><td colspan="4" style="text-align: center; padding: var(--spacing-md);">No hay registros</td></tr>' :
                         sortedAudits.map(audit => `
                             <tr>
                                 <td>${Utils.formatDate(audit.created_at, 'DD/MM/YYYY HH:mm')}</td>
-                                <td>${audit.user_id || 'Sistema'}</td>
-                                <td>${audit.action}</td>
-                                <td style="font-size: 10px;">${JSON.stringify(audit.details || {}).substring(0, 50)}</td>
+                                <td>${Utils.escapeHtml(audit.user_id || 'Sistema')}</td>
+                                <td>${Utils.escapeHtml(audit.action)}</td>
+                                <td style="font-size: 10px;">${Utils.escapeHtml(JSON.stringify(audit.details || {}).substring(0, 50))}</td>
                             </tr>
                         `).join('')}
                     </tbody>

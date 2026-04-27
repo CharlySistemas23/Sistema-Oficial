@@ -153,11 +153,11 @@ const Transfers = {
         
         if (fromSelect) {
             fromSelect.innerHTML = '<option value="">Todas</option>' + 
-                activeBranches.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
+                activeBranches.map(b => `<option value="${b.id}">${Utils.escapeHtml(b.name)}</option>`).join('');
         }
         if (toSelect) {
             toSelect.innerHTML = '<option value="">Todas</option>' + 
-                activeBranches.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
+                activeBranches.map(b => `<option value="${b.id}">${Utils.escapeHtml(b.name)}</option>`).join('');
         }
         
         // Escuchar eventos Socket.IO para actualización en tiempo real
@@ -573,13 +573,13 @@ const Transfers = {
                                     };
                                     return `
                                         <tr>
-                                            <td><strong>${transfer.folio || transfer.id.substring(0, 8)}</strong></td>
-                                            <td>${getBranchName(transfer.from_branch_id)}</td>
-                                            <td>${getBranchName(transfer.to_branch_id)}</td>
+                                            <td><strong>${Utils.escapeHtml(transfer.folio || transfer.id.substring(0, 8))}</strong></td>
+                                            <td>${Utils.escapeHtml(getBranchName(transfer.from_branch_id))}</td>
+                                            <td>${Utils.escapeHtml(getBranchName(transfer.to_branch_id))}</td>
                                             <td>${transfer.items_count || 0} pieza(s)</td>
                                             <td>
                                                 <span class="status-badge status-${statusColors[transfer.status] || 'secondary'}">
-                                                    ${statusLabels[transfer.status] || transfer.status}
+                                                    ${Utils.escapeHtml(statusLabels[transfer.status] || transfer.status)}
                                                 </span>
                                             </td>
                                             <td>${Utils.formatDate(new Date(transfer.created_at), 'DD/MM/YYYY HH:mm')}</td>
@@ -675,7 +675,7 @@ const Transfers = {
                         </label>
                         <select id="transfer-from-branch" class="form-select" required>
                             ${activeOriginBranches.map(b => 
-                                `<option value="${b.id}" ${b.id === currentBranchId ? 'selected' : ''}>${b.name}</option>`
+                                `<option value="${b.id}" ${b.id === currentBranchId ? 'selected' : ''}>${Utils.escapeHtml(b.name)}</option>`
                             ).join('')}
                         </select>
                     </div>
@@ -685,8 +685,8 @@ const Transfers = {
                             Sucursal Destino <span style="color: var(--color-danger);">*</span>
                         </label>
                         <select id="transfer-to-branch" class="form-select" required>
-                            ${activeDestinationBranches.filter(b => b.id !== currentBranchId).map(b => 
-                                `<option value="${b.id}">${b.name}</option>`
+                            ${activeDestinationBranches.filter(b => b.id !== currentBranchId).map(b =>
+                                `<option value="${b.id}">${Utils.escapeHtml(b.name)}</option>`
                             ).join('')}
                         </select>
                     </div>
@@ -1795,11 +1795,11 @@ const Transfers = {
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md); margin-bottom: var(--spacing-md);">
                     <div>
                         <div style="font-size: 11px; color: var(--color-text-secondary); margin-bottom: var(--spacing-xs);">Folio</div>
-                        <div style="font-weight: 600; font-size: 14px;">${transfer.folio}</div>
+                        <div style="font-weight: 600; font-size: 14px;">${Utils.escapeHtml(transfer.folio)}</div>
                     </div>
                     <div>
                         <div style="font-size: 11px; color: var(--color-text-secondary); margin-bottom: var(--spacing-xs);">Estado</div>
-                        <div><span class="status-badge status-${transfer.status === 'completed' ? 'success' : transfer.status === 'cancelled' ? 'danger' : 'warning'}">${statusLabels[transfer.status] || transfer.status}</span></div>
+                        <div><span class="status-badge status-${transfer.status === 'completed' ? 'success' : transfer.status === 'cancelled' ? 'danger' : 'warning'}">${Utils.escapeHtml(statusLabels[transfer.status] || transfer.status)}</span></div>
                     </div>
                     <div>
                         <div style="font-size: 11px; color: var(--color-text-secondary); margin-bottom: var(--spacing-xs);">Desde</div>
@@ -2128,7 +2128,7 @@ const Transfers = {
             branchFilterContainer.style.display = '';
             const branches = await DB.getAll('catalog_branches') || [];
             branchFilter.innerHTML = '<option value="all">Todas las sucursales</option>' + 
-                branches.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
+                branches.map(b => `<option value="${b.id}">${Utils.escapeHtml(b.name)}</option>`).join('');
             branchFilter.value = currentBranchId || 'all';
             const newBranchFilter = branchFilter.cloneNode(true);
             branchFilter.parentNode.replaceChild(newBranchFilter, branchFilter);

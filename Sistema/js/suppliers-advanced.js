@@ -46,7 +46,7 @@ window.SuppliersAdvanced = {
     },
 
     async showOverview(supplier) {
-        const title = `Vista Avanzada: ${supplier.name}`;
+        const title = `Vista Avanzada: ${Utils.escapeHtml(supplier.name)}`;
         
         const body = `
             <div class="supplier-advanced-view">
@@ -203,7 +203,7 @@ window.SuppliersAdvanced = {
     // ========== GESTIÓN DE CONTRATOS ==========
 
     async showContracts(supplier) {
-        const title = `Contratos: ${supplier.name}`;
+        const title = `Contratos: ${Utils.escapeHtml(supplier.name)}`;
         
         const body = `
             <div class="supplier-contracts-view">
@@ -460,7 +460,7 @@ window.SuppliersAdvanced = {
     // ========== GESTIÓN DE ÓRDENES DE COMPRA ==========
 
     async showPurchaseOrders(supplier) {
-        const title = `Órdenes de Compra: ${supplier.name}`;
+        const title = `Órdenes de Compra: ${Utils.escapeHtml(supplier.name)}`;
         
         const body = `
             <div class="supplier-orders-view">
@@ -708,7 +708,7 @@ window.SuppliersAdvanced = {
             </form>
         `;
 
-        const orderModalTitle = isEdit ? `Editar Orden: ${orderNumber}` : `Nueva Orden: ${supplier.name}`;
+        const orderModalTitle = isEdit ? `Editar Orden: ${Utils.escapeHtml(orderNumber)}` : `Nueva Orden: ${Utils.escapeHtml(supplier.name)}`;
         UI.showModal(
             orderModalTitle,
             body,
@@ -977,7 +977,7 @@ window.SuppliersAdvanced = {
                             <tbody>
                                 ${(order.items || []).map(item => `
                                     <tr>
-                                        <td>${item.name}</td>
+                                        <td>${Utils.escapeHtml(item.name)}</td>
                                         <td>${item.quantity_ordered}</td>
                                         <td>${Utils.formatCurrency(item.unit_price)}</td>
                                         <td>${Utils.formatCurrency(item.line_total)}</td>
@@ -1021,7 +1021,7 @@ window.SuppliersAdvanced = {
     // ========== GESTIÓN DE PAGOS ==========
 
     async showPayments(supplier) {
-        const title = `Cuentas por Pagar: ${supplier.name}`;
+        const title = `Cuentas por Pagar: ${Utils.escapeHtml(supplier.name)}`;
         
         const body = `
             <div class="supplier-payments-view">
@@ -1286,7 +1286,7 @@ window.SuppliersAdvanced = {
             </form>
         `;
 
-        const paymentTitle = isEdit ? `Editar Pago: ${referenceNumber}` : `Nuevo Pago/Factura: ${supplier.name}`;
+        const paymentTitle = isEdit ? `Editar Pago: ${Utils.escapeHtml(referenceNumber)}` : `Nuevo Pago/Factura: ${Utils.escapeHtml(supplier.name)}`;
         UI.showModal(
             paymentTitle,
             body,
@@ -1815,7 +1815,7 @@ window.SuppliersAdvanced = {
         ${branch ? `
         <div class="info-row">
             <span class="info-label">Sucursal:</span>
-            <span class="info-value">${branch.name || 'N/A'}</span>
+            <span class="info-value">${Utils.escapeHtml(branch.name || 'N/A')}</span>
         </div>
         ` : ''}
     </div>
@@ -2107,7 +2107,7 @@ window.SuppliersAdvanced = {
                             ${data.map(row => `
                                 <tr>
                                     <td style="padding: 8px; border: 1px solid var(--color-border);">
-                                        ${row.code || ''} ${row.code && row.name ? '- ' : ''}${row.name || 'N/A'}
+                                        ${Utils.escapeHtml(row.code || '')} ${row.code && row.name ? '- ' : ''}${Utils.escapeHtml(row.name || 'N/A')}
                                     </td>
                                     <td style="padding: 8px; text-align: center; border: 1px solid var(--color-border);">
                                         ${row.rating ? `${parseFloat(row.rating).toFixed(1)} ⭐` : 'N/A'}
@@ -2176,7 +2176,7 @@ window.SuppliersAdvanced = {
     },
 
     async showAnalytics(supplier) {
-        const title = `Análisis: ${supplier.name}`;
+        const title = `Análisis: ${Utils.escapeHtml(supplier.name)}`;
         
         const body = `
             <div class="supplier-analytics-view">
