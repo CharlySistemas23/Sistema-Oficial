@@ -232,7 +232,7 @@ router.post('/:employeeId/user', requireMasterAdmin, async (req, res) => {
 router.put('/user/:userId', requireMasterAdmin, async (req, res) => {
   try {
     const { userId } = req.params;
-    const { role, permissions, permissions_by_branch } = req.body;
+    const { role, permissions, permissions_by_branch, password, active } = req.body;
 
     const userResult = await query(
       'SELECT id, username FROM users WHERE id = $1',
@@ -260,8 +260,28 @@ router.put('/user/:userId', requireMasterAdmin, async (req, res) => {
         : '{}';
       values.push(pbb);
     }
+    if (active !== undefined) {
+      updates.push(`active = $${pos++}`);
+      values.push(active === true || active === 'true');
+    }
+    // Cambio de password: bcrypt y validar minimo 4 chars + no debil.
+    // Antes este endpoint NO aceptaba password, asi que NO HABIA forma de
+    // cambiar la contrasena de un usuario desde la UI. Ahora si.
+    if (password !== undefined && password !== null && password !== '') {
+      const pwd = String(password).trim();
+      if (pwd.length < 4) {
+        return res.status(400).json({ error: 'La contrasena debe tener al menos 4 caracteres' });
+      }
+      const blacklist = new Set(['1234','0000','1111','2222','3333','4444','5555','6666','7777','8888','9999','4321','12345','54321','111111','000000','123456','password','admin']);
+      if (blacklist.has(pwd.toLowerCase())) {
+        return res.status(400).json({ error: 'Contrasena demasiado comun' });
+      }
+      const newHash = await bcrypt.hash(pwd, 10);
+      updates.push(`password_hash = $${pos++}`);
+      values.push(newHash);
+    }
     if (updates.length === 0) {
-      return res.status(400).json({ error: 'Indica role, permissions y/o permissions_by_branch para actualizar' });
+      return res.status(400).json({ error: 'Indica algo para actualizar (role, permissions, permissions_by_branch, password, active)' });
     }
     values.push(userId);
     await query(

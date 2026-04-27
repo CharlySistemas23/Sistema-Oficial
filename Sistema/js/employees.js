@@ -1761,8 +1761,14 @@ const Employees = {
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>PIN (dejar vacío para mantener actual)</label>
-                    <input type="password" id="user-pin" class="form-input" maxlength="6" placeholder="6 dígitos">
+                    <label>PIN local (dejar vacio para mantener actual)</label>
+                    <input type="password" id="user-pin" class="form-input" maxlength="6" placeholder="4-6 digitos">
+                    <small style="color: var(--color-text-secondary); font-size: 10px;">Se usa para reautenticarse en este dispositivo. Hash local SHA-256.</small>
+                </div>
+                <div class="form-group">
+                    <label>Contrasena de Login Web (dejar vacio para mantener actual)</label>
+                    <input type="password" id="user-password" class="form-input" placeholder="Minimo 4 caracteres">
+                    <small style="color: var(--color-text-secondary); font-size: 10px;">Se usa para iniciar sesion desde la web. Hash bcrypt en el servidor.</small>
                 </div>
                 <div class="form-group">
                     <label>Permisos (generales)</label>
@@ -1832,10 +1838,27 @@ const Employees = {
         const pinInput = document.getElementById('user-pin').value;
         let pinHash = null;
         if (pinInput && pinInput.length >= 4) {
+            // Validar PIN debil
+            if (Utils.isWeakPin) {
+                const weak = Utils.isWeakPin(pinInput);
+                if (weak) {
+                    Utils.showNotification('PIN rechazado: ' + weak, 'error');
+                    return;
+                }
+            }
             pinHash = await Utils.hashPin(pinInput);
         } else if (userId) {
             const existing = await DB.get('users', userId);
             pinHash = existing?.pin_hash;
+        }
+
+        // Password de login web (bcrypt en backend). Solo se envia si el usuario
+        // escribio algo; vacio = mantener el actual.
+        const passwordEl = document.getElementById('user-password');
+        const passwordInput = passwordEl ? passwordEl.value : '';
+        if (passwordInput && passwordInput.length > 0 && passwordInput.length < 4) {
+            Utils.showNotification('La contrasena debe tener al menos 4 caracteres', 'error');
+            return;
         }
 
         const globalCheckboxes = document.querySelectorAll('#user-form input[data-perm-type="global"]:checked');
@@ -1847,7 +1870,10 @@ const Employees = {
 
         const hasApi = typeof API !== 'undefined' && API.baseURL && API.token;
 
-        const payload = { role, permissions };
+        const payload = { role, permissions, active };
+        if (passwordInput && passwordInput.length >= 4) {
+            payload.password = passwordInput;
+        }
         if (userId) {
             const permissionsByBranch = (typeof this._editingPermissionsByBranch === 'object' && this._editingPermissionsByBranch !== null)
                 ? this._editingPermissionsByBranch
