@@ -252,8 +252,13 @@ router.post('/', requireBranchAccess, async (req, res) => {
   }
 });
 
-// Actualizar pago
+// Actualizar pago. Envuelto en transaccion + lock para evitar race
+// conditions con POST /:id/pay (que ya estaba protegido pero podria
+// pisarse contra un PUT concurrente).
 router.put('/:id', requireBranchAccess, async (req, res) => {
+  const client = await getClient();
+  let transactionCommitted = false;
+
   try {
     const { id } = req.params;
     const {
@@ -265,39 +270,40 @@ router.put('/:id', requireBranchAccess, async (req, res) => {
       notes, document_urls
     } = req.body;
 
-    // Verificar que el pago existe
-    const existingResult = await query(
-      'SELECT * FROM supplier_payments WHERE id = $1',
+    await client.query('BEGIN');
+
+    // SELECT FOR UPDATE bloquea el row hasta el COMMIT/ROLLBACK
+    const existingResult = await client.query(
+      'SELECT * FROM supplier_payments WHERE id = $1 FOR UPDATE',
       [id]
     );
 
     if (existingResult.rows.length === 0) {
+      await safeRollback(client);
       return res.status(404).json({ error: 'Pago no encontrado' });
     }
 
     const existing = existingResult.rows[0];
 
-    // Verificar permisos
     if (!req.user.isMasterAdmin) {
       if (existing.branch_id !== req.user.branchId) {
+        await safeRollback(client);
         return res.status(403).json({ error: 'No tienes permisos para editar este pago' });
       }
     }
 
-    // Verificar que el número de referencia no esté en uso por otro pago
     if (reference_number && reference_number !== existing.reference_number) {
-      const codeCheck = await query(
+      const codeCheck = await client.query(
         'SELECT id FROM supplier_payments WHERE reference_number = $1 AND id != $2',
         [reference_number, id]
       );
       if (codeCheck.rows.length > 0) {
+        await safeRollback(client);
         return res.status(400).json({ error: 'El número de referencia ya está en uso' });
       }
     }
 
-    // Calcular montos. Postgres devuelve DECIMAL como string y req.body
-    // puede traer numeros o strings; sin parseFloat, `+` concatena.
-    // (ej. "100.00" + "10.00" => "100.0010.00", luego Postgres rechaza el cast).
+    // Calcular montos con parseFloat para evitar concatenacion de strings
     const finalAmount = parseFloat(amount ?? existing.amount) || 0;
     const finalTaxAmount = parseFloat(tax_amount !== undefined ? tax_amount : existing.tax_amount) || 0;
     const finalDiscountAmount = parseFloat(discount_amount !== undefined ? discount_amount : existing.discount_amount) || 0;
@@ -305,7 +311,6 @@ router.put('/:id', requireBranchAccess, async (req, res) => {
       ? (parseFloat(total_amount) || 0)
       : (finalAmount + finalTaxAmount - finalDiscountAmount);
 
-    // Actualizar estado si se marca como pagado
     let finalStatus = status || existing.status;
     if (payment_date && !existing.payment_date) {
       if (finalStatus === 'pending' || finalStatus === 'partial') {
@@ -313,7 +318,7 @@ router.put('/:id', requireBranchAccess, async (req, res) => {
       }
     }
 
-    const result = await query(
+    const result = await client.query(
       `UPDATE supplier_payments SET
         payment_type = COALESCE($1, payment_type),
         reference_number = COALESCE($2, reference_number),
@@ -346,9 +351,11 @@ router.put('/:id', requireBranchAccess, async (req, res) => {
       ]
     );
 
+    await client.query('COMMIT');
+    transactionCommitted = true;
+
     const payment = result.rows[0];
 
-    // Emitir actualización en tiempo real
     if (io) {
       const supplier = await query(
         'SELECT * FROM suppliers WHERE id = $1',
@@ -361,11 +368,14 @@ router.put('/:id', requireBranchAccess, async (req, res) => {
 
     res.json(payment);
   } catch (error) {
+    if (!transactionCommitted) await safeRollback(client);
     console.error('Error actualizando pago:', error);
     if (error.code === '23505') {
       return res.status(400).json({ error: 'El número de referencia ya existe' });
     }
     res.status(500).json({ error: 'Error al actualizar pago' });
+  } finally {
+    client.release();
   }
 });
 

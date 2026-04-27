@@ -1870,7 +1870,7 @@ const Employees = {
 
         const hasApi = typeof API !== 'undefined' && API.baseURL && API.token;
 
-        const payload = { role, permissions, active };
+        const payload = { username, role, permissions, active };
         if (passwordInput && passwordInput.length >= 4) {
             payload.password = passwordInput;
         }

@@ -232,7 +232,7 @@ router.post('/:employeeId/user', requireMasterAdmin, async (req, res) => {
 router.put('/user/:userId', requireMasterAdmin, async (req, res) => {
   try {
     const { userId } = req.params;
-    const { role, permissions, permissions_by_branch, password, active } = req.body;
+    const { username, role, permissions, permissions_by_branch, password, active } = req.body;
 
     const userResult = await query(
       'SELECT id, username FROM users WHERE id = $1',
@@ -245,6 +245,30 @@ router.put('/user/:userId', requireMasterAdmin, async (req, res) => {
     const updates = [];
     const values = [];
     let pos = 1;
+
+    // Cambio de username: validar formato y unicidad. Antes este endpoint
+    // ignoraba username — no habia forma de renombrar un usuario.
+    if (username !== undefined && username !== null) {
+      const newUsername = String(username).trim();
+      if (newUsername.length < 3) {
+        return res.status(400).json({ error: 'El username debe tener al menos 3 caracteres' });
+      }
+      if (!/^[a-zA-Z0-9_.-]+$/.test(newUsername)) {
+        return res.status(400).json({ error: 'El username solo puede contener letras, numeros, guion bajo, punto y guion' });
+      }
+      if (newUsername !== userResult.rows[0].username) {
+        const conflictCheck = await query(
+          'SELECT id FROM users WHERE username = $1 AND id != $2',
+          [newUsername, userId]
+        );
+        if (conflictCheck.rows.length > 0) {
+          return res.status(400).json({ error: 'El username ya esta en uso por otro usuario' });
+        }
+        updates.push(`username = $${pos++}`);
+        values.push(newUsername);
+      }
+    }
+
     if (role !== undefined) {
       updates.push(`role = $${pos++}`);
       values.push(role);
