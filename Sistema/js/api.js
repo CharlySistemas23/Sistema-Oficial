@@ -2055,6 +2055,10 @@ const API = {
 
     async setCompanySettings(settings) {
         return await this.put('/api/settings/company', { settings });
+    },
+
+    async getAuditLogs(filters = {}) {
+        return await this.get('/api/audit-logs', filters);
     }
 };
 

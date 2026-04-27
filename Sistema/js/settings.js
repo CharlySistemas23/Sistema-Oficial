@@ -4431,8 +4431,23 @@ const Settings = {
             Utils.showNotification('No tienes permiso para ver el log de auditoría', 'error');
             return;
         }
-        const audits = await DB.getAll('audit_log') || [];
-        const sortedAudits = audits.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 100);
+
+        // Cargar desde el backend (autoridad). Antes solo se leia de IndexedDB
+        // local, que NUNCA se llenaba — el log siempre salia vacio.
+        let audits = [];
+        try {
+            if (typeof API !== 'undefined' && API.baseURL && API.token && typeof API.getAuditLogs === 'function') {
+                audits = await API.getAuditLogs({ limit: 200 }) || [];
+            } else {
+                // Fallback offline: leer del IndexedDB local
+                audits = await DB.getAll('audit_log') || [];
+            }
+        } catch (e) {
+            console.warn('No se pudo cargar audit log desde backend, usando local:', e?.message || e);
+            audits = await DB.getAll('audit_log') || [];
+        }
+
+        const sortedAudits = audits.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 200);
 
         const body = `
             <div style="max-height: 500px; overflow-y: auto;">
@@ -4441,18 +4456,20 @@ const Settings = {
                         <tr>
                             <th>Fecha</th>
                             <th>Usuario</th>
-                            <th>Acción</th>
+                            <th>Accion</th>
+                            <th>Tipo</th>
                             <th>Detalles</th>
                         </tr>
                     </thead>
                     <tbody>
-                        ${sortedAudits.length === 0 ? '<tr><td colspan="4" style="text-align: center; padding: var(--spacing-md);">No hay registros</td></tr>' :
+                        ${sortedAudits.length === 0 ? '<tr><td colspan="5" style="text-align: center; padding: var(--spacing-md);">No hay registros</td></tr>' :
                         sortedAudits.map(audit => `
                             <tr>
                                 <td>${Utils.formatDate(audit.created_at, 'DD/MM/YYYY HH:mm')}</td>
-                                <td>${Utils.escapeHtml(audit.user_id || 'Sistema')}</td>
-                                <td>${Utils.escapeHtml(audit.action)}</td>
-                                <td style="font-size: 10px;">${Utils.escapeHtml(JSON.stringify(audit.details || {}).substring(0, 50))}</td>
+                                <td>${Utils.escapeHtml(audit.username || audit.user_id || 'Sistema')}</td>
+                                <td>${Utils.escapeHtml(audit.action || '-')}</td>
+                                <td style="font-size: 10px;">${Utils.escapeHtml(audit.entity_type || '-')}</td>
+                                <td style="font-size: 10px; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${Utils.escapeHtml(JSON.stringify(audit.details || {}))}">${Utils.escapeHtml(JSON.stringify(audit.details || {}).substring(0, 80))}</td>
                             </tr>
                         `).join('')}
                     </tbody>
