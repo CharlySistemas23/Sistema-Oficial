@@ -154,7 +154,40 @@ const UserManager = {
                         permissions,
                         permissions_by_branch: permissionsByBranch
                     }));
-                    
+
+                    // Sincronizar el PIN local con el password que acaba de
+                    // funcionar contra el backend. Asi el modelo "PIN local"
+                    // siempre queda alineado con el password de login web —
+                    // no hay que mantener dos cosas distintas. Cuando hay
+                    // backend offline, validatePin local sigue funcionando
+                    // con el ultimo password que el usuario uso para entrar.
+                    try {
+                        if (typeof Utils !== 'undefined' && Utils.hashPin && pinValue) {
+                            const localUserId = result.user.id;
+                            if (localUserId) {
+                                const newPinHash = await Utils.hashPin(pinValue);
+                                const existingLocal = await DB.get('users', localUserId);
+                                if (existingLocal && existingLocal.pin_hash !== newPinHash) {
+                                    existingLocal.pin_hash = newPinHash;
+                                    await DB.put('users', existingLocal);
+                                } else if (!existingLocal) {
+                                    await DB.put('users', {
+                                        id: localUserId,
+                                        username: result.user.username,
+                                        employee_id: result.user.employeeId || null,
+                                        role: userRole,
+                                        permissions,
+                                        pin_hash: newPinHash,
+                                        active: true,
+                                        created_at: new Date().toISOString()
+                                    });
+                                }
+                            }
+                        }
+                    } catch (syncErr) {
+                        console.warn('No se pudo sincronizar pin_hash local:', syncErr?.message || syncErr);
+                    }
+
                     // Ocultar login y mostrar sistema
                     document.getElementById('login-screen').style.display = 'none';
                     

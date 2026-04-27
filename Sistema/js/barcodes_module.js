@@ -493,8 +493,8 @@ var BarcodesModule = {
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--spacing-md); margin-bottom: var(--spacing-md);">
                 ${templates.map(template => `
                     <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light);">
-                        <h3 style="font-size: 13px; font-weight: 600; margin-bottom: var(--spacing-sm);">${template.name}</h3>
-                        <p style="font-size: 11px; color: var(--color-text-secondary); margin-bottom: var(--spacing-sm);">${template.description}</p>
+                        <h3 style="font-size: 13px; font-weight: 600; margin-bottom: var(--spacing-sm);">${Utils.escapeHtml(template.name)}</h3>
+                        <p style="font-size: 11px; color: var(--color-text-secondary); margin-bottom: var(--spacing-sm);">${Utils.escapeHtml(template.description || '')}</p>
                         <div style="display: flex; gap: var(--spacing-xs); margin-top: var(--spacing-sm);">
                             <button class="btn-secondary btn-sm" onclick="window.BarcodesModule.editTemplate('${template.id}')" style="flex: 1;">
                                 <i class="fas fa-edit"></i> Editar
@@ -670,8 +670,8 @@ var BarcodesModule = {
                     return true;
                 });
                 
-                branchFilter.innerHTML = '<option value="all">Todas las sucursales</option>' + 
-                    branches.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
+                branchFilter.innerHTML = '<option value="all">Todas las sucursales</option>' +
+                    branches.map(b => `<option value="${b.id}">${Utils.escapeHtml(b.name)}</option>`).join('');
                 
                 // Establecer valor por defecto según sucursal actual
                 if (currentBranchId) {
@@ -2248,12 +2248,12 @@ var BarcodesModule = {
                 });
                 html += `
                     <div class="label">
-                        ${templateToUse.fields.includes('name') ? `<h3>${entity.name || 'N/A'}</h3>` : ''}
-                        ${templateToUse.fields.includes('sku') && entity.sku ? `<div style="font-size: 8pt;">SKU: ${entity.sku}</div>` : ''}
+                        ${templateToUse.fields.includes('name') ? `<h3>${Utils.escapeHtml(entity.name || 'N/A')}</h3>` : ''}
+                        ${templateToUse.fields.includes('sku') && entity.sku ? `<div style="font-size: 8pt;">SKU: ${Utils.escapeHtml(entity.sku)}</div>` : ''}
                         <img src="${barcodeImg}" alt="Barcode">
-                        <div style="font-size: 8pt;">${entity.barcode}</div>
+                        <div style="font-size: 8pt;">${Utils.escapeHtml(entity.barcode)}</div>
                         ${templateToUse.fields.includes('price') && entity.price ? `<div style="font-weight: bold;">${Utils.formatCurrency(entity.price)}</div>` : ''}
-                        ${templateToUse.fields.includes('metal') && entity.metal ? `<div style="font-size: 7pt;">${entity.metal}</div>` : ''}
+                        ${templateToUse.fields.includes('metal') && entity.metal ? `<div style="font-size: 7pt;">${Utils.escapeHtml(entity.metal)}</div>` : ''}
                         ${templateToUse.fields.includes('stone') && entity.stone ? `<div style="font-size: 7pt;">${entity.stone}</div>` : ''}
                     </div>
                 `;
@@ -2295,11 +2295,11 @@ var BarcodesModule = {
             <div style="padding: var(--spacing-md);">
                 <div class="form-group">
                     <label>Nombre</label>
-                    <input type="text" id="template-name" class="form-input" value="${template.name}">
+                    <input type="text" id="template-name" class="form-input" value="${Utils.escapeHtml(template.name)}">
                 </div>
                 <div class="form-group">
                     <label>Descripción</label>
-                    <textarea id="template-description" class="form-input" rows="2">${template.description || ''}</textarea>
+                    <textarea id="template-description" class="form-input" rows="2">${Utils.escapeHtml(template.description || '')}</textarea>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
@@ -2748,11 +2748,11 @@ var BarcodesModule = {
 
         const body = `
             <div style="padding: var(--spacing-md); text-align: center;">
-                <h3 style="margin-bottom: var(--spacing-md);">${entity.name}</h3>
-                ${qrImage ? `<img src="${qrImage}" alt="QR Code" style="max-width: 100%; margin-bottom: var(--spacing-md);">` : 
+                <h3 style="margin-bottom: var(--spacing-md);">${Utils.escapeHtml(entity.name)}</h3>
+                ${qrImage ? `<img src="${qrImage}" alt="QR Code" style="max-width: 100%; margin-bottom: var(--spacing-md);">` :
                     `<div style="padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md); margin-bottom: var(--spacing-md);">
                         <p style="font-size: 11px; color: var(--color-text-secondary);">Código QR:</p>
-                        <code style="font-size: 10px; word-break: break-all;">${content}</code>
+                        <code style="font-size: 10px; word-break: break-all;">${Utils.escapeHtml(content)}</code>
                     </div>`
                 }
                 <div style="font-size: 10px; color: var(--color-text-secondary); margin-top: var(--spacing-sm);">
@@ -2763,7 +2763,7 @@ var BarcodesModule = {
 
         const footer = `
             <button class="btn-secondary" onclick="UI.closeModal()">Cerrar</button>
-            ${qrImage ? `<button class="btn-primary" onclick="window.BarcodesModule.printQR('${entity.id}', '${entity.name}', '${qrImage}')">Imprimir QR</button>` : ''}
+            ${qrImage ? `<button class="btn-primary" onclick="window.BarcodesModule.printQR('${entity.id}', ${JSON.stringify(entity.name || '')}, '${qrImage}')">Imprimir QR</button>` : ''}
         `;
 
         UI.showModal('Código QR', body, footer);
@@ -3048,9 +3048,9 @@ var BarcodesModule = {
         const body = `
             <div style="padding: var(--spacing-md);">
                 <div style="margin-bottom: var(--spacing-md);">
-                    <h3 style="margin-bottom: var(--spacing-sm);">${entity.name || 'Sin nombre'}</h3>
+                    <h3 style="margin-bottom: var(--spacing-sm);">${Utils.escapeHtml(entity.name || 'Sin nombre')}</h3>
                     <p style="color: var(--color-text-secondary); font-size: 12px;">
-                        ${storeName} • ${code}
+                        ${Utils.escapeHtml(storeName)} • ${Utils.escapeHtml(code)}
                     </p>
                 </div>
                 ${hasBarcode ? `

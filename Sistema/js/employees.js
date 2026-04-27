@@ -1761,15 +1761,17 @@ const Employees = {
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>PIN local (dejar vacio para mantener actual)</label>
-                    <input type="password" id="user-pin" class="form-input" maxlength="6" placeholder="4-6 digitos">
-                    <small style="color: var(--color-text-secondary); font-size: 10px;">Se usa para reautenticarse en este dispositivo. Hash local SHA-256.</small>
-                </div>
-                <div class="form-group">
-                    <label>Contrasena de Login Web (dejar vacio para mantener actual)</label>
+                    <label>Contrasena (dejar vacio para mantener actual)</label>
                     <input type="password" id="user-password" class="form-input" placeholder="Minimo 4 caracteres">
-                    <small style="color: var(--color-text-secondary); font-size: 10px;">Se usa para iniciar sesion desde la web. Hash bcrypt en el servidor.</small>
+                    <small style="color: var(--color-text-secondary); font-size: 10px;">
+                        Se usa para iniciar sesion. El PIN local de offline se sincroniza
+                        automaticamente con esta contrasena al loguear.
+                    </small>
                 </div>
+                <!-- Campo PIN oculto: hoy solo existe por compatibilidad con codigo
+                     viejo que lee user-pin. Se rellena con el mismo password de
+                     arriba si el usuario lo deja vacio. -->
+                <input type="hidden" id="user-pin" value="">
                 <div class="form-group">
                     <label>Permisos (generales)</label>
                     <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--spacing-sm); margin-top: var(--spacing-sm);">
@@ -1835,30 +1837,31 @@ const Employees = {
             return;
         }
 
-        const pinInput = document.getElementById('user-pin').value;
-        let pinHash = null;
-        if (pinInput && pinInput.length >= 4) {
-            // Validar PIN debil
-            if (Utils.isWeakPin) {
-                const weak = Utils.isWeakPin(pinInput);
-                if (weak) {
-                    Utils.showNotification('PIN rechazado: ' + weak, 'error');
-                    return;
-                }
-            }
-            pinHash = await Utils.hashPin(pinInput);
-        } else if (userId) {
-            const existing = await DB.get('users', userId);
-            pinHash = existing?.pin_hash;
-        }
-
-        // Password de login web (bcrypt en backend). Solo se envia si el usuario
-        // escribio algo; vacio = mantener el actual.
+        // Password unico (login web). El "PIN local" se deriva automaticamente
+        // del mismo password — antes eran 2 cosas independientes que confundian.
         const passwordEl = document.getElementById('user-password');
         const passwordInput = passwordEl ? passwordEl.value : '';
         if (passwordInput && passwordInput.length > 0 && passwordInput.length < 4) {
             Utils.showNotification('La contrasena debe tener al menos 4 caracteres', 'error');
             return;
+        }
+        if (passwordInput && Utils.isWeakPin) {
+            const weak = Utils.isWeakPin(passwordInput);
+            // Solo bloquear si claramente es un PIN debil de tipo "1234"; permitimos
+            // passwords mas largos que tendrian otros chars.
+            if (weak && passwordInput.length <= 6) {
+                Utils.showNotification('Contrasena rechazada: ' + weak, 'error');
+                return;
+            }
+        }
+
+        // pin_hash local: derivado del password si lo cambian, si no se mantiene.
+        let pinHash = null;
+        if (passwordInput && passwordInput.length >= 4) {
+            pinHash = await Utils.hashPin(passwordInput);
+        } else if (userId) {
+            const existing = await DB.get('users', userId);
+            pinHash = existing?.pin_hash;
         }
 
         const globalCheckboxes = document.querySelectorAll('#user-form input[data-perm-type="global"]:checked');
