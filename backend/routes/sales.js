@@ -85,16 +85,22 @@ router.get('/', requireBranchAccess, async (req, res) => {
       paramCount++;
     }
 
+    // Filtros de fecha con timezone local. Antes comparabamos created_at
+    // (TIMESTAMP) directo contra start_date/end_date (DATE). Eso comparaba
+    // contra medianoche UTC, asi que ventas de la tarde/noche en horario
+    // Mexico caian en el dia equivocado.
+    const appTimezone = process.env.APP_TIMEZONE || 'America/Mexico_City';
+
     if (start_date) {
-      sql += ` AND s.created_at >= $${paramCount}`;
-      params.push(start_date);
-      paramCount++;
+      sql += ` AND DATE(s.created_at AT TIME ZONE $${paramCount}) >= $${paramCount + 1}`;
+      params.push(appTimezone, start_date);
+      paramCount += 2;
     }
 
     if (end_date) {
-      sql += ` AND s.created_at <= $${paramCount}`;
-      params.push(end_date);
-      paramCount++;
+      sql += ` AND DATE(s.created_at AT TIME ZONE $${paramCount}) <= $${paramCount + 1}`;
+      params.push(appTimezone, end_date);
+      paramCount += 2;
     }
 
     if (status) {

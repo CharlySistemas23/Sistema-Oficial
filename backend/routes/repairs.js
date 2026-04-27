@@ -50,16 +50,19 @@ router.get('/', requireBranchAccess, async (req, res) => {
       paramCount++;
     }
 
+    // Filtros de fecha en timezone local (mismo patron que sales.js).
+    const appTimezone = process.env.APP_TIMEZONE || 'America/Mexico_City';
+
     if (start_date) {
-      sql += ` AND r.created_at >= $${paramCount}`;
-      params.push(start_date);
-      paramCount++;
+      sql += ` AND DATE(r.created_at AT TIME ZONE $${paramCount}) >= $${paramCount + 1}`;
+      params.push(appTimezone, start_date);
+      paramCount += 2;
     }
 
     if (end_date) {
-      sql += ` AND r.created_at <= $${paramCount}`;
-      params.push(end_date);
-      paramCount++;
+      sql += ` AND DATE(r.created_at AT TIME ZONE $${paramCount}) <= $${paramCount + 1}`;
+      params.push(appTimezone, end_date);
+      paramCount += 2;
     }
 
     if (search) {
