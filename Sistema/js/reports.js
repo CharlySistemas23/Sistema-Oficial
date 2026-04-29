@@ -6215,6 +6215,113 @@ const Reports = {
                 return;
             }
 
+            // RECALCULO ON-THE-FLY de costos operativos por reporte.
+            // En vez de leer report.total_operating_costs (que puede estar inflado
+            // por bugs viejos antes de que existiera isRecurringActiveOn), recalculamos
+            // desde cost_entries con los filtros correctos en este mismo momento.
+            // Asi el historico siempre refleja la realidad de cost_entries actual,
+            // sin depender de que el usuario corra Reparar Reportes.
+            const allCostEntries = await DB.getAll('cost_entries') || [];
+            const allCashSessions = await DB.getAll('cash_sessions') || [];
+            const allCashMovements = await DB.getAll('cash_movements') || [];
+
+            for (const report of archivedReports) {
+                try {
+                    if (!report.branch_id) continue;
+                    const reportDate = this.getArchivedReportDate(report);
+                    if (!reportDate) continue;
+                    const targetDate = new Date(reportDate);
+                    const DAYS_PER_MONTH = 30;
+                    const daysInYear = ((targetDate.getFullYear() % 4 === 0 && targetDate.getFullYear() % 100 !== 0) || (targetDate.getFullYear() % 400 === 0)) ? 366 : 365;
+
+                    const branchCosts = this.deduplicateCosts(
+                        allCostEntries.filter(c => c.branch_id && String(c.branch_id) === String(report.branch_id))
+                    );
+
+                    let varDaily = 0;
+                    let fixedProrated = 0;
+                    let bankDaily = 0;
+
+                    const monthlySet = this.deduplicateRecurringCosts(branchCosts.filter(c =>
+                        c.period_type === 'monthly' &&
+                        (c.recurring === true || c.recurring === 'true' || c.type === 'fijo') &&
+                        c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias' &&
+                        this.isRecurringActiveOn(c, targetDate)
+                    ));
+                    for (const cost of monthlySet) fixedProrated += (parseFloat(cost.amount) || 0) / DAYS_PER_MONTH;
+
+                    const weeklySet = this.deduplicateRecurringCosts(branchCosts.filter(c =>
+                        c.period_type === 'weekly' &&
+                        (c.recurring === true || c.recurring === 'true' || c.type === 'fijo') &&
+                        c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias' &&
+                        this.isRecurringActiveOn(c, targetDate)
+                    ));
+                    for (const cost of weeklySet) fixedProrated += (parseFloat(cost.amount) || 0) / 7;
+
+                    const annualSet = this.deduplicateRecurringCosts(branchCosts.filter(c =>
+                        (c.period_type === 'annual' || c.period_type === 'yearly') &&
+                        (c.recurring === true || c.recurring === 'true' || c.type === 'fijo') &&
+                        c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias' &&
+                        this.isRecurringActiveOn(c, targetDate)
+                    ));
+                    for (const cost of annualSet) fixedProrated += (parseFloat(cost.amount) || 0) / daysInYear;
+
+                    const isFixed = c => c.recurring === true || c.recurring === 'true' || c.type === 'fijo';
+                    const varCosts = branchCosts.filter(c => {
+                        const ds = (c.date || c.created_at || '').split('T')[0];
+                        const cat = (c.category || '').toLowerCase();
+                        return ds === reportDate &&
+                            cat !== 'pago_llegadas' && cat !== 'comisiones_bancarias' &&
+                            cat !== 'comisiones' && cat !== 'costo_ventas' && cat !== 'cogs' &&
+                            !isFixed(c) &&
+                            (c.period_type === 'one_time' || c.period_type === 'daily' || !c.period_type);
+                    });
+                    for (const cost of varCosts) varDaily += (parseFloat(cost.amount) || 0);
+
+                    const bankCosts = branchCosts.filter(c => {
+                        const ds = (c.date || c.created_at || '').split('T')[0];
+                        return ds === reportDate && (c.category || '').toLowerCase() === 'comisiones_bancarias';
+                    });
+                    for (const cost of bankCosts) bankDaily += (parseFloat(cost.amount) || 0);
+
+                    const daySessions = allCashSessions.filter(s => {
+                        const sd = (s.date || s.created_at || '').split('T')[0];
+                        return sd === reportDate && String(s.branch_id) === String(report.branch_id);
+                    });
+                    const sessionIds = daySessions.map(s => s.id);
+                    for (const m of allCashMovements) {
+                        if (m.type === 'withdrawal' && sessionIds.includes(m.session_id)) {
+                            varDaily += (parseFloat(m.amount) || 0);
+                        }
+                    }
+
+                    const newOpCosts = varDaily + fixedProrated;
+                    let newBank = bankDaily;
+                    if (newBank <= 0 && (parseFloat(report.total_sales_mxn) || 0) > 0) {
+                        newBank = (parseFloat(report.total_sales_mxn) || 0) * 0.045;
+                    }
+
+                    // Override en memoria — no toca local ni servidor, solo afecta agregacion del historico actual
+                    const oldOp = parseFloat(report.total_operating_costs) || 0;
+                    if (Math.abs(oldOp - newOpCosts) > 0.01) {
+                        console.log(`💡 [Historico] ${reportDate} br:${(report.branch_id||'').slice(0,8)}: opCosts $${oldOp.toFixed(2)} → $${newOpCosts.toFixed(2)} (recalc on-the-fly)`);
+                    }
+                    report.total_operating_costs = newOpCosts;
+                    report.variable_costs_daily = varDaily;
+                    report.fixed_costs_prorated = fixedProrated;
+                    report.bank_commissions = newBank;
+                    // Recalcular gross/net con los nuevos op costs
+                    const rSales = parseFloat(report.total_sales_mxn) || 0;
+                    const rCogs = parseFloat(report.total_cogs) || 0;
+                    const rComm = parseFloat(report.total_commissions) || 0;
+                    const rArrival = parseFloat(report.total_arrival_costs) || 0;
+                    report.gross_profit = rSales - rCogs - rComm;
+                    report.net_profit = report.gross_profit - rArrival - newOpCosts - newBank;
+                } catch (e) {
+                    console.warn('Error recalculando op costs on-the-fly:', e);
+                }
+            }
+
             // Agregar datos de todos los reportes.
             // IMPORTANTE: totalDays cuenta DIAS UNICOS, no filas de reporte.
             // Antes hacia totalDays++ por cada report, lo que duplicaba el conteo
