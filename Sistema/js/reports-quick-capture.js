@@ -9399,36 +9399,51 @@ const ReportsQuickCapture = {
         normalizedCaptures.forEach(capture => {
             totalQuantity += parseFloat(capture?.quantity) || 1;
 
+            // capture.total es la fuente autoritativa: ya esta en MXN, convertido al
+            // tipo de cambio del momento del registro. Sumarlo directo evita que el
+            // archivo re-convierta payments con un rate distinto al de la captura.
+            const captureTotalMXN = parseFloat(capture?.total) || 0;
             const payments = this.normalizeCapturePayments(capture);
+
             if (payments.length > 0) {
+                // Desglose por moneda usando los pagos originales
                 payments.forEach(payment => {
                     const amount = parseFloat(payment?.amount) || 0;
                     const paymentCurrency = (payment?.currency || capture?.currency || 'MXN').toUpperCase();
                     const currency = ['USD', 'MXN', 'CAD'].includes(paymentCurrency) ? paymentCurrency : 'MXN';
-
                     totals[currency] = (totals[currency] || 0) + amount;
-                    if (currency === 'USD') totalSalesMXN += amount * safeUsdRate;
-                    else if (currency === 'CAD') totalSalesMXN += amount * safeCadRate;
-                    else totalSalesMXN += amount;
                 });
+
+                if (captureTotalMXN > 0) {
+                    totalSalesMXN += captureTotalMXN;
+                } else {
+                    // Fallback raro: capture.total = 0, reconvertir desde payments
+                    payments.forEach(payment => {
+                        const amount = parseFloat(payment?.amount) || 0;
+                        const paymentCurrency = (payment?.currency || capture?.currency || 'MXN').toUpperCase();
+                        const currency = ['USD', 'MXN', 'CAD'].includes(paymentCurrency) ? paymentCurrency : 'MXN';
+                        if (currency === 'USD') totalSalesMXN += amount * safeUsdRate;
+                        else if (currency === 'CAD') totalSalesMXN += amount * safeCadRate;
+                        else totalSalesMXN += amount;
+                    });
+                }
                 return;
             }
 
             const captureCurrencyRaw = (capture?.currency || 'MXN').toUpperCase();
             const captureCurrency = ['USD', 'MXN', 'CAD'].includes(captureCurrencyRaw) ? captureCurrencyRaw : 'MXN';
-            const captureTotal = parseFloat(capture?.total) || 0;
 
             if (captureCurrency === 'USD') {
-                const originalAmount = parseFloat(capture?.original_amount) || (captureTotal / safeUsdRate);
+                const originalAmount = parseFloat(capture?.original_amount) || (captureTotalMXN / safeUsdRate);
                 totals.USD += originalAmount;
-                totalSalesMXN += originalAmount * safeUsdRate;
+                totalSalesMXN += captureTotalMXN || (originalAmount * safeUsdRate);
             } else if (captureCurrency === 'CAD') {
-                const originalAmount = parseFloat(capture?.original_amount) || (captureTotal / safeCadRate);
+                const originalAmount = parseFloat(capture?.original_amount) || (captureTotalMXN / safeCadRate);
                 totals.CAD += originalAmount;
-                totalSalesMXN += originalAmount * safeCadRate;
+                totalSalesMXN += captureTotalMXN || (originalAmount * safeCadRate);
             } else {
-                totals.MXN += captureTotal;
-                totalSalesMXN += captureTotal;
+                totals.MXN += captureTotalMXN;
+                totalSalesMXN += captureTotalMXN;
             }
         });
 

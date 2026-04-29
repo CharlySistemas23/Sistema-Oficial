@@ -7688,31 +7688,59 @@ const Reports = {
             );
             if (!confirm) return;
 
-            // Cargar el reporte para obtener el server_id real (puede ser distinto
-            // del id local si el reporte se sincronizo desde el servidor con otro
-            // id mientras lo conservabamos por la clave period+fechas+branch).
-            let serverIdToDelete = reportId;
-            try {
-                const localReport = await DB.get('historical_reports', reportId);
-                if (localReport && localReport.server_id) {
-                    serverIdToDelete = localReport.server_id;
-                }
-            } catch (_) {}
+            // Cargar el reporte local para obtener server_id y la clave de busqueda
+            let localReport = null;
+            try { localReport = await DB.get('historical_reports', reportId); } catch (_) {}
 
-            // Eliminar del servidor. El backend puede devolver 404 si:
-            //   a) el reporte ya no existia (ok, equivalente a borrado)
-            //   b) el id que mandamos no coincide (lo manejamos por server_id arriba)
-            // En ambos casos NO bloqueamos el flujo — la realidad es que el reporte
-            // no existe en servidor, asi que el resultado deseado se cumple.
-            if (typeof API !== 'undefined' && API.deleteHistoricalReport) {
+            const serverIdsToTry = new Set();
+            if (localReport?.server_id) serverIdsToTry.add(localReport.server_id);
+            if (typeof reportId === 'string' && reportId && !reportId.startsWith('historical_')) {
+                serverIdsToTry.add(reportId);
+            }
+
+            const tryDelete = async (id) => {
                 try {
-                    await API.deleteHistoricalReport(serverIdToDelete);
-                    console.log('✅ Reporte histórico eliminado del servidor');
+                    await API.deleteHistoricalReport(id);
+                    console.log(`✅ Reporte histórico ${id} eliminado del servidor`);
+                    return { ok: true, status: 200 };
                 } catch (error) {
-                    if (error?.status === 404 || (error?.message || '').includes('no encontrado')) {
-                        console.log('ℹ️ El reporte no existia en el servidor (404). Se elimina solo localmente.');
-                    } else {
-                        console.warn('Error eliminando reporte histórico del servidor:', error);
+                    const status = error?.status;
+                    if (status === 404 || (error?.message || '').includes('no encontrado')) {
+                        return { ok: false, status: 404 };
+                    }
+                    console.warn(`Error eliminando ${id}:`, error);
+                    return { ok: false, status, error };
+                }
+            };
+
+            let serverDeleted = false;
+            if (typeof API !== 'undefined' && API.deleteHistoricalReport) {
+                // Intentar con los ids conocidos
+                for (const id of serverIdsToTry) {
+                    const res = await tryDelete(id);
+                    if (res.ok) { serverDeleted = true; break; }
+                }
+
+                // Si todos los intentos dieron 404 o no hay id, buscar en el servidor
+                // por la clave (period_type + date_from + date_to + branch_id) y borrar
+                // con el id real. Esto evita que el Paso 2 de loadHistoricalReports
+                // re-cree el reporte local porque sigue existiendo en el servidor.
+                if (!serverDeleted && localReport && API.getHistoricalReports) {
+                    try {
+                        const filters = {
+                            period_type: localReport.period_type,
+                            date_from: localReport.date_from,
+                            date_to: localReport.date_to
+                        };
+                        if (localReport.branch_id) filters.branch_id = localReport.branch_id;
+                        const matches = await API.getHistoricalReports(filters) || [];
+                        for (const m of matches) {
+                            if (!m?.id || serverIdsToTry.has(m.id)) continue;
+                            const res = await tryDelete(m.id);
+                            if (res.ok) { serverDeleted = true; }
+                        }
+                    } catch (lookupErr) {
+                        console.warn('No se pudo buscar el reporte en el servidor para borrarlo:', lookupErr);
                     }
                 }
             }
@@ -7723,9 +7751,6 @@ const Reports = {
 
             Utils.showNotification('Reporte histórico eliminado', 'success');
 
-            // Recargar lista. Nota: si el reporte SI existia en el servidor con
-            // otro id (caso raro), volveria a aparecer aqui. Por eso usamos
-            // server_id arriba para la eliminacion remota.
             await this.loadHistoricalReports();
         } catch (error) {
             console.error('Error eliminando reporte histórico:', error);

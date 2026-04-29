@@ -1770,4 +1770,107 @@ router.delete('/historical-quick-captures/:id', requireBranchAccess, async (req,
   }
 });
 
+// Recalcula total_sales_mxn y profits para todos los archived_quick_capture_reports
+// en un rango de fechas, sumando capture.total (que ya esta en MXN). Soluciona los
+// reportes que se archivaron antes del fix del bug de tipo de cambio.
+// Solo master_admin. Body: { date_from, date_to, branch_id? }
+router.post('/archived-quick-captures/recalculate-totals', requireBranchAccess, async (req, res) => {
+  if (!req.user.isMasterAdmin) {
+    return res.status(403).json({ error: 'Solo master_admin puede ejecutar el recálculo' });
+  }
+
+  const { date_from, date_to, branch_id } = req.body || {};
+  if (!date_from || !date_to) {
+    return res.status(400).json({ error: 'date_from y date_to son requeridos (YYYY-MM-DD)' });
+  }
+
+  const client = await getClient();
+  let transactionCommitted = false;
+
+  try {
+    await client.query('BEGIN');
+
+    const params = [date_from, date_to];
+    let sql = `SELECT id, report_date, branch_id, captures, total_cogs, total_arrival_costs,
+                      total_operating_costs, bank_commissions, total_commissions
+               FROM archived_quick_capture_reports
+               WHERE report_date >= $1 AND report_date <= $2`;
+    if (branch_id) {
+      params.push(branch_id);
+      sql += ` AND branch_id = $${params.length}`;
+    }
+    sql += ' FOR UPDATE';
+
+    const { rows } = await client.query(sql, params);
+
+    const results = [];
+    for (const row of rows) {
+      const captures = Array.isArray(row.captures)
+        ? row.captures
+        : (typeof row.captures === 'string' ? JSON.parse(row.captures || '[]') : []);
+
+      const newTotalSalesMXN = captures.reduce((s, c) => s + (parseFloat(c?.total) || 0), 0);
+      const totalCommissions = parseFloat(row.total_commissions) || 0;
+      const totalCOGS = parseFloat(row.total_cogs) || 0;
+      const totalArrival = parseFloat(row.total_arrival_costs) || 0;
+      const totalOperating = parseFloat(row.total_operating_costs) || 0;
+      let bankComm = parseFloat(row.bank_commissions) || 0;
+      if (bankComm <= 0 && newTotalSalesMXN > 0) bankComm = newTotalSalesMXN * 0.045;
+
+      const grossProfit = newTotalSalesMXN - totalCOGS - totalCommissions;
+      const netProfit = grossProfit - totalArrival - totalOperating - bankComm;
+
+      await client.query(
+        `UPDATE archived_quick_capture_reports
+         SET total_sales_mxn = $1,
+             gross_profit = $2,
+             net_profit = $3,
+             bank_commissions = $4,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $5`,
+        [
+          parseFloat(newTotalSalesMXN.toFixed(2)),
+          parseFloat(grossProfit.toFixed(2)),
+          parseFloat(netProfit.toFixed(2)),
+          parseFloat(bankComm.toFixed(2)),
+          row.id
+        ]
+      );
+
+      results.push({
+        id: row.id,
+        report_date: row.report_date,
+        branch_id: row.branch_id,
+        captures_count: captures.length,
+        new_total_sales_mxn: parseFloat(newTotalSalesMXN.toFixed(2)),
+        new_gross_profit: parseFloat(grossProfit.toFixed(2)),
+        new_net_profit: parseFloat(netProfit.toFixed(2))
+      });
+    }
+
+    await client.query('COMMIT');
+    transactionCommitted = true;
+
+    logReportsOperation('archived_recalculate_totals', {
+      userId: req.user.id,
+      dateFrom: date_from,
+      dateTo: date_to,
+      branchId: branch_id || null,
+      updated: results.length
+    });
+
+    res.json({
+      message: `${results.length} reportes recalculados`,
+      updated: results.length,
+      reports: results
+    });
+  } catch (error) {
+    if (!transactionCommitted) await safeRollback(client, 'reports');
+    console.error('Error recalculando archived_quick_capture_reports:', error);
+    res.status(500).json({ error: 'Error en recálculo', details: error.message });
+  } finally {
+    client.release();
+  }
+});
+
 export default router;
