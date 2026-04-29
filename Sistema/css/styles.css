@@ -4519,6 +4519,34 @@ button.btn-xs {
     display: flex;
     align-items: center;
     gap: 4px;
+    justify-content: space-between;
+}
+
+/* Boton pequeno para abrir picker manual de Guia/Vendedor/Agencia */
+.pos-pick-btn {
+    background: transparent;
+    border: 1px solid var(--color-border-light);
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 10px;
+    cursor: pointer;
+    color: var(--color-text-secondary);
+    transition: all 0.15s;
+}
+.pos-pick-btn:hover {
+    background: var(--color-bg-secondary);
+    color: var(--color-primary);
+    border-color: var(--color-primary);
+}
+
+/* Hacer clickable el campo de seleccion de Guia/Vendedor/Agencia para
+   abrir el picker. Antes solo se podia escanear; ahora la fila entera
+   abre el modal de seleccion manual. */
+.pos-customer-value[onclick] {
+    cursor: pointer;
+}
+.pos-customer-value[onclick]:hover {
+    background: var(--color-bg-secondary);
 }
 
 .pos-customer-field label i {

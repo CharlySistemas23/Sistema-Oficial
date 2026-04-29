@@ -3107,6 +3107,145 @@ Object.assign(POS, {
         Utils.showNotification('Vendedor limpiado', 'info');
     },
 
+    // Picker manual: muestra una lista de entidades activas en un modal con
+    // busqueda, para que el usuario pueda seleccionar sin necesidad de
+    // escanear un codigo de barras (que puede no existir o estar danado).
+    async _pickEntity({ store, title, currentSelected, onSelect, includeClear }) {
+        const all = await DB.getAll(store, null, null, { filterByBranch: false }) || [];
+        // Solo activos. Ordenar alfabetico.
+        const items = all
+            .filter(x => x && x.active !== false && x.name)
+            .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+
+        if (items.length === 0) {
+            Utils.showNotification(`No hay ${title.toLowerCase()} registrados. Crea uno desde Configuración → Catálogos.`, 'warning');
+            return;
+        }
+
+        const inputId = 'picker-search-' + Date.now();
+        const listId = 'picker-list-' + Date.now();
+        const escName = (n) => (typeof Utils !== 'undefined' && Utils.escapeHtml) ? Utils.escapeHtml(n) : n;
+        const renderRow = (item) => {
+            const isCurrent = currentSelected && currentSelected.id === item.id;
+            return `
+                <div class="picker-row" data-id="${item.id}" data-name="${escName((item.name || '').toLowerCase())}"
+                     style="padding: 10px 12px; border-bottom: 1px solid var(--color-border-light); cursor: pointer; ${isCurrent ? 'background: var(--color-bg-secondary); font-weight: 600;' : ''}">
+                    ${escName(item.name)}
+                    ${item.barcode ? `<small style="color: var(--color-text-secondary); margin-left: 8px;">${escName(item.barcode)}</small>` : ''}
+                </div>
+            `;
+        };
+
+        const body = `
+            <div style="display: flex; flex-direction: column; gap: 8px; min-width: 320px;">
+                <input type="search" id="${inputId}" class="form-input" placeholder="Buscar..." autofocus>
+                ${includeClear && currentSelected ? `
+                    <button type="button" class="btn-secondary btn-sm" id="${listId}-clear">
+                        <i class="fas fa-times"></i> Quitar seleccion actual
+                    </button>
+                ` : ''}
+                <div id="${listId}" style="max-height: 360px; overflow-y: auto; border: 1px solid var(--color-border-light); border-radius: var(--radius-sm);">
+                    ${items.map(renderRow).join('')}
+                </div>
+            </div>
+        `;
+
+        UI.showModal(`Seleccionar ${title}`, body, [
+            { text: 'Cancelar', class: 'btn-secondary', onclick: () => UI.closeModal() }
+        ]);
+
+        // Wire up search filter
+        setTimeout(() => {
+            const searchEl = document.getElementById(inputId);
+            const listEl = document.getElementById(listId);
+            const clearBtn = document.getElementById(`${listId}-clear`);
+
+            if (searchEl) {
+                searchEl.addEventListener('input', () => {
+                    const q = searchEl.value.toLowerCase().trim();
+                    listEl.querySelectorAll('.picker-row').forEach(row => {
+                        const name = row.dataset.name || '';
+                        row.style.display = (!q || name.includes(q)) ? '' : 'none';
+                    });
+                });
+            }
+
+            if (listEl) {
+                listEl.addEventListener('click', async (e) => {
+                    const row = e.target.closest('.picker-row');
+                    if (!row) return;
+                    const id = row.dataset.id;
+                    const item = items.find(x => x.id === id);
+                    if (!item) return;
+                    UI.closeModal();
+                    try { await onSelect(item); } catch (err) {
+                        console.error('Error seleccionando', err);
+                        Utils.showNotification('Error al seleccionar: ' + (err?.message || err), 'error');
+                    }
+                });
+            }
+
+            if (clearBtn) {
+                clearBtn.addEventListener('click', async () => {
+                    UI.closeModal();
+                    try { await onSelect(null); } catch (_) {}
+                });
+            }
+        }, 50);
+    },
+
+    async pickSeller() {
+        await this._pickEntity({
+            store: 'catalog_sellers',
+            title: 'Vendedor',
+            currentSelected: this.currentSeller,
+            includeClear: true,
+            onSelect: async (seller) => {
+                if (!seller) {
+                    this.clearSeller();
+                    return;
+                }
+                await this.setSeller(seller);
+                Utils.showNotification(`Vendedor: ${seller.name}`, 'success');
+            }
+        });
+    },
+
+    async pickGuide() {
+        await this._pickEntity({
+            store: 'catalog_guides',
+            title: 'Guia',
+            currentSelected: this.currentGuide,
+            includeClear: true,
+            onSelect: async (guide) => {
+                if (!guide) {
+                    this.clearGuide();
+                    return;
+                }
+                await this.setGuide(guide);
+                Utils.showNotification(`Guia: ${guide.name}`, 'success');
+            }
+        });
+    },
+
+    async pickAgency() {
+        await this._pickEntity({
+            store: 'catalog_agencies',
+            title: 'Agencia',
+            currentSelected: this.currentAgency,
+            includeClear: true,
+            onSelect: async (agency) => {
+                if (!agency) {
+                    this.currentAgency = null;
+                    this.updateCustomerDisplay();
+                    return;
+                }
+                await this.setAgency(agency);
+                Utils.showNotification(`Agencia: ${agency.name}`, 'success');
+            }
+        });
+    },
+
     /**
      * Busca agencia, guía o vendedor por código de barras y los asigna en el POS.
      * Retorna true si encontró y asignó alguno, false si no.
