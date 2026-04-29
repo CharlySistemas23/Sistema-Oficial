@@ -348,6 +348,9 @@ const ReportsQuickCapture = {
                         </h3>
                     </div>
                     <div style="display: flex; gap: 6px;">
+                        <button class="btn-secondary btn-sm" onclick="window.Reports.repairArchivedReports()" title="Quita capturas duplicadas dentro de cada reporte archivado y recalcula totales" style="font-weight: 600; padding: 6px 10px; font-size: 11px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); color: var(--color-danger, #c0392b);">
+                            <i class="fas fa-wrench"></i> Reparar Reportes
+                        </button>
                         <button class="btn-secondary btn-sm" onclick="window.Reports.recalcAllArchivedCosts()" title="Recalcular costos operativos (variables + fijos + bancarias) de todos los archivados desde cost_entries" style="font-weight: 600; padding: 6px 10px; font-size: 11px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); color: var(--color-info, #3498db);">
                             <i class="fas fa-sync-alt"></i> Recalcular Costos
                         </button>
@@ -6867,6 +6870,215 @@ const ReportsQuickCapture = {
         });
     },
 
+    /**
+     * Repara reportes archivados deduplicando capturas internas y recalculando
+     * total_sales_mxn, total_captures, total_quantity, total_cogs y comisiones
+     * desde el array dedup'd. Soluciona el caso donde el array captures embebido
+     * en el reporte tiene entradas duplicadas (acumuladas por syncs/merges).
+     */
+    async repairArchivedReports() {
+        try {
+            const confirmed = await Utils.confirm(
+                'Reparar todos los reportes archivados:\n\n• Eliminar capturas duplicadas dentro de cada reporte\n• Recalcular ventas, comisiones, utilidades desde el array limpio\n• Subir al servidor\n\n¿Continuar?',
+                'Reparar Reportes Archivados'
+            );
+            if (!confirmed) return;
+
+            Utils.showNotification('Reparando reportes...', 'info');
+
+            // 1) Descargar fresh del servidor para tener captures actualizadas
+            try {
+                if (typeof API !== 'undefined' && API.getArchivedReports) {
+                    const serverReports = await API.getArchivedReports({}) || [];
+                    for (const sr of serverReports) {
+                        const reportDate = this.getArchivedReportDate(sr);
+                        const branchId = sr.branch_id;
+                        if (!reportDate || !branchId) continue;
+                        const existingLocal = await DB.getAll('archived_quick_captures') || [];
+                        const existing = existingLocal.find(r => this.getArchivedReportDate(r) === reportDate && r.branch_id === branchId);
+                        const localReport = {
+                            id: existing ? existing.id : `report_${reportDate}_${branchId}`,
+                            ...sr,
+                            date: reportDate,
+                            captures: this.normalizeArchivedArray(sr.captures),
+                            daily_summary: this.normalizeArchivedArray(sr.daily_summary),
+                            seller_commissions: this.normalizeArchivedArray(sr.seller_commissions),
+                            guide_commissions: this.normalizeArchivedArray(sr.guide_commissions),
+                            arrivals: this.normalizeArchivedArray(sr.arrivals),
+                            metrics: sr.metrics || {},
+                            server_id: sr.id,
+                            sync_status: 'synced'
+                        };
+                        await DB.put('archived_quick_captures', localReport);
+                    }
+                }
+            } catch (e) {
+                console.warn('No se pudo descargar del servidor, usando local:', e);
+            }
+
+            const allReports = await DB.getAll('archived_quick_captures') || [];
+            const commissionRules = await DB.getAll('commission_rules') || [];
+            const agencies = await DB.getAll('catalog_agencies') || [];
+            const sellers = await DB.getAll('catalog_sellers') || [];
+            const guides = await DB.getAll('catalog_guides') || [];
+
+            let repaired = 0;
+            let unchanged = 0;
+            let serverUpdated = 0;
+
+            for (const report of allReports) {
+                try {
+                    const rawCaptures = this.normalizeArchivedArray(report.captures);
+                    if (rawCaptures.length === 0) { unchanged++; continue; }
+
+                    // Dedupe por id (o por clave compuesta si no hay id)
+                    const seen = new Set();
+                    const cleanCaptures = [];
+                    for (const c of rawCaptures) {
+                        if (!c) continue;
+                        const key = c.id || c.server_id || `${c.date||''}_${c.seller_id||''}_${c.product||''}_${parseFloat(c.total)||0}_${c.created_at||''}`;
+                        if (seen.has(key)) continue;
+                        seen.add(key);
+                        cleanCaptures.push(c);
+                    }
+
+                    const beforeCount = rawCaptures.length;
+                    const afterCount = cleanCaptures.length;
+
+                    // Recalcular desde cero con captures limpias
+                    const totalSalesMXN = cleanCaptures.reduce((s, c) => s + (parseFloat(c.total) || 0), 0);
+                    const totalQuantity = cleanCaptures.reduce((s, c) => s + (parseFloat(c.quantity) || 1), 0);
+                    const totalCOGS = cleanCaptures.reduce((s, c) => s + (parseFloat(c.merchandise_cost) || 0), 0);
+
+                    let totalCommissions = 0;
+                    const sellerCommissions = {};
+                    const guideCommissions = {};
+
+                    for (const capture of cleanCaptures) {
+                        const ctotMXN = parseFloat(capture.total) || 0;
+                        if (capture.is_street && capture.seller_id && ctotMXN > 0 && capture.payment_method) {
+                            let sc = 0;
+                            if (capture.payment_method === 'card') sc = ctotMXN * (1 - 0.045) * 0.12;
+                            else if (capture.payment_method === 'cash') sc = ctotMXN * 0.14;
+                            totalCommissions += sc;
+                        } else {
+                            const agency = agencies.find(a => a.id === capture.agency_id);
+                            const seller = sellers.find(s => s.id === capture.seller_id);
+                            const guide = guides.find(g => g.id === capture.guide_id);
+                            const cbr = this.calculateCommissionByRules(ctotMXN, agency?.name || null, seller?.name || null, guide?.name || null);
+
+                            if (capture.seller_id && ctotMXN > 0 && !capture.is_street) {
+                                let sc = cbr.sellerCommission;
+                                if (sc === 0) {
+                                    const sr2 = commissionRules.find(r => r.entity_type === 'seller' && r.entity_id === capture.seller_id) ||
+                                                commissionRules.find(r => r.entity_type === 'seller' && r.entity_id === null);
+                                    if (sr2) sc = ctotMXN * (1 - ((sr2.discount_pct || 0) / 100)) * ((sr2.multiplier || 1) / 100);
+                                }
+                                if (sc > 0) {
+                                    totalCommissions += sc;
+                                    if (!sellerCommissions[capture.seller_id]) sellerCommissions[capture.seller_id] = { seller, total: 0, sales: 0, commissions: {} };
+                                    sellerCommissions[capture.seller_id].total += sc;
+                                    sellerCommissions[capture.seller_id].sales += 1;
+                                }
+                            }
+
+                            if (capture.guide_id && ctotMXN > 0) {
+                                let gc = cbr.guideCommission;
+                                if (gc === 0) {
+                                    const gr2 = commissionRules.find(r => r.entity_type === 'guide' && r.entity_id === capture.guide_id) ||
+                                                commissionRules.find(r => r.entity_type === 'guide' && r.entity_id === null);
+                                    if (gr2) gc = ctotMXN * (1 - ((gr2.discount_pct || 0) / 100)) * ((gr2.multiplier || 1) / 100);
+                                }
+                                if (gc > 0) {
+                                    totalCommissions += gc;
+                                    if (!guideCommissions[capture.guide_id]) guideCommissions[capture.guide_id] = { guide, total: 0, sales: 0, commissions: {} };
+                                    guideCommissions[capture.guide_id].total += gc;
+                                    guideCommissions[capture.guide_id].sales += 1;
+                                }
+                            }
+                        }
+                    }
+
+                    const totalArrival = parseFloat(report.total_arrival_costs) || 0;
+                    const totalOpCosts = parseFloat(report.total_operating_costs) || 0;
+                    let bankCommissions = parseFloat(report.bank_commissions) || 0;
+                    if (bankCommissions <= 0 && totalSalesMXN > 0) bankCommissions = totalSalesMXN * 0.045;
+
+                    const grossProfit = totalSalesMXN - totalCOGS - totalCommissions;
+                    const netProfit = grossProfit - totalArrival - totalOpCosts - bankCommissions;
+
+                    const wasChanged = beforeCount !== afterCount ||
+                        Math.abs((parseFloat(report.total_sales_mxn) || 0) - totalSalesMXN) > 0.01;
+
+                    if (!wasChanged) { unchanged++; continue; }
+
+                    console.log(`🧹 [Reparar] ${report.date} br:${(report.branch_id||'').slice(0,8)}: capturas ${beforeCount}→${afterCount}, ventas $${(parseFloat(report.total_sales_mxn)||0).toFixed(2)}→$${totalSalesMXN.toFixed(2)}`);
+
+                    const updated = {
+                        ...report,
+                        captures: cleanCaptures,
+                        total_captures: afterCount,
+                        total_quantity: totalQuantity,
+                        total_sales_mxn: parseFloat(totalSalesMXN.toFixed(2)),
+                        total_cogs: parseFloat(totalCOGS.toFixed(2)),
+                        total_commissions: parseFloat(totalCommissions.toFixed(2)),
+                        seller_commissions: Object.values(sellerCommissions).map(s => ({ seller_id: s.seller?.id, seller_name: s.seller?.name, total: s.total, sales: s.sales })),
+                        guide_commissions: Object.values(guideCommissions).map(g => ({ guide_id: g.guide?.id, guide_name: g.guide?.name, total: g.total, sales: g.sales })),
+                        gross_profit: parseFloat(grossProfit.toFixed(2)),
+                        net_profit: parseFloat(netProfit.toFixed(2)),
+                        bank_commissions: parseFloat(bankCommissions.toFixed(2)),
+                        recalculated_at: new Date().toISOString()
+                    };
+                    await DB.put('archived_quick_captures', updated);
+                    repaired++;
+
+                    // Subir al servidor (POST upsert con todos los campos)
+                    if (typeof API !== 'undefined' && API.saveArchivedReport) {
+                        try {
+                            await API.saveArchivedReport({
+                                report_date: report.date || report.report_date,
+                                branch_id: report.branch_id,
+                                total_captures: afterCount,
+                                total_quantity: totalQuantity,
+                                total_sales_mxn: updated.total_sales_mxn,
+                                total_cogs: updated.total_cogs,
+                                total_commissions: updated.total_commissions,
+                                total_arrival_costs: totalArrival,
+                                total_operating_costs: totalOpCosts,
+                                variable_costs_daily: parseFloat(report.variable_costs_daily) || 0,
+                                fixed_costs_prorated: parseFloat(report.fixed_costs_prorated) || 0,
+                                bank_commissions: updated.bank_commissions,
+                                gross_profit: updated.gross_profit,
+                                net_profit: updated.net_profit,
+                                exchange_rates: report.exchange_rates || {},
+                                captures: cleanCaptures,
+                                daily_summary: report.daily_summary || [],
+                                seller_commissions: updated.seller_commissions,
+                                guide_commissions: updated.guide_commissions,
+                                arrivals: report.arrivals || [],
+                                metrics: report.metrics || {}
+                            });
+                            serverUpdated++;
+                        } catch (e) {
+                            console.warn('Error subiendo reparado al servidor:', e.message);
+                        }
+                    }
+                } catch (e) {
+                    console.error('Error reparando reporte', report.id, e);
+                }
+            }
+
+            Utils.showNotification(
+                `Reparados ${repaired} reportes (${unchanged} sin cambios, ${serverUpdated} subidos al servidor).`,
+                'success'
+            );
+            await this.loadArchivedReports(true);
+        } catch (e) {
+            console.error('Error en repairArchivedReports:', e);
+            Utils.showNotification('Error: ' + e.message, 'error');
+        }
+    },
+
     async recalcAllArchivedCosts() {
         try {
             const confirmed = await Utils.confirm(
@@ -7275,7 +7487,27 @@ const ReportsQuickCapture = {
             let serverUpdatedCount = 0;
 
             for (const report of reportsWithCaptures) {
-                const captures = report.captures;
+                // CRITICO: deduplicar captures por id ANTES de calcular cualquier total.
+                // Bug observado: el array captures embebido en el reporte archivado puede
+                // tener duplicados (acumulados por syncs/merges sucesivos). Sin dedupe,
+                // total_sales_mxn y total_commissions se inflan proporcionalmente.
+                const rawCaptures = Array.isArray(report.captures) ? report.captures : [];
+                const seenIds = new Set();
+                const captures = [];
+                for (const c of rawCaptures) {
+                    if (!c) continue;
+                    // Si tiene id, dedup por id. Si no, dedup por (date+seller+product+amount).
+                    const key = c.id || `${c.date||''}_${c.seller_id||''}_${c.product||''}_${parseFloat(c.total)||0}_${c.created_at||''}`;
+                    if (seenIds.has(key)) continue;
+                    seenIds.add(key);
+                    captures.push(c);
+                }
+                if (captures.length !== rawCaptures.length) {
+                    console.warn(`🧹 [Recalc] Reporte ${report.date}: ${rawCaptures.length} → ${captures.length} capturas tras dedupe`);
+                    report.captures = captures;
+                    report.total_captures = captures.length;
+                }
+
                 const usdRate = report.exchange_rates?.usd || 20.0;
                 const cadRate = report.exchange_rates?.cad || 15.0;
 
