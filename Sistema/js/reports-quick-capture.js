@@ -6031,15 +6031,37 @@ const ReportsQuickCapture = {
             const dateInput = document.getElementById('qc-date');
             const selectedDate = dateInput?.value || this.getLocalDateStr();
             const normalizedSelectedDate = selectedDate.split('T')[0];
-            
+
+            // CRITICO: filtrar por sucursal actual ademas de fecha. Sin este filtro,
+            // archivar Malecon en un dia donde tambien hay capturas de Sayulita
+            // metia TODAS las capturas en el reporte de Malecon, y al archivar
+            // Sayulita despues se duplicaba el set entero. El historico sumaba
+            // ambos reportes -> ventas infladas 2x-4x.
+            const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
+
             let captures = await DB.getAll('temp_quick_captures') || [];
             captures = captures.filter(c => {
                 const captureDate = c.date || c.original_report_date || '';
-                return captureDate.split('T')[0] === normalizedSelectedDate;
+                if (captureDate.split('T')[0] !== normalizedSelectedDate) return false;
+                // Si hay sucursal seleccionada, EXIGIR coincidencia. Master_admin
+                // viendo "todas" cae en el branch actual del BranchManager o se
+                // archiva por sucursal individualmente desde la UI.
+                if (currentBranchId) return c.branch_id === currentBranchId;
+                return true;
+            });
+
+            // Dedupe defensivo por id por si el sync acumulo duplicados en temp.
+            const seenCaptureIds = new Set();
+            captures = captures.filter(c => {
+                if (!c) return false;
+                const k = c.id || c.server_id || `${c.date||''}_${c.seller_id||''}_${c.product||''}_${parseFloat(c.total)||0}`;
+                if (seenCaptureIds.has(k)) return false;
+                seenCaptureIds.add(k);
+                return true;
             });
 
             if (captures.length === 0) {
-                Utils.showNotification(`No hay capturas para archivar para la fecha ${normalizedSelectedDate}`, 'warning');
+                Utils.showNotification(`No hay capturas para archivar para la fecha ${normalizedSelectedDate}${currentBranchId ? ' en esta sucursal' : ''}`, 'warning');
                 return;
             }
 
@@ -6499,10 +6521,14 @@ const ReportsQuickCapture = {
                 });
             });
 
-            // Crear objeto de reporte archivado con TODOS los datos calculados
+            // Crear objeto de reporte archivado con TODOS los datos calculados.
+            // archiveBranchId es la sucursal canonica del reporte. captureBranchIds
+            // se mantiene como info auxiliar pero el branch_id principal es uno solo.
+            const archiveBranchIdForReport = currentBranchId || (captureBranchIds.length === 1 ? captureBranchIds[0] : null);
             const archivedReport = {
-                id: 'archived_' + normalizedSelectedDate + '_' + Date.now(),
+                id: 'archived_' + normalizedSelectedDate + '_' + (archiveBranchIdForReport || 'all') + '_' + Date.now(),
                 date: normalizedSelectedDate,
+                branch_id: archiveBranchIdForReport,
                 report_type: 'quick_capture',
                 captures: captures,
                 totals: totals,
@@ -6548,13 +6574,15 @@ const ReportsQuickCapture = {
                 return;
             }
 
-            // Verificar si ya existe un reporte archivado para esta fecha
+            // Verificar si ya existe un reporte archivado para esta fecha + sucursal.
+            // CRITICO: incluir branch_id en el matching. Sin esto, archivar Sayulita
+            // sobreescribia el reporte de Malecon (mismo id) si Malecon ya tenia uno.
             let existingReport = null;
             try {
                 const existingReports = await DB.query('archived_quick_captures', 'date', normalizedSelectedDate) || [];
-                // Buscar el más reciente para esta fecha
+                const archiveBranchId = currentBranchId || (captureBranchIds.length === 1 ? captureBranchIds[0] : null);
                 existingReport = existingReports
-                    .filter(r => r.report_type === 'quick_capture')
+                    .filter(r => r.report_type === 'quick_capture' && r.branch_id === archiveBranchId)
                     .sort((a, b) => new Date(b.archived_at || 0) - new Date(a.archived_at || 0))[0];
             } catch (e) {
                 console.warn('No se pudo verificar reportes existentes:', e);
@@ -6642,7 +6670,14 @@ const ReportsQuickCapture = {
                                       API.baseURL; // baseURL es requerido para hacer requests
                 
                 if (isAPIAvailable) {
-                        const branchId = captureBranchIds.length === 1 ? captureBranchIds[0] : null;
+                        // Usar la sucursal canonica del reporte (la activa). NUNCA null.
+                        // Si no hay sucursal seleccionada, no se sube al servidor para
+                        // evitar crear filas fantasma con branch_id=null.
+                        const branchId = archiveBranchIdForReport;
+                        if (!branchId) {
+                            console.warn('⚠️ [Archivar] No hay branch_id canonico, no se sube al servidor para evitar duplicados.');
+                            return;
+                        }
                         const currentUserId = typeof UserManager !== 'undefined' && UserManager.currentUser ? UserManager.currentUser.id : null;
                         
                     console.log('📤 [CRÍTICO] Guardando reporte archivado en servidor...');
@@ -6871,20 +6906,50 @@ const ReportsQuickCapture = {
     },
 
     /**
-     * Repara reportes archivados deduplicando capturas internas y recalculando
-     * total_sales_mxn, total_captures, total_quantity, total_cogs y comisiones
-     * desde el array dedup'd. Soluciona el caso donde el array captures embebido
-     * en el reporte tiene entradas duplicadas (acumuladas por syncs/merges).
+     * Repara reportes archivados:
+     *   1. Elimina reportes fantasma con branch_id=null (que mezclaban capturas
+     *      de varias sucursales y causaban doble conteo en el historico).
+     *   2. Filtra dentro de cada reporte las capturas que no son de la sucursal
+     *      correcta (contaminacion cruzada del bug del filtro original).
+     *   3. Deduplica capturas por id.
+     *   4. Recalcula total_sales_mxn, total_captures, total_quantity, total_cogs,
+     *      comisiones, gross y net desde el array limpio.
+     *   5. Sube al servidor (upsert con captures dedup'd reemplaza el corrupto).
      */
     async repairArchivedReports() {
         try {
             const confirmed = await Utils.confirm(
-                'Reparar todos los reportes archivados:\n\n• Eliminar capturas duplicadas dentro de cada reporte\n• Recalcular ventas, comisiones, utilidades desde el array limpio\n• Subir al servidor\n\n¿Continuar?',
+                'Reparar todos los reportes archivados:\n\n• Eliminar reportes fantasma (branch_id=null)\n• Filtrar capturas que no son de la sucursal del reporte\n• Eliminar duplicados internos\n• Recalcular ventas y utilidades\n• Subir al servidor\n\n¿Continuar?',
                 'Reparar Reportes Archivados'
             );
             if (!confirmed) return;
 
             Utils.showNotification('Reparando reportes...', 'info');
+
+            // 0) Eliminar reportes fantasma con branch_id null en servidor y local
+            try {
+                if (typeof API !== 'undefined' && API.getArchivedReports && API.deleteArchivedReport) {
+                    const allServer = await API.getArchivedReports({}) || [];
+                    const phantoms = allServer.filter(r => !r.branch_id);
+                    for (const ph of phantoms) {
+                        try {
+                            await API.deleteArchivedReport(ph.id);
+                            console.log(`🗑️ Reporte fantasma eliminado del servidor: ${ph.id} (date:${ph.report_date})`);
+                        } catch (e) {
+                            console.warn(`No se pudo eliminar fantasma ${ph.id}:`, e.message);
+                        }
+                    }
+                }
+                // Tambien eliminar local
+                const localAll = await DB.getAll('archived_quick_captures') || [];
+                for (const r of localAll) {
+                    if (!r.branch_id) {
+                        try { await DB.delete('archived_quick_captures', r.id); } catch (_) {}
+                    }
+                }
+            } catch (e) {
+                console.warn('Error limpiando reportes fantasma:', e);
+            }
 
             // 1) Descargar fresh del servidor para tener captures actualizadas
             try {
@@ -6928,13 +6993,20 @@ const ReportsQuickCapture = {
 
             for (const report of allReports) {
                 try {
+                    if (!report.branch_id) { unchanged++; continue; }
                     const rawCaptures = this.normalizeArchivedArray(report.captures);
                     if (rawCaptures.length === 0) { unchanged++; continue; }
 
-                    // Dedupe por id (o por clave compuesta si no hay id)
+                    // 1) Filtrar capturas que NO son de la sucursal del reporte
+                    //    (contaminacion cruzada del bug original sin filtro de sucursal)
+                    const branchFiltered = rawCaptures.filter(c =>
+                        !c?.branch_id || c.branch_id === report.branch_id
+                    );
+
+                    // 2) Dedupe por id (o por clave compuesta si no hay id)
                     const seen = new Set();
                     const cleanCaptures = [];
-                    for (const c of rawCaptures) {
+                    for (const c of branchFiltered) {
                         if (!c) continue;
                         const key = c.id || c.server_id || `${c.date||''}_${c.seller_id||''}_${c.product||''}_${parseFloat(c.total)||0}_${c.created_at||''}`;
                         if (seen.has(key)) continue;
