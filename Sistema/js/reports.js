@@ -3056,6 +3056,43 @@ const Reports = {
     },
 
     /**
+     * Determina si un costo recurrente debe prorratearse para una fecha objetivo.
+     * Reglas:
+     *  - monthly: la fecha del costo debe estar en el MISMO año-mes que targetDate.
+     *    Esto evita que registrar "Renta" para enero, febrero y marzo termine
+     *    prorrateando los 3 todos los días, inflando 3x los costos fijos.
+     *  - weekly: misma semana ISO y mismo año.
+     *  - annual/yearly: mismo año.
+     * Sin fecha → permitir (asumimos template).
+     */
+    isRecurringActiveOn(cost, targetDate) {
+        if (!cost) return false;
+        const raw = cost.date || cost.created_at;
+        if (!raw) return true;
+        const costDate = new Date(raw);
+        if (isNaN(costDate.getTime())) return true;
+        const period = cost.period_type;
+        if (period === 'monthly') {
+            return costDate.getFullYear() === targetDate.getFullYear() &&
+                   costDate.getMonth() === targetDate.getMonth();
+        }
+        if (period === 'weekly') {
+            const isoWeek = (d) => {
+                const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+                const dayNum = t.getUTCDay() || 7;
+                t.setUTCDate(t.getUTCDate() + 4 - dayNum);
+                const yearStart = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+                return `${Math.ceil((((t - yearStart) / 86400000) + 1) / 7)}_${t.getUTCFullYear()}`;
+            };
+            return isoWeek(costDate) === isoWeek(targetDate);
+        }
+        if (period === 'annual' || period === 'yearly') {
+            return costDate.getFullYear() === targetDate.getFullYear();
+        }
+        return true;
+    },
+
+    /**
      * Calcula los costos de llegadas desde cost_entries (fuente autorizada)
      * Si no hay costos registrados, calcula desde agency_arrivals como fallback
      * @param {string} dateStr - Fecha en formato YYYY-MM-DD

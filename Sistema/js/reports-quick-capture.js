@@ -3897,7 +3897,7 @@ const ReportsQuickCapture = {
                         // Aceptar si tiene recurring=true O si tiene type='fijo' (para compatibilidad)
                         const isRecurring = c.recurring === true || c.recurring === 'true' || c.type === 'fijo';
                         const isValidCategory = c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias';
-                        return isMonthly && isRecurring && isValidCategory;
+                        return isMonthly && isRecurring && isValidCategory && this.isRecurringActiveOn(c, targetDate);
                     }));
                     console.log(`   📅 Costos mensuales encontrados: ${monthlyCosts.length} (únicos tras deduplicar recurrentes)`);
                     for (const cost of monthlyCosts) {
@@ -3920,13 +3920,10 @@ const ReportsQuickCapture = {
                     // IMPORTANTE: Para costos recurrentes semanales, aplicar si estamos en la misma semana
                     // del año objetivo
                     const weeklyCosts = this.deduplicateRecurringCosts(branchCosts.filter(c => {
-                        const costDate = new Date(c.date || c.created_at);
-                        // Para costos recurrentes semanales, aplicar si están en el mismo año
                         const isWeekly = c.period_type === 'weekly';
                         const isRecurring = c.recurring === true || c.recurring === 'true' || c.type === 'fijo';
                         const isValidCategory = c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias';
-                        const isSameYear = targetDate.getFullYear() === costDate.getFullYear();
-                        return isWeekly && isRecurring && isValidCategory && isSameYear;
+                        return isWeekly && isRecurring && isValidCategory && this.isRecurringActiveOn(c, targetDate);
                     }));
                     console.log(`   📅 Costos semanales encontrados: ${weeklyCosts.length} (únicos tras deduplicar recurrentes)`);
                     for (const cost of weeklyCosts) {
@@ -3950,9 +3947,7 @@ const ReportsQuickCapture = {
                         const isAnnual = c.period_type === 'annual' || c.period_type === 'yearly';
                         const isRecurring = c.recurring === true || c.recurring === 'true' || c.type === 'fijo';
                         const isValidCategory = c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias';
-                        return isAnnual && isRecurring && isValidCategory;
-                        // Removido el filtro de año porque los costos recurrentes anuales se aplican siempre
-                        // que estén activos para ese año
+                        return isAnnual && isRecurring && isValidCategory && this.isRecurringActiveOn(c, targetDate);
                     }));
                     console.log(`   📅 Costos anuales encontrados: ${annualCosts.length} (únicos tras deduplicar recurrentes)`);
                     for (const cost of annualCosts) {
@@ -5785,7 +5780,7 @@ const ReportsQuickCapture = {
                         const isMonthly = c.period_type === 'monthly';
                         const isRecurring = c.recurring === true || c.recurring === 'true' || c.type === 'fijo';
                         const isValidCategory = c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias';
-                        return isMonthly && isRecurring && isValidCategory;
+                        return isMonthly && isRecurring && isValidCategory && this.isRecurringActiveOn(c, targetDate);
                     }));
                     for (const cost of monthlyCosts) {
                         // Usar 30 días fijos para prorrateo mensual (convención contable estándar)
@@ -5796,12 +5791,10 @@ const ReportsQuickCapture = {
 
                     // Costos semanales prorrateados
                     const weeklyCosts = this.deduplicateRecurringCosts(branchCosts.filter(c => {
-                        const costDate = new Date(c.date || c.created_at);
                         const isWeekly = c.period_type === 'weekly';
                         const isRecurring = c.recurring === true || c.recurring === 'true' || c.type === 'fijo';
                         const isValidCategory = c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias';
-                        const isSameYear = targetDate.getFullYear() === costDate.getFullYear();
-                        return isWeekly && isRecurring && isValidCategory && isSameYear;
+                        return isWeekly && isRecurring && isValidCategory && this.isRecurringActiveOn(c, targetDate);
                     }));
                     for (const cost of weeklyCosts) {
                         const dailyAmount = (parseFloat(cost.amount) || 0) / 7;
@@ -5813,7 +5806,7 @@ const ReportsQuickCapture = {
                         const isAnnual = c.period_type === 'annual' || c.period_type === 'yearly';
                         const isRecurring = c.recurring === true || c.recurring === 'true' || c.type === 'fijo';
                         const isValidCategory = c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias';
-                        return isAnnual && isRecurring && isValidCategory;
+                        return isAnnual && isRecurring && isValidCategory && this.isRecurringActiveOn(c, targetDate);
                     }));
                     for (const cost of annualCosts) {
                         const daysInYear = ((targetDate.getFullYear() % 4 === 0 && targetDate.getFullYear() % 100 !== 0) || (targetDate.getFullYear() % 400 === 0)) ? 366 : 365;
@@ -6254,39 +6247,36 @@ const ReportsQuickCapture = {
                     branchCosts = this.deduplicateCosts(branchCosts);
 
                     // A) COSTOS FIJOS PRORRATEADOS
-                    // Mensuales
-                    const monthlyCosts = this.deduplicateRecurringCosts(branchCosts.filter(c => {
-                        const isMonthly = c.period_type === 'monthly';
-                        const isRecurring = c.recurring === true || c.recurring === 'true' || c.type === 'fijo';
-                        const isValidCategory = c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias';
-                        return isMonthly && isRecurring && isValidCategory;
-                    }));
+                    // CRITICO: filtrar por isRecurringActiveOn(cost, targetDate) para que
+                    // un costo "Renta marzo" no se prorratee tambien en abril/mayo/etc.
+                    const isRecurring = (c) => c.recurring === true || c.recurring === 'true' || c.type === 'fijo';
+                    const isValidCategory = (c) => c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias';
+
+                    // Mensuales — solo del mismo año-mes que el reporte
+                    const monthlyCosts = this.deduplicateRecurringCosts(branchCosts.filter(c =>
+                        c.period_type === 'monthly' && isRecurring(c) && isValidCategory(c) &&
+                        this.isRecurringActiveOn(c, targetDate)
+                    ));
                     for (const cost of monthlyCosts) {
-                        // Usar 30 días fijos para prorrateo mensual (convención contable estándar)
                         const DAYS_PER_MONTH = 30;
                         fixedCostsProrated += (parseFloat(cost.amount) || 0) / DAYS_PER_MONTH;
                     }
 
-                    // Semanales
-                    const weeklyCosts = this.deduplicateRecurringCosts(branchCosts.filter(c => {
-                        const isWeekly = c.period_type === 'weekly';
-                        const isRecurring = c.recurring === true || c.recurring === 'true' || c.type === 'fijo';
-                        const isValidCategory = c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias';
-                        const costDate = new Date(c.date || c.created_at);
-                        const isSameYear = targetDate.getFullYear() === costDate.getFullYear();
-                        return isWeekly && isRecurring && isValidCategory && isSameYear;
-                    }));
+                    // Semanales — solo de la misma semana ISO
+                    const weeklyCosts = this.deduplicateRecurringCosts(branchCosts.filter(c =>
+                        c.period_type === 'weekly' && isRecurring(c) && isValidCategory(c) &&
+                        this.isRecurringActiveOn(c, targetDate)
+                    ));
                     for (const cost of weeklyCosts) {
                         fixedCostsProrated += (parseFloat(cost.amount) || 0) / 7;
                     }
 
-                    // Anuales/Yearly
-                    const annualCosts = this.deduplicateRecurringCosts(branchCosts.filter(c => {
-                        const isAnnual = c.period_type === 'annual' || c.period_type === 'yearly';
-                        const isRecurring = c.recurring === true || c.recurring === 'true' || c.type === 'fijo';
-                        const isValidCategory = c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias';
-                        return isAnnual && isRecurring && isValidCategory;
-                    }));
+                    // Anuales/Yearly — solo del mismo año
+                    const annualCosts = this.deduplicateRecurringCosts(branchCosts.filter(c =>
+                        (c.period_type === 'annual' || c.period_type === 'yearly') &&
+                        isRecurring(c) && isValidCategory(c) &&
+                        this.isRecurringActiveOn(c, targetDate)
+                    ));
                     for (const cost of annualCosts) {
                         const daysInYear = ((targetDate.getFullYear() % 4 === 0 && targetDate.getFullYear() % 100 !== 0) || (targetDate.getFullYear() % 400 === 0)) ? 366 : 365;
                         fixedCostsProrated += (parseFloat(cost.amount) || 0) / daysInYear;
@@ -6920,27 +6910,28 @@ const ReportsQuickCapture = {
                         });
                         branchCosts = this.deduplicateCosts(branchCosts);
 
-                        // A) FIJOS PRORRATEADOS
+                        // A) FIJOS PRORRATEADOS — solo costos cuya fecha cae en el periodo del reporte
                         const monthlyCosts = this.deduplicateRecurringCosts(branchCosts.filter(c =>
                             c.period_type === 'monthly' &&
                             (c.recurring === true || c.recurring === 'true' || c.type === 'fijo') &&
-                            c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias'
+                            c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias' &&
+                            this.isRecurringActiveOn(c, targetDate)
                         ));
                         for (const cost of monthlyCosts) fixedCostsProrated += (parseFloat(cost.amount) || 0) / DAYS_PER_MONTH;
 
-                        const weeklyCosts = this.deduplicateRecurringCosts(branchCosts.filter(c => {
-                            const cd = new Date(c.date || c.created_at);
-                            return c.period_type === 'weekly' &&
-                                (c.recurring === true || c.recurring === 'true' || c.type === 'fijo') &&
-                                c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias' &&
-                                targetDate.getFullYear() === cd.getFullYear();
-                        }));
+                        const weeklyCosts = this.deduplicateRecurringCosts(branchCosts.filter(c =>
+                            c.period_type === 'weekly' &&
+                            (c.recurring === true || c.recurring === 'true' || c.type === 'fijo') &&
+                            c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias' &&
+                            this.isRecurringActiveOn(c, targetDate)
+                        ));
                         for (const cost of weeklyCosts) fixedCostsProrated += (parseFloat(cost.amount) || 0) / 7;
 
                         const annualCosts = this.deduplicateRecurringCosts(branchCosts.filter(c =>
                             (c.period_type === 'annual' || c.period_type === 'yearly') &&
                             (c.recurring === true || c.recurring === 'true' || c.type === 'fijo') &&
-                            c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias'
+                            c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias' &&
+                            this.isRecurringActiveOn(c, targetDate)
                         ));
                         for (const cost of annualCosts) fixedCostsProrated += (parseFloat(cost.amount) || 0) / daysInYear;
 
@@ -8300,23 +8291,24 @@ const ReportsQuickCapture = {
                 const monthlyCosts = this.deduplicateRecurringCosts(branchCosts.filter(c =>
                     c.period_type === 'monthly' &&
                     (c.recurring === true || c.recurring === 'true' || c.type === 'fijo') &&
-                    c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias'
+                    c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias' &&
+                    this.isRecurringActiveOn(c, targetDate)
                 ));
                 for (const cost of monthlyCosts) fixedCostsProrated += (parseFloat(cost.amount) || 0) / DAYS_PER_MONTH;
 
-                const weeklyCosts = this.deduplicateRecurringCosts(branchCosts.filter(c => {
-                    const costDate = new Date(c.date || c.created_at);
-                    return c.period_type === 'weekly' &&
-                        (c.recurring === true || c.recurring === 'true' || c.type === 'fijo') &&
-                        c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias' &&
-                        targetDate.getFullYear() === costDate.getFullYear();
-                }));
+                const weeklyCosts = this.deduplicateRecurringCosts(branchCosts.filter(c =>
+                    c.period_type === 'weekly' &&
+                    (c.recurring === true || c.recurring === 'true' || c.type === 'fijo') &&
+                    c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias' &&
+                    this.isRecurringActiveOn(c, targetDate)
+                ));
                 for (const cost of weeklyCosts) fixedCostsProrated += (parseFloat(cost.amount) || 0) / 7;
 
                 const annualCosts = this.deduplicateRecurringCosts(branchCosts.filter(c =>
                     (c.period_type === 'annual' || c.period_type === 'yearly') &&
                     (c.recurring === true || c.recurring === 'true' || c.type === 'fijo') &&
-                    c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias'
+                    c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias' &&
+                    this.isRecurringActiveOn(c, targetDate)
                 ));
                 for (const cost of annualCosts) fixedCostsProrated += (parseFloat(cost.amount) || 0) / daysInYear;
 
