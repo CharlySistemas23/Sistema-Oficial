@@ -6346,6 +6346,12 @@ const Reports = {
             const metricsBySeller = {};
             let totalPassengers = 0;
 
+            // Acumular comisiones pagadas por entidad. Cada archive trae arrays
+            // seller_commissions y guide_commissions con {id, name, total, sales}.
+            const commissionsBySeller = {};   // sellerId → { name, total, sales }
+            const commissionsByGuide = {};    // guideId → { name, total, sales, agency_id }
+            const commissionsByAgency = {};   // agencyId → { name, total } (sum of guides commissions)
+
             // Diagnostico: log de las fuentes que se estan agregando para que el
             // usuario pueda auditar de donde sale cada peso.
             const auditLog = [];
@@ -6402,6 +6408,24 @@ const Reports = {
                 if (report.id) {
                     archivedReportIds.push(report.id);
                 }
+
+                // Agregar comisiones pagadas por seller/guide desde el archive
+                const sellerCommArr = Array.isArray(report.seller_commissions) ? report.seller_commissions : [];
+                sellerCommArr.forEach(sc => {
+                    const sid = sc.seller_id;
+                    if (!sid) return;
+                    if (!commissionsBySeller[sid]) commissionsBySeller[sid] = { seller_id: sid, seller_name: sc.seller_name || 'Desconocido', total: 0, sales: 0 };
+                    commissionsBySeller[sid].total += parseFloat(sc.total) || 0;
+                    commissionsBySeller[sid].sales += parseInt(sc.sales) || 0;
+                });
+                const guideCommArr = Array.isArray(report.guide_commissions) ? report.guide_commissions : [];
+                guideCommArr.forEach(gc => {
+                    const gid = gc.guide_id;
+                    if (!gid) return;
+                    if (!commissionsByGuide[gid]) commissionsByGuide[gid] = { guide_id: gid, guide_name: gc.guide_name || 'Desconocido', total: 0, sales: 0, agency_id: null };
+                    commissionsByGuide[gid].total += parseFloat(gc.total) || 0;
+                    commissionsByGuide[gid].sales += parseInt(gc.sales) || 0;
+                });
 
                 // Agregar métricas del reporte (si existen)
                 if (report.metrics || report.captures) {
@@ -6661,6 +6685,22 @@ const Reports = {
             }
             // ── Fin recálculo costos operativos ──────────────────────────────────────
 
+            // Resolver agency_id de cada guia (desde metricsByGuide) y sumar a comisionesByAgency
+            Object.values(commissionsByGuide).forEach(gc => {
+                const guideMetric = metricsByGuide[gc.guide_id];
+                const agencyId = guideMetric?.agency_id;
+                if (!agencyId) return;
+                gc.agency_id = agencyId;
+                if (!commissionsByAgency[agencyId]) {
+                    commissionsByAgency[agencyId] = {
+                        agency_id: agencyId,
+                        agency_name: guideMetric.agency_name || 'Desconocida',
+                        total: 0
+                    };
+                }
+                commissionsByAgency[agencyId].total += gc.total;
+            });
+
             // Calcular métricas agregadas finales
             const aggregatedMetrics = {
                 general: {
@@ -6675,7 +6715,8 @@ const Reports = {
                     pasajeros: agency.pasajeros,
                     cierre_percent: agency.pasajeros > 0 ? parseFloat(((agency.ventas / agency.pasajeros) * 100).toFixed(2)) : 0,
                     ticket_promedio: agency.ventas > 0 ? parseFloat((agency.total_ventas_mxn / agency.ventas).toFixed(2)) : 0,
-                    total_ventas_mxn: parseFloat((parseFloat(agency.total_ventas_mxn) || 0).toFixed(2))
+                    total_ventas_mxn: parseFloat((parseFloat(agency.total_ventas_mxn) || 0).toFixed(2)),
+                    comisiones_pagadas: parseFloat(((commissionsByAgency[agency.agency_id]?.total) || 0).toFixed(2))
                 })),
                 por_guia: Object.values(metricsByGuide).map(guide => ({
                     guide_id: guide.guide_id,
@@ -6686,14 +6727,16 @@ const Reports = {
                     pasajeros: guide.pasajeros,
                     cierre_percent: guide.pasajeros > 0 ? parseFloat(((guide.ventas / guide.pasajeros) * 100).toFixed(2)) : 0,
                     ticket_promedio: guide.ventas > 0 ? parseFloat((guide.total_ventas_mxn / guide.ventas).toFixed(2)) : 0,
-                    total_ventas_mxn: parseFloat((parseFloat(guide.total_ventas_mxn) || 0).toFixed(2))
+                    total_ventas_mxn: parseFloat((parseFloat(guide.total_ventas_mxn) || 0).toFixed(2)),
+                    comisiones_pagadas: parseFloat(((commissionsByGuide[guide.guide_id]?.total) || 0).toFixed(2))
                 })),
                 por_vendedor: Object.values(metricsBySeller).map(seller => ({
                     seller_id: seller.seller_id,
                     seller_name: seller.seller_name,
                     ventas: seller.ventas,
                     ticket_promedio: seller.ventas > 0 ? parseFloat((seller.total_ventas_mxn / seller.ventas).toFixed(2)) : 0,
-                    total_ventas_mxn: parseFloat((parseFloat(seller.total_ventas_mxn) || 0).toFixed(2))
+                    total_ventas_mxn: parseFloat((parseFloat(seller.total_ventas_mxn) || 0).toFixed(2)),
+                    comisiones_pagadas: parseFloat(((commissionsBySeller[seller.seller_id]?.total) || 0).toFixed(2))
                 }))
             };
 
@@ -7745,6 +7788,137 @@ const Reports = {
                     y += 7;
                 });
                 y += 4;
+            }
+
+            // ========== TOP 5 AGENCIAS DEL PERIODO ==========
+            if (porAgencia.length > 0) {
+                const top5Ag = [...porAgencia]
+                    .sort((a, b) => (parseFloat(b.total_ventas_mxn) || 0) - (parseFloat(a.total_ventas_mxn) || 0))
+                    .slice(0, 5);
+                checkPage(60);
+                y = drawSectionTitle('TOP 5 AGENCIAS DEL PERÍODO', y);
+                const tA = [margin + 8, margin + 18, margin + 76, margin + 102, margin + 132, margin + 165, margin + 200, margin + 240, pageWidth - margin - 2];
+                doc.setFillColor(212, 160, 23); doc.rect(margin, y, pageWidth - margin * 2, 8, 'F');
+                doc.setFontSize(7); doc.setFont('helvetica', 'bold'); doc.setTextColor(255, 255, 255);
+                doc.text('#', tA[0], y + 5.5);
+                doc.text('Agencia', tA[1], y + 5.5);
+                doc.text('Ventas', tA[2] + (tA[3] - tA[2]) / 2, y + 5.5, { align: 'center' });
+                doc.text('Pax', tA[3] + (tA[4] - tA[3]) / 2, y + 5.5, { align: 'center' });
+                doc.text('% Cierre', tA[4] + (tA[5] - tA[4]) / 2, y + 5.5, { align: 'center' });
+                doc.text('Ticket Prom.', tA[5] + (tA[6] - tA[5]) / 2, y + 5.5, { align: 'center' });
+                doc.text('Comisiones', tA[6] + (tA[7] - tA[6]) / 2, y + 5.5, { align: 'center' });
+                doc.text('Total Ventas', tA[8], y + 5.5, { align: 'right' });
+                doc.setTextColor(0, 0, 0);
+                y += 8;
+                top5Ag.forEach((ag, i) => {
+                    checkPage(8);
+                    if (i % 2 === 0) { doc.setFillColor(255, 248, 230); doc.rect(margin, y, pageWidth - margin * 2, 8, 'F'); }
+                    doc.setDrawColor(220, 215, 200); doc.rect(margin, y, pageWidth - margin * 2, 8);
+                    doc.setFontSize(9); doc.setFont('helvetica', 'bold'); doc.setTextColor(212, 160, 23);
+                    doc.text(`${i + 1}`, tA[0], y + 5.5);
+                    doc.setFont('helvetica', 'bold'); doc.setTextColor(44, 62, 80); doc.setFontSize(8);
+                    doc.text(String(ag.agency_name || 'N/A').substring(0, 28), tA[1], y + 5.5);
+                    doc.setFont('helvetica', 'normal'); doc.setTextColor(60, 60, 70);
+                    doc.text(String(ag.ventas || 0), tA[2] + (tA[3] - tA[2]) / 2, y + 5.5, { align: 'center' });
+                    doc.text(String(ag.pasajeros || 0), tA[3] + (tA[4] - tA[3]) / 2, y + 5.5, { align: 'center' });
+                    doc.setFont('helvetica', 'bold'); doc.setTextColor(44, 62, 80);
+                    doc.text(`${(parseFloat(ag.cierre_percent) || 0).toFixed(1)}%`, tA[4] + (tA[5] - tA[4]) / 2, y + 5.5, { align: 'center' });
+                    doc.setFont('helvetica', 'normal'); doc.setTextColor(60, 60, 70);
+                    doc.text(fmt(ag.ticket_promedio || 0), tA[5] + (tA[6] - tA[5]) / 2, y + 5.5, { align: 'center' });
+                    doc.setTextColor(170, 80, 30);
+                    doc.text(fmt(ag.comisiones_pagadas || 0), tA[6] + (tA[7] - tA[6]) / 2, y + 5.5, { align: 'center' });
+                    doc.setFont('helvetica', 'bold'); doc.setTextColor(30, 90, 30);
+                    doc.text(fmt(ag.total_ventas_mxn || 0), tA[8], y + 5.5, { align: 'right' });
+                    doc.setTextColor(0, 0, 0);
+                    y += 8;
+                });
+                y += 6;
+            }
+
+            // ========== TOP 5 GUÍAS DEL PERIODO ==========
+            if (porGuia.length > 0) {
+                const top5Gu = [...porGuia]
+                    .sort((a, b) => (parseFloat(b.total_ventas_mxn) || 0) - (parseFloat(a.total_ventas_mxn) || 0))
+                    .slice(0, 5);
+                checkPage(60);
+                y = drawSectionTitle('TOP 5 GUÍAS DEL PERÍODO', y);
+                const tG = [margin + 8, margin + 18, margin + 65, margin + 110, margin + 130, margin + 152, margin + 180, margin + 210, margin + 245, pageWidth - margin - 2];
+                doc.setFillColor(212, 160, 23); doc.rect(margin, y, pageWidth - margin * 2, 8, 'F');
+                doc.setFontSize(7); doc.setFont('helvetica', 'bold'); doc.setTextColor(255, 255, 255);
+                doc.text('#', tG[0], y + 5.5);
+                doc.text('Guía', tG[1], y + 5.5);
+                doc.text('Agencia', tG[2], y + 5.5);
+                doc.text('Ventas', tG[3] + (tG[4] - tG[3]) / 2, y + 5.5, { align: 'center' });
+                doc.text('Pax', tG[4] + (tG[5] - tG[4]) / 2, y + 5.5, { align: 'center' });
+                doc.text('% Cierre', tG[5] + (tG[6] - tG[5]) / 2, y + 5.5, { align: 'center' });
+                doc.text('Ticket Prom.', tG[6] + (tG[7] - tG[6]) / 2, y + 5.5, { align: 'center' });
+                doc.text('Comisiones', tG[7] + (tG[8] - tG[7]) / 2, y + 5.5, { align: 'center' });
+                doc.text('Total Ventas', tG[9], y + 5.5, { align: 'right' });
+                doc.setTextColor(0, 0, 0);
+                y += 8;
+                top5Gu.forEach((gu, i) => {
+                    checkPage(8);
+                    if (i % 2 === 0) { doc.setFillColor(255, 248, 230); doc.rect(margin, y, pageWidth - margin * 2, 8, 'F'); }
+                    doc.setDrawColor(220, 215, 200); doc.rect(margin, y, pageWidth - margin * 2, 8);
+                    doc.setFontSize(9); doc.setFont('helvetica', 'bold'); doc.setTextColor(212, 160, 23);
+                    doc.text(`${i + 1}`, tG[0], y + 5.5);
+                    doc.setFont('helvetica', 'bold'); doc.setTextColor(44, 62, 80); doc.setFontSize(8);
+                    doc.text(String(gu.guide_name || 'N/A').substring(0, 22), tG[1], y + 5.5);
+                    doc.setFont('helvetica', 'normal'); doc.setTextColor(60, 60, 70);
+                    doc.text(String(gu.agency_name || 'N/A').substring(0, 22), tG[2], y + 5.5);
+                    doc.text(String(gu.ventas || 0), tG[3] + (tG[4] - tG[3]) / 2, y + 5.5, { align: 'center' });
+                    doc.text(String(gu.pasajeros || 0), tG[4] + (tG[5] - tG[4]) / 2, y + 5.5, { align: 'center' });
+                    doc.setFont('helvetica', 'bold'); doc.setTextColor(44, 62, 80);
+                    doc.text(`${(parseFloat(gu.cierre_percent) || 0).toFixed(1)}%`, tG[5] + (tG[6] - tG[5]) / 2, y + 5.5, { align: 'center' });
+                    doc.setFont('helvetica', 'normal'); doc.setTextColor(60, 60, 70);
+                    doc.text(fmt(gu.ticket_promedio || 0), tG[6] + (tG[7] - tG[6]) / 2, y + 5.5, { align: 'center' });
+                    doc.setTextColor(170, 80, 30);
+                    doc.text(fmt(gu.comisiones_pagadas || 0), tG[7] + (tG[8] - tG[7]) / 2, y + 5.5, { align: 'center' });
+                    doc.setFont('helvetica', 'bold'); doc.setTextColor(30, 90, 30);
+                    doc.text(fmt(gu.total_ventas_mxn || 0), tG[9], y + 5.5, { align: 'right' });
+                    doc.setTextColor(0, 0, 0);
+                    y += 8;
+                });
+                y += 6;
+            }
+
+            // ========== TOP 5 VENDEDORES DEL PERIODO ==========
+            if (porVendedor.length > 0) {
+                const top5Ve = [...porVendedor]
+                    .sort((a, b) => (parseFloat(b.total_ventas_mxn) || 0) - (parseFloat(a.total_ventas_mxn) || 0))
+                    .slice(0, 5);
+                checkPage(60);
+                y = drawSectionTitle('TOP 5 VENDEDORES DEL PERÍODO', y);
+                const tV = [margin + 8, margin + 18, margin + 100, margin + 140, margin + 185, pageWidth - margin - 2];
+                doc.setFillColor(212, 160, 23); doc.rect(margin, y, pageWidth - margin * 2, 8, 'F');
+                doc.setFontSize(7); doc.setFont('helvetica', 'bold'); doc.setTextColor(255, 255, 255);
+                doc.text('#', tV[0], y + 5.5);
+                doc.text('Vendedor', tV[1], y + 5.5);
+                doc.text('Ventas', tV[2] + (tV[3] - tV[2]) / 2, y + 5.5, { align: 'center' });
+                doc.text('Ticket Promedio', tV[3] + (tV[4] - tV[3]) / 2, y + 5.5, { align: 'center' });
+                doc.text('Comisiones', tV[4] + (tV[5] - tV[4]) / 2, y + 5.5, { align: 'center' });
+                doc.text('Total Ventas', tV[5], y + 5.5, { align: 'right' });
+                doc.setTextColor(0, 0, 0);
+                y += 8;
+                top5Ve.forEach((ve, i) => {
+                    checkPage(8);
+                    if (i % 2 === 0) { doc.setFillColor(255, 248, 230); doc.rect(margin, y, pageWidth - margin * 2, 8, 'F'); }
+                    doc.setDrawColor(220, 215, 200); doc.rect(margin, y, pageWidth - margin * 2, 8);
+                    doc.setFontSize(9); doc.setFont('helvetica', 'bold'); doc.setTextColor(212, 160, 23);
+                    doc.text(`${i + 1}`, tV[0], y + 5.5);
+                    doc.setFont('helvetica', 'bold'); doc.setTextColor(44, 62, 80); doc.setFontSize(8);
+                    doc.text(String(ve.seller_name || 'N/A').substring(0, 30), tV[1], y + 5.5);
+                    doc.setFont('helvetica', 'normal'); doc.setTextColor(60, 60, 70);
+                    doc.text(String(ve.ventas || 0), tV[2] + (tV[3] - tV[2]) / 2, y + 5.5, { align: 'center' });
+                    doc.text(fmt(ve.ticket_promedio || 0), tV[3] + (tV[4] - tV[3]) / 2, y + 5.5, { align: 'center' });
+                    doc.setTextColor(170, 80, 30);
+                    doc.text(fmt(ve.comisiones_pagadas || 0), tV[4] + (tV[5] - tV[4]) / 2, y + 5.5, { align: 'center' });
+                    doc.setFont('helvetica', 'bold'); doc.setTextColor(30, 90, 30);
+                    doc.text(fmt(ve.total_ventas_mxn || 0), tV[5], y + 5.5, { align: 'right' });
+                    doc.setTextColor(0, 0, 0);
+                    y += 8;
+                });
+                y += 6;
             }
 
             // ========== TABLA DÍA POR DÍA ==========
