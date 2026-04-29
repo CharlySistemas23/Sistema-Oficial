@@ -1569,30 +1569,50 @@ Object.assign(POS, {
     },
 
     updateQuantity(itemId, newQuantity) {
-        if (newQuantity < 1) {
-            this.removeFromCart(itemId);
+        const qty = Number(newQuantity);
+        if (!Number.isFinite(qty) || qty < 1) {
+            if (qty === 0) this.removeFromCart(itemId);
             return;
         }
         const item = this.cart.find(c => c.id === itemId);
-        if (item) {
-            item.quantity = newQuantity;
-            item.subtotal = item.price * item.quantity * (1 - (item.discount || 0) / 100);
-            this.updateCartDisplay();
-            this.calculateTotals();
-            this.saveCartToStorage();
-        }
+        if (!item) return;
+        item.quantity = qty;
+        item.subtotal = (Number(item.price) || 0) * qty * (1 - (item.discount || 0) / 100);
+        // Actualizar SOLO el subtotal de este item en el DOM en vez de re-renderizar
+        // todo el carrito. Re-renderizar destruia los inputs y el usuario perdia
+        // el foco mid-typing — por eso se sentia que "se trababa".
+        this._updateCartItemSubtotal(itemId, item.subtotal);
+        this.calculateTotals();
+        this.saveCartToStorage();
     },
 
     updateItemPrice(itemId, newPrice) {
-        if (newPrice < 0) return;
+        const price = Number(newPrice);
+        // Rechazar NaN, infinitos y negativos. Antes con NaN el subtotal/total
+        // se volvian NaN y la venta se procesaba con valores invalidos.
+        if (!Number.isFinite(price) || price < 0) return;
         const item = this.cart.find(c => c.id === itemId);
-        if (item) {
-            item.price = newPrice;
-            item.subtotal = item.price * item.quantity * (1 - (item.discount || 0) / 100);
+        if (!item) return;
+        item.price = price;
+        item.subtotal = price * item.quantity * (1 - (item.discount || 0) / 100);
+        // Mismo fix que updateQuantity: NO re-renderizar todo el carrito al
+        // cambiar precio. Solo actualizar el subtotal de la fila.
+        this._updateCartItemSubtotal(itemId, item.subtotal);
+        this.calculateTotals();
+        this.saveCartToStorage();
+    },
+
+    // Actualiza in-place el subtotal de una fila del carrito sin re-renderizar
+    // todo el contenedor. Preserva el foco del input que el usuario esta editando.
+    _updateCartItemSubtotal(itemId, subtotal) {
+        const row = document.querySelector(`.pos-cart-item-advanced[data-item-id="${CSS.escape(itemId)}"]`);
+        if (!row) {
+            // Si no encontramos la fila (caso raro), fallback a re-renderizar.
             this.updateCartDisplay();
-            this.calculateTotals();
-            this.saveCartToStorage();
+            return;
         }
+        const totalEl = row.querySelector('.pos-cart-item-total');
+        if (totalEl) totalEl.textContent = Utils.formatCurrency(subtotal);
     },
 
     // ==================== DESCUENTOS ====================

@@ -680,13 +680,20 @@ const Printer = {
     // ==================== MÉTODO ALTERNATIVO (IFRAME OCULTO) ====================
     
     async printTicketFallback(sale) {
-        // Protección global contra impresiones duplicadas
+        // Proteccion global contra duplicados. Si por alguna razon el flag
+        // quedo "atorado" (ej. error sin catch), liberamos despues de 5s
+        // para no bloquear ventas siguientes hasta el reload de pagina.
         if (this._printingInProgress) {
-            console.log('Impresión ya en progreso, ignorando llamada duplicada');
-            return;
+            const stuck = this._printingStartedAt && (Date.now() - this._printingStartedAt > 5000);
+            if (!stuck) {
+                console.log('Impresión ya en progreso, ignorando llamada duplicada');
+                return;
+            }
+            console.warn('[Printer] _printingInProgress lleva >5s atorado, forzando reset');
         }
-        
+
         this._printingInProgress = true;
+        this._printingStartedAt = Date.now();
         
         try {
             console.log('Usando método fallback de impresión para venta:', sale.folio);
@@ -839,16 +846,20 @@ const Printer = {
                 }
             }
             
-            // Resetear bandera global después de un delay
+            // Resetear bandera global despues de un delay corto (200ms basta
+            // para que el navegador procese la cola de print). Antes era 1s
+            // y ventas rapidas consecutivas se ignoraban silenciosamente.
             setTimeout(() => {
                 this._printingInProgress = false;
-            }, 1000);
+                this._printingStartedAt = 0;
+            }, 200);
         } catch (e) {
             console.error('Error en fallback de impresión:', e);
             console.error('Stack:', e.stack);
             Utils.showNotification('Error al imprimir ticket. Revisa la consola para más detalles.', 'error');
             // Resetear bandera en caso de error
             this._printingInProgress = false;
+            this._printingStartedAt = 0;
         }
     },
 
