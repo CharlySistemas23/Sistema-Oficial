@@ -6953,12 +6953,14 @@ const Reports = {
                         </thead>
                         <tbody>
                             ${historicalReports.map(report => {
-                                const grossProfit = report.gross_profit || 0;
-                                const netProfit = report.net_profit || 0;
-                                const totalSales = report.total_sales_mxn || 0;
-                                const captureCount = report.total_captures || 0;
-                                const totalDays = report.total_days || 0;
-                                
+                                // Postgres devuelve DECIMAL como string ("1500.00"). Sin parseFloat
+                                // .toFixed() reventaba con "totalSales.toFixed is not a function".
+                                const grossProfit = parseFloat(report.gross_profit) || 0;
+                                const netProfit = parseFloat(report.net_profit) || 0;
+                                const totalSales = parseFloat(report.total_sales_mxn) || 0;
+                                const captureCount = parseInt(report.total_captures) || 0;
+                                const totalDays = parseInt(report.total_days) || 0;
+
                                 const grossMargin = totalSales > 0 ? ((grossProfit / totalSales) * 100).toFixed(2) : '0.00';
                                 const netMargin = totalSales > 0 ? ((netProfit / totalSales) * 100).toFixed(2) : '0.00';
                                 
