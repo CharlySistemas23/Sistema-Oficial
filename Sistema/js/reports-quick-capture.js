@@ -1144,14 +1144,13 @@ const ReportsQuickCapture = {
             console.log(`   [Llegadas] Agencia seleccionada: ${selectedAgency.name} (ID: ${selectedAgency.id})`);
             console.log(`   [Llegadas] Total guías en DB: ${guides.length}`);
 
-            // Prioridad 1: usar asignación explícita agencia -> guías
-            const assignedGuides = this.getAssignedGuidesForAgency(guides, selectedAgency.name);
-            if (assignedGuides && assignedGuides.length > 0) {
-                guideSelect.innerHTML = '<option value="">Seleccionar...</option>' +
-                    assignedGuides.map(g => `<option value="${g.id}">${g.name}</option>`).join('');
-                console.log(`✅ [Llegadas] ${assignedGuides.length} guías cargados por asignación explícita para ${selectedAgency.name}`);
-                return;
-            }
+            // Asignación explícita (lista hardcodeada) — antes era PRIORIDAD 1 con
+            // return inmediato. Eso ocultaba guías reales (ej. FERREIRA) que NO
+            // estuvieran en la lista hardcodeada aun teniendo agency_id correcto.
+            // Ahora la incluimos como un set adicional que se UNE con los matches
+            // dinamicos por agency_id.
+            const assignedGuides = this.getAssignedGuidesForAgency(guides, selectedAgency.name) || [];
+            const assignedGuideIds = new Set(assignedGuides.map(g => g.id));
 
             // Normalizar nombre de la agencia seleccionada para comparaciones
             const selectedNameNorm = String(selectedAgency.name || '').trim().toUpperCase().replace(/\s+/g, '');
@@ -1222,16 +1221,25 @@ const ReportsQuickCapture = {
                 );
             }
             
-            // Eliminar duplicados de guías filtrados
+            // Union: matches dinamicos por agency_id + asignaciones hardcoded.
+            // Antes la hardcoded era exclusiva, ocultando guias reales (ej.
+            // FERREIRA) que tuvieran agency_id correcto pero no estuvieran en
+            // la lista hardcoded.
+            const _allMatches_a = [...filteredGuides];
+            const _assignedGuidesScope = (typeof assignedGuides !== 'undefined' && Array.isArray(assignedGuides)) ? assignedGuides : [];
+            for (const ag of _assignedGuidesScope) {
+                if (!filteredGuides.some(g => g.id === ag.id)) _allMatches_a.push(ag);
+            }
+
             const seenFilteredGuides = new Map();
             const uniqueFilteredGuides = [];
-            
-            for (const guide of filteredGuides) {
+
+            for (const guide of _allMatches_a) {
                 if (!guide.active && guide.active !== undefined) continue;
-                
+
                 const guideName = (guide.name || '').trim().toUpperCase();
                 const key = guideName;
-                
+
                 if (!seenFilteredGuides.has(key)) {
                     seenFilteredGuides.set(key, guide);
                     uniqueFilteredGuides.push(guide);
@@ -1313,14 +1321,11 @@ const ReportsQuickCapture = {
 
             console.log(`   Agencia seleccionada: ${selectedAgency.name} (ID: ${selectedAgency.id})`);
 
-            // Prioridad 1: usar asignación explícita agencia -> guías
-            const assignedGuides = this.getAssignedGuidesForAgency(guides, selectedAgency.name);
-            if (assignedGuides && assignedGuides.length > 0) {
-                guideSelect.innerHTML = '<option value="">Ninguno</option>' +
-                    assignedGuides.map(g => `<option value="${g.id}">${g.name}</option>`).join('');
-                console.log(`✅ ${assignedGuides.length} guías cargados por asignación explícita para agencia ${selectedAgency.name}`);
-                return;
-            }
+            // Asignacion hardcodeada como SET adicional (no exclusivo). Antes
+            // si habia matches hardcoded retornaba sin probar el match dinamico,
+            // ocultando guias reales de la BD (ej. FERREIRA) que no estuvieran
+            // en la lista hardcoded.
+            const assignedGuides = this.getAssignedGuidesForAgency(guides, selectedAgency.name) || [];
 
             // Filtrar guías por agencia seleccionada
             // Usar comparación flexible de IDs Y nombres de agencia
@@ -1365,16 +1370,25 @@ const ReportsQuickCapture = {
                 });
             }
 
-            // Eliminar duplicados de guías filtrados
+            // Union: matches dinamicos por agency_id + asignaciones hardcoded.
+            // Antes la hardcoded era exclusiva, ocultando guias reales (ej.
+            // FERREIRA) que tuvieran agency_id correcto pero no estuvieran en
+            // la lista hardcoded.
+            const _allMatches_a = [...filteredGuides];
+            const _assignedGuidesScope = (typeof assignedGuides !== 'undefined' && Array.isArray(assignedGuides)) ? assignedGuides : [];
+            for (const ag of _assignedGuidesScope) {
+                if (!filteredGuides.some(g => g.id === ag.id)) _allMatches_a.push(ag);
+            }
+
             const seenFilteredGuides = new Map();
             const uniqueFilteredGuides = [];
-            
-            for (const guide of filteredGuides) {
+
+            for (const guide of _allMatches_a) {
                 if (!guide.active && guide.active !== undefined) continue;
-                
+
                 const guideName = (guide.name || '').trim().toUpperCase();
                 const key = guideName;
-                
+
                 if (!seenFilteredGuides.has(key)) {
                     seenFilteredGuides.set(key, guide);
                     uniqueFilteredGuides.push(guide);
@@ -1636,10 +1650,12 @@ const ReportsQuickCapture = {
                 return this.compareIds(g.agency_id, agencyId);
             });
 
-            // Prioridad 1: usar asignación explícita agencia -> guías
-            const assignedGuides = this.getAssignedGuidesForAgency(guides, selectedAgency.name);
-            if (assignedGuides && assignedGuides.length > 0) {
-                filteredGuides = assignedGuides;
+            // Union: dinamico + hardcoded. Antes el hardcoded sobreescribia
+            // (perdiendo guias reales como FERREIRA que tuvieran agency_id
+            // correcto pero no estuvieran hardcodeados).
+            const assignedGuides = this.getAssignedGuidesForAgency(guides, selectedAgency.name) || [];
+            for (const ag of assignedGuides) {
+                if (!filteredGuides.some(g => g.id === ag.id)) filteredGuides.push(ag);
             }
 
             console.log(`   [Edición] Guías filtradas: ${filteredGuides.length}`);
@@ -7829,7 +7845,209 @@ const ReportsQuickCapture = {
                 return;
             }
 
-            // Renderizar tabla de reportes archivados
+            // Cachear reportes para que el agrupamiento se haga sin volver a consultar
+            this._archivedReportsCache = archivedReports;
+
+            // Render con el agrupamiento elegido (Dia por default)
+            const groupBy = this._archivedGroupBy || 'day';
+            this._renderArchivedReportsList(container, archivedReports, groupBy);
+            return;
+        } catch (error) {
+            console.error('Error cargando reportes archivados:', error);
+            const container = document.getElementById('archived-reports-list');
+            if (container) {
+                container.innerHTML = `<div style="color: var(--color-danger); padding: var(--spacing-md);">Error al cargar reportes archivados: ${error.message || ''}</div>`;
+            }
+        }
+    },
+
+    // Cambia el agrupamiento sin recargar todo el flujo (es solo cambio de vista)
+    setArchivedReportsGroupBy(groupBy) {
+        this._archivedGroupBy = groupBy;
+        const container = document.getElementById('archived-reports-list');
+        const reports = this._archivedReportsCache || [];
+        if (container) this._renderArchivedReportsList(container, reports, groupBy);
+    },
+
+    // Genera la clave de agrupamiento para una fecha YYYY-MM-DD segun el modo.
+    _archivedGroupKey(dateStr, groupBy) {
+        if (!dateStr) return { key: 'sin-fecha', label: 'Sin fecha' };
+        const [y, m, d] = String(dateStr).split('-').map(Number);
+        if (!y) return { key: 'sin-fecha', label: 'Sin fecha' };
+        const monthNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+        if (groupBy === 'year') {
+            return { key: `${y}`, label: `${y}` };
+        }
+        if (groupBy === 'month') {
+            const mm = String(m || 1).padStart(2, '0');
+            return { key: `${y}-${mm}`, label: `${monthNames[(m || 1) - 1]} ${y}` };
+        }
+        if (groupBy === 'week') {
+            // Numero de semana ISO. Aproximacion simple: primer dia de la semana = lunes.
+            const dt = new Date(Date.UTC(y, (m || 1) - 1, d || 1));
+            const dayNum = dt.getUTCDay() || 7;
+            dt.setUTCDate(dt.getUTCDate() + 4 - dayNum);
+            const yearStart = new Date(Date.UTC(dt.getUTCFullYear(), 0, 1));
+            const weekNum = Math.ceil((((dt - yearStart) / 86400000) + 1) / 7);
+            return { key: `${dt.getUTCFullYear()}-W${String(weekNum).padStart(2, '0')}`, label: `Semana ${weekNum} de ${dt.getUTCFullYear()}` };
+        }
+        // day (default)
+        const mm = String(m || 1).padStart(2, '0');
+        const dd = String(d || 1).padStart(2, '0');
+        return { key: `${y}-${mm}-${dd}`, label: `${dd}/${mm}/${y}` };
+    },
+
+    _renderArchivedReportsList(container, archivedReports, groupBy) {
+        const groupOptions = [
+            { value: 'day', label: 'Día' },
+            { value: 'week', label: 'Semana' },
+            { value: 'month', label: 'Mes' },
+            { value: 'year', label: 'Año' }
+        ];
+        const groupSelector = `
+            <div style="display: flex; gap: 4px; margin-bottom: var(--spacing-sm); align-items: center; flex-wrap: wrap;">
+                <span style="font-size: 11px; color: var(--color-text-secondary); margin-right: 6px;">Agrupar por:</span>
+                ${groupOptions.map(opt => `
+                    <button type="button"
+                        onclick="window.Reports.setArchivedReportsGroupBy('${opt.value}')"
+                        class="btn-${opt.value === groupBy ? 'primary' : 'secondary'} btn-xs">
+                        ${opt.label}
+                    </button>
+                `).join('')}
+                <span style="margin-left: auto; font-size: 11px; color: var(--color-text-secondary);">${archivedReports.length} reporte${archivedReports.length === 1 ? '' : 's'}</span>
+            </div>
+        `;
+
+        // Agrupar reports
+        const groups = new Map();
+        for (const report of archivedReports) {
+            const dateStr = this.getArchivedReportDate(report);
+            const { key, label } = this._archivedGroupKey(dateStr, groupBy);
+            if (!groups.has(key)) groups.set(key, { key, label, reports: [], totals: { sales: 0, gross: 0, net: 0, captures: 0 } });
+            const grp = groups.get(key);
+            grp.reports.push(report);
+            grp.totals.sales += parseFloat(report.total_sales_mxn || 0) || 0;
+            grp.totals.gross += parseFloat(report.gross_profit || 0) || 0;
+            grp.totals.net += parseFloat(report.net_profit || 0) || 0;
+            grp.totals.captures += Array.isArray(report.captures) ? report.captures.length : 0;
+        }
+
+        // Orden descendente por key (las keys van en formato YYYY o YYYY-MM o YYYY-Wnn o YYYY-MM-DD)
+        const sortedGroups = Array.from(groups.values()).sort((a, b) => {
+            if (a.key === 'sin-fecha') return 1;
+            if (b.key === 'sin-fecha') return -1;
+            return b.key.localeCompare(a.key);
+        });
+
+        const reportRowHTML = (report) => {
+            const normalizedDate = this.getArchivedReportDate(report);
+            const dateStr = normalizedDate ? this.formatDateWithoutTimezone(normalizedDate) : 'Sin fecha';
+            let archivedDate = '';
+            if (report.archived_at) {
+                const archived = new Date(report.archived_at);
+                const year = archived.getFullYear();
+                const month = String(archived.getMonth() + 1).padStart(2, '0');
+                const day = String(archived.getDate()).padStart(2, '0');
+                const minute = String(archived.getMinutes()).padStart(2, '0');
+                const ampm = archived.getHours() >= 12 ? 'p.m.' : 'a.m.';
+                const hour12 = archived.getHours() % 12 || 12;
+                archivedDate = `${day}/${month}/${year}, ${hour12}:${minute} ${ampm}`;
+            }
+            const grossProfit = parseFloat(report.gross_profit || 0) || 0;
+            const netProfit = parseFloat(report.net_profit || 0) || 0;
+            const totalSales = parseFloat(report.total_sales_mxn || 0) || 0;
+            const captureCount = Array.isArray(report.captures) ? report.captures.length : 0;
+            const grossMargin = totalSales > 0 ? ((grossProfit / totalSales) * 100).toFixed(2) : '0.00';
+            const netMargin = totalSales > 0 ? ((netProfit / totalSales) * 100).toFixed(2) : '0.00';
+
+            return `
+                <tr style="border-bottom: 1px solid var(--color-border-light);">
+                    <td style="padding: var(--spacing-sm);">
+                        <div style="font-weight: 600;">${dateStr}</div>
+                        ${archivedDate ? `<small style="color: var(--color-text-secondary); font-size: 10px;">Archivado: ${archivedDate}</small>` : ''}
+                    </td>
+                    <td style="padding: var(--spacing-sm); text-align: center;">${captureCount}</td>
+                    <td style="padding: var(--spacing-sm); text-align: right; font-weight: 600;">$${totalSales.toFixed(2)}</td>
+                    <td style="padding: var(--spacing-sm); text-align: right;">
+                        <div style="color: var(--color-success); font-weight: 600;">$${grossProfit.toFixed(2)}</div>
+                        <small style="color: var(--color-text-secondary); font-size: 10px;">${grossMargin}%</small>
+                    </td>
+                    <td style="padding: var(--spacing-sm); text-align: right;">
+                        <div style="color: ${netProfit >= 0 ? 'var(--color-success)' : 'var(--color-danger)'}; font-weight: 600;">$${netProfit.toFixed(2)}</div>
+                        <small style="color: var(--color-text-secondary); font-size: 10px;">${netMargin}%</small>
+                    </td>
+                    <td style="padding: var(--spacing-sm); text-align: center;">
+                        <div style="display: flex; gap: var(--spacing-xs); justify-content: center; flex-wrap: wrap;">
+                            <button class="btn-primary btn-xs" onclick="window.Reports.viewArchivedReport('${report.id}')" title="Ver Detalles">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            <button class="btn-success btn-xs" onclick="window.Reports.restoreArchivedReport('${report.id}')" title="Restaurar">
+                                <i class="fas fa-undo"></i>
+                            </button>
+                            <button class="btn-xs" onclick="window.Reports.editArchivedReport('${report.id}')" title="Editar" style="background: var(--color-warning, #e67e22); color: white; border: none; border-radius: 4px; cursor: pointer; padding: 4px 6px; font-size: 11px;">
+                                <i class="fas fa-sliders-h"></i>
+                            </button>
+                            <button class="btn-secondary btn-xs" onclick="window.Reports.exportArchivedReportPDF('${report.id}')" title="Exportar PDF">
+                                <i class="fas fa-file-pdf"></i>
+                            </button>
+                            <button class="btn-danger btn-xs" onclick="window.Reports.deleteArchivedReport('${report.id}')" title="Eliminar">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        };
+
+        const tableHeader = `
+            <thead>
+                <tr style="background: var(--color-bg-secondary); border-bottom: 2px solid var(--color-border-light);">
+                    <th style="padding: var(--spacing-sm); text-align: left; font-size: 11px; text-transform: uppercase; font-weight: 600;">Fecha</th>
+                    <th style="padding: var(--spacing-sm); text-align: center; font-size: 11px; text-transform: uppercase; font-weight: 600;">Capturas</th>
+                    <th style="padding: var(--spacing-sm); text-align: right; font-size: 11px; text-transform: uppercase; font-weight: 600;">Ventas (MXN)</th>
+                    <th style="padding: var(--spacing-sm); text-align: right; font-size: 11px; text-transform: uppercase; font-weight: 600;">Utilidad Bruta</th>
+                    <th style="padding: var(--spacing-sm); text-align: right; font-size: 11px; text-transform: uppercase; font-weight: 600;">Utilidad Neta</th>
+                    <th style="padding: var(--spacing-sm); text-align: center; font-size: 11px; text-transform: uppercase; font-weight: 600;">Acciones</th>
+                </tr>
+            </thead>
+        `;
+
+        // Si es agrupamiento por dia, no agregamos headers de grupo (cada reporte ya
+        // es un dia). Solo render plana.
+        let bodyHTML = '';
+        if (groupBy === 'day') {
+            bodyHTML = `<tbody>${archivedReports.map(reportRowHTML).join('')}</tbody>`;
+        } else {
+            // Render con headers de grupo y una fila de subtotal por cada grupo.
+            const fmt = (n) => `$${(Number(n) || 0).toFixed(2)}`;
+            bodyHTML = `<tbody>${sortedGroups.map(grp => `
+                <tr style="background: var(--color-bg-secondary); border-top: 2px solid var(--color-primary);">
+                    <td colspan="6" style="padding: 8px 12px; font-weight: 700; font-size: 12px; color: var(--color-primary);">
+                        <i class="fas fa-folder-open"></i> ${grp.label}
+                        <span style="font-weight: 400; color: var(--color-text-secondary); margin-left: 12px; font-size: 11px;">
+                            ${grp.reports.length} reporte${grp.reports.length === 1 ? '' : 's'} · ${grp.totals.captures} capturas · Ventas ${fmt(grp.totals.sales)} · Bruta ${fmt(grp.totals.gross)} · Neta ${fmt(grp.totals.net)}
+                        </span>
+                    </td>
+                </tr>
+                ${grp.reports.map(reportRowHTML).join('')}
+            `).join('')}</tbody>`;
+        }
+
+        container.innerHTML = `
+            ${groupSelector}
+            <div style="overflow-x: auto;">
+                <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                    ${tableHeader}
+                    ${bodyHTML}
+                </table>
+            </div>
+        `;
+    },
+
+    // (Codigo legacy de render plana eliminado — ahora usa _renderArchivedReportsList)
+    async _legacyArchivedReportsRender_NOT_USED(skipServerSync) {
+        return;
+        /* Codigo dead-code preservado por si rollback:
             let html = `
                 <div style="overflow-x: auto;">
                     <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
@@ -7844,7 +8062,7 @@ const ReportsQuickCapture = {
                             </tr>
                         </thead>
                         <tbody>
-                            ${archivedReports.map(report => {
+                            ${[].map(report => {
                                 // Formatear fecha sin desfase de zona horaria
                                 const normalizedDate = this.getArchivedReportDate(report);
                                 const dateStr = normalizedDate ? this.formatDateWithoutTimezone(normalizedDate) : 'Sin fecha';
@@ -7916,17 +8134,7 @@ const ReportsQuickCapture = {
             `;
 
             container.innerHTML = html;
-        } catch (error) {
-            console.error('Error cargando reportes archivados:', error);
-            const container = document.getElementById('archived-reports-list');
-            if (container) {
-                container.innerHTML = `
-                    <div style="padding: var(--spacing-sm); background: var(--color-danger); color: white; border-radius: var(--radius-sm); font-size: 12px;">
-                        Error: ${error.message}
-                    </div>
-                `;
-            }
-        }
+        */
     },
 
     async editArchivedReport(reportId) {
