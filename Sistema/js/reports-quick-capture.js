@@ -6983,6 +6983,9 @@ const ReportsQuickCapture = {
 
             const allReports = await DB.getAll('archived_quick_captures') || [];
             const commissionRules = await DB.getAll('commission_rules') || [];
+            const allCosts = await DB.getAll('cost_entries') || [];
+            const allSessions = await DB.getAll('cash_sessions') || [];
+            const allMovements = await DB.getAll('cash_movements') || [];
             const agencies = await DB.getAll('catalog_agencies') || [];
             const sellers = await DB.getAll('catalog_sellers') || [];
             const guides = await DB.getAll('catalog_guides') || [];
@@ -7071,20 +7074,92 @@ const ReportsQuickCapture = {
                         }
                     }
 
+                    // RECALCULAR COSTOS OPERATIVOS DESDE cost_entries usando isRecurringActiveOn
+                    const reportDate = this.getArchivedReportDate(report);
+                    const targetDate = new Date(reportDate);
+                    const DAYS_PER_MONTH = 30;
+                    const daysInYear = ((targetDate.getFullYear() % 4 === 0 && targetDate.getFullYear() % 100 !== 0) || (targetDate.getFullYear() % 400 === 0)) ? 366 : 365;
+                    let variableCostsDaily = 0;
+                    let fixedCostsProrated = 0;
+                    let bankFromEntries = 0;
+
+                    const branchCosts = this.deduplicateCosts(
+                        allCosts.filter(c => c.branch_id && String(c.branch_id) === String(report.branch_id))
+                    );
+
+                    // Fijos prorrateados con filtro de periodo (mensual=mes, semanal=semana, anual=año)
+                    const monthly = this.deduplicateRecurringCosts(branchCosts.filter(c =>
+                        c.period_type === 'monthly' &&
+                        (c.recurring === true || c.recurring === 'true' || c.type === 'fijo') &&
+                        c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias' &&
+                        this.isRecurringActiveOn(c, targetDate)
+                    ));
+                    for (const cost of monthly) fixedCostsProrated += (parseFloat(cost.amount) || 0) / DAYS_PER_MONTH;
+
+                    const weekly = this.deduplicateRecurringCosts(branchCosts.filter(c =>
+                        c.period_type === 'weekly' &&
+                        (c.recurring === true || c.recurring === 'true' || c.type === 'fijo') &&
+                        c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias' &&
+                        this.isRecurringActiveOn(c, targetDate)
+                    ));
+                    for (const cost of weekly) fixedCostsProrated += (parseFloat(cost.amount) || 0) / 7;
+
+                    const annual = this.deduplicateRecurringCosts(branchCosts.filter(c =>
+                        (c.period_type === 'annual' || c.period_type === 'yearly') &&
+                        (c.recurring === true || c.recurring === 'true' || c.type === 'fijo') &&
+                        c.category !== 'pago_llegadas' && c.category !== 'comisiones_bancarias' &&
+                        this.isRecurringActiveOn(c, targetDate)
+                    ));
+                    for (const cost of annual) fixedCostsProrated += (parseFloat(cost.amount) || 0) / daysInYear;
+
+                    // Variables del dia
+                    const isFixed = c => c.recurring === true || c.recurring === 'true' || c.type === 'fijo';
+                    const varCosts = branchCosts.filter(c => {
+                        const ds = (c.date || c.created_at || '').split('T')[0];
+                        const cat = (c.category || '').toLowerCase();
+                        return ds === reportDate &&
+                            cat !== 'pago_llegadas' && cat !== 'comisiones_bancarias' &&
+                            cat !== 'comisiones' && cat !== 'costo_ventas' && cat !== 'cogs' &&
+                            !isFixed(c) &&
+                            (c.period_type === 'one_time' || c.period_type === 'daily' || !c.period_type);
+                    });
+                    for (const cost of varCosts) variableCostsDaily += (parseFloat(cost.amount) || 0);
+
+                    // Comisiones bancarias registradas
+                    const bankCosts = branchCosts.filter(c => {
+                        const ds = (c.date || c.created_at || '').split('T')[0];
+                        return ds === reportDate && (c.category || '').toLowerCase() === 'comisiones_bancarias';
+                    });
+                    for (const cost of bankCosts) bankFromEntries += (parseFloat(cost.amount) || 0);
+
+                    // Retiros de caja
+                    const daySessions = allSessions.filter(s => {
+                        const sd = (s.date || s.created_at || '').split('T')[0];
+                        return sd === reportDate && String(s.branch_id) === String(report.branch_id);
+                    });
+                    const sessionIds = daySessions.map(s => s.id);
+                    for (const m of allMovements) {
+                        if (m.type === 'withdrawal' && sessionIds.includes(m.session_id)) {
+                            variableCostsDaily += (parseFloat(m.amount) || 0);
+                        }
+                    }
+
                     const totalArrival = parseFloat(report.total_arrival_costs) || 0;
-                    const totalOpCosts = parseFloat(report.total_operating_costs) || 0;
-                    let bankCommissions = parseFloat(report.bank_commissions) || 0;
+                    const totalOpCosts = variableCostsDaily + fixedCostsProrated;
+                    let bankCommissions = bankFromEntries;
                     if (bankCommissions <= 0 && totalSalesMXN > 0) bankCommissions = totalSalesMXN * 0.045;
 
                     const grossProfit = totalSalesMXN - totalCOGS - totalCommissions;
                     const netProfit = grossProfit - totalArrival - totalOpCosts - bankCommissions;
 
+                    const oldOpCosts = parseFloat(report.total_operating_costs) || 0;
                     const wasChanged = beforeCount !== afterCount ||
-                        Math.abs((parseFloat(report.total_sales_mxn) || 0) - totalSalesMXN) > 0.01;
+                        Math.abs((parseFloat(report.total_sales_mxn) || 0) - totalSalesMXN) > 0.01 ||
+                        Math.abs(oldOpCosts - totalOpCosts) > 0.01;
 
                     if (!wasChanged) { unchanged++; continue; }
 
-                    console.log(`🧹 [Reparar] ${report.date} br:${(report.branch_id||'').slice(0,8)}: capturas ${beforeCount}→${afterCount}, ventas $${(parseFloat(report.total_sales_mxn)||0).toFixed(2)}→$${totalSalesMXN.toFixed(2)}`);
+                    console.log(`🧹 [Reparar] ${report.date} br:${(report.branch_id||'').slice(0,8)}: capturas ${beforeCount}→${afterCount}, ventas $${(parseFloat(report.total_sales_mxn)||0).toFixed(2)}→$${totalSalesMXN.toFixed(2)}, opCosts $${oldOpCosts.toFixed(2)}→$${totalOpCosts.toFixed(2)}`);
 
                     const updated = {
                         ...report,
@@ -7096,6 +7171,9 @@ const ReportsQuickCapture = {
                         total_commissions: parseFloat(totalCommissions.toFixed(2)),
                         seller_commissions: Object.values(sellerCommissions).map(s => ({ seller_id: s.seller?.id, seller_name: s.seller?.name, total: s.total, sales: s.sales })),
                         guide_commissions: Object.values(guideCommissions).map(g => ({ guide_id: g.guide?.id, guide_name: g.guide?.name, total: g.total, sales: g.sales })),
+                        variable_costs_daily: parseFloat(variableCostsDaily.toFixed(2)),
+                        fixed_costs_prorated: parseFloat(fixedCostsProrated.toFixed(2)),
+                        total_operating_costs: parseFloat(totalOpCosts.toFixed(2)),
                         gross_profit: parseFloat(grossProfit.toFixed(2)),
                         net_profit: parseFloat(netProfit.toFixed(2)),
                         bank_commissions: parseFloat(bankCommissions.toFixed(2)),
@@ -7116,9 +7194,9 @@ const ReportsQuickCapture = {
                                 total_cogs: updated.total_cogs,
                                 total_commissions: updated.total_commissions,
                                 total_arrival_costs: totalArrival,
-                                total_operating_costs: totalOpCosts,
-                                variable_costs_daily: parseFloat(report.variable_costs_daily) || 0,
-                                fixed_costs_prorated: parseFloat(report.fixed_costs_prorated) || 0,
+                                total_operating_costs: updated.total_operating_costs,
+                                variable_costs_daily: updated.variable_costs_daily,
+                                fixed_costs_prorated: updated.fixed_costs_prorated,
                                 bank_commissions: updated.bank_commissions,
                                 gross_profit: updated.gross_profit,
                                 net_profit: updated.net_profit,
