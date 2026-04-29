@@ -2767,44 +2767,37 @@ const Reports = {
                 branchId === null || c.branch_id === branchId || !c.branch_id
             );
             
-            // Costos mensuales prorrateados
-            const monthlyCosts = branchCosts.filter(c => {
-                const costDate = new Date(c.date || c.created_at);
-                return c.period_type === 'monthly' && 
-                       c.recurring === true &&
-                       costDate.getMonth() === targetDate.getMonth() &&
-                       costDate.getFullYear() === targetDate.getFullYear();
-            });
+            // Costos mensuales prorrateados — dedupe por gasto logico para evitar
+            // que el mismo costo registrado N veces se cuente N veces.
+            const monthlyCosts = this.deduplicateRecurringCosts(branchCosts.filter(c =>
+                c.period_type === 'monthly' &&
+                c.recurring === true &&
+                this.isRecurringActiveOn(c, targetDate)
+            ));
             for (const cost of monthlyCosts) {
-                // Usar 30 días fijos para prorrateo mensual (convención contable: $94,500/30 = $3,150)
                 const DAYS_PER_MONTH = 30;
-                fixedCostsDaily += (cost.amount || 0) / DAYS_PER_MONTH;
+                fixedCostsDaily += (parseFloat(cost.amount) || 0) / DAYS_PER_MONTH;
             }
-            
+
             // Costos semanales prorrateados
-            const weeklyCosts = branchCosts.filter(c => {
-                const costDate = new Date(c.date || c.created_at);
-                const targetWeek = this.getWeekNumber(targetDate);
-                const costWeek = this.getWeekNumber(costDate);
-                return c.period_type === 'weekly' && 
-                       c.recurring === true &&
-                       targetWeek === costWeek &&
-                       targetDate.getFullYear() === costDate.getFullYear();
-            });
+            const weeklyCosts = this.deduplicateRecurringCosts(branchCosts.filter(c =>
+                c.period_type === 'weekly' &&
+                c.recurring === true &&
+                this.isRecurringActiveOn(c, targetDate)
+            ));
             for (const cost of weeklyCosts) {
-                fixedCostsDaily += (cost.amount || 0) / 7;
+                fixedCostsDaily += (parseFloat(cost.amount) || 0) / 7;
             }
-            
+
             // Costos anuales prorrateados
-            const annualCosts = branchCosts.filter(c => {
-                const costDate = new Date(c.date || c.created_at);
-                return c.period_type === 'annual' && 
-                       c.recurring === true &&
-                       costDate.getFullYear() === targetDate.getFullYear();
-            });
+            const annualCosts = this.deduplicateRecurringCosts(branchCosts.filter(c =>
+                (c.period_type === 'annual' || c.period_type === 'yearly') &&
+                c.recurring === true &&
+                this.isRecurringActiveOn(c, targetDate)
+            ));
             for (const cost of annualCosts) {
                 const daysInYear = ((targetDate.getFullYear() % 4 === 0 && targetDate.getFullYear() % 100 !== 0) || (targetDate.getFullYear() % 400 === 0)) ? 366 : 365;
-                fixedCostsDaily += (cost.amount || 0) / daysInYear;
+                fixedCostsDaily += (parseFloat(cost.amount) || 0) / daysInYear;
             }
             
             // Costos variables/diarios del día específico
