@@ -235,7 +235,7 @@ const ProfitCalculator = {
             }) || [];
             const daySales = allSales.filter(s => {
                 if (!s.created_at) return false;
-                const saleDate = s.created_at.split('T')[0];
+                const saleDate = Utils.toLocalDateStr(s.created_at);
                 return saleDate === dateYYYYMMDD && 
                        String(s.branch_id || '').trim() === branchIdStr && 
                        (typeof Utils !== 'undefined' && Utils.isSaleCompleted ? Utils.isSaleCompleted(s) : (s.status === 'completada' || s.status === 'completed'));

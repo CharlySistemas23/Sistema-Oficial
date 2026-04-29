@@ -7093,7 +7093,7 @@ const ReportsQuickCapture = {
 
                     // Llegadas del día para guardar en el reporte
                     let dayArrivals = allArrivals.filter(a => {
-                        const aDate = (a.date || (a.created_at ? a.created_at.split('T')[0] : null) || '');
+                        const aDate = (a.date || Utils.toLocalDateStr(a.created_at) || '');
                         if (aDate !== reportDate) return false;
                         if (normBranchIds.length === 0) return true;
                         return !a.branch_id || normBranchIds.includes(norm(a.branch_id));

@@ -1217,6 +1217,113 @@ const Utils = {
         }
     },
 
+    // Exportar a Excel con MULTIPLES hojas (para reportes contables/auditoria
+    // donde un solo workbook tiene Resumen + Items + Pagos en pestanas separadas).
+    //
+    // sheets: objeto { 'NombreHoja': [arrayDeFilas], ... }
+    //   - Cada array de filas debe ser un array de objetos donde las llaves son
+    //     los headers (igual que exportToExcel).
+    // filename: nombre del archivo .xlsx
+    //
+    // Mantiene el mismo estilo (header azul oscuro, zebra rows, bordes) que
+    // exportToExcel pero aplicado a cada hoja.
+    exportToExcelMultiSheet(sheets, filename) {
+        if (typeof XLSX === 'undefined') {
+            this.showNotification('SheetJS no está disponible', 'error');
+            return;
+        }
+        if (!sheets || typeof sheets !== 'object') {
+            this.showNotification('No hay hojas para exportar', 'warning');
+            return;
+        }
+
+        const sheetNames = Object.keys(sheets);
+        const totalRows = sheetNames.reduce((sum, name) => sum + (sheets[name]?.length || 0), 0);
+        if (totalRows === 0) {
+            this.showNotification('No hay datos para exportar', 'warning');
+            return;
+        }
+
+        try {
+            const wb = XLSX.utils.book_new();
+            const headerBgColor = { rgb: '34596E' };
+            const headerTextColor = { rgb: 'FFFFFF' };
+            const evenRowBgColor = { rgb: 'F8F9FA' };
+
+            for (const sheetName of sheetNames) {
+                const data = sheets[sheetName] || [];
+                if (data.length === 0) continue;
+
+                const ws = XLSX.utils.json_to_sheet(data);
+                const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+                const headerRow = range.s.r;
+                const lastRow = range.e.r;
+                const lastCol = range.e.c;
+
+                for (let col = range.s.c; col <= lastCol; col++) {
+                    const cellAddress = XLSX.utils.encode_cell({ r: headerRow, c: col });
+                    if (!ws[cellAddress]) continue;
+                    ws[cellAddress].s = {
+                        fill: { fgColor: headerBgColor, patternType: 'solid' },
+                        font: { bold: true, color: headerTextColor, sz: 12, name: 'Calibri' },
+                        alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+                        border: {
+                            top: { style: 'thin', color: { rgb: '000000' } },
+                            bottom: { style: 'medium', color: { rgb: '000000' } },
+                            left: { style: 'thin', color: { rgb: '000000' } },
+                            right: { style: 'thin', color: { rgb: '000000' } }
+                        }
+                    };
+                }
+
+                for (let row = headerRow + 1; row <= lastRow; row++) {
+                    const isEven = (row - headerRow - 1) % 2 === 0;
+                    if (!isEven) continue;
+                    for (let col = range.s.c; col <= lastCol; col++) {
+                        const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
+                        if (!ws[cellAddress]) ws[cellAddress] = { v: '', t: 's' };
+                        ws[cellAddress].s = {
+                            ...(ws[cellAddress].s || {}),
+                            fill: { fgColor: evenRowBgColor, patternType: 'solid' }
+                        };
+                    }
+                }
+
+                // Auto-width tentativo: 14 chars default
+                ws['!cols'] = (Object.keys(data[0] || {})).map(() => ({ wch: 14 }));
+
+                XLSX.utils.book_append_sheet(wb, ws, sheetName.substring(0, 31)); // Excel limita a 31 chars
+            }
+
+            XLSX.writeFile(wb, filename);
+            this.showNotification(`Excel exportado: ${sheetNames.length} hojas, ${totalRows} filas`, 'success');
+        } catch (e) {
+            console.error('Error exportToExcelMultiSheet:', e);
+            this.showNotification('Error al exportar Excel: ' + e.message, 'error');
+        }
+    },
+
+    // Convierte un timestamp (Date o ISO) a fecha LOCAL en horario Mexico.
+    // Devuelve YYYY-MM-DD. Util para comparar fechas en filtros sin que el
+    // timezone UTC corte los limites del dia mal.
+    toLocalDateStr(value, timezone = 'America/Mexico_City') {
+        try {
+            const d = (value instanceof Date) ? value : new Date(value);
+            if (Number.isNaN(d.getTime())) return '';
+            // Intl.DateTimeFormat con timezone explicito da el dia tal cual lo
+            // ve un usuario en Mexico, sin importar UTC del navegador/servidor.
+            const fmt = new Intl.DateTimeFormat('en-CA', {
+                timeZone: timezone,
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+            });
+            return fmt.format(d); // en-CA da YYYY-MM-DD natural
+        } catch (e) {
+            return '';
+        }
+    },
+
     // Exportar a CSV
     exportToCSV(data, filename) {
         if (!data || data.length === 0) {

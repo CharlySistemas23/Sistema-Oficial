@@ -976,7 +976,7 @@ const Reports = {
 
         const dailyTotals = {};
         last30Days.forEach(sale => {
-            const date = sale.created_at.split('T')[0];
+            const date = Utils.toLocalDateStr(sale.created_at);
             if (!dailyTotals[date]) {
                 dailyTotals[date] = 0;
             }
@@ -996,7 +996,7 @@ const Reports = {
         if (showBranchSeries) {
             last30Days.forEach(sale => {
                 const branchId = sale.branch_id || 'sin_sucursal';
-                const date = sale.created_at.split('T')[0];
+                const date = Utils.toLocalDateStr(sale.created_at);
                 
                 if (!branchDailyTotals[branchId]) {
                     branchDailyTotals[branchId] = {};
@@ -1482,69 +1482,202 @@ const Reports = {
         const dateFrom = document.getElementById('history-date-from')?.value || '';
         const dateTo = document.getElementById('history-date-to')?.value || '';
 
-        // Verificar si es master_admin
         const isMasterAdmin = typeof UserManager !== 'undefined' && (
             UserManager.currentUser?.role === 'master_admin' ||
             UserManager.currentUser?.is_master_admin ||
             UserManager.currentUser?.isMasterAdmin ||
             UserManager.currentEmployee?.role === 'master_admin'
         );
-        
-        // Obtener sucursal actual
+
         const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
-        
-        // Para master_admin sin filtro, mostrar todas las sucursales
         const filterBranchId = isMasterAdmin ? null : currentBranchId;
-        
-        // Usar el helper para obtener ventas filtradas por sucursal
+
+        // Helper: convertir created_at (timestamp) a fecha local Mexico (YYYY-MM-DD).
+        // Antes los filtros comparaban directo contra UTC y cortaban las ventas de
+        // tarde/noche en el dia equivocado.
+        const localDate = (val) => Utils.toLocalDateStr ? Utils.toLocalDateStr(val) : String(val || '').split('T')[0];
+
         let sales = await this.getFilteredSales({
             branchId: filterBranchId,
             dateFrom: dateFrom || null,
             dateTo: dateTo || null,
             status: statusFilter || null
         });
+
         const branches = await DB.getAll('catalog_branches') || [];
         const sellers = await DB.getAll('catalog_sellers') || [];
         const agencies = await DB.getAll('catalog_agencies') || [];
         const guides = await DB.getAll('catalog_guides') || [];
+        const customers = await DB.getAll('customers') || [];
 
-        // Aplicar mismos filtros que en loadHistory
         if (statusFilter) {
             sales = sales.filter(s => s.status === statusFilter);
         }
         if (search) {
-            sales = sales.filter(s => 
+            sales = sales.filter(s =>
                 (s.folio || '').toLowerCase().includes(search) ||
-                sellers.find(sel => sel.id === s.seller_id)?.name?.toLowerCase().includes(search)
+                (sellers.find(sel => sel.id === s.seller_id)?.name?.toLowerCase() || '').includes(search)
             );
         }
         if (dateFrom) {
-            sales = sales.filter(s => s.created_at >= dateFrom);
+            sales = sales.filter(s => localDate(s.created_at) >= dateFrom);
         }
         if (dateTo) {
-            sales = sales.filter(s => s.created_at <= dateTo + 'T23:59:59');
+            sales = sales.filter(s => localDate(s.created_at) <= dateTo);
         }
 
-        const exportData = sales.map(sale => {
+        if (sales.length === 0) {
+            Utils.showNotification('No hay ventas que coincidan con los filtros', 'warning');
+            return;
+        }
+
+        // Cargar items y pagos de TODAS las ventas a exportar de una vez.
+        // (Mejor que un getByIndex por sale para evitar muchos roundtrips a IDB.)
+        const allItems = await DB.getAll('sale_items') || [];
+        const allPayments = await DB.getAll('payments') || [];
+        const inventory = await DB.getAll('inventory_items') || [];
+        const itemsBySale = new Map();
+        const paymentsBySale = new Map();
+        for (const it of allItems) {
+            const sid = it.sale_id;
+            if (!sid) continue;
+            if (!itemsBySale.has(sid)) itemsBySale.set(sid, []);
+            itemsBySale.get(sid).push(it);
+        }
+        for (const p of allPayments) {
+            const sid = p.sale_id;
+            if (!sid) continue;
+            if (!paymentsBySale.has(sid)) paymentsBySale.set(sid, []);
+            paymentsBySale.get(sid).push(p);
+        }
+
+        const num = (v) => {
+            const n = parseFloat(v);
+            return Number.isFinite(n) ? n : 0;
+        };
+
+        // ========== HOJA 1: RESUMEN POR VENTA ==========
+        const resumenRows = sales.map(sale => {
             const branch = branches.find(b => b.id === sale.branch_id);
             const seller = sellers.find(s => s.id === sale.seller_id);
             const agency = agencies.find(a => a.id === sale.agency_id);
             const guide = guides.find(g => g.id === sale.guide_id);
+            const customer = customers.find(c => c.id === sale.customer_id);
+
+            const items = itemsBySale.get(sale.id) || [];
+            const payments = paymentsBySale.get(sale.id) || [];
+
+            // Totales por metodo de pago (puede haber varios pagos por venta)
+            const sumByMethod = (m) => payments.filter(p => p.method === m).reduce((s, p) => s + num(p.amount), 0);
+            const cashUsd = sumByMethod('cash_usd');
+            const cashMxn = sumByMethod('cash_mxn');
+            const cashCad = sumByMethod('cash_cad');
+            const tpvVisa = sumByMethod('tpv_visa');
+            const tpvAmex = sumByMethod('tpv_amex');
+
+            const totalCogs = items.reduce((s, it) => s + (num(it.cost) * num(it.quantity || 1)), 0);
+            const totalSellerComm = num(sale.seller_commission) || items.reduce((s, it) => s + num(it.seller_commission), 0);
+            const totalGuideComm = num(sale.guide_commission) || items.reduce((s, it) => s + num(it.guide_commission), 0);
+
             return {
                 'Folio': sale.folio || '',
-                'Fecha': Utils.formatDate(sale.created_at, 'DD/MM/YYYY'),
+                'Fecha (Mexico)': localDate(sale.created_at),
+                'Hora (Mexico)': new Date(sale.created_at).toLocaleTimeString('es-MX', { timeZone: 'America/Mexico_City' }),
                 'Sucursal': branch?.name || '',
                 'Vendedor': seller?.name || '',
                 'Agencia': agency?.name || '',
                 'Guía': guide?.name || '',
-                'Total': sale.total || 0,
+                'Cliente': customer?.name || '',
+                'Items (cantidad)': items.length,
+                'Subtotal': num(sale.subtotal),
+                'Descuento %': num(sale.discount_percent),
+                'Descuento $': num(sale.discount_amount),
+                'Total Venta': num(sale.total),
+                'COGS (Costo Mercancía)': totalCogs,
+                'Comisión Vendedor': totalSellerComm,
+                'Comisión Guía': totalGuideComm,
+                'Utilidad Bruta': num(sale.total) - totalCogs - totalSellerComm - totalGuideComm,
+                'Pago Efectivo USD': cashUsd,
+                'Pago Efectivo MXN': cashMxn,
+                'Pago Efectivo CAD': cashCad,
+                'Pago TPV Visa MXN': tpvVisa,
+                'Pago TPV Amex MXN': tpvAmex,
+                'Total Pagado MXN-equiv': payments.reduce((s, p) => s + num(p.amount_mxn_equiv || p.amount), 0),
                 'Estado': sale.status || ''
             };
         });
 
+        // ========== HOJA 2: ITEMS (1 fila por sale_item) ==========
+        const itemsRows = [];
+        for (const sale of sales) {
+            const branchName = branches.find(b => b.id === sale.branch_id)?.name || '';
+            const sellerName = sellers.find(s => s.id === sale.seller_id)?.name || '';
+            const items = itemsBySale.get(sale.id) || [];
+            for (const it of items) {
+                const inv = inventory.find(i => i.id === it.item_id);
+                const qty = num(it.quantity || 1);
+                const unitPrice = num(it.unit_price ?? it.price);
+                const cost = num(it.cost ?? inv?.cost);
+                const subtotal = num(it.subtotal ?? (qty * unitPrice));
+                itemsRows.push({
+                    'Folio': sale.folio || '',
+                    'Fecha (Mexico)': localDate(sale.created_at),
+                    'Sucursal': branchName,
+                    'Vendedor': sellerName,
+                    'SKU': it.sku || inv?.sku || '',
+                    'Producto': it.name || inv?.name || '',
+                    'Categoría': inv?.category || '',
+                    'Cantidad': qty,
+                    'Precio Unitario': unitPrice,
+                    'Costo Unitario (COGS)': cost,
+                    'Subtotal': subtotal,
+                    'Descuento %': num(it.discount_percent),
+                    'Comisión Vendedor': num(it.seller_commission),
+                    'Comisión Guía': num(it.guide_commission),
+                    'Utilidad Línea': subtotal - (cost * qty) - num(it.seller_commission) - num(it.guide_commission)
+                });
+            }
+        }
+
+        // ========== HOJA 3: PAGOS (1 fila por payment) ==========
+        const paymentsRows = [];
+        for (const sale of sales) {
+            const branchName = branches.find(b => b.id === sale.branch_id)?.name || '';
+            const payments = paymentsBySale.get(sale.id) || [];
+            for (const p of payments) {
+                paymentsRows.push({
+                    'Folio': sale.folio || '',
+                    'Fecha (Mexico)': localDate(sale.created_at),
+                    'Sucursal': branchName,
+                    'Método': p.method || '',
+                    'Monto': num(p.amount),
+                    'Moneda': p.currency || 'MXN',
+                    'Equivalente MXN': num(p.amount_mxn_equiv || p.amount),
+                    'Banco (TPV)': p.bank || '',
+                    'Tipo Tarjeta': p.card_type || '',
+                    'Comisión Bancaria': num(p.bank_commission),
+                    'Referencia': p.reference || ''
+                });
+            }
+        }
+
         const date = Utils.formatDate(new Date(), 'YYYYMMDD');
-        Utils.exportToExcel(exportData, `historial_ventas_${date}.xlsx`, 'Historial Ventas');
-        Utils.showNotification(`Exportadas ${exportData.length} ventas`, 'success');
+        const filename = `historial_ventas_${date}.xlsx`;
+
+        if (Utils.exportToExcelMultiSheet) {
+            Utils.exportToExcelMultiSheet({
+                'Resumen': resumenRows,
+                'Items': itemsRows,
+                'Pagos': paymentsRows
+            }, filename);
+        } else {
+            // Fallback: exportar solo el resumen
+            Utils.exportToExcel(resumenRows, filename, 'Resumen');
+        }
+        Utils.showNotification(
+            `Exportadas ${sales.length} ventas (${resumenRows.length} resumen, ${itemsRows.length} items, ${paymentsRows.length} pagos)`,
+            'success'
+        );
     },
 
     async loadCatalogs() {
@@ -2010,7 +2143,7 @@ const Reports = {
                 branchIdField: 'branch_id' 
             }) || [];
             const periodArrivals = allArrivals.filter(a => {
-                const arrivalDate = a.date || a.created_at?.split('T')[0];
+                const arrivalDate = a.date || Utils.toLocalDateStr(a.created_at);
                 return arrivalDate >= costsDateFrom && arrivalDate <= costsDateTo &&
                        (branchId === null || !branchId || a.branch_id === branchId) &&
                        a.passengers > 0;
@@ -2241,7 +2374,7 @@ const Reports = {
         // Ventas por día
         const dailyStats = {};
         completedSales.forEach(sale => {
-            const date = sale.created_at.split('T')[0];
+            const date = Utils.toLocalDateStr(sale.created_at);
             if (!dailyStats[date]) {
                 dailyStats[date] = { total: 0, count: 0 };
             }
@@ -2261,7 +2394,7 @@ const Reports = {
         try {
             const allArchived = await DB.getAll('archived_quick_captures') || [];
             const hasQuickCaptureData = allArchived.some(r => {
-                const d = r.date || r.report_date || r.created_at?.split('T')[0];
+                const d = r.date || r.report_date || Utils.toLocalDateStr(r.created_at);
                 return d && d >= dateFrom && d <= dateTo;
             });
             if (hasQuickCaptureData) {
@@ -2696,7 +2829,7 @@ const Reports = {
         // Calcular estadísticas por día con costos y utilidades
         const dailyStats = {};
         for (const sale of sales) {
-            const date = sale.created_at.split('T')[0];
+            const date = Utils.toLocalDateStr(sale.created_at);
             if (!dailyStats[date]) {
                 dailyStats[date] = { 
                     total: 0, 
@@ -2716,7 +2849,7 @@ const Reports = {
         
         // Calcular COGS y comisiones por día (preferir cost en sale_item, fallback a inventario)
         for (const sale of sales) {
-            const date = sale.created_at.split('T')[0];
+            const date = Utils.toLocalDateStr(sale.created_at);
             const items = saleItems.filter(si => si.sale_id === sale.id);
             
             // COGS
@@ -3021,7 +3154,7 @@ const Reports = {
             }) || [];
             
             const dayArrivals = allArrivals.filter(a => {
-                const arrivalDate = a.date || (a.created_at ? a.created_at.split('T')[0] : null);
+                const arrivalDate = a.date || Utils.toLocalDateStr(a.created_at) || null;
                 if (!arrivalDate || arrivalDate !== dateStr) return false;
                 // Solo excluir si no hay fee calculado o asignado
                 const hasFee = parseFloat(a.calculated_fee || a.arrival_fee || 0) > 0;
@@ -4137,7 +4270,7 @@ const Reports = {
             });
             
             const filteredSales = allSales.filter(sale => {
-                const saleDate = sale.created_at?.split('T')[0];
+                const saleDate = Utils.toLocalDateStr(sale.created_at);
                 return saleDate >= dateFrom && saleDate <= dateTo && (typeof Utils !== 'undefined' && Utils.isSaleCompleted ? Utils.isSaleCompleted(sale) : (sale.status === 'completada' || sale.status === 'completed'));
             });
             
@@ -4909,7 +5042,7 @@ const Reports = {
                 // Aceptar múltiples formatos de status
                 const status = (sale.status || '').toLowerCase();
                 if (status !== 'completada' && status !== 'completed' && status !== 'completado') return false;
-                const saleDate = sale.created_at?.split('T')[0];
+                const saleDate = Utils.toLocalDateStr(sale.created_at);
                 if (saleDate < dateFrom || saleDate > dateTo) return false;
                 if (sellerId && sale.seller_id !== sellerId) return false;
                 if (guideId && sale.guide_id !== guideId) return false;
@@ -5023,7 +5156,7 @@ const Reports = {
             try {
                 const allArrivalsForComm = await DB.getAll('agency_arrivals') || [];
                 const filteredArrivalsForComm = allArrivalsForComm.filter(a => {
-                    const arrivalDate = a.date || a.created_at?.split('T')[0];
+                    const arrivalDate = a.date || Utils.toLocalDateStr(a.created_at);
                     return arrivalDate >= dateFrom && arrivalDate <= dateTo;
                 });
                 filteredArrivalsForComm.forEach(a => {
@@ -5242,9 +5375,13 @@ const Reports = {
         const guideId = document.getElementById('commissions-guide')?.value || '';
 
         const allSales = await this.getFilteredSales({ branchId: branchId || null });
+        // Convertir created_at a fecha LOCAL Mexico antes de comparar, no UTC.
+        // Antes split('T')[0] daba la fecha UTC y cortaba mal las ventas de
+        // tarde/noche en zonas con offset negativo.
+        const localDate = (val) => Utils.toLocalDateStr ? Utils.toLocalDateStr(val) : String(val || '').split('T')[0];
         const sales = allSales.filter(sale => {
             if (!(typeof Utils !== 'undefined' && Utils.isSaleCompleted ? Utils.isSaleCompleted(sale) : (sale.status === 'completada' || sale.status === 'completed'))) return false;
-            const saleDate = sale.created_at?.split('T')[0];
+            const saleDate = localDate(sale.created_at);
             if (saleDate < dateFrom || saleDate > dateTo) return false;
             if (sellerId && sale.seller_id !== sellerId) return false;
             if (guideId && sale.guide_id !== guideId) return false;
@@ -5313,7 +5450,7 @@ const Reports = {
             const sales = allSales.filter(sale => {
                 const status = (sale.status || '').toLowerCase();
                 if (!['completada', 'completed', 'completado'].includes(status)) return false;
-                const saleDate = sale.created_at?.split('T')[0];
+                const saleDate = Utils.toLocalDateStr(sale.created_at);
                 if (saleDate < dateFrom || saleDate > dateTo) return false;
                 if (sellerId && sale.seller_id !== sellerId) return false;
                 if (guideId  && sale.guide_id  !== guideId)  return false;
@@ -5348,7 +5485,7 @@ const Reports = {
             try {
                 const allArrivals = await DB.getAll('agency_arrivals') || [];
                 allArrivals.filter(a => {
-                    const d = a.date || a.created_at?.split('T')[0];
+                    const d = a.date || Utils.toLocalDateStr(a.created_at);
                     return d >= dateFrom && d <= dateTo;
                 }).forEach(a => {
                     if (a.guide_id && guideMap[a.guide_id]) {
