@@ -6185,8 +6185,11 @@ const Reports = {
                 return;
             }
 
-            // Agregar datos de todos los reportes
-            let totalDays = 0;
+            // Agregar datos de todos los reportes.
+            // IMPORTANTE: totalDays cuenta DIAS UNICOS, no filas de reporte.
+            // Antes hacia totalDays++ por cada report, lo que duplicaba el conteo
+            // cuando habia mas de una sucursal con reporte el mismo dia.
+            const uniqueDates = new Set();
             let totalCaptures = 0;
             let totalQuantity = 0;
             let totalSalesMXN = 0;
@@ -6206,18 +6209,47 @@ const Reports = {
             const metricsBySeller = {};
             let totalPassengers = 0;
 
+            // Diagnostico: log de las fuentes que se estan agregando para que el
+            // usuario pueda auditar de donde sale cada peso.
+            const auditLog = [];
+
             archivedReports.forEach(report => {
-                totalDays++;
-                totalCaptures += parseInt(report.total_captures || report.captures?.length || 0);
-                totalQuantity += parseInt(report.total_quantity || 0);
-                totalSalesMXN += parseFloat(report.total_sales_mxn || 0);
-                totalCOGS += parseFloat(report.total_cogs || 0);
-                totalCommissions += parseFloat(report.total_commissions || 0);
-                totalArrivalCosts += parseFloat(report.total_arrival_costs || 0);
-                totalOperatingCosts += parseFloat(report.total_operating_costs || 0);
-                totalBankCommissions += parseFloat(report.bank_commissions || 0);
-                grossProfit += parseFloat(report.gross_profit || 0);
-                netProfit += parseFloat(report.net_profit || 0);
+                const reportDateForCount = this.getArchivedReportDate(report);
+                if (reportDateForCount) uniqueDates.add(reportDateForCount);
+
+                const rCaptures = parseInt(report.total_captures || report.captures?.length || 0);
+                const rQuantity = parseInt(report.total_quantity || 0);
+                const rSales = parseFloat(report.total_sales_mxn || 0);
+                const rCogs = parseFloat(report.total_cogs || 0);
+                const rComm = parseFloat(report.total_commissions || 0);
+                const rArrival = parseFloat(report.total_arrival_costs || 0);
+                const rOper = parseFloat(report.total_operating_costs || 0);
+                const rBank = parseFloat(report.bank_commissions || 0);
+                const rGross = parseFloat(report.gross_profit || 0);
+                const rNet = parseFloat(report.net_profit || 0);
+
+                auditLog.push({
+                    fecha: reportDateForCount,
+                    branch: report.branch_id?.substring(0, 8),
+                    capturas: rCaptures,
+                    ventas: rSales.toFixed(2),
+                    cogs: rCogs.toFixed(2),
+                    comisiones: rComm.toFixed(2),
+                    bancarias: rBank.toFixed(2),
+                    bruta: rGross.toFixed(2),
+                    neta: rNet.toFixed(2)
+                });
+
+                totalCaptures += rCaptures;
+                totalQuantity += rQuantity;
+                totalSalesMXN += rSales;
+                totalCOGS += rCogs;
+                totalCommissions += rComm;
+                totalArrivalCosts += rArrival;
+                totalOperatingCosts += rOper;
+                totalBankCommissions += rBank;
+                grossProfit += rGross;
+                netProfit += rNet;
 
                 // Agregar a daily_summary
                 const reportDate = this.getArchivedReportDate(report);
@@ -6555,7 +6587,7 @@ const Reports = {
                 date_from: dateFrom,
                 date_to: dateTo,
                 branch_id: currentBranchId,
-                total_days: totalDays,
+                total_days: uniqueDates.size,
                 total_captures: totalCaptures,
                 total_quantity: totalQuantity,
                 total_sales_mxn: parseFloat(totalSalesMXN.toFixed(2)),
@@ -6582,6 +6614,22 @@ const Reports = {
                 }
                 await DB.put('historical_reports', historicalReport);
                 console.log('✅ Reporte histórico guardado localmente:', historicalReport.id);
+
+                // Diagnostico para auditar de donde sale cada peso del historico.
+                // Si los numeros parecen incorrectos, abre la consola (F12 > Console)
+                // y revisa esta tabla con la suma fila por fila.
+                console.log(`📋 Auditoria del historico (${uniqueDates.size} dias unicos, ${archivedReports.length} reportes-fuente):`);
+                if (typeof console.table === 'function') console.table(auditLog);
+                console.log('TOTALES finales:', {
+                    ventas_mxn: totalSalesMXN.toFixed(2),
+                    cogs: totalCOGS.toFixed(2),
+                    comisiones: totalCommissions.toFixed(2),
+                    bancarias: totalBankCommissions.toFixed(2),
+                    operativos: totalOperatingCosts.toFixed(2),
+                    llegadas: totalArrivalCosts.toFixed(2),
+                    bruta: grossProfit.toFixed(2),
+                    neta: netProfit.toFixed(2)
+                });
             } catch (dbError) {
                 console.error('Error guardando reporte histórico localmente:', dbError);
                 throw new Error(`No se pudo guardar el reporte histórico: ${dbError.message}`);
