@@ -4965,11 +4965,16 @@ const ReportsQuickCapture = {
             const dateInput = document.getElementById('qc-date');
             const selectedDate = dateInput?.value || this.getLocalDateStr();
             const normalizedSelectedDate = selectedDate.split('T')[0];
-            
+
+            // Filtrar por sucursal para no exportar capturas de otras tiendas
+            const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
+
             let captures = await DB.getAll('temp_quick_captures') || [];
             captures = captures.filter(c => {
                 const captureDate = c.date || c.original_report_date || '';
-                return captureDate.split('T')[0] === normalizedSelectedDate;
+                if (captureDate.split('T')[0] !== normalizedSelectedDate) return false;
+                if (currentBranchId) return c.branch_id === currentBranchId;
+                return true;
             });
 
             if (captures.length === 0) {
@@ -5050,20 +5055,24 @@ const ReportsQuickCapture = {
             }
 
             const { jsPDF } = jspdfLib;
-            
+
+            // Filtrar por sucursal ademas de fecha para no incluir otras tiendas en el PDF
+            const currentBranchIdForPdf = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
+
             // Obtener capturas filtradas por la fecha seleccionada
             let captures = await DB.getAll('temp_quick_captures') || [];
-            
-            // Filtrar capturas por la fecha seleccionada (normalizar fechas)
-                captures = captures.filter(c => {
-                    const captureDateValue = c.original_report_date || c.date;
+
+            // Filtrar capturas por la fecha y sucursal seleccionada
+            captures = captures.filter(c => {
+                const captureDateValue = c.original_report_date || c.date;
                 if (!captureDateValue) return false;
-                // Normalizar fecha para comparación
                 const normalizedCaptureDate = captureDateValue.split('T')[0];
                 const normalizedSelectedDate = selectedDate.split('T')[0];
-                return normalizedCaptureDate === normalizedSelectedDate;
+                if (normalizedCaptureDate !== normalizedSelectedDate) return false;
+                if (currentBranchIdForPdf) return c.branch_id === currentBranchIdForPdf;
+                return true;
             });
-            
+
             if (captures.length === 0) {
                 Utils.showNotification(`No hay capturas para exportar para la fecha ${Utils.formatDate(selectedDate, 'DD/MM/YYYY')}`, 'warning');
                 this.isExporting = false;
@@ -7842,11 +7851,16 @@ const ReportsQuickCapture = {
             const dateInput = document.getElementById('qc-date');
             const selectedDate = dateInput?.value || this.getLocalDateStr();
             const normalizedSelectedDate = selectedDate.split('T')[0];
-            
+
+            // CRITICO: filtrar por sucursal para no borrar capturas de otras tiendas
+            const currentBranchId = typeof BranchManager !== 'undefined' ? BranchManager.getCurrentBranchId() : null;
+
             let captures = await DB.getAll('temp_quick_captures') || [];
             captures = captures.filter(c => {
                 const captureDate = c.date || c.original_report_date || '';
-                return captureDate.split('T')[0] === normalizedSelectedDate;
+                if (captureDate.split('T')[0] !== normalizedSelectedDate) return false;
+                if (currentBranchId) return c.branch_id === currentBranchId;
+                return true;
             });
 
             for (const capture of captures) {
