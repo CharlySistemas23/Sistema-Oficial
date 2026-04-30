@@ -208,7 +208,7 @@ window.SuppliersIntegration = {
             const orderData = {
                 supplier_id: supplierId,
                 order_number: orderNumber,
-                order_date: new Date().toISOString().split('T')[0],
+                order_date: (typeof Utils !== 'undefined' && Utils.toLocalDateStr) ? Utils.toLocalDateStr(new Date()) : new Date().toISOString().split('T')[0],
                 status: 'draft',
                 priority: 'normal',
                 subtotal: subtotal,
@@ -364,7 +364,7 @@ window.SuppliersIntegration = {
             const orderData = {
                 supplier_id: supplierId,
                 order_number: orderNumber,
-                order_date: new Date().toISOString().split('T')[0],
+                order_date: (typeof Utils !== 'undefined' && Utils.toLocalDateStr) ? Utils.toLocalDateStr(new Date()) : new Date().toISOString().split('T')[0],
                 status: 'draft',
                 priority: 'normal',
                 items: [{

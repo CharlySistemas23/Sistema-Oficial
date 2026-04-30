@@ -552,8 +552,9 @@ Object.assign(POS, {
                                     }
                                 } catch (err) { console.warn('POS: Error guardando venta creada en local:', err); }
                                 if (document.getElementById('pos-history-branch-filter')) await this.showHistory();
-                                const today = new Date().toISOString().split('T')[0];
-                                const saleDate = sale.created_at?.split('T')[0];
+                                // Usar fecha local — TZ-safe
+                                const today = (typeof Utils !== 'undefined' && Utils.toLocalDateStr) ? Utils.toLocalDateStr(new Date()) : new Date().toISOString().split('T')[0];
+                                const saleDate = (typeof Utils !== 'undefined' && Utils.toLocalDateStr) ? Utils.toLocalDateStr(sale.created_at) : sale.created_at?.split('T')[0];
                                 if (saleDate === today) await this.updateTodaySalesCount();
                             }
                         } catch (error) {
@@ -3945,8 +3946,9 @@ Object.assign(POS, {
             return;
         }
         
-        const today = new Date().toISOString().split('T')[0];
-        const saleDate = sale.created_at?.split('T')[0];
+        // Usar fecha local (Mexico City) para no confundir noche con dia siguiente
+        const today = (typeof Utils !== 'undefined' && Utils.toLocalDateStr) ? Utils.toLocalDateStr(new Date()) : new Date().toISOString().split('T')[0];
+        const saleDate = (typeof Utils !== 'undefined' && Utils.toLocalDateStr) ? Utils.toLocalDateStr(sale.created_at) : sale.created_at?.split('T')[0];
         if (saleDate !== today) {
             Utils.showNotification('Solo se pueden editar ventas del día actual', 'error');
             return;

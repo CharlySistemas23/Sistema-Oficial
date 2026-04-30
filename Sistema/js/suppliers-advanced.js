@@ -936,7 +936,7 @@ window.SuppliersAdvanced = {
                     quantity: item.quantity_ordered,
                     total_amount: item.quantity_ordered * item.unit_price,
                     currency: 'MXN',
-                    price_date: new Date().toISOString().split('T')[0]
+                    price_date: (typeof Utils !== 'undefined' && Utils.toLocalDateStr) ? Utils.toLocalDateStr(new Date()) : new Date().toISOString().split('T')[0]
                 });
             }
         } catch (error) {

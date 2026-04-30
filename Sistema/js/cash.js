@@ -628,22 +628,23 @@ const Cash = {
             };
         }
 
-        // Monto inicial
-        let current_usd = this.currentSession.initial_usd || 0;
-        let current_mxn = this.currentSession.initial_mxn || 0;
-        let current_cad = this.currentSession.initial_cad || 0;
+        // Monto inicial — parseFloat para evitar concat de string DECIMAL del backend
+        let current_usd = parseFloat(this.currentSession.initial_usd) || 0;
+        let current_mxn = parseFloat(this.currentSession.initial_mxn) || 0;
+        let current_cad = parseFloat(this.currentSession.initial_cad) || 0;
 
         // Sumar movimientos
         const movements = await DB.query('cash_movements', 'session_id', this.currentSession.id);
         movements.forEach(m => {
+            const amt = parseFloat(m.amount) || 0;
             if (m.type === 'entrada') {
-                if (m.currency === 'USD') current_usd += m.amount;
-                if (m.currency === 'MXN') current_mxn += m.amount;
-                if (m.currency === 'CAD') current_cad += m.amount;
+                if (m.currency === 'USD') current_usd += amt;
+                if (m.currency === 'MXN') current_mxn += amt;
+                if (m.currency === 'CAD') current_cad += amt;
             } else if (m.type === 'salida') {
-                if (m.currency === 'USD') current_usd -= m.amount;
-                if (m.currency === 'MXN') current_mxn -= m.amount;
-                if (m.currency === 'CAD') current_cad -= m.amount;
+                if (m.currency === 'USD') current_usd -= amt;
+                if (m.currency === 'MXN') current_mxn -= amt;
+                if (m.currency === 'CAD') current_cad -= amt;
             }
         });
 
@@ -674,16 +675,17 @@ const Cash = {
         for (const sale of sessionSales) {
             const payments = await DB.query('payments', 'sale_id', sale.id);
             payments.forEach(p => {
+                const amt = parseFloat(p.amount) || 0;
                 const code = getMethodCode(p.method_id);
                 if (code.startsWith('CASH')) {
-                    sales_total += p.amount;
-                    if (p.currency === 'USD') sales_cash_usd += p.amount;
-                    if (p.currency === 'MXN') sales_cash_mxn += p.amount;
-                    if (p.currency === 'CAD') sales_cash_cad += p.amount;
+                    sales_total += amt;
+                    if (p.currency === 'USD') sales_cash_usd += amt;
+                    if (p.currency === 'MXN') sales_cash_mxn += amt;
+                    if (p.currency === 'CAD') sales_cash_cad += amt;
                 } else if (code.startsWith('TPV_VISA') || code.startsWith('TPV_MC')) {
-                    sales_tpv_visa += p.amount;
+                    sales_tpv_visa += amt;
                 } else if (code.startsWith('TPV_AMEX')) {
-                    sales_tpv_amex += p.amount;
+                    sales_tpv_amex += amt;
                 }
             });
         }
@@ -1683,15 +1685,16 @@ const Cash = {
             for (const sale of sessionSales) {
                 const payments = await DB.query('payments', 'sale_id', sale.id);
                 payments.forEach(p => {
+                    const amt = parseFloat(p.amount) || 0;
                     const code = getMethodCode2(p.method_id);
                     if (code.startsWith('CASH')) {
-                        if (p.currency === 'USD') expectedCashUsd += p.amount;
-                        if (p.currency === 'MXN') expectedCashMxn += p.amount;
-                        if (p.currency === 'CAD') expectedCashCad += p.amount;
+                        if (p.currency === 'USD') expectedCashUsd += amt;
+                        if (p.currency === 'MXN') expectedCashMxn += amt;
+                        if (p.currency === 'CAD') expectedCashCad += amt;
                     } else if (code.startsWith('TPV_VISA') || code.startsWith('TPV_MC')) {
-                        totalTpvVisa += p.amount;
+                        totalTpvVisa += amt;
                     } else if (code.startsWith('TPV_AMEX')) {
-                        totalTpvAmex += p.amount;
+                        totalTpvAmex += amt;
                     }
                 });
             }
@@ -1807,8 +1810,9 @@ const Cash = {
             let totalEntries = 0;
             let totalExits = 0;
             movements.forEach(m => {
-                if (m.type === 'entrada') totalEntries += (m.amount || 0);
-                if (m.type === 'salida') totalExits += (m.amount || 0);
+                const amt = parseFloat(m.amount) || 0;
+                if (m.type === 'entrada') totalEntries += amt;
+                if (m.type === 'salida') totalExits += amt;
             });
 
             const statsSection = document.getElementById('cash-stats-section');

@@ -923,7 +923,8 @@ const Repairs = {
                         category: 'reparacion',
                         type: 'variable',
                         description: `Costo de reparación - ${repair.folio}`,
-                        date: new Date().toISOString().split('T')[0],
+                        // Fecha local Mexico City — evita off-by-one en horario nocturno
+                        date: (typeof Utils !== 'undefined' && Utils.toLocalDateStr) ? Utils.toLocalDateStr(new Date()) : new Date().toISOString().split('T')[0],
                         branch_id: branchId,
                         notes: `Reparación ${repair.folio}: ${repair.description}`,
                         repair_id: repair.id

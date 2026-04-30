@@ -1003,11 +1003,12 @@ const TouristReport = {
             for (const sale of todaySales) {
                 const payments = await DB.query('payments', 'sale_id', sale.id);
                 payments.forEach(p => {
-                    if (p.currency === 'USD') posCashUsd += p.amount;
-                    if (p.currency === 'MXN' && p.method_id?.includes('CASH')) posCashMxn += p.amount;
-                    if (p.currency === 'CAD') posCashCad += p.amount;
-                    if (p.method_id?.includes('VISA')) posTpvVisaMc += p.amount;
-                    if (p.method_id?.includes('AMEX')) posTpvAmex += p.amount;
+                    const amt = parseFloat(p.amount) || 0;
+                    if (p.currency === 'USD') posCashUsd += amt;
+                    if (p.currency === 'MXN' && p.method_id?.includes('CASH')) posCashMxn += amt;
+                    if (p.currency === 'CAD') posCashCad += amt;
+                    if (p.method_id?.includes('VISA')) posTpvVisaMc += amt;
+                    if (p.method_id?.includes('AMEX')) posTpvAmex += amt;
                 });
             }
 
@@ -1900,11 +1901,12 @@ const TouristReport = {
             for (const sale of todaySales) {
                 const payments = await DB.query('payments', 'sale_id', sale.id);
                 payments.forEach(p => {
-                    if (p.currency === 'USD') posCashUsd += p.amount;
-                    if (p.currency === 'MXN' && p.method_id?.includes('CASH')) posCashMxn += p.amount;
-                    if (p.currency === 'CAD') posCashCad += p.amount;
-                    if (p.method_id?.includes('VISA') || p.method_id?.includes('MC')) posTpvVisaMc += p.amount;
-                    if (p.method_id?.includes('AMEX')) posTpvAmex += p.amount;
+                    const amt = parseFloat(p.amount) || 0;
+                    if (p.currency === 'USD') posCashUsd += amt;
+                    if (p.currency === 'MXN' && p.method_id?.includes('CASH')) posCashMxn += amt;
+                    if (p.currency === 'CAD') posCashCad += amt;
+                    if (p.method_id?.includes('VISA') || p.method_id?.includes('MC')) posTpvVisaMc += amt;
+                    if (p.method_id?.includes('AMEX')) posTpvAmex += amt;
                 });
             }
 
