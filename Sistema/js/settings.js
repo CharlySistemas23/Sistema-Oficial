@@ -432,10 +432,13 @@ const Settings = {
                             <div class="form-group">
                                 <label>Modelo de Impresora</label>
                                 <select id="setting-printer-model" class="form-select" onchange="window.Settings.onPrinterModelChange()">
-                                    <option value="GP-5838">GP-5838 SERIES (Recomendado)</option>
-                                    <option value="GP-5830">GP-5830 Series</option>
-                                    <option value="EC-58110">EC Line 58110</option>
-                                    <option value="GP-5830II">GP-5830II</option>
+                                    <option value="POS-8360" selected>POS-8360 (80mm USB) — Recomendado</option>
+                                    <option value="GP-5838">GP-5838 SERIES (58mm)</option>
+                                    <option value="GP-5830">GP-5830 Series (58mm)</option>
+                                    <option value="EC-58110">EC Line 58110 (58mm)</option>
+                                    <option value="GP-5830II">GP-5830II (58mm)</option>
+                                    <option value="generic-80">Genérica 80mm USB</option>
+                                    <option value="generic-58">Genérica 58mm USB</option>
                                     <option value="custom">Personalizada</option>
                                 </select>
                             </div>
@@ -449,7 +452,17 @@ const Settings = {
                                     <span id="printer-port-status" style="font-weight: 600;">Puerto USB: No conectado</span>
                                 </div>
                                 <div style="margin-top: 6px; padding: 6px; background: rgba(26, 26, 26, 0.05); border-radius: var(--radius-xs); font-size: 9px; color: var(--color-text-tertiary); line-height: 1.4;">
-                                    <i class="fas fa-info-circle"></i> <strong>Consejo:</strong> Al hacer clic en "Conectar", se abrirá una ventana para seleccionar tu impresora. Busca "GP-5838" o cualquier puerto USB (como USB004). Si no aparece, verifica que la impresora esté encendida y el cable USB bien conectado.
+                                    <i class="fas fa-info-circle"></i> <strong>Cómo conectar tu POS-8360 por USB:</strong>
+                                    <ol style="margin: 4px 0 0 16px; padding: 0;">
+                                        <li>Conecta la impresora al USB y enciéndela</li>
+                                        <li>Instala el driver del fabricante (CDC/Virtual COM Port) si Windows no lo detecta</li>
+                                        <li>Click en <strong>Conectar</strong> abajo</li>
+                                        <li>En la ventana del navegador, selecciona "POS-8360", "USB Serial", "CH340" o el puerto que aparezca (USB001, USB002, etc.)</li>
+                                        <li>Si no aparece nada, prueba otro puerto USB o reinicia la impresora</li>
+                                    </ol>
+                                    <div style="margin-top: 6px; font-size: 8.5px; color: var(--color-text-tertiary);">
+                                        <strong>Importante:</strong> Solo Chrome y Edge soportan impresión USB directa (Web Serial API). Firefox y Safari no.
+                                    </div>
                                 </div>
                             </div>
                             <div class="form-group">
@@ -3617,29 +3630,44 @@ const Settings = {
     async connectPrinter() {
         try {
             const baudRate = parseInt(document.getElementById('setting-printer-baud')?.value || '9600');
-            const printerModel = document.getElementById('setting-printer-model')?.value || 'GP-5830';
-            
-            // Verificar que Web Serial API esté disponible
+            const printerModel = document.getElementById('setting-printer-model')?.value || 'POS-8360';
+            const printerWidth = document.getElementById('setting-printer-width')?.value || '80';
+
+            // Verificar que Web Serial API este disponible
             if (!('serial' in navigator)) {
-                Utils.showNotification('Tu navegador no soporta impresión directa. Usa Chrome o Edge (versión 89+).', 'error');
+                Utils.showNotification('Tu navegador no soporta impresion directa. Usa Chrome o Edge (version 89+).', 'error');
                 return;
             }
-            
+
             if (typeof Printer !== 'undefined') {
-                // Para GP-5830, no usar filtros restrictivos - dejar que el usuario seleccione manualmente
-                // Esto es más confiable ya que diferentes adaptadores USB pueden tener diferentes Vendor IDs
-                Printer.preferredFilters = null; // Sin filtros para permitir selección manual
-                
+                // Aplicar filtros de USB segun el modelo seleccionado.
+                // Si el modelo no devuelve filtros utiles, dejamos null (seleccion manual).
+                const filters = this.getPrinterFiltersForModel(printerModel);
+                Printer.preferredFilters = (filters && filters.length > 0) ? filters : null;
+
+                // Configurar el ancho de papel del template (32 para 58mm, 48 para 80mm)
+                Printer.printerWidth = parseInt(printerWidth) === 80 ? 48 : 32;
+
+                // Persistir configuracion para que el template HTML use el ancho correcto
+                try {
+                    await DB.put('settings', { id: 'ticket_width_mm', value: parseInt(printerWidth) });
+                    await DB.put('settings', { id: 'printer_model', value: printerModel });
+                } catch (_) {}
+
                 // Mostrar instrucciones antes de conectar
+                const modelLabel = printerModel === 'POS-8360' ? 'POS-8360' : printerModel;
                 const shouldContinue = confirm(
-                    'INSTRUCCIONES PARA CONECTAR GP-5830:\n\n' +
+                    `Cómo conectar tu impresora ${modelLabel} por USB:\n\n` +
                     '1. Asegúrate de que la impresora esté encendida\n' +
-                    '2. Verifica que esté conectada por USB\n' +
-                    '3. En la ventana que aparecerá, busca "GP-5830" o "USB Serial Port"\n' +
-                    '4. Si no aparece, busca cualquier puerto USB que no sea "Print to PDF"\n\n' +
-                    '¿Continuar con la conexión?'
+                    '2. Verifica que el cable USB esté bien conectado\n' +
+                    '3. En la ventana que aparecerá, busca:\n' +
+                    '   • "POS-8360" o "USB Serial Port"\n' +
+                    '   • "USB-SERIAL CH340" (chip más común)\n' +
+                    '   • Cualquier puerto USB001/USB002/COM3...\n' +
+                    '4. Si no aparece nada, instala el driver del fabricante (CH340/CDC) y reinicia el navegador\n\n' +
+                    '¿Continuar?'
                 );
-                
+
                 if (!shouldContinue) return;
                 
                 const connected = await Printer.connect(baudRate);
@@ -3681,30 +3709,82 @@ const Settings = {
     onPrinterModelChange() {
         const model = document.getElementById('setting-printer-model')?.value;
         const customNameDiv = document.getElementById('printer-name-custom');
-        
+
         if (model === 'custom') {
             if (customNameDiv) customNameDiv.style.display = 'block';
         } else {
             if (customNameDiv) customNameDiv.style.display = 'none';
-            
-            // Configurar valores predeterminados según modelo
+
+            // Configurar valores predeterminados segun modelo
             const defaults = {
-                'GP-5830': { baud: '9600', width: '58', density: 'medium' },
-                'GP-5830II': { baud: '9600', width: '58', density: 'high' },
-                'EC-58110': { baud: '9600', width: '58', density: 'medium' }
+                'POS-8360':    { baud: '9600',  width: '80', density: 'medium' },
+                'generic-80':  { baud: '9600',  width: '80', density: 'medium' },
+                'generic-58':  { baud: '9600',  width: '58', density: 'medium' },
+                'GP-5838':     { baud: '9600',  width: '58', density: 'medium' },
+                'GP-5830':     { baud: '9600',  width: '58', density: 'medium' },
+                'GP-5830II':   { baud: '9600',  width: '58', density: 'high'   },
+                'EC-58110':    { baud: '9600',  width: '58', density: 'medium' }
             };
-            
+
             if (defaults[model]) {
                 const config = defaults[model];
                 const baudEl = document.getElementById('setting-printer-baud');
                 const widthEl = document.getElementById('setting-printer-width');
                 const densityEl = document.getElementById('setting-printer-density');
-                
+
                 if (baudEl) baudEl.value = config.baud;
                 if (widthEl) widthEl.value = config.width;
                 if (densityEl) densityEl.value = config.density;
             }
+
+            // Actualizar filtros de USB del Printer segun modelo seleccionado
+            if (typeof Printer !== 'undefined') {
+                Printer.preferredFilters = this.getPrinterFiltersForModel(model);
+            }
         }
+    },
+
+    /**
+     * Devuelve los filtros de USB Vendor IDs apropiados para cada modelo.
+     * Estos VendorIDs cubren los chips USB-Serial mas comunes en impresoras
+     * termicas chinas y POS-8360 en particular.
+     */
+    getPrinterFiltersForModel(model) {
+        // Chips USB-Serial mas comunes en impresoras termicas
+        const COMMON_USB_SERIAL_CHIPS = [
+            { usbVendorId: 0x1A86 }, // QinHeng CH340/CH341 — el mas usado en POS chinos
+            { usbVendorId: 0x067B }, // Prolific PL2303
+            { usbVendorId: 0x0403 }, // FTDI
+            { usbVendorId: 0x10C4 }, // Silicon Labs CP210x
+            { usbVendorId: 0x0483 }, // STMicroelectronics
+            { usbVendorId: 0x04B8 }, // Epson (TM series)
+            { usbVendorId: 0x0519 }, // Star Micronics
+            { usbVendorId: 0x0FE6 }, // ICS Advent
+            { usbVendorId: 0x0416 }, // Winbond
+            { usbVendorId: 0x04F9 }  // Brother
+        ];
+
+        // POS-8360 y genericas 80mm tipicamente usan CH340 o STM
+        if (model === 'POS-8360' || model === 'generic-80' || model === 'generic-58') {
+            return COMMON_USB_SERIAL_CHIPS;
+        }
+
+        // GP-5838/5830 usan Brother o Winbond
+        if (model && model.startsWith('GP-')) {
+            return [
+                { usbVendorId: 0x04F9 }, // Brother
+                { usbVendorId: 0x0416 }, // Winbond
+                ...COMMON_USB_SERIAL_CHIPS
+            ];
+        }
+
+        // EC Line - chip generico
+        if (model === 'EC-58110') {
+            return COMMON_USB_SERIAL_CHIPS;
+        }
+
+        // Custom o desconocido: todos los filtros
+        return COMMON_USB_SERIAL_CHIPS;
     },
 
     async updatePrinterPortInfo() {
