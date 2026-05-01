@@ -403,13 +403,40 @@ const Printer = {
             }
             
             console.log('✅ Datos verificados. Venta guardada:', savedSale.folio, 'Items:', items.length, 'Pagos:', payments.length);
-            
-            // Si no hay conexión directa, usar método alternativo
+
+            // CRITICO: solo se imprime por ESC/POS directo. Si no hay conexion,
+            // bloqueamos la impresion y guiamos al usuario a conectar la impresora.
+            // El fallback HTML por Chrome se desactivo porque el driver de Windows
+            // distorsionaba el formato del ticket (queda apretado en mitad del papel).
             if (!this.connected) {
-                console.log('Impresora no conectada, usando método fallback');
-                return await this.printTicketFallback(sale);
+                console.warn('⚠️ Impresora termica no conectada. Bloqueando impresion HTML/Chrome.');
+                if (typeof Utils !== 'undefined' && Utils.showNotification) {
+                    Utils.showNotification(
+                        'Impresora térmica no conectada. Ve a Configuración → Sistema → Impresora y haz clic en "Conectar".',
+                        'warning',
+                        7000
+                    );
+                }
+                // Intentar abrir el modulo de configuracion automaticamente
+                try {
+                    if (typeof UI !== 'undefined' && UI.showModule) {
+                        const goToSettings = await Utils.confirm(
+                            'La impresora térmica no está conectada.\n\nEl ticket NO se puede imprimir hasta que conectes la POS-8360 por USB.\n\n¿Quieres ir ahora a Configuración para conectarla?',
+                            'Impresora desconectada'
+                        );
+                        if (goToSettings) {
+                            UI.showModule('settings');
+                            // Activar la pestaña de impresion despues de cargar
+                            setTimeout(() => {
+                                const printingTab = document.querySelector('#settings-main-tabs [data-tab="printing"]');
+                                if (printingTab) printingTab.click();
+                            }, 300);
+                        }
+                    }
+                } catch (_) {}
+                return false;
             }
-            
+
             console.log('Impresora conectada, usando método directo ESC/POS');
 
             // Obtener configuración personalizada (con manejo de errores)
@@ -682,7 +709,11 @@ const Printer = {
     },
 
     // ==================== MÉTODO ALTERNATIVO (IFRAME OCULTO) ====================
-    
+    // DEPRECATED: este metodo se desactivo en produccion porque Chrome+driver
+    // de Windows distorsionan el formato del ticket. Solo se mantiene como
+    // referencia interna y para Vista Previa en Settings (donde el usuario
+    // ELIGE imprimir desde el iframe). NO se llama automaticamente al hacer
+    // una venta — eso ahora exige conexion ESC/POS directa.
     async printTicketFallback(sale) {
         // Proteccion global contra duplicados. Si por alguna razon el flag
         // quedo "atorado" (ej. error sin catch), liberamos despues de 5s
@@ -1074,47 +1105,58 @@ const Printer = {
     // ==================== OTROS TICKETS ====================
 
     async printRepairTicket(repair, customer, item) {
-        if (this.connected) {
-            // Impresión directa ESC/POS
-            await this.sendCommand(this.commands.INIT);
-            await this.sendCommand(this.commands.ALIGN_CENTER);
-            await this.sendCommand(this.commands.SIZE_DOUBLE);
-            await this.writeText('OPAL & CO\n');
-            await this.sendCommand(this.commands.SIZE_NORMAL);
-            await this.writeText('REPARACION\n');
-            await this.writeText('Folio: ' + repair.folio + '\n');
-            await this.writeText(this.line('-') + '\n');
-            await this.sendCommand(this.commands.ALIGN_LEFT);
-            await this.writeText('Cliente: ' + (customer?.name || 'N/A') + '\n');
-            await this.writeText('Pieza: ' + (item?.sku || 'N/A') + '\n');
-            if (item?.name) await this.writeText(item.name.substring(0, 30) + '\n');
-            await this.writeText('Estado: ' + repair.status + '\n');
-            await this.writeText('Costo: ' + this.formatMoney(repair.cost) + '\n');
-            await this.writeText(this.line('-') + '\n');
-            await this.writeText('Descripcion:\n' + (repair.description || '').substring(0, 100) + '\n');
-            await this.sendCommand(this.commands.FEED);
-            await this.sendCommand(this.commands.CUT);
-            Utils.showNotification('Ticket impreso', 'success');
-        } else {
-            // Fallback HTML usando iframe oculto
-            const html = this.buildRepairTicketHTML(repair, customer, item);
-            let iframe = document.getElementById('print-frame');
-            if (!iframe) {
-                iframe = document.createElement('iframe');
-                iframe.id = 'print-frame';
-                iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
-                document.body.appendChild(iframe);
-            }
-            const doc = iframe.contentWindow.document;
-            doc.open();
-            doc.write(html);
-            doc.close();
-            iframe.onload = () => {
-                iframe.contentWindow.focus();
-                iframe.contentWindow.print();
-            };
-            Utils.showNotification('Ticket de reparación enviado', 'success');
+        if (!this.connected) {
+            // Solo permitimos impresion ESC/POS directa. Bloqueamos HTML/Chrome.
+            Utils.showNotification(
+                'Impresora térmica no conectada. Conéctala primero en Configuración → Sistema → Impresora.',
+                'warning',
+                7000
+            );
+            return false;
         }
+
+        // Impresión directa ESC/POS
+        await this.sendCommand(this.commands.INIT);
+        await this.sendCommand(this.commands.ALIGN_CENTER);
+        await this.sendCommand(this.commands.SIZE_DOUBLE);
+        await this.writeText('OPAL & CO\n');
+        await this.sendCommand(this.commands.SIZE_NORMAL);
+        await this.writeText('REPARACION\n');
+        await this.writeText('Folio: ' + repair.folio + '\n');
+        await this.writeText(this.line('-') + '\n');
+        await this.sendCommand(this.commands.ALIGN_LEFT);
+        await this.writeText('Cliente: ' + (customer?.name || 'N/A') + '\n');
+        await this.writeText('Pieza: ' + (item?.sku || 'N/A') + '\n');
+        if (item?.name) await this.writeText(item.name.substring(0, 30) + '\n');
+        await this.writeText('Estado: ' + repair.status + '\n');
+        await this.writeText('Costo: ' + this.formatMoney(repair.cost) + '\n');
+        await this.writeText(this.line('-') + '\n');
+        await this.writeText('Descripcion:\n' + (repair.description || '').substring(0, 100) + '\n');
+        await this.sendCommand(this.commands.FEED);
+        await this.sendCommand(this.commands.CUT);
+        Utils.showNotification('Ticket impreso', 'success');
+        return true;
+
+        /* CODIGO LEGACY DESACTIVADO: HTML fallback. No funciona bien con drivers
+           de Windows en POS-8360. Solo se mantiene como referencia.
+        const html = this.buildRepairTicketHTML(repair, customer, item);
+        let iframe = document.getElementById('print-frame');
+        if (!iframe) {
+            iframe = document.createElement('iframe');
+            iframe.id = 'print-frame';
+            iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+            document.body.appendChild(iframe);
+        }
+        const doc = iframe.contentWindow.document;
+        doc.open();
+        doc.write(html);
+        doc.close();
+        iframe.onload = () => {
+            iframe.contentWindow.focus();
+            iframe.contentWindow.print();
+        };
+        Utils.showNotification('Ticket de reparación enviado', 'success');
+        */
     },
 
     buildRepairTicketHTML(repair, customer, item) {

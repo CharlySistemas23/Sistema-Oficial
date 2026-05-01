@@ -1395,18 +1395,32 @@ const Settings = {
         try {
             // Guardar configuración antes de probar
             await this.savePrinterSettings();
-            
+
             // Verificar si Printer está disponible
             if (typeof Printer === 'undefined') {
                 Utils.showNotification('Módulo de impresora no disponible', 'error');
                 return;
             }
-            
-            // Si está conectada, usar método directo
+
+            // Solo se permite impresion ESC/POS directa. Si no esta conectada,
+            // exigimos conectarla antes (no hay fallback HTML que distorsiona el formato).
+            if (!Printer.connected) {
+                Utils.showNotification(
+                    'Conecta la impresora primero usando el botón "Conectar" antes de imprimir una prueba.',
+                    'warning',
+                    5000
+                );
+                return;
+            }
+
+            await Printer.testPrint();
+            return;
+
+            // CODIGO LEGACY DESACTIVADO (HTML fallback distorsiona el formato)
+            /*
             if (Printer.connected) {
                 await Printer.testPrint();
             } else {
-                // Si no está conectada, crear un ticket de prueba completo y usar método fallback
                 Utils.showNotification('Impresora no conectada. Usando método de impresión del navegador...', 'info');
                 
                 // Crear una venta de prueba completa para el ticket
@@ -1482,6 +1496,7 @@ const Settings = {
                     setTimeout(printWhenReady, 500);
                 }
             }
+            */
         } catch (e) {
             console.error('Error en prueba:', e);
             Utils.showNotification('Error al imprimir prueba: ' + e.message, 'error');
