@@ -466,7 +466,7 @@ const Settings = {
                                 <label>Ancho de Papel</label>
                                 <select id="setting-printer-width" class="form-select">
                                     <option value="58">58mm (32 caracteres)</option>
-                                    <option value="80">80mm (48 caracteres)</option>
+                                    <option value="80" selected>80mm (48 caracteres) — POS-8360</option>
                                 </select>
                             </div>
                             <div class="form-group">

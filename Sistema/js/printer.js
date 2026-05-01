@@ -903,91 +903,152 @@ const Printer = {
         const businessName = settings.business_name || 'OPAL & CO';
         const businessPhone = settings.business_phone || '';
         const businessAddress = settings.business_address || '';
-        const footerMessage = settings.ticket_footer || 'Gracias por su compra';
+        const businessRfc = settings.business_rfc || '';
+        const footerMessage = settings.ticket_footer || 'Gracias por su preferencia';
         const ticketFormat = settings.ticket_format || 'standard';
         const printFooter = settings.print_footer !== false;
-        
+        const ticketWidth = settings.ticket_width_mm || 80; // POS-8360 = 80mm
+
+        // Helper para formato de fecha completo
+        const d = new Date(sale.created_at);
+        const dateStr = d.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        const timeStr = d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+
+        // Subtotal y total formateados
+        const subtotalFmt = this.formatMoney(sale.subtotal || sale.total);
+        const totalFmt = this.formatMoney(sale.total);
+        const totalItems = items.reduce((s, i) => s + (parseInt(i.quantity) || 0), 0);
+
         return `<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
     <title>Ticket ${sale.folio}</title>
     <style>
-        @page { size: 58mm auto; margin: 0; }
-        @media print { 
-            html, body { width: 58mm; margin: 0 !important; padding: 0 !important; }
+        @page { size: ${ticketWidth}mm auto; margin: 0; }
+        @media print {
+            html, body { width: ${ticketWidth}mm; margin: 0 !important; padding: 0 !important; }
             @page { margin: 0; }
         }
-        * { margin: 0; padding: 0; box-sizing: border-box; font-weight: 900 !important; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: 'Courier New', monospace;
-            font-size: 13pt;
-            width: 58mm;
-            padding: 2mm;
-            line-height: 1.3;
-            font-weight: 900 !important;
+            font-family: 'Courier New', 'Lucida Console', monospace;
+            font-size: 11pt;
+            width: ${ticketWidth}mm;
+            padding: 3mm;
+            line-height: 1.35;
+            color: #000;
+            font-weight: 700;
         }
-        .center { text-align: center; font-weight: 900 !important; font-size: 13pt !important; }
-        .bold { font-weight: 900 !important; font-size: 13pt !important; }
-        .big { font-size: 16pt !important; font-weight: 900 !important; }
-        .small { font-size: 11pt !important; font-weight: 900 !important; }
-        .line { border-bottom: 2px dashed #000; margin: 3mm 0; font-weight: 900 !important; }
-        .row { display: flex; justify-content: space-between; margin: 2mm 0; font-weight: 900 !important; font-size: 13pt !important; }
-        .total { font-size: 18pt !important; font-weight: 900 !important; border-top: 2px solid #000; padding-top: 3mm; margin-top: 3mm; }
-        h1 { font-size: 20pt !important; margin: 0; font-weight: 900 !important; }
-        div { font-weight: 900 !important; font-size: 13pt !important; }
-        span { font-weight: 900 !important; font-size: 13pt !important; }
-        p { font-weight: 900 !important; font-size: 13pt !important; }
-        td { font-weight: 900 !important; font-size: 13pt !important; }
-        th { font-weight: 900 !important; font-size: 13pt !important; }
+        .center { text-align: center; }
+        .right { text-align: right; }
+        .row { display: flex; justify-content: space-between; align-items: baseline; }
+        .sep-solid { border-top: 1.5px solid #000; margin: 2mm 0; }
+        .sep-dash { border-top: 1px dashed #000; margin: 2mm 0; }
+        .sep-double { border-top: 1.5px solid #000; border-bottom: 1.5px solid #000; height: 2px; margin: 2mm 0; }
+        .brand { font-size: 22pt; font-weight: 900; letter-spacing: 2px; margin-top: 1mm; }
+        .branch { font-size: 12pt; font-weight: 900; letter-spacing: 4px; margin-top: 1mm; margin-bottom: 1mm; }
+        .small { font-size: 9pt; font-weight: 700; }
+        .meta { font-size: 10pt; margin: 0.5mm 0; }
+        .meta-label { color: #000; font-weight: 700; }
+        .item-name { font-size: 11pt; font-weight: 900; margin-top: 1mm; text-transform: uppercase; }
+        .item-row { font-size: 10pt; margin-top: 0.5mm; padding-left: 2mm; }
+        .total-box {
+            margin: 2mm 0;
+            padding: 2mm 0;
+            border-top: 2px solid #000;
+            border-bottom: 2px solid #000;
+        }
+        .total-label { font-size: 14pt; font-weight: 900; letter-spacing: 1px; }
+        .total-value { font-size: 16pt; font-weight: 900; }
+        .pay-label { font-size: 10pt; font-weight: 900; letter-spacing: 1px; margin-bottom: 1mm; }
+        .pay-row { font-size: 10pt; margin: 0.5mm 0; }
+        .footer-msg { font-size: 11pt; font-weight: 900; margin-top: 2mm; letter-spacing: 1px; }
+        .footer-brand { font-size: 9pt; margin-top: 1mm; letter-spacing: 3px; }
     </style>
 </head>
 <body>
+    <!-- HEADER -->
     <div class="center">
-        <h1>${businessName}</h1>
-        ${businessPhone && ticketFormat !== 'minimal' ? `<div style="font-size: 12pt !important; font-weight: 900 !important;">${businessPhone}</div>` : ''}
-        ${businessAddress && ticketFormat !== 'minimal' ? `<div style="font-size: 11pt !important; font-weight: 900 !important;">${businessAddress}</div>` : ''}
-        ${ticketFormat !== 'minimal' ? `<div style="font-size: 15pt !important; font-weight: 900 !important;">${branch?.name || 'Tienda'}</div>` : ''}
-        <div style="font-size: 13pt !important; font-weight: 900 !important;">Folio: ${sale.folio}</div>
-        ${ticketFormat !== 'minimal' ? `<div style="font-size: 13pt !important; font-weight: 900 !important;">${this.formatDate(sale.created_at)}</div>` : ''}
+        <div class="brand">${businessName}</div>
+        <div class="branch">— ${(branch?.name || 'TIENDA').toUpperCase()} —</div>
+        ${businessAddress ? `<div class="small">${businessAddress}</div>` : ''}
+        ${businessPhone ? `<div class="small">Tel: ${businessPhone}</div>` : ''}
+        ${businessRfc ? `<div class="small">RFC: ${businessRfc}</div>` : ''}
+    </div>
+
+    <div class="sep-double"></div>
+
+    <!-- INFO DE VENTA -->
+    <div class="row meta"><span class="meta-label">Folio:</span><span>${sale.folio}</span></div>
+    <div class="row meta"><span class="meta-label">Fecha:</span><span>${dateStr}</span></div>
+    <div class="row meta"><span class="meta-label">Hora:</span><span>${timeStr}</span></div>
+
+    ${ticketFormat !== 'minimal' ? `
+    <div class="sep-dash"></div>
+    <div class="row meta"><span class="meta-label">Vendedor:</span><span>${(seller?.name || 'N/D').toUpperCase()}</span></div>
+    ${guide ? `<div class="row meta"><span class="meta-label">Guía:</span><span>${guide.name.toUpperCase()}</span></div>` : ''}
+    ${agency ? `<div class="row meta"><span class="meta-label">Agencia:</span><span>${agency.name.toUpperCase()}</span></div>` : ''}
+    ` : ''}
+
+    <div class="sep-solid"></div>
+
+    <!-- ITEMS -->
+    ${items.map(item => {
+        const itemName = (item.name || 'Pieza').substring(0, 32).toUpperCase();
+        const qty = item.quantity || 1;
+        const unitPrice = parseFloat(item.unit_price ?? item.price) || 0;
+        const subtotal = parseFloat(item.subtotal) || (qty * unitPrice);
+        return `
+        <div class="item-name">${itemName}</div>
+        <div class="row item-row">
+            <span>${qty} x ${this.formatMoney(unitPrice)}</span>
+            <span>${this.formatMoney(subtotal)}</span>
         </div>
-    <div class="line"></div>
-    ${ticketFormat !== 'minimal' ? `
-        <div class="row" style="font-size: 13pt !important; font-weight: 900 !important;"><span>Vendedor:</span><span>${seller?.name || 'N/A'}</span></div>
-        ${guide ? `<div class="row" style="font-size: 13pt !important; font-weight: 900 !important;"><span>Guía:</span><span>${guide.name}</span></div>` : ''}
-        ${agency ? `<div class="row" style="font-size: 13pt !important; font-weight: 900 !important;"><span>Agencia:</span><span>${agency.name}</span></div>` : ''}
-        <div class="line"></div>
+        ${item.discount > 0 ? `<div class="item-row" style="color: #555;">Descuento: ${item.discount}%</div>` : ''}
+        `;
+    }).join('')}
+
+    <div class="sep-dash"></div>
+
+    <!-- TOTALES -->
+    <div class="row meta"><span>Artículos:</span><span>${totalItems}</span></div>
+    <div class="row meta"><span>Subtotal:</span><span>${subtotalFmt}</span></div>
+    ${sale.discount > 0 ? `<div class="row meta"><span>Descuento:</span><span>-${this.formatMoney(sale.discount)}</span></div>` : ''}
+    ${sale.tax > 0 ? `<div class="row meta"><span>IVA:</span><span>${this.formatMoney(sale.tax)}</span></div>` : ''}
+
+    <!-- TOTAL DESTACADO -->
+    <div class="total-box">
+        <div class="row">
+            <span class="total-label">TOTAL</span>
+            <span class="total-value">${totalFmt}</span>
+        </div>
+    </div>
+
+    <!-- PAGOS -->
+    ${payments.length > 0 ? `
+    <div class="pay-label">FORMA DE PAGO</div>
+    ${payments.map(p => {
+        const methodName = this.getPaymentMethodName(p.method_id);
+        const amt = this.formatMoney(p.amount, p.currency);
+        const curr = p.currency && p.currency !== 'MXN' ? ` (${p.currency})` : '';
+        return `<div class="row pay-row"><span>${methodName}${curr}:</span><span>${amt}</span></div>`;
+    }).join('')}
+    ${sale.change > 0 ? `<div class="row pay-row" style="font-weight: 900; margin-top: 1mm;"><span>CAMBIO:</span><span>${this.formatMoney(sale.change)}</span></div>` : ''}
     ` : ''}
-    ${ticketFormat !== 'minimal' ? items.map(item => `
-        <div class="bold" style="font-size: 14pt !important; font-weight: 900 !important; margin-bottom: 2mm;">${(item.name || 'Pieza').substring(0, 28)}</div>
-        <div class="row" style="font-size: 13pt !important; font-weight: 900 !important;">
-            <span>${item.quantity}x ${this.formatMoney(item.unit_price ?? item.price)}</span>
-            <span>${this.formatMoney(item.subtotal)}</span>
-            </div>
-        ${item.discount > 0 && ticketFormat === 'detailed' ? `<div style="font-size: 12pt !important; font-weight: 900 !important;">Desc: ${item.discount}%</div>` : ''}
-    `).join('') : ''}
-    ${ticketFormat !== 'minimal' ? `
-        <div class="line"></div>
-        <div class="row" style="font-size: 14pt !important; font-weight: 900 !important;"><span>Subtotal:</span><span>${this.formatMoney(sale.subtotal)}</span></div>
-        ${sale.discount > 0 ? `<div class="row" style="font-size: 14pt !important; font-weight: 900 !important;"><span>Descuento:</span><span>-${this.formatMoney(sale.discount)}</span></div>` : ''}
-    ` : ''}
-    <div class="row total" style="font-size: 18pt !important; font-weight: 900 !important;"><span>TOTAL:</span><span>${this.formatMoney(sale.total)}</span></div>
-    ${ticketFormat !== 'minimal' && payments.length > 0 ? `
-        <div class="line"></div>
-        <div class="bold" style="font-size: 14pt !important; font-weight: 900 !important; margin-bottom: 2mm;">PAGOS:</div>
-        ${payments.map(p => `<div class="row" style="font-size: 13pt !important; font-weight: 900 !important;"><span>${this.getPaymentMethodName(p.method_id)}:</span><span>${this.formatMoney(p.amount, p.currency)}</span></div>`).join('')}
-    ` : ''}
+
+    <!-- FOOTER -->
     ${printFooter ? `
-        <div class="line"></div>
-        <div class="center">
-            <div style="font-size: 16pt !important; font-weight: 900 !important; margin-top: 3mm;">${footerMessage.toUpperCase()}</div>
-            <div style="font-size: 13pt !important; font-weight: 900 !important;">${this.formatDate(new Date())}</div>
-        </div>
+    <div class="sep-double"></div>
+    <div class="center">
+        <div class="footer-msg">${footerMessage.toUpperCase()}</div>
+        <div class="footer-brand">— ${businessName} —</div>
+        <div class="small" style="margin-top: 2mm;">Conserve este ticket para cualquier aclaración</div>
+    </div>
     ` : ''}
-    <script>
-        // El diálogo de impresión se maneja desde el código principal
-        // No auto-imprimir aquí para evitar duplicados
-    </script>
+
+    <!-- Espacio para corte -->
+    <div style="height: 8mm;"></div>
 </body>
 </html>`;
     },
