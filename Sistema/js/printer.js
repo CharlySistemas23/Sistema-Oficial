@@ -404,37 +404,12 @@ const Printer = {
             
             console.log('✅ Datos verificados. Venta guardada:', savedSale.folio, 'Items:', items.length, 'Pagos:', payments.length);
 
-            // CRITICO: solo se imprime por ESC/POS directo. Si no hay conexion,
-            // bloqueamos la impresion y guiamos al usuario a conectar la impresora.
-            // El fallback HTML por Chrome se desactivo porque el driver de Windows
-            // distorsionaba el formato del ticket (queda apretado en mitad del papel).
+            // Si NO hay conexion ESC/POS directa, usar fallback HTML.
+            // El nuevo template HTML usa <pre> con texto monospace pre-formateado
+            // que el driver de Windows no puede distorsionar.
             if (!this.connected) {
-                console.warn('⚠️ Impresora termica no conectada. Bloqueando impresion HTML/Chrome.');
-                if (typeof Utils !== 'undefined' && Utils.showNotification) {
-                    Utils.showNotification(
-                        'Impresora térmica no conectada. Ve a Configuración → Sistema → Impresora y haz clic en "Conectar".',
-                        'warning',
-                        7000
-                    );
-                }
-                // Intentar abrir el modulo de configuracion automaticamente
-                try {
-                    if (typeof UI !== 'undefined' && UI.showModule) {
-                        const goToSettings = await Utils.confirm(
-                            'La impresora térmica no está conectada.\n\nEl ticket NO se puede imprimir hasta que conectes la POS-8360 por USB.\n\n¿Quieres ir ahora a Configuración para conectarla?',
-                            'Impresora desconectada'
-                        );
-                        if (goToSettings) {
-                            UI.showModule('settings');
-                            // Activar la pestaña de impresion despues de cargar
-                            setTimeout(() => {
-                                const printingTab = document.querySelector('#settings-main-tabs [data-tab="printing"]');
-                                if (printingTab) printingTab.click();
-                            }, 300);
-                        }
-                    }
-                } catch (_) {}
-                return false;
+                console.log('Impresora no conectada por USB directo. Usando HTML fallback con formato <pre>.');
+                return await this.printTicketFallback(sale);
             }
 
             console.log('Impresora conectada, usando método directo ESC/POS');
@@ -961,6 +936,7 @@ const Printer = {
         const ticketFormat = settings.ticket_format || 'standard';
         const printFooter = settings.print_footer !== false;
         const ticketWidth = settings.ticket_width_mm || 80;
+        const W = ticketWidth === 80 ? 42 : 32; // chars por linea (42 para 80mm con fuente legible)
 
         const d = new Date(sale.created_at);
         const dateStr = d.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -970,133 +946,163 @@ const Printer = {
         const totalFmt = this.formatMoney(sale.total);
         const totalItems = items.reduce((s, i) => s + (parseInt(i.quantity) || 0), 0);
 
-        // Helper para fila de tabla (label izquierda, valor derecha)
-        // Usa <table> con widths fijos en lugar de flexbox (mas compatible con drivers termicos)
-        const row = (label, value, opts = {}) => {
-            const lblStyle = opts.bold ? 'font-weight:900;' : 'font-weight:700;';
-            const valStyle = opts.boldVal ? 'font-weight:900;' : 'font-weight:700;';
-            const sz = opts.size ? `font-size:${opts.size}pt;` : '';
-            const color = opts.color ? `color:${opts.color};` : '';
-            return `<table style="width:100%;border-collapse:collapse;margin:0.5mm 0;${sz}${color}">
-                <tr>
-                    <td style="text-align:left;padding:0;${lblStyle}">${label}</td>
-                    <td style="text-align:right;padding:0;${valStyle}white-space:nowrap;">${value}</td>
-                </tr>
-            </table>`;
+        // ==================== HELPERS DE TEXTO PRE-FORMATEADO ====================
+        // Usamos string padding en lugar de flex/table porque los drivers de
+        // impresoras termicas (Windows) ignoran/distorsionan CSS layout pero
+        // SI respetan texto plano monospace dentro de <pre>.
+        const escapeHtml = (s) => String(s || '')
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const padR = (s, len) => {
+            const str = String(s || '');
+            return str.length >= len ? str.substring(0, len) : str + ' '.repeat(len - str.length);
         };
+        const padL = (s, len) => {
+            const str = String(s || '');
+            return str.length >= len ? str.substring(0, len) : ' '.repeat(len - str.length) + str;
+        };
+        const center = (s) => {
+            const str = String(s || '');
+            if (str.length >= W) return str.substring(0, W);
+            const pad = Math.floor((W - str.length) / 2);
+            return ' '.repeat(pad) + str;
+        };
+        // Linea con label a la izquierda y valor a la derecha (alineado)
+        const line = (label, value) => {
+            const lbl = String(label || '');
+            const val = String(value || '');
+            const totalLen = lbl.length + val.length;
+            if (totalLen >= W) {
+                // Si no cabe en una linea, rompemos: label en una linea, valor a la derecha en la siguiente
+                return escapeHtml(lbl) + '\n' + escapeHtml(padL(val, W));
+            }
+            return escapeHtml(lbl + ' '.repeat(W - totalLen) + val);
+        };
+        const sepDash = () => '-'.repeat(W);
+        const sepEq = () => '='.repeat(W);
 
+        // ==================== CONSTRUIR EL CONTENIDO ====================
+        let content = '';
+
+        // Header
+        content += escapeHtml(center(businessName.toUpperCase())) + '\n';
+        content += escapeHtml(center('- ' + (branch?.name || 'TIENDA').toUpperCase() + ' -')) + '\n';
+        if (businessAddress) content += escapeHtml(center(businessAddress)) + '\n';
+        if (businessPhone) content += escapeHtml(center('Tel: ' + businessPhone)) + '\n';
+        if (businessRfc) content += escapeHtml(center('RFC: ' + businessRfc)) + '\n';
+        content += sepEq() + '\n';
+
+        // Info de venta
+        content += line('Folio:', sale.folio || '-') + '\n';
+        content += line('Fecha:', dateStr) + '\n';
+        content += line('Hora:', timeStr) + '\n';
+
+        if (ticketFormat !== 'minimal') {
+            content += sepDash() + '\n';
+            content += line('Vendedor:', (seller?.name || 'N/D').toUpperCase()) + '\n';
+            if (guide) content += line('Guia:', guide.name.toUpperCase()) + '\n';
+            if (agency) content += line('Agencia:', agency.name.toUpperCase()) + '\n';
+        }
+
+        content += sepDash() + '\n';
+
+        // Items
+        items.forEach(item => {
+            const itemName = String(item.name || 'Pieza').substring(0, W).toUpperCase();
+            const qty = item.quantity || 1;
+            const unitPrice = parseFloat(item.unit_price ?? item.price) || 0;
+            const subtotal = parseFloat(item.subtotal) || (qty * unitPrice);
+            content += escapeHtml(itemName) + '\n';
+            content += line('  ' + qty + ' x ' + this.formatMoney(unitPrice), this.formatMoney(subtotal)) + '\n';
+            if (item.discount > 0) {
+                content += escapeHtml('  Descuento: ' + item.discount + '%') + '\n';
+            }
+        });
+
+        content += sepDash() + '\n';
+
+        // Totales
+        content += line('Articulos:', String(totalItems)) + '\n';
+        content += line('Subtotal:', subtotalFmt) + '\n';
+        if (sale.discount > 0) content += line('Descuento:', '-' + this.formatMoney(sale.discount)) + '\n';
+        if (sale.tax > 0) content += line('IVA:', this.formatMoney(sale.tax)) + '\n';
+
+        // Total destacado
+        content += sepEq() + '\n';
+        content += `<span class="big">${escapeHtml(line('TOTAL', totalFmt))}</span>` + '\n';
+        content += sepEq() + '\n';
+
+        // Pagos
+        if (payments.length > 0) {
+            content += escapeHtml('FORMA DE PAGO') + '\n';
+            payments.forEach(p => {
+                const methodName = this.getPaymentMethodName(p.method_id);
+                const amt = this.formatMoney(p.amount, p.currency);
+                const curr = p.currency && p.currency !== 'MXN' ? ' (' + p.currency + ')' : '';
+                content += line(methodName + curr + ':', amt) + '\n';
+            });
+            if (sale.change > 0) {
+                content += line('CAMBIO:', this.formatMoney(sale.change)) + '\n';
+            }
+        }
+
+        // Footer
+        if (printFooter) {
+            content += sepEq() + '\n';
+            content += escapeHtml(center(footerMessage.toUpperCase())) + '\n';
+            content += escapeHtml(center('- ' + businessName + ' -')) + '\n';
+            content += '\n';
+            content += escapeHtml(center('Conserve este ticket para')) + '\n';
+            content += escapeHtml(center('cualquier aclaracion')) + '\n';
+        }
+
+        content += '\n\n\n'; // espacio para corte
+
+        // <pre> con texto monospace pre-formateado: indestructible por driver.
+        // El driver de Windows puede ignorar CSS layout, pero no puede romper
+        // texto plano dentro de <pre> con monospace fijo.
         return `<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
     <title>Ticket ${sale.folio}</title>
     <style>
-        @page { size: ${ticketWidth}mm auto; margin: 0; }
+        @page { size: ${ticketWidth}mm auto; margin: 0mm; }
         @media print {
+            @page { size: ${ticketWidth}mm auto; margin: 0mm; }
             html, body { width: ${ticketWidth}mm; margin: 0 !important; padding: 0 !important; }
-            @page { margin: 0; size: ${ticketWidth}mm auto; }
-            .ticket-wrapper { page-break-after: always; page-break-inside: avoid; break-after: page; }
-            .ticket-wrapper:last-child { page-break-after: auto; break-after: auto; }
+            .ticket-wrapper { page-break-after: always; }
+            .ticket-wrapper:last-child { page-break-after: auto; }
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        html, body { background: #fff; }
+        html, body { background: #fff; color: #000; }
         body {
-            font-family: 'Courier New', 'Lucida Console', monospace;
-            font-size: 11pt;
+            font-family: 'Courier New', 'Consolas', 'Lucida Console', monospace;
+            font-size: 10pt;
+            line-height: 1.15;
+            padding: 2mm;
             width: ${ticketWidth}mm;
-            padding: 3mm;
-            line-height: 1.3;
-            color: #000;
             font-weight: 700;
         }
-        table { border-collapse: collapse; }
-        td { vertical-align: top; }
-        .ticket-wrapper { width: 100%; }
-        .center { text-align: center; }
-        .sep-dash { border: 0; border-top: 1px dashed #000; margin: 2mm 0; height: 0; }
-        .sep-solid { border: 0; border-top: 1.5px solid #000; margin: 2mm 0; height: 0; }
-        .sep-double { border: 0; border-top: 1.5px solid #000; border-bottom: 1.5px solid #000; height: 1.5px; margin: 2mm 0; }
-        .brand { font-size: 22pt; font-weight: 900; letter-spacing: 2px; margin: 1mm 0 0 0; }
-        .branch-name { font-size: 12pt; font-weight: 900; letter-spacing: 3px; margin: 1mm 0; }
-        .small { font-size: 9pt; font-weight: 700; }
-        .item-name { font-size: 11pt; font-weight: 900; margin-top: 1.5mm; text-transform: uppercase; }
-        .total-box { margin: 2mm 0; padding: 2mm 1mm; border-top: 2px solid #000; border-bottom: 2px solid #000; }
-        .pay-label { font-size: 10pt; font-weight: 900; letter-spacing: 1px; margin: 1mm 0; }
-        .footer-msg { font-size: 12pt; font-weight: 900; margin: 2mm 0 1mm 0; letter-spacing: 1px; }
-        .footer-brand { font-size: 9pt; margin-top: 1mm; letter-spacing: 3px; }
-        .footer-note { font-size: 8.5pt; margin-top: 2mm; font-weight: 700; }
-        .cut-space { height: 12mm; }
+        pre {
+            font-family: inherit;
+            font-size: inherit;
+            line-height: inherit;
+            font-weight: inherit;
+            white-space: pre;
+            margin: 0;
+            padding: 0;
+            color: #000;
+            letter-spacing: 0;
+        }
+        .big {
+            font-size: 14pt;
+            font-weight: 900;
+        }
     </style>
 </head>
 <body>
 <div class="ticket-wrapper">
-    <div class="center">
-        <div class="brand">${businessName}</div>
-        <div class="branch-name">- ${(branch?.name || 'TIENDA').toUpperCase()} -</div>
-        ${businessAddress ? `<div class="small">${businessAddress}</div>` : ''}
-        ${businessPhone ? `<div class="small">Tel: ${businessPhone}</div>` : ''}
-        ${businessRfc ? `<div class="small">RFC: ${businessRfc}</div>` : ''}
-    </div>
-
-    <div class="sep-double"></div>
-
-    ${row('Folio:', sale.folio || '-')}
-    ${row('Fecha:', dateStr)}
-    ${row('Hora:', timeStr)}
-
-    ${ticketFormat !== 'minimal' ? `
-    <div class="sep-dash"></div>
-    ${row('Vendedor:', (seller?.name || 'N/D').toUpperCase())}
-    ${guide ? row('Guía:', guide.name.toUpperCase()) : ''}
-    ${agency ? row('Agencia:', agency.name.toUpperCase()) : ''}
-    ` : ''}
-
-    <div class="sep-solid"></div>
-
-    ${items.map(item => {
-        const itemName = (item.name || 'Pieza').substring(0, 36).toUpperCase();
-        const qty = item.quantity || 1;
-        const unitPrice = parseFloat(item.unit_price ?? item.price) || 0;
-        const subtotal = parseFloat(item.subtotal) || (qty * unitPrice);
-        return `
-        <div class="item-name">${itemName}</div>
-        ${row(`${qty} x ${this.formatMoney(unitPrice)}`, this.formatMoney(subtotal), { size: 10 })}
-        ${item.discount > 0 ? `<div style="font-size:9pt;color:#555;padding-left:2mm;">Descuento: ${item.discount}%</div>` : ''}
-        `;
-    }).join('')}
-
-    <div class="sep-dash"></div>
-
-    ${row('Artículos:', String(totalItems), { size: 10 })}
-    ${row('Subtotal:', subtotalFmt, { size: 10 })}
-    ${sale.discount > 0 ? row('Descuento:', `-${this.formatMoney(sale.discount)}`, { size: 10 }) : ''}
-    ${sale.tax > 0 ? row('IVA:', this.formatMoney(sale.tax), { size: 10 }) : ''}
-
-    <div class="total-box">
-        ${row('TOTAL', totalFmt, { size: 14, bold: true, boldVal: true })}
-    </div>
-
-    ${payments.length > 0 ? `
-    <div class="pay-label">FORMA DE PAGO</div>
-    ${payments.map(p => {
-        const methodName = this.getPaymentMethodName(p.method_id);
-        const amt = this.formatMoney(p.amount, p.currency);
-        const curr = p.currency && p.currency !== 'MXN' ? ` (${p.currency})` : '';
-        return row(`${methodName}${curr}:`, amt, { size: 10 });
-    }).join('')}
-    ${sale.change > 0 ? row('CAMBIO:', this.formatMoney(sale.change), { size: 10, bold: true, boldVal: true }) : ''}
-    ` : ''}
-
-    ${printFooter ? `
-    <div class="sep-double"></div>
-    <div class="center">
-        <div class="footer-msg">${footerMessage.toUpperCase()}</div>
-        <div class="footer-brand">- ${businessName} -</div>
-        <div class="footer-note">Conserve este ticket para<br>cualquier aclaración</div>
-    </div>
-    ` : ''}
-
-    <div class="cut-space"></div>
+<pre>${content}</pre>
 </div>
 </body>
 </html>`;
@@ -1105,40 +1111,31 @@ const Printer = {
     // ==================== OTROS TICKETS ====================
 
     async printRepairTicket(repair, customer, item) {
-        if (!this.connected) {
-            // Solo permitimos impresion ESC/POS directa. Bloqueamos HTML/Chrome.
-            Utils.showNotification(
-                'Impresora térmica no conectada. Conéctala primero en Configuración → Sistema → Impresora.',
-                'warning',
-                7000
-            );
-            return false;
+        if (this.connected) {
+            // Impresión directa ESC/POS
+            await this.sendCommand(this.commands.INIT);
+            await this.sendCommand(this.commands.ALIGN_CENTER);
+            await this.sendCommand(this.commands.SIZE_DOUBLE);
+            await this.writeText('OPAL & CO\n');
+            await this.sendCommand(this.commands.SIZE_NORMAL);
+            await this.writeText('REPARACION\n');
+            await this.writeText('Folio: ' + repair.folio + '\n');
+            await this.writeText(this.line('-') + '\n');
+            await this.sendCommand(this.commands.ALIGN_LEFT);
+            await this.writeText('Cliente: ' + (customer?.name || 'N/A') + '\n');
+            await this.writeText('Pieza: ' + (item?.sku || 'N/A') + '\n');
+            if (item?.name) await this.writeText(item.name.substring(0, 30) + '\n');
+            await this.writeText('Estado: ' + repair.status + '\n');
+            await this.writeText('Costo: ' + this.formatMoney(repair.cost) + '\n');
+            await this.writeText(this.line('-') + '\n');
+            await this.writeText('Descripcion:\n' + (repair.description || '').substring(0, 100) + '\n');
+            await this.sendCommand(this.commands.FEED);
+            await this.sendCommand(this.commands.CUT);
+            Utils.showNotification('Ticket impreso', 'success');
+            return true;
         }
 
-        // Impresión directa ESC/POS
-        await this.sendCommand(this.commands.INIT);
-        await this.sendCommand(this.commands.ALIGN_CENTER);
-        await this.sendCommand(this.commands.SIZE_DOUBLE);
-        await this.writeText('OPAL & CO\n');
-        await this.sendCommand(this.commands.SIZE_NORMAL);
-        await this.writeText('REPARACION\n');
-        await this.writeText('Folio: ' + repair.folio + '\n');
-        await this.writeText(this.line('-') + '\n');
-        await this.sendCommand(this.commands.ALIGN_LEFT);
-        await this.writeText('Cliente: ' + (customer?.name || 'N/A') + '\n');
-        await this.writeText('Pieza: ' + (item?.sku || 'N/A') + '\n');
-        if (item?.name) await this.writeText(item.name.substring(0, 30) + '\n');
-        await this.writeText('Estado: ' + repair.status + '\n');
-        await this.writeText('Costo: ' + this.formatMoney(repair.cost) + '\n');
-        await this.writeText(this.line('-') + '\n');
-        await this.writeText('Descripcion:\n' + (repair.description || '').substring(0, 100) + '\n');
-        await this.sendCommand(this.commands.FEED);
-        await this.sendCommand(this.commands.CUT);
-        Utils.showNotification('Ticket impreso', 'success');
-        return true;
-
-        /* CODIGO LEGACY DESACTIVADO: HTML fallback. No funciona bien con drivers
-           de Windows en POS-8360. Solo se mantiene como referencia.
+        // Fallback HTML con <pre> monospace (driver-resistant)
         const html = this.buildRepairTicketHTML(repair, customer, item);
         let iframe = document.getElementById('print-frame');
         if (!iframe) {
@@ -1156,7 +1153,7 @@ const Printer = {
             iframe.contentWindow.print();
         };
         Utils.showNotification('Ticket de reparación enviado', 'success');
-        */
+        return true;
     },
 
     buildRepairTicketHTML(repair, customer, item) {

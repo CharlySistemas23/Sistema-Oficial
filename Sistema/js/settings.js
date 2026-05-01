@@ -376,12 +376,12 @@ const Settings = {
     getPrintingTicketsTab() {
         return `
             <div class="settings-section">
-                <h3 class="settings-section-title"><i class="fas fa-receipt"></i> Tickets / Recibos - GP-5838 SERIES</h3>
+                <h3 class="settings-section-title"><i class="fas fa-receipt"></i> Tickets de Venta</h3>
                 <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--spacing-md);">
                 <!-- MÓDULO: TICKETS / RECIBOS -->
                 <div class="module" style="padding: var(--spacing-md); background: var(--color-bg-card); border-radius: var(--radius-md); border: 1px solid var(--color-border-light);">
                     <h3 style="margin-bottom: var(--spacing-md); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; justify-content: space-between;">
-                        <span><i class="fas fa-receipt"></i> Tickets / Recibos - GP-5838 SERIES</span>
+                        <span><i class="fas fa-receipt"></i> Tickets de Venta</span>
                         <span id="printer-status-badge" class="printer-status-badge disconnected">
                             <i class="fas fa-circle"></i> Desconectada
                         </span>
@@ -392,10 +392,10 @@ const Settings = {
                         <div style="display: flex; align-items: start; gap: var(--spacing-sm); font-size: 11px; color: var(--color-text-secondary);">
                             <i class="fas fa-info-circle" style="color: var(--color-primary); margin-top: 2px;"></i>
                             <div>
-                                <div style="font-weight: 600; margin-bottom: 4px;"><strong>GP-5838 SERIES</strong> - Impresora térmica 58mm</div>
+                                <div style="font-weight: 600; margin-bottom: 4px;"><strong>Impresora Térmica POS</strong> - 80mm USB</div>
                                 <div style="font-size: 10px; line-height: 1.4;">
-                                    <strong>Requisitos:</strong> Chrome o Edge (versión 89+), impresora encendida, cable USB conectado. 
-                                    Al conectar, selecciona manualmente tu impresora en la lista de dispositivos.
+                                    <strong>Compatible con:</strong> POS-8360, Xprinter, Hoin, Eprint, GP-5838 y cualquier impresora térmica USB con ESC/POS.
+                                    Conecta el cable USB y enciende la impresora.
                                 </div>
                             </div>
                         </div>
@@ -1402,26 +1402,12 @@ const Settings = {
                 return;
             }
 
-            // Solo se permite impresion ESC/POS directa. Si no esta conectada,
-            // exigimos conectarla antes (no hay fallback HTML que distorsiona el formato).
-            if (!Printer.connected) {
-                Utils.showNotification(
-                    'Conecta la impresora primero usando el botón "Conectar" antes de imprimir una prueba.',
-                    'warning',
-                    5000
-                );
-                return;
-            }
-
-            await Printer.testPrint();
-            return;
-
-            // CODIGO LEGACY DESACTIVADO (HTML fallback distorsiona el formato)
-            /*
+            // Si esta conectada, usa metodo directo ESC/POS.
+            // Si NO, usa fallback HTML con <pre> monospace (driver-resistant).
             if (Printer.connected) {
                 await Printer.testPrint();
             } else {
-                Utils.showNotification('Impresora no conectada. Usando método de impresión del navegador...', 'info');
+                Utils.showNotification('Imprimiendo ticket de prueba via Chrome...', 'info');
                 
                 // Crear una venta de prueba completa para el ticket
                 const testSale = {
@@ -1496,7 +1482,6 @@ const Settings = {
                     setTimeout(printWhenReady, 500);
                 }
             }
-            */
         } catch (e) {
             console.error('Error en prueba:', e);
             Utils.showNotification('Error al imprimir prueba: ' + e.message, 'error');
