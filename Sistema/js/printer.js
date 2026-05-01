@@ -1067,8 +1067,11 @@ const Printer = {
             content += escapeHtml(center('para cualquier aclaracion')) + '\n';
         }
 
-        // Espacio final generoso para que la cortadora no agarre texto
-        content += '\n\n\n\n\n';
+        // Espacio final extra-generoso (3 parrafos) para que:
+        //  1) La cortadora no agarre texto del footer al cortar
+        //  2) El driver de la termica detecte fin de pagina y dispare auto-corte
+        // Cada \n equivale a una linea de papel termico (~3mm)
+        content += '\n\n\n\n\n\n\n\n\n\n\n\n';
 
         // <pre> con texto monospace pre-formateado: indestructible por driver.
         // El driver de Windows puede ignorar CSS layout, pero no puede romper
@@ -1083,8 +1086,17 @@ const Printer = {
         @media print {
             @page { size: ${ticketWidth}mm auto; margin: 0mm; }
             html, body { width: ${ticketWidth}mm; margin: 0 !important; padding: 0 !important; }
-            .ticket-wrapper { page-break-after: always; }
-            .ticket-wrapper:last-child { page-break-after: auto; }
+            /* page-break-after: always fuerza al driver a tratar este contenido
+               como una pagina completa, lo que dispara el auto-corte al final */
+            .ticket-wrapper {
+                page-break-after: always;
+                break-after: page;
+                display: block;
+            }
+            .ticket-wrapper:last-child {
+                page-break-after: always;
+                break-after: page;
+            }
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body { background: #fff; color: #000; }
