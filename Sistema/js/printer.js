@@ -935,8 +935,13 @@ const Printer = {
         const footerMessage = settings.ticket_footer || 'Gracias por su preferencia';
         const ticketFormat = settings.ticket_format || 'standard';
         const printFooter = settings.print_footer !== false;
-        const ticketWidth = settings.ticket_width_mm || 80;
-        const W = ticketWidth === 80 ? 42 : 32; // chars por linea (42 para 80mm con fuente legible)
+        // Forzamos ticketWidth = 80 por defecto. Si el usuario tiene 58 guardado
+        // antiguo, lo respetamos. Pero la mayoria de POS modernos son 80mm.
+        const ticketWidth = parseInt(settings.ticket_width_mm) || parseInt(settings.printer_width) || 80;
+        // Chars por linea: calibrado para que el texto LLENE todo el papel.
+        // 80mm con padding 1mm cada lado = 78mm, Courier New 11pt ~ 2.05mm/char ≈ 38 chars
+        // Si bumpeamos a 46 chars el texto se aprieta pero ocupa todo el ancho
+        const W = ticketWidth >= 80 ? 46 : 32;
 
         const d = new Date(sale.created_at);
         const dateStr = d.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -1102,9 +1107,9 @@ const Printer = {
         html, body { background: #fff; color: #000; }
         body {
             font-family: 'Courier New', 'Consolas', 'Lucida Console', monospace;
-            font-size: 10pt;
-            line-height: 1.2;
-            padding: 2mm;
+            font-size: 11pt;
+            line-height: 1.18;
+            padding: 1mm;
             width: ${ticketWidth}mm;
             font-weight: 700;
         }
@@ -1117,12 +1122,12 @@ const Printer = {
             margin: 0;
             padding: 0;
             color: #000;
-            letter-spacing: 0;
+            letter-spacing: -0.3px; /* ligeramente apretado para que mas chars quepan */
         }
         .big {
-            font-size: 14pt;
+            font-size: 15pt;
             font-weight: 900;
-            letter-spacing: 1px;
+            letter-spacing: 0;
         }
         .b {
             font-weight: 900;
