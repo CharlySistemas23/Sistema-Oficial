@@ -1,5 +1,8 @@
 // Printer Manager - Impresión Directa ESC/POS para Impresoras Térmicas
-// Soporta: GP-5838 SERIES, GP-5830, EC Line 58110, y otras impresoras térmicas 58mm
+// Soporta: POS-8360, GP-5838 SERIES, GP-5830, EC Line 58110, y otras térmicas USB ESC/POS
+// VERSION: 2026-04-30-cutfix2 (corte con flush+feed+delay+cut)
+
+console.log('%c🖨️ Printer.js cargado - VERSION 2026-04-30-cutfix2', 'background:#1a1a1a;color:#0f0;padding:4px 8px;font-weight:bold;');
 
 const Printer = {
     // Configuración según especificación
@@ -251,35 +254,47 @@ const Printer = {
      * Esto resuelve el problema de POS-8360 donde el CUT solo no se ejecutaba.
      */
     async cutPaper() {
+        console.log('%c✂️ cutPaper() INICIADO', 'background:#0a0;color:#fff;padding:2px 6px;');
         try {
             // 1. Asegurar que todo el contenido previo se haya escrito
+            console.log('  [1/6] flush buffer...');
             await this.flush();
 
-            // 2. Feed: avanzar 6 lineas para que el footer pase la cuchilla.
+            // 2. Feed: avanzar 8 lineas para que el footer pase la cuchilla.
             //    La cuchilla esta ~10-15mm arriba del print head en POS-8360.
-            //    6 lineas a 3mm/linea = 18mm, suficiente para librar la cuchilla.
-            await this.write([0x1B, 0x64, 0x06]); // ESC d 6 - feed 6 lines
+            //    8 lineas a 3mm/linea = 24mm, libera la cuchilla con margen.
+            console.log('  [2/6] feed 8 lineas (~24mm)...');
+            await this.write([0x1B, 0x64, 0x08]); // ESC d 8 - feed 8 lines
             await this.flush();
 
-            // 3. Esperar 250ms para que el motor termine de avanzar fisicamente.
+            // 3. Esperar 400ms para que el motor termine de avanzar fisicamente.
             //    Sin este delay, el CUT se manda mientras el papel todavia
             //    esta moviendose y la cuchilla falla.
-            await this.sleep(250);
+            console.log('  [3/6] sleep 400ms (motor)...');
+            await this.sleep(400);
 
             // 4. Comando de corte completo. Usar GS V con argumento m=0 (full cut).
-            //    Es el comando ESC/POS estandar mas compatible con POS-8360.
+            //    Es el comando ESC/POS estandar mas compatible.
+            console.log('  [4/6] enviar GS V 0 (full cut)...');
             await this.write([0x1D, 0x56, 0x00]); // GS V 0 - Full cut
-
-            // Variante alternativa por si la primera no funciona en algunos modelos
-            // GS V m con feed: avanza n lineas y corta
             await this.flush();
-            await this.sleep(50);
-            await this.write([0x1D, 0x56, 0x42, 0x00]); // GS V B 0 - Cut with no feed (some printers)
+            await this.sleep(100);
 
+            // 5. Variante con feed: GS V A n (avanza n lineas y corta)
+            //    Algunos modelos requieren esta variante.
+            console.log('  [5/6] enviar GS V A 3 (cut with feed)...');
+            await this.write([0x1D, 0x56, 0x41, 0x03]); // GS V A 3
             await this.flush();
-            console.log('✂️ Comando de corte enviado a la impresora');
+            await this.sleep(100);
+
+            // 6. Comando legacy alternativo (algunos clones chinos)
+            console.log('  [6/6] enviar ESC i (corte legacy)...');
+            await this.write([0x1B, 0x69]); // ESC i - corte legacy
+            await this.flush();
+
+            console.log('%c✂️ cutPaper() COMPLETADO - 3 variantes de corte enviadas', 'background:#0a0;color:#fff;padding:2px 6px;');
         } catch (e) {
-            console.error('Error ejecutando corte:', e);
+            console.error('❌ Error ejecutando corte:', e);
         }
     },
 
