@@ -294,26 +294,30 @@ const Printer = {
 
     // ==================== UTILIDADES DE FORMATO ====================
     
-    // Función mkline según especificación: alinea left a la izquierda y right a la derecha
-    mkline(left, right, width = 32) {
+    // Función mkline: alinea left a la izquierda y right a la derecha.
+    // Si no se pasa width, usa this.printerWidth (32 para 58mm, 48 para 80mm).
+    mkline(left, right, width = null) {
+        const w = width || this.printerWidth || 32;
         const leftStr = String(left || '');
         const rightStr = String(right || '');
         const totalLength = leftStr.length + rightStr.length;
-        const spaces = Math.max(1, width - totalLength);
+        const spaces = Math.max(1, w - totalLength);
         return leftStr + ' '.repeat(spaces) + rightStr;
     },
 
-    centerText(text, width = 32) {
-        const padding = Math.max(0, Math.floor((width - text.length) / 2));
+    centerText(text, width = null) {
+        const w = width || this.printerWidth || 32;
+        const padding = Math.max(0, Math.floor((w - text.length) / 2));
         return ' '.repeat(padding) + text;
     },
 
-    rightAlign(left, right, width = 32) {
-        return this.mkline(left, right, width);
+    rightAlign(left, right, width = null) {
+        return this.mkline(left, right, width || this.printerWidth || 32);
     },
 
-    line(char = '-', width = 32) {
-        return char.repeat(width);
+    line(char = '-', width = null) {
+        const w = width || this.printerWidth || 32;
+        return char.repeat(w);
     },
 
     // ==================== IMPRESIÓN DE TICKETS ====================
@@ -1177,15 +1181,22 @@ const Printer = {
                 }
             });
             
+            const widthMm = parseInt(settingsMap.printer_width || settingsMap.ticket_width_mm) || 80;
+            const charWidth = widthMm === 80 ? 48 : 32;
+
             const normalizedSettings = {
                 business_name: settingsMap.business_name || 'OPAL & CO',
                 business_phone: settingsMap.business_phone || '',
                 business_address: settingsMap.business_address || '',
-                ticket_footer: settingsMap.ticket_footer || 'Gracias por su compra',
+                business_rfc: settingsMap.business_rfc || '',
+                ticket_footer: settingsMap.ticket_footer || 'Gracias por su preferencia',
                 ticket_format: settingsMap.ticket_format || 'standard',
                 ticket_copies: parseInt(settingsMap.ticket_copies) || 1,
                 paper_cut: settingsMap.paper_cut || 'full',
                 feed_lines: parseInt(settingsMap.feed_lines) || 3,
+                ticket_width_mm: widthMm,
+                printer_char_width: charWidth,
+                printer_model: settingsMap.printer_model || 'POS-8360',
                 print_logo: settingsMap.print_logo !== false && settingsMap.print_logo !== 'false',
                 print_barcode: settingsMap.print_barcode === true || settingsMap.print_barcode === 'true',
                 print_qr: settingsMap.print_qr === true || settingsMap.print_qr === 'true',
@@ -1193,12 +1204,15 @@ const Printer = {
                 print_footer: settingsMap.print_footer !== false && settingsMap.print_footer !== 'false',
                 print_duplicate: settingsMap.print_duplicate === true || settingsMap.print_duplicate === 'true'
             };
-            
+
+            // CRITICO: aplicar el ancho a Printer.printerWidth para que mkline/line/etc lo usen
+            this.printerWidth = charWidth;
+
             // Actualizar cache
             localStorage.setItem('printer_settings', JSON.stringify(normalizedSettings));
             localStorage.setItem('printer_settings_timestamp', new Date().toISOString());
-            
-            console.log('📋 Configuración obtenida de BD:', normalizedSettings);
+
+            console.log(`📋 Configuración obtenida de BD (ancho ${widthMm}mm = ${charWidth} chars):`, normalizedSettings);
             return normalizedSettings;
         } catch (e) {
             console.error('Error obteniendo configuración:', e);
@@ -1218,15 +1232,23 @@ const Printer = {
     
     // Normalizar settings (convertir tipos correctamente)
     normalizeSettings(settingsMap) {
+        const widthMm = parseInt(settingsMap.printer_width || settingsMap.ticket_width_mm) || 80;
+        const charWidth = widthMm === 80 ? 48 : 32;
+        // Aplicar a Printer.printerWidth para que helpers lo usen
+        this.printerWidth = charWidth;
         return {
             business_name: settingsMap.business_name || 'OPAL & CO',
             business_phone: settingsMap.business_phone || '',
             business_address: settingsMap.business_address || '',
-            ticket_footer: settingsMap.ticket_footer || 'Gracias por su compra',
+            business_rfc: settingsMap.business_rfc || '',
+            ticket_footer: settingsMap.ticket_footer || 'Gracias por su preferencia',
             ticket_format: settingsMap.ticket_format || 'standard',
             ticket_copies: parseInt(settingsMap.ticket_copies) || 1,
             paper_cut: settingsMap.paper_cut || 'full',
             feed_lines: parseInt(settingsMap.feed_lines) || 3,
+            ticket_width_mm: widthMm,
+            printer_char_width: charWidth,
+            printer_model: settingsMap.printer_model || 'POS-8360',
             print_logo: settingsMap.print_logo !== false && settingsMap.print_logo !== 'false',
             print_barcode: settingsMap.print_barcode === true || settingsMap.print_barcode === 'true',
             print_qr: settingsMap.print_qr === true || settingsMap.print_qr === 'true',
