@@ -3861,6 +3861,85 @@ const Settings = {
     },
 
     async previewTicket() {
+        // Generar el ticket usando EL MISMO template real que se usa al imprimir.
+        // Asi el usuario ve EXACTAMENTE lo que se va a mandar a la impresora,
+        // y puede detectar bugs de formato antes de gastar papel.
+        if (typeof Printer !== 'undefined' && Printer.buildTicketHTML) {
+            try {
+                const printerWidth = parseInt(document.getElementById('setting-printer-width')?.value || '80');
+                const settings = {
+                    business_name: document.getElementById('setting-business-name')?.value || 'OPAL & CO',
+                    business_phone: document.getElementById('setting-business-phone')?.value || '',
+                    business_address: document.getElementById('setting-business-address')?.value || '',
+                    business_rfc: document.getElementById('setting-business-rfc')?.value || '',
+                    ticket_footer: document.getElementById('setting-ticket-footer')?.value || 'Gracias por su preferencia',
+                    ticket_format: document.getElementById('setting-ticket-format')?.value || 'standard',
+                    print_footer: document.getElementById('setting-print-footer')?.checked !== false,
+                    ticket_width_mm: printerWidth
+                };
+                const testSale = {
+                    id: 'preview',
+                    folio: 'LVA-' + new Date().toISOString().slice(0,10).replace(/-/g,'') + '-PREV',
+                    subtotal: 20800,
+                    total: 20800,
+                    discount: 0,
+                    created_at: new Date().toISOString()
+                };
+                const testItems = [
+                    { name: 'ARETES CLIP', quantity: 1, unit_price: 17330, subtotal: 17330 },
+                    { name: 'DIJE PLATA G', quantity: 1, unit_price: 120, subtotal: 120 },
+                    { name: 'ESCLAVA PETATILLO', quantity: 1, unit_price: 3350, subtotal: 3350 }
+                ];
+                const testPayments = [{ method_id: 'CASH_MXN', amount: 20800, currency: 'MXN' }];
+                const testBranch = { name: 'L Vallarta' };
+                const testSeller = { name: 'PACO' };
+                const html = Printer.buildTicketHTML(testSale, testItems, testPayments, testBranch, testSeller, null, null, settings);
+
+                // Mostrar el HTML real en un iframe dentro del modal para que se vea identico al impreso
+                const modalBody = `
+                    <div style="text-align:center; margin-bottom: var(--spacing-md); font-size: 12px; color: var(--color-text-secondary);">
+                        Esta es exactamente la salida que va a la impresora cuando hace una venta.
+                        Si aqui se ve bien pero al imprimir sale mal, el problema es el driver/Chrome.
+                    </div>
+                    <div style="display: flex; justify-content: center;">
+                        <iframe id="ticket-preview-iframe" style="width: ${printerWidth + 4}mm; min-height: 500px; border: 1px solid #999; background: white; box-shadow: 0 4px 12px rgba(0,0,0,0.15);"></iframe>
+                    </div>
+                    <div style="margin-top: var(--spacing-md); padding: var(--spacing-sm); background: var(--color-bg-secondary); border-radius: var(--radius-sm); font-size: 11px;">
+                        <strong>Versión cargada:</strong> ${(document.querySelector('script[src*="printer.js"]')?.src || '').split('?v=')[1] || 'desconocida'}<br>
+                        <strong>Ancho papel:</strong> ${printerWidth}mm (${printerWidth === 80 ? 48 : 32} caracteres en ESC/POS)<br>
+                        <strong>Impresora conectada:</strong> ${typeof Printer !== 'undefined' && Printer.connected ? 'Sí (ESC/POS directo)' : 'No (HTML→Chrome→Driver)'}
+                    </div>
+                `;
+                UI.showModal('Vista Previa del Ticket Real', modalBody, [
+                    { text: 'Cerrar', class: 'btn-primary', onclick: () => UI.closeModal() },
+                    { text: 'Imprimir esta vista', class: 'btn-secondary', onclick: () => {
+                        const iframe = document.getElementById('ticket-preview-iframe');
+                        if (iframe) {
+                            iframe.contentWindow.focus();
+                            iframe.contentWindow.print();
+                        }
+                    }}
+                ]);
+
+                // Cargar el HTML en el iframe despues de que el modal este en el DOM
+                setTimeout(() => {
+                    const iframe = document.getElementById('ticket-preview-iframe');
+                    if (iframe) {
+                        const doc = iframe.contentWindow.document;
+                        doc.open();
+                        doc.write(html);
+                        doc.close();
+                    }
+                }, 50);
+                return;
+            } catch (e) {
+                console.error('Error generando preview real:', e);
+                Utils.showNotification('Error generando vista previa: ' + e.message, 'error');
+                return;
+            }
+        }
+
+        // Fallback al preview viejo si Printer no esta disponible
         const businessName = document.getElementById('setting-business-name')?.value || 'OPAL & CO';
         const businessPhone = document.getElementById('setting-business-phone')?.value || '';
         const businessAddress = document.getElementById('setting-business-address')?.value || '';
