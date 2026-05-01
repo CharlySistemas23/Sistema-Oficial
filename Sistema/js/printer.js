@@ -1031,13 +1031,12 @@ const Printer = {
         const footerMessage = settings.ticket_footer || 'Gracias por su preferencia';
         const ticketFormat = settings.ticket_format || 'standard';
         const printFooter = settings.print_footer !== false;
-        // Forzamos ticketWidth = 80 por defecto. Si el usuario tiene 58 guardado
-        // antiguo, lo respetamos. Pero la mayoria de POS modernos son 80mm.
+        // Ticket width: 80mm es el estandar de POS-8360 y termicas modernas.
         const ticketWidth = parseInt(settings.ticket_width_mm) || parseInt(settings.printer_width) || 80;
-        // Chars por linea: calibrado para que el texto LLENE todo el papel.
-        // 80mm con padding 1mm cada lado = 78mm, Courier New 11pt ~ 2.05mm/char ≈ 38 chars
-        // Si bumpeamos a 46 chars el texto se aprieta pero ocupa todo el ancho
-        const W = ticketWidth >= 80 ? 46 : 32;
+        // Chars por linea calibrados para impresora termica 80mm con driver
+        // POS instalado correctamente. El area imprimible real de POS-8360
+        // es 72mm (de 80mm fisicos). Con Courier New 12pt ~1.8mm/char ≈ 40 chars.
+        const W = ticketWidth >= 80 ? 40 : 32;
 
         const d = new Date(sale.created_at);
         const dateStr = d.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -1213,9 +1212,10 @@ const Printer = {
         html, body { background: #fff; color: #000; }
         body {
             font-family: 'Courier New', 'Consolas', 'Lucida Console', monospace;
-            font-size: 11pt;
-            line-height: 1.18;
-            padding: 1mm;
+            font-size: 12pt;
+            line-height: 1.2;
+            padding: 0;
+            margin: 0;
             width: ${ticketWidth}mm;
             font-weight: 700;
         }
@@ -1226,14 +1226,14 @@ const Printer = {
             font-weight: inherit;
             white-space: pre;
             margin: 0;
-            padding: 0;
+            padding: 1mm 2mm;
             color: #000;
-            letter-spacing: -0.3px; /* ligeramente apretado para que mas chars quepan */
+            letter-spacing: 0;
         }
         .big {
-            font-size: 15pt;
+            font-size: 16pt;
             font-weight: 900;
-            letter-spacing: 0;
+            letter-spacing: 1px;
         }
         .b {
             font-weight: 900;
