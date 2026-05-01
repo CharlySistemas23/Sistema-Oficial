@@ -1168,11 +1168,21 @@ const Printer = {
             content += escapeHtml(center('para cualquier aclaracion')) + '\n';
         }
 
-        // Espacio final extra-generoso (3 parrafos) para que:
+        // Espacio final extra-generoso para que:
         //  1) La cortadora no agarre texto del footer al cortar
-        //  2) El driver de la termica detecte fin de pagina y dispare auto-corte
-        // Cada \n equivale a una linea de papel termico (~3mm)
-        content += '\n\n\n\n\n\n\n\n\n\n\n\n';
+        //  2) El driver de la termica detecte fin de pagina y avance papel
+        //
+        // IMPORTANTE: usamos lineas con un caracter invisible (NBSP o punto)
+        // en lugar de \n puros, porque algunos drivers de Windows (incluido
+        // el "Generic/Text Only") OPTIMIZAN y borran lineas que estan
+        // completamente en blanco al final del documento.
+        //
+        // Cada linea con NBSP fuerza al driver a enviar un line-feed real
+        // a la impresora, lo que hace avanzar el papel ~3mm por linea.
+        const NBSP = ' '; // espacio no separable
+        for (let i = 0; i < 14; i++) {
+            content += NBSP + '\n'; // 14 lineas = ~42mm de avance
+        }
 
         // <pre> con texto monospace pre-formateado: indestructible por driver.
         // El driver de Windows puede ignorar CSS layout, pero no puede romper
