@@ -206,9 +206,81 @@ const Printer = {
         if (!this.connected || !this.writer) {
             throw new Error('Impresora no conectada');
         }
-        
+
         const uint8 = new Uint8Array(data);
+        // Esperar a que el writer este listo (drain del buffer previo)
+        // antes de escribir el siguiente chunk. Esto evita que comandos
+        // criticos como CUT lleguen antes de que el contenido se imprima.
+        if (this.writer.ready) {
+            await this.writer.ready;
+        }
         await this.writer.write(uint8);
+    },
+
+    /**
+     * Espera a que el buffer del writer se vacie completamente.
+     * Critico antes del comando CUT — sin esto, el corte puede llegar
+     * antes que los ultimos bytes del contenido a la impresora.
+     */
+    async flush() {
+        if (!this.writer) return;
+        try {
+            // writer.ready promete cuando el chunk anterior se procesa
+            if (this.writer.ready) await this.writer.ready;
+        } catch (e) {
+            console.warn('Error esperando writer.ready:', e);
+        }
+    },
+
+    /**
+     * Sleep helper. Para dar tiempo a que el motor de la impresora avance
+     * el papel antes de ejecutar el corte. Sin esto, el cortador puede
+     * activarse mientras el papel todavia esta avanzando = corte fallido.
+     */
+    async sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    },
+
+    /**
+     * Comando de corte robusto. Combina:
+     *  1. Flush del buffer
+     *  2. Feed de varias lineas (mover papel hasta la cuchilla)
+     *  3. Sleep para dar tiempo al motor
+     *  4. Comando CUT (multiple variantes para maximo compatibilidad)
+     *
+     * Esto resuelve el problema de POS-8360 donde el CUT solo no se ejecutaba.
+     */
+    async cutPaper() {
+        try {
+            // 1. Asegurar que todo el contenido previo se haya escrito
+            await this.flush();
+
+            // 2. Feed: avanzar 6 lineas para que el footer pase la cuchilla.
+            //    La cuchilla esta ~10-15mm arriba del print head en POS-8360.
+            //    6 lineas a 3mm/linea = 18mm, suficiente para librar la cuchilla.
+            await this.write([0x1B, 0x64, 0x06]); // ESC d 6 - feed 6 lines
+            await this.flush();
+
+            // 3. Esperar 250ms para que el motor termine de avanzar fisicamente.
+            //    Sin este delay, el CUT se manda mientras el papel todavia
+            //    esta moviendose y la cuchilla falla.
+            await this.sleep(250);
+
+            // 4. Comando de corte completo. Usar GS V con argumento m=0 (full cut).
+            //    Es el comando ESC/POS estandar mas compatible con POS-8360.
+            await this.write([0x1D, 0x56, 0x00]); // GS V 0 - Full cut
+
+            // Variante alternativa por si la primera no funciona en algunos modelos
+            // GS V m con feed: avanza n lineas y corta
+            await this.flush();
+            await this.sleep(50);
+            await this.write([0x1D, 0x56, 0x42, 0x00]); // GS V B 0 - Cut with no feed (some printers)
+
+            await this.flush();
+            console.log('✂️ Comando de corte enviado a la impresora');
+        } catch (e) {
+            console.error('Error ejecutando corte:', e);
+        }
     },
 
     async writeText(text, useBold = true) {
@@ -493,16 +565,25 @@ const Printer = {
                 await this.printTicketContent(savedSale, itemsWithNames, payments, branch, seller, guide, agency, settings, ticketFormat, businessName, businessPhone, businessAddress, footerMessage, printFooter);
             }
             
-            // Aplicar corte según configuración
+            // Aplicar corte segun configuracion.
+            // CRITICO: el orden correcto es FEED + DELAY + CUT.
+            // Si solo mandamos CUT, el cortador se activa mientras el papel
+            // todavia esta moviendose y/o antes que llegue el footer = corte fallido.
             if (paperCut === 'full') {
-                await this.sendCommand(this.commands.CUT); // GS V 0 - Corte completo
+                await this.cutPaper(); // metodo robusto: flush + feed + delay + cut
             } else if (paperCut === 'partial') {
-                await this.sendCommand([0x1D, 0x56, 0x01]); // GS V 1 - Corte parcial
+                await this.flush();
+                await this.write([0x1B, 0x64, 0x06]); // feed 6 lineas
+                await this.flush();
+                await this.sleep(250);
+                await this.write([0x1D, 0x56, 0x01]); // GS V 1 - corte parcial
+                await this.flush();
             }
-            
-            // Avanzar líneas después del corte
-            if (feedLines > 0) {
-                await this.sendCommand([0x1B, 0x64, feedLines]); // ESC d n
+
+            // feedLines despues del corte ya no aplica — el cutPaper hace su propio feed.
+            // Si el usuario configuro feed_lines extra, lo respetamos.
+            if (feedLines > 0 && paperCut !== 'full' && paperCut !== 'partial') {
+                await this.sendCommand([0x1B, 0x64, feedLines]);
             }
 
             Utils.showNotification(`✅ Ticket impreso (${ticketCopies} copia${ticketCopies > 1 ? 's' : ''})`, 'success');
@@ -1163,8 +1244,8 @@ const Printer = {
             await this.writeText('Costo: ' + this.formatMoney(repair.cost) + '\n');
             await this.writeText(this.line('-') + '\n');
             await this.writeText('Descripcion:\n' + (repair.description || '').substring(0, 100) + '\n');
-            await this.sendCommand(this.commands.FEED);
-            await this.sendCommand(this.commands.CUT);
+            // Corte robusto: flush + feed + delay + cut (en vez de solo CUT)
+            await this.cutPaper();
             Utils.showNotification('Ticket impreso', 'success');
             return true;
         }
@@ -1401,10 +1482,10 @@ const Printer = {
                 await this.sendCommand(this.commands.ALIGN_CENTER); // ESC a 1
                 await this.writeText('GRACIAS POR SU COMPRA\r\n', true);
                 await this.writeText(testDate + '\r\n\r\n', true);
-                
-                // Corte
-                await this.sendCommand(this.commands.CUT); // GS V 0
-                
+
+                // Corte robusto: flush + feed + delay + cut
+                await this.cutPaper();
+
                 Utils.showNotification('Prueba de impresión enviada', 'success');
             } catch (e) {
                 console.error('Error en prueba de impresión:', e);
