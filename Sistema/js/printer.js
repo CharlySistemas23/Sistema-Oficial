@@ -979,12 +979,18 @@ const Printer = {
         };
         const sepDash = () => '-'.repeat(W);
         const sepEq = () => '='.repeat(W);
+        const sepDot = () => '.'.repeat(W);
+        const blank = () => ' '.repeat(W);
 
         // ==================== CONSTRUIR EL CONTENIDO ====================
         let content = '';
 
-        // Header
-        content += escapeHtml(center(businessName.toUpperCase())) + '\n';
+        // Espacio inicial para que la cortadora no agarre el header del ticket anterior
+        content += '\n\n';
+
+        // Header — OPAL & CO destacado en grande
+        content += `<span class="big">${escapeHtml(center(businessName.toUpperCase()))}</span>` + '\n';
+        content += '\n';
         content += escapeHtml(center('- ' + (branch?.name || 'TIENDA').toUpperCase() + ' -')) + '\n';
         if (businessAddress) content += escapeHtml(center(businessAddress)) + '\n';
         if (businessPhone) content += escapeHtml(center('Tel: ' + businessPhone)) + '\n';
@@ -1004,6 +1010,7 @@ const Printer = {
         }
 
         content += sepDash() + '\n';
+        content += '\n';
 
         // Items
         items.forEach(item => {
@@ -1011,13 +1018,14 @@ const Printer = {
             const qty = item.quantity || 1;
             const unitPrice = parseFloat(item.unit_price ?? item.price) || 0;
             const subtotal = parseFloat(item.subtotal) || (qty * unitPrice);
-            content += escapeHtml(itemName) + '\n';
+            content += `<span class="b">${escapeHtml(itemName)}</span>` + '\n';
             content += line('  ' + qty + ' x ' + this.formatMoney(unitPrice), this.formatMoney(subtotal)) + '\n';
             if (item.discount > 0) {
                 content += escapeHtml('  Descuento: ' + item.discount + '%') + '\n';
             }
         });
 
+        content += '\n';
         content += sepDash() + '\n';
 
         // Totales
@@ -1025,6 +1033,7 @@ const Printer = {
         content += line('Subtotal:', subtotalFmt) + '\n';
         if (sale.discount > 0) content += line('Descuento:', '-' + this.formatMoney(sale.discount)) + '\n';
         if (sale.tax > 0) content += line('IVA:', this.formatMoney(sale.tax)) + '\n';
+        content += '\n';
 
         // Total destacado
         content += sepEq() + '\n';
@@ -1033,7 +1042,8 @@ const Printer = {
 
         // Pagos
         if (payments.length > 0) {
-            content += escapeHtml('FORMA DE PAGO') + '\n';
+            content += '\n';
+            content += `<span class="b">${escapeHtml('FORMA DE PAGO')}</span>` + '\n';
             payments.forEach(p => {
                 const methodName = this.getPaymentMethodName(p.method_id);
                 const amt = this.formatMoney(p.amount, p.currency);
@@ -1047,15 +1057,18 @@ const Printer = {
 
         // Footer
         if (printFooter) {
-            content += sepEq() + '\n';
-            content += escapeHtml(center(footerMessage.toUpperCase())) + '\n';
+            content += '\n';
+            content += sepDash() + '\n';
+            content += '\n';
+            content += `<span class="b">${escapeHtml(center(footerMessage.toUpperCase()))}</span>` + '\n';
             content += escapeHtml(center('- ' + businessName + ' -')) + '\n';
             content += '\n';
-            content += escapeHtml(center('Conserve este ticket para')) + '\n';
-            content += escapeHtml(center('cualquier aclaracion')) + '\n';
+            content += escapeHtml(center('Conserve este ticket')) + '\n';
+            content += escapeHtml(center('para cualquier aclaracion')) + '\n';
         }
 
-        content += '\n\n\n'; // espacio para corte
+        // Espacio final generoso para que la cortadora no agarre texto
+        content += '\n\n\n\n\n';
 
         // <pre> con texto monospace pre-formateado: indestructible por driver.
         // El driver de Windows puede ignorar CSS layout, pero no puede romper
@@ -1078,7 +1091,7 @@ const Printer = {
         body {
             font-family: 'Courier New', 'Consolas', 'Lucida Console', monospace;
             font-size: 10pt;
-            line-height: 1.15;
+            line-height: 1.2;
             padding: 2mm;
             width: ${ticketWidth}mm;
             font-weight: 700;
@@ -1096,6 +1109,10 @@ const Printer = {
         }
         .big {
             font-size: 14pt;
+            font-weight: 900;
+            letter-spacing: 1px;
+        }
+        .b {
             font-weight: 900;
         }
     </style>
