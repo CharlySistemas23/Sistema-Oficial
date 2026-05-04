@@ -2360,19 +2360,51 @@ Object.assign(POS, {
             if (folioEl) folioEl.textContent = `Folio: ${sale.folio}`;
             if (totalEl) totalEl.textContent = Utils.formatCurrency(sale.total);
             overlay.style.display = 'flex';
+
+            // Click en el fondo (fuera del contenido) cierra el overlay.
+            // Sin esto, si los botones fallan, el overlay queda bloqueando la UI.
+            const onBackdropClick = (e) => {
+                if (e.target === overlay) {
+                    this.closeSuccessOverlay();
+                    overlay.removeEventListener('click', onBackdropClick);
+                }
+            };
+            overlay.addEventListener('click', onBackdropClick);
+
+            // Auto-cerrar despues de 3 segundos para que no bloquee la siguiente
+            // venta. El usuario sigue viendo la confirmacion, pero el cajero
+            // puede empezar a cobrar al siguiente cliente sin esperar/clickear.
+            if (this._successOverlayTimeout) clearTimeout(this._successOverlayTimeout);
+            this._successOverlayTimeout = setTimeout(() => {
+                this.closeSuccessOverlay();
+            }, 3000);
         }
     },
 
     closeSuccessOverlay() {
         const overlay = document.getElementById('pos-success-overlay');
         if (overlay) overlay.style.display = 'none';
+        if (this._successOverlayTimeout) {
+            clearTimeout(this._successOverlayTimeout);
+            this._successOverlayTimeout = null;
+        }
     },
 
     async printLastTicket() {
-        if (this.lastSale) {
-            await Printer.printTicket(this.lastSale);
+        // try/finally garantiza que el overlay siempre se cierra,
+        // incluso si la impresion falla. Antes: si Printer.printTicket
+        // throweaba, closeSuccessOverlay() nunca corria y el overlay
+        // quedaba bloqueando la UI hasta refresh.
+        try {
+            if (this.lastSale) {
+                await Printer.printTicket(this.lastSale);
+            }
+        } catch (e) {
+            console.error('Error imprimiendo ticket:', e);
+            Utils.showNotification('Error al imprimir: ' + e.message, 'error');
+        } finally {
+            this.closeSuccessOverlay();
         }
-        this.closeSuccessOverlay();
     },
 
     // ==================== BORRADOR Y APARTAR ====================
