@@ -238,58 +238,56 @@ router.post('/', requireBranchAccess, async (req, res) => {
       });
     }
 
-    // Crear venta con reintento automático si hay colisión de folio (unique_violation 23505).
-    // Usamos SAVEPOINT para poder reintentar sin abortar la transacción completa.
-    let folioCandidate = folio || `SALE-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+    // Folio atómico via SEQUENCE PostgreSQL (migración 001-add-sales-folio-sequence.sql).
+    // Si el body trae folio (ej. desde sync offline), lo respetamos; si choca por
+    // unique_violation 23505 hacemos UN solo retry generando atómicamente desde la
+    // secuencia. Imposible volver a colisionar — la secuencia es atómica por contrato.
+    const branchCodeRow = await client.query(
+      'SELECT code FROM branches WHERE id = $1',
+      [finalBranchId]
+    );
+    const branchCode = branchCodeRow.rows[0]?.code || null;
+
+    const generateAtomicFolio = async () => {
+      const r = await client.query('SELECT next_sale_folio($1) AS folio', [branchCode]);
+      return r.rows[0].folio;
+    };
+
+    let folioCandidate = folio || (await generateAtomicFolio());
     let saleResult;
-    const maxFolioAttempts = 5;
-    for (let attempt = 1; attempt <= maxFolioAttempts; attempt++) {
-      await client.query('SAVEPOINT sp_insert_sale');
-      try {
-        saleResult = await client.query(
-          `INSERT INTO sales (
-            folio, branch_id, seller_id, guide_id, agency_id, customer_id,
-            subtotal, discount_percent, discount_amount, total, status, created_by
-          )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-          RETURNING *`,
-          [
-            folioCandidate,
-            finalBranchId,
-            seller_id,
-            guide_id,
-            agency_id,
-            customer_id,
-            subtotal,
-            discount_percent,
-            discount_amount,
-            total,
-            'completed',
-            req.user.id
-          ]
-        );
-        await client.query('RELEASE SAVEPOINT sp_insert_sale');
-        break;
-      } catch (insertErr) {
-        await client.query('ROLLBACK TO SAVEPOINT sp_insert_sale');
-        const isFolioCollision = insertErr && insertErr.code === '23505' &&
-          (insertErr.constraint === 'sales_folio_key' ||
-           /sales.*folio/i.test(insertErr.detail || '') ||
-           /sales.*folio/i.test(insertErr.message || ''));
-        if (!isFolioCollision || attempt === maxFolioAttempts) {
-          throw insertErr;
-        }
-        logSaleOperation('folio_collision_retry', {
-          branchId: finalBranchId,
-          userId: req.user.id,
-          collidingFolio: folioCandidate,
-          attempt
-        });
-        // Regenerar folio preservando la base (rama previa a "-R") y añadiendo sufijo único.
-        const base = String(folioCandidate).split('-R')[0];
-        const suffix = `R${attempt}${Math.random().toString(36).slice(2, 8)}`;
-        folioCandidate = `${base}-${suffix}`;
+    const insertSale = async () => client.query(
+      `INSERT INTO sales (
+        folio, branch_id, seller_id, guide_id, agency_id, customer_id,
+        subtotal, discount_percent, discount_amount, total, status, created_by
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      RETURNING *`,
+      [
+        folioCandidate, finalBranchId, seller_id, guide_id, agency_id, customer_id,
+        subtotal, discount_percent, discount_amount, total, 'completed', req.user.id
+      ]
+    );
+
+    await client.query('SAVEPOINT sp_insert_sale');
+    try {
+      saleResult = await insertSale();
+      await client.query('RELEASE SAVEPOINT sp_insert_sale');
+    } catch (insertErr) {
+      await client.query('ROLLBACK TO SAVEPOINT sp_insert_sale');
+      const isFolioCollision = insertErr && insertErr.code === '23505' &&
+        (insertErr.constraint === 'sales_folio_key' ||
+         /sales.*folio/i.test(insertErr.detail || '') ||
+         /sales.*folio/i.test(insertErr.message || ''));
+      if (!isFolioCollision) {
+        throw insertErr;
       }
+      logSaleOperation('folio_collision_retry', {
+        branchId: finalBranchId, userId: req.user.id,
+        collidingFolio: folioCandidate, source: 'client_provided'
+      });
+      // Único retry: regenerar atómico (imposible volver a colisionar).
+      folioCandidate = await generateAtomicFolio();
+      saleResult = await insertSale();
     }
 
     const sale = saleResult.rows[0];
