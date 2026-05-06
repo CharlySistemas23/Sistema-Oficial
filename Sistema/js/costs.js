@@ -4223,16 +4223,59 @@ const Costs = {
                 UserManager.currentUser?.is_master_admin
             );
 
+            const recurring = document.getElementById('cost-recurring')?.checked || false;
+            const selectedBranchInDropdown = document.getElementById('cost-branch')?.value || null;
+            const category = document.getElementById('cost-category').value;
+            const amount = parseFloat(document.getElementById('cost-amount').value);
+            const period_type = document.getElementById('cost-period-type')?.value || null;
+
+            // Resolver branch_id final
+            const finalBranchId = isMasterAdmin
+                ? (selectedBranchInDropdown || currentBranchId)
+                : currentBranchId;
+
+            // VALIDACIÓN: para master_admin creando costo recurrente, REQUERIR
+            // selección explícita de sucursal en dropdown. El bug previo era que
+            // si no seleccionaba, todas iban a la sucursal actual. Eso causó 13
+            // duplicados de "linea_amarilla" $10K asignados a 1 sola sucursal
+            // cuando debían ser 4 sucursales distintas — overhead de $130K.
+            if (!costId && recurring && isMasterAdmin && !selectedBranchInDropdown) {
+                Utils.showNotification(
+                    'Selecciona una sucursal en el dropdown. Para costos por todas las sucursales, créalos uno por uno con la sucursal correcta.',
+                    'error'
+                );
+                return;
+            }
+
+            // VALIDACIÓN: detectar duplicado de plantilla recurrente antes de guardar.
+            // Evita crear 2 plantillas con misma (branch_id, category, amount, period_type, recurring=true).
+            if (!costId && recurring) {
+                const existing = (await DB.getAll('cost_entries') || []).find(c =>
+                    c.recurring === true &&
+                    c.category === category &&
+                    String(c.branch_id || '').toLowerCase() === String(finalBranchId || '').toLowerCase() &&
+                    Number(c.amount) === amount &&
+                    c.period_type === period_type
+                );
+                if (existing) {
+                    Utils.showNotification(
+                        `Ya existe una plantilla recurrente igual (${category} $${amount} ${period_type}). Edítala en lugar de crear otra.`,
+                        'error'
+                    );
+                    return;
+                }
+            }
+
             const costData = {
                 type: document.getElementById('cost-type').value,
-                category: document.getElementById('cost-category').value,
-                amount: parseFloat(document.getElementById('cost-amount').value),
+                category,
+                amount,
                 date: document.getElementById('cost-date').value,
                 notes: document.getElementById('cost-notes').value.trim() || null,
                 supplier_id: document.getElementById('cost-supplier')?.value || null,
-                branch_id: isMasterAdmin ? (document.getElementById('cost-branch')?.value || currentBranchId) : currentBranchId,
-                recurring: document.getElementById('cost-recurring')?.checked || false,
-                period_type: document.getElementById('cost-period-type')?.value || null,
+                branch_id: finalBranchId,
+                recurring,
+                period_type,
                 auto_generate: document.getElementById('cost-auto-generate')?.checked || false
             };
 
