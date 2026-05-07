@@ -1825,10 +1825,21 @@ Object.assign(POS, {
             return;
         }
 
-        // Evitar llamadas múltiples simultáneas
+        // Evitar llamadas múltiples simultáneas — pero si el flag lleva
+        // más de 60s en true, asumimos que la llamada anterior se quedó
+        // colgada (timeout de red, error sin catch, etc) y desbloqueamos.
         if (this.isProcessingSale) {
-            console.log('Venta ya en proceso, ignorando llamada duplicada');
-            return;
+            const stuckSince = this._isProcessingSaleStartedAt || 0;
+            const elapsed = Date.now() - stuckSince;
+            if (elapsed > 60000) {
+                console.warn(`[POS] isProcessingSale lleva ${elapsed}ms colgado, desbloqueando`);
+                this.isProcessingSale = false;
+                this._isProcessingSaleStartedAt = 0;
+            } else {
+                console.log('Venta ya en proceso, ignorando llamada duplicada');
+                Utils.showNotification('Venta en proceso. Si esto se queda colgado, recarga la página (F5).', 'warning');
+                return;
+            }
         }
 
         if (this.cart.length === 0) {
@@ -1837,6 +1848,19 @@ Object.assign(POS, {
         }
 
         this.isProcessingSale = true;
+        this._isProcessingSaleStartedAt = Date.now();
+
+        // Watchdog: si la venta dura más de 90s, resetea el flag aunque
+        // el await siga colgado. Evita que el cajero quede atascado.
+        const _watchdog = setTimeout(() => {
+            if (this.isProcessingSale) {
+                console.error('[POS] watchdog: venta duró >90s, forzando reset del flag');
+                this.isProcessingSale = false;
+                this._isProcessingSaleStartedAt = 0;
+                Utils.showNotification('La venta tardó demasiado. Verifica si quedó registrada antes de reintentar.', 'error');
+            }
+        }, 90000);
+        this._saleWatchdog = _watchdog;
         
         try {
             // Validar pagos
@@ -2239,6 +2263,11 @@ Object.assign(POS, {
             this.isProcessingSale = false;
         } finally {
             this.isProcessingSale = false;
+            this._isProcessingSaleStartedAt = 0;
+            if (this._saleWatchdog) {
+                clearTimeout(this._saleWatchdog);
+                this._saleWatchdog = null;
+            }
         }
     },
 
