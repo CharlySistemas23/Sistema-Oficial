@@ -2187,6 +2187,18 @@ Object.assign(POS, {
         // Crear pagos
         await this.savePayments(sale.id);
 
+        // VENTA YA GUARDADA — liberar el flag inmediatamente para que el cajero
+        // pueda procesar la siguiente venta sin esperar a que termine la
+        // impresión / sync / actualización de UI. Antes: el flag quedaba en
+        // true durante 5-10s mientras printTicket esperaba a la impresora
+        // térmica, bloqueando ventas siguientes.
+        this.isProcessingSale = false;
+        this._isProcessingSaleStartedAt = 0;
+        if (this._saleWatchdog) {
+            clearTimeout(this._saleWatchdog);
+            this._saleWatchdog = null;
+        }
+
         // Actualizar historial del cliente si existe
         if (customerId && typeof Customers !== 'undefined') {
             try {
