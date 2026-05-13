@@ -14,20 +14,43 @@ const useSSL = process.env.DB_SSL === 'false'
     ? { rejectUnauthorized: false }
     : false;
 
-// Configuración de la conexión a PostgreSQL optimizada para Railway
+// Configuración de la conexión a PostgreSQL optimizada para Railway.
+// Defaults agresivos para reciclar sockets stale del NAT interno de Railway:
+// - idleTimeoutMillis 10s: si una conexión queda idle >10s, pg-pool la cierra
+//   antes de que el NAT la deje half-closed.
+// - maxUses 500: cada socket se recicla cada 500 queries para evitar acumular
+//   estado/leaks. Antes era 2000 y un pool de 20 quedaba 100% stale en ~90 min.
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: useSSL,
   max: parseInt(process.env.DB_POOL_MAX || '5', 10),
   min: parseInt(process.env.DB_POOL_MIN || '1', 10),
-  idleTimeoutMillis: parseInt(process.env.DB_IDLE_TIMEOUT_MS || '30000', 10),
+  idleTimeoutMillis: parseInt(process.env.DB_IDLE_TIMEOUT_MS || '10000', 10),
   connectionTimeoutMillis: parseInt(process.env.DB_CONNECT_TIMEOUT_MS || '20000', 10),
   keepAlive: true,
-  keepAliveInitialDelayMillis: 10000,
+  keepAliveInitialDelayMillis: 5000,
   statement_timeout: parseInt(process.env.DB_STATEMENT_TIMEOUT_MS || '60000', 10),
   query_timeout: parseInt(process.env.DB_QUERY_TIMEOUT_MS || '60000', 10),
-  maxUses: parseInt(process.env.DB_MAX_USES || '2000', 10),
+  maxUses: parseInt(process.env.DB_MAX_USES || '500', 10),
 });
+
+// Reaper periódico: cada 60s exige una conexión y hace SELECT 1.
+// Si la conexión está half-closed (TCP RST silencioso por NAT timeout), el
+// query fallará y pg-pool removerá el cliente. Esto previene que el pool
+// se llene de sockets fantasma que ya no responden. Sin esto, el primer
+// request real es el que descubre el socket muerto y eventualmente satura.
+const POOL_REAPER_MS = parseInt(process.env.DB_POOL_REAPER_MS || '60000', 10);
+const reaperInterval = setInterval(async () => {
+  try {
+    if (pool.totalCount === 0) return;
+    await pool.query('SELECT 1');
+  } catch (e) {
+    if (process.env.DEBUG_DB === 'true') {
+      console.warn('[DB reaper] sweep ping failed (esperado si socket muerto):', e.message);
+    }
+  }
+}, POOL_REAPER_MS);
+if (typeof reaperInterval.unref === 'function') reaperInterval.unref();
 
 const RETRY_BASE_MS = parseInt(process.env.DB_RETRY_BASE_MS || '600', 10);
 const RETRY_MAX_MS = parseInt(process.env.DB_RETRY_MAX_MS || '3000', 10);
