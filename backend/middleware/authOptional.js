@@ -2,8 +2,10 @@ import jwt from 'jsonwebtoken';
 import { query } from '../config/database.js';
 
 // ⚡ PERFORMANCE FIX: Cache usuario by token para evitar query BD en cada request
+// TTL bajado a 30s (antes 5min) — cambios de permisos se reflejaban demasiado tarde.
+// Usar invalidateUserCache(userId) tras UPDATE de permisos para invalidación inmediata.
 const userCache = new Map();
-const CACHE_TTL = parseInt(process.env.AUTH_OPTIONAL_CACHE_TTL_MS || '300000', 10); // 5 minutos por defecto
+const CACHE_TTL = parseInt(process.env.AUTH_OPTIONAL_CACHE_TTL_MS || '30000', 10);
 
 const getCachedUser = (token) => {
   const entry = userCache.get(token);
@@ -17,6 +19,20 @@ const getCachedUser = (token) => {
 
 const setCachedUser = (token, user) => {
   userCache.set(token, { user, timestamp: Date.now() });
+};
+
+// Invalida el cache para un usuario. Llamar tras cambios de permisos/role/active.
+export const invalidateUserCache = (userId) => {
+  if (userId == null) return 0;
+  const target = String(userId);
+  let removed = 0;
+  for (const [token, entry] of userCache.entries()) {
+    if (entry?.user && String(entry.user.id) === target) {
+      userCache.delete(token);
+      removed++;
+    }
+  }
+  return removed;
 };
 
 // Normalizar UUID a minúsculas para comparaciones consistentes (BD vs headers/query)

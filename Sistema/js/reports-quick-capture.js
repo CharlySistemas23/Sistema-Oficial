@@ -10795,11 +10795,11 @@ const ReportsQuickCapture = {
                     return false;
                 }
                 
-                // Remover listeners anteriores si existen (evitar duplicados)
-                if (API.socket.hasListeners && API.socket.hasListeners('archived_report_created')) {
-                    API.socket.off('archived_report_created');
-                    API.socket.off('archived_report_updated');
-                }
+                // Remover listeners anteriores SIEMPRE (evita memory leak en reconexión).
+                // hasListeners() puede dar falsos negativos en algunas versiones de socket.io.
+                API.socket.off('archived_report_created');
+                API.socket.off('archived_report_updated');
+                API.socket.off('archived_report_deleted');
                 
                 // Escuchar creación de reportes archivados
                 API.socket.on('archived_report_created', async (data) => {
@@ -11037,7 +11037,11 @@ const ReportsQuickCapture = {
                     API.socket.emit('join', `user:${currentUserId}`);
                     console.log(`✅ Usuario unido a sala user:${currentUserId} para reportes históricos`);
                 }
-                
+
+                // Remover listeners anteriores SIEMPRE (evita memory leak en reconexión)
+                API.socket.off('historical_report_created');
+                API.socket.off('historical_report_deleted');
+
                 // Escuchar creación de reportes históricos
                 API.socket.on('historical_report_created', async (data) => {
                     try {
