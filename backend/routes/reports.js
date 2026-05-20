@@ -375,6 +375,33 @@ router.post('/quick-captures', requireBranchAccess, async (req, res) => {
 
     const finalBranchId = branch_id || req.user.branchId;
 
+    // ANTI-DUPLICADO: idempotencia de 5 segundos.
+    // Si el mismo (branch_id, created_by, product, total, currency, date) llegó
+    // hace <5s, devolvemos la captura existente sin insertar otra.
+    // Causa: doble-tap móvil / handler registrado dos veces / reintento de sync.
+    // Las 4 dups halladas tenían Δ=127-363ms entre filas.
+    const dupCheck = await client.query(
+      `SELECT id FROM quick_captures
+       WHERE COALESCE(branch_id::text,'') = COALESCE($1::text,'')
+         AND created_by = $2
+         AND product = $3
+         AND total = $4
+         AND currency = $5
+         AND date = $6
+         AND created_at >= NOW() - INTERVAL '5 seconds'
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [finalBranchId, req.user.id, product, total, currency, date]
+    );
+    if (dupCheck.rows.length > 0) {
+      await safeRollback(client);
+      return res.status(409).json({
+        error: 'Captura duplicada (mismo producto/total/sucursal en últimos 5s). Refresca el reporte.',
+        existing_id: dupCheck.rows[0].id,
+        duplicate: true,
+      });
+    }
+
     if (guide_id && !isValidUUID(guide_id)) {
       console.warn(`⚠️ guide_id inválido ignorado (POST /quick-captures): "${guide_id}"`);
     }

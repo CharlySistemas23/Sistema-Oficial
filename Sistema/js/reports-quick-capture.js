@@ -2517,6 +2517,14 @@ const ReportsQuickCapture = {
     },
 
     async saveAllPendingCaptures() {
+        // ANTI-DUPLICADO: bloquear re-entrada.
+        // Doble-tap del botón "Guardar Todo" disparaba dos saveAllPendingCaptures
+        // en paralelo, mandando cada captura dos veces al backend.
+        if (this._savingAllPending) {
+            console.warn('⚠️ saveAllPendingCaptures ya en curso, ignorando segundo tap');
+            return;
+        }
+        this._savingAllPending = true;
         try {
             if (this.pendingCaptures.length === 0) {
                 Utils.showNotification('No hay capturas pendientes para guardar', 'warning');
@@ -2612,15 +2620,27 @@ const ReportsQuickCapture = {
                             serverSaved = true;
                             console.log('✅ Captura sincronizada con servidor');
                         } catch (apiError) {
-                            console.warn('⚠️ Error sincronizando con servidor (continuando con guardado local):', apiError.message);
-                            // Continuar con guardado local aunque falle el servidor
-                            // Agregar a cola de sincronización para intentar más tarde
-                            if (typeof SyncManager !== 'undefined') {
-                                try {
-                                    await SyncManager.addToQueue('quick_capture', savedCapture.id, 'create');
-                                    console.log('📤 Captura agregada a cola de sincronización');
-                                } catch (syncError) {
-                                    console.error('Error agregando a cola de sincronización:', syncError);
+                            // 409 = duplicado detectado por el backend (idempotencia 5s).
+                            // Tratamos como éxito: el servidor ya tiene la fila; no
+                            // re-encolamos sync para evitar bucles infinitos.
+                            if (apiError && apiError.status === 409 && apiError.details?.duplicate) {
+                                console.warn(`⚠️ Backend rechazó duplicado (existing_id=${apiError.details.existing_id}). Marcando como sincronizada.`);
+                                if (apiError.details.existing_id) {
+                                    savedCapture.server_id = apiError.details.existing_id;
+                                    await DB.put('temp_quick_captures', savedCapture);
+                                }
+                                serverSaved = true;
+                            } else {
+                                console.warn('⚠️ Error sincronizando con servidor (continuando con guardado local):', apiError.message);
+                                // Continuar con guardado local aunque falle el servidor
+                                // Agregar a cola de sincronización para intentar más tarde
+                                if (typeof SyncManager !== 'undefined') {
+                                    try {
+                                        await SyncManager.addToQueue('quick_capture', savedCapture.id, 'create');
+                                        console.log('📤 Captura agregada a cola de sincronización');
+                                    } catch (syncError) {
+                                        console.error('Error agregando a cola de sincronización:', syncError);
+                                    }
                                 }
                             }
                         }
@@ -2650,6 +2670,8 @@ const ReportsQuickCapture = {
         } catch (error) {
             console.error('Error guardando capturas pendientes:', error);
             Utils.showNotification('Error al guardar las capturas: ' + error.message, 'error');
+        } finally {
+            this._savingAllPending = false;
         }
     },
 
