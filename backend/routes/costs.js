@@ -165,11 +165,34 @@ router.post('/', requireBranchAccess, (req, res, next) => {
     }
 
     const finalBranchId = branch_id || req.user.branchId;
-    
+
     // Validar que amount sea un número
     const amountNum = parseFloat(amount);
     if (isNaN(amountNum) || amountNum <= 0) {
       return res.status(400).json({ error: 'Monto inválido' });
+    }
+
+    // ANTI-DUPLICADO: si es plantilla recurrente, verificar que NO exista otra
+    // con misma (branch_id, category, amount, period_type, recurring=true).
+    // El bug previo creó 13 plantillas duplicadas de linea_amarilla causando
+    // ~$130K MXN de overhead al regenerar mensualmente. Issue #5.
+    if (recurring === true) {
+      const existingRecurring = await query(
+        `SELECT id FROM cost_entries
+         WHERE recurring = true
+           AND COALESCE(branch_id::text,'') = COALESCE($1::text,'')
+           AND category = $2
+           AND amount = $3
+           AND COALESCE(period_type,'') = COALESCE($4,'')
+         LIMIT 1`,
+        [finalBranchId, category || null, amountNum, period_type || null]
+      );
+      if (existingRecurring.rows.length > 0) {
+        return res.status(409).json({
+          error: `Ya existe una plantilla recurrente igual (sucursal/categoría/monto/periodo). Edita la existente en lugar de duplicar.`,
+          existing_id: existingRecurring.rows[0].id,
+        });
+      }
     }
 
     // INSERT idempotente: si existe duplicado por (branch_id, category, notes, amount, date)
